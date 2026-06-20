@@ -6,7 +6,8 @@ protocol BenchmarkRunning {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping (BenchmarkProgress) -> Void,
+        result: @escaping (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult]
     func cancel()
 }
@@ -54,14 +55,15 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping (BenchmarkProgress) -> Void,
+        result: @escaping (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
         setCancelled(false)
 
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    let results = try self.runBlocking(profile: profile, drive: drive, volumePath: volumePath, progress: progress)
+                    let results = try self.runBlocking(profile: profile, drive: drive, volumePath: volumePath, progress: progress, result: result)
                     continuation.resume(returning: results)
                 } catch {
                     continuation.resume(throwing: error)
@@ -74,7 +76,8 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping (BenchmarkProgress) -> Void,
+        result: @escaping (BenchmarkResult) -> Void
     ) throws -> [BenchmarkResult] {
         let volumeURL = URL(fileURLWithPath: volumePath, isDirectory: true)
         var isDirectory: ObjCBool = false
@@ -141,7 +144,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 }
             }
 
-            results.append(BenchmarkResult(
+            let completedResult = BenchmarkResult(
                 driveID: drive.id,
                 volumePath: volumePath,
                 profileID: profile.id,
@@ -154,7 +157,9 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 iops: bestIOPS,
                 latencyMicroseconds: minLatency.isFinite ? minLatency : 0,
                 bytesTransferred: bestBytes
-            ))
+            )
+            results.append(completedResult)
+            notify(result, completedResult)
         }
 
         notify(progress, BenchmarkProgress(currentTestLabel: "Complete", completed: totalSteps, total: totalSteps, message: "Benchmark complete"))
@@ -348,6 +353,12 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private func notify(_ progress: @escaping (BenchmarkProgress) -> Void, _ value: BenchmarkProgress) {
         DispatchQueue.main.async {
             progress(value)
+        }
+    }
+
+    private func notify(_ result: @escaping (BenchmarkResult) -> Void, _ value: BenchmarkResult) {
+        DispatchQueue.main.sync {
+            result(value)
         }
     }
 }

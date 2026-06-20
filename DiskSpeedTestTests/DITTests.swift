@@ -110,6 +110,62 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(status.driverPaths, [driver.path])
     }
 
+    func testBenchmarkProfileConfigurationAppliesRunSizeAndDataPattern() {
+        let fileSize: Int64 = 4 * 1_024 * 1_024 * 1_024
+        let profile = BenchmarkProfile.default.configured(runs: 5, fileSizeBytes: fileSize, dataPattern: .zeroFill)
+
+        XCTAssertEqual(profile.runs, 5)
+        XCTAssertEqual(profile.testFileSizeBytes, fileSize)
+        XCTAssertTrue(profile.tests.allSatisfy { $0.testSizeBytes == fileSize })
+        XCTAssertTrue(profile.tests.allSatisfy { $0.dataPattern == .zeroFill })
+        XCTAssertTrue(profile.id.contains("r5"))
+        XCTAssertTrue(profile.id.contains("zeroFill"))
+    }
+
+    func testBenchmarkProfileConfigurationSeparatesResultIDs() {
+        let random = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .random)
+        let zeroFill = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .zeroFill)
+        let larger = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: 4 * 1_024 * 1_024 * 1_024, dataPattern: .random)
+
+        XCTAssertNotEqual(random.id, zeroFill.id)
+        XCTAssertNotEqual(random.id, larger.id)
+        XCTAssertEqual(random.baseProfileID, BenchmarkProfile.default.id)
+    }
+
+    func testBenchmarkDefaultsMatchDiskMarkControls() {
+        XCTAssertEqual(BenchmarkProfile.defaultRuns, 3)
+        XCTAssertEqual(BenchmarkProfile.defaultTestSize, 1_073_741_824)
+        XCTAssertEqual(BenchmarkProfile.defaultDataPattern, .random)
+        XCTAssertEqual(BenchmarkProfile.runCountOptions, Array(1...9))
+        XCTAssertTrue(BenchmarkProfile.fileSizeOptions.contains(BenchmarkProfile.defaultTestSize))
+    }
+
+    func testBenchmarkConfigurationDescriptionIsLocalized() {
+        let english = AppLanguage.english.benchmarkConfigurationDescription(
+            profile: .default,
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random
+        )
+        let chinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
+            profile: .default,
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random
+        )
+
+        XCTAssertTrue(english.profileUse.contains("Default"))
+        XCTAssertTrue(english.dataPattern.contains("Random"))
+        XCTAssertTrue(english.testTerms.contains("SEQ"))
+        XCTAssertTrue(english.testTerms.contains("queue depth"))
+        XCTAssertTrue(chinese.profileUse.contains("默认"))
+        XCTAssertTrue(chinese.runs.contains("3"))
+        XCTAssertTrue(chinese.fileSize.contains("1 GiB"))
+        XCTAssertTrue(chinese.dataPattern.contains("随机"))
+        XCTAssertTrue(chinese.testTerms.contains("SEQ"))
+        XCTAssertTrue(chinese.testTerms.contains("队列深度"))
+    }
+
     func testBenchmarkRunnerCleansTemporaryFile() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -134,11 +190,57 @@ final class DITTests: XCTestCase {
         )
         let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 65_536, runs: 1, tests: [test])
 
-        let results = try await NativeBenchmarkRunner().run(profile: profile, drive: drive, volumePath: root.path) { _ in }
+        let results = try await NativeBenchmarkRunner().run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
         XCTAssertEqual(results.count, 1)
 
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter { $0.hasPrefix(".dit-benchmark-") }
         XCTAssertTrue(leftovers.isEmpty)
+    }
+
+    func testBenchmarkRunnerPublishesEachCompletedResult() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+        let read = BenchmarkTest(
+            id: "unit-read",
+            label: "SEQ1M Q1T1",
+            accessPattern: .sequential,
+            operation: .read,
+            blockSizeBytes: 4_096,
+            queueDepth: 1,
+            threads: 1,
+            durationSeconds: 0.05,
+            testSizeBytes: 65_536,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 0
+        )
+        let write = BenchmarkTest(
+            id: "unit-write",
+            label: "RND4K Q1T1",
+            accessPattern: .random,
+            operation: .write,
+            blockSizeBytes: 4_096,
+            queueDepth: 1,
+            threads: 1,
+            durationSeconds: 0.05,
+            testSizeBytes: 65_536,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 100
+        )
+        let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 65_536, runs: 1, tests: [read, write])
+        var publishedTestIDs: [String] = []
+
+        let results = try await NativeBenchmarkRunner().run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
+            publishedTestIDs.append(result.testID)
+        }
+
+        XCTAssertEqual(results.map(\.testID), ["unit-read", "unit-write"])
+        XCTAssertEqual(publishedTestIDs, ["unit-read", "unit-write"])
     }
 
     private static func fixtureDrive() -> DriveDevice {

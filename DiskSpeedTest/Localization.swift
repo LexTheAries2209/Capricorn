@@ -64,7 +64,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case .english:
             return profile.name
         case .simplifiedChinese:
-            return switch profile.id {
+            return switch profile.baseProfileID {
             case "default": "默认"
             case "peak-nvme": "峰值 / NVMe"
             case "real-world": "真实场景"
@@ -72,6 +72,44 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             case "custom": "自定义"
             default: profile.name
             }
+        }
+    }
+
+    func benchmarkDataPatternTitle(_ pattern: BenchmarkDataPattern) -> String {
+        switch self {
+        case .english:
+            return pattern.title
+        case .simplifiedChinese:
+            return switch pattern {
+            case .random: "随机"
+            case .zeroFill: "0 填充"
+            }
+        }
+    }
+
+    func benchmarkConfigurationDescription(
+        profile: BenchmarkProfile,
+        runs: Int,
+        fileSizeBytes: Int64,
+        dataPattern: BenchmarkDataPattern
+    ) -> BenchmarkConfigurationDescription {
+        switch self {
+        case .english:
+            return BenchmarkConfigurationDescription(
+                profileUse: englishProfileUseDescription(profile),
+                runs: "Runs: \(runs) measured pass\(runs == 1 ? "" : "es") after one warm-up. More runs improve stability and take longer.",
+                fileSize: "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) temporary file. Larger files reduce cache effects but need more free space.",
+                dataPattern: "Data pattern: \(benchmarkDataPatternTitle(dataPattern)). Random is closer to incompressible real data; 0 Fill can expose compression, dedupe, or controller peak behavior.",
+                testTerms: "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Higher Q/T can show parallel peak speed, while Q1T1 is closer to single-app responsiveness."
+            )
+        case .simplifiedChinese:
+            return BenchmarkConfigurationDescription(
+                profileUse: chineseProfileUseDescription(profile),
+                runs: "测试次数：\(runs) 轮正式测量，另有 1 轮预热不计入结果。次数越多越稳定，但耗时更长。",
+                fileSize: "测试文件大小：\(formatBenchmarkFileSize(fileSizeBytes)) 临时文件。文件越大越能降低缓存影响，但需要更多可用空间。",
+                dataPattern: "数据模式：\(benchmarkDataPatternTitle(dataPattern))。随机数据更接近不可压缩真实负载；0 填充适合观察压缩、去重或控制器峰值，结果可能偏高。",
+                testTerms: "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。更高的 Q/T 更容易跑出并行峰值，Q1T1 更接近单个应用的响应速度。"
+            )
         }
     }
 
@@ -92,12 +130,46 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
     }
 
-    func benchmarkFooter(testCount: Int, fileSize: Int64, runs: Int) -> String {
+    func benchmarkFooter(testCount: Int, fileSize: Int64, runs: Int, dataPattern: BenchmarkDataPattern) -> String {
         switch self {
         case .english:
-            return "\(testCount) tests · \(formatByteCount(fileSize)) file · \(runs) run\(runs == 1 ? "" : "s")"
+            return "\(testCount) tests · \(formatBenchmarkFileSize(fileSize)) file · \(runs) run\(runs == 1 ? "" : "s") · \(benchmarkDataPatternTitle(dataPattern))"
         case .simplifiedChinese:
-            return "\(testCount) 项测试 · \(formatByteCount(fileSize)) 文件 · \(runs) 轮"
+            return "\(testCount) 项测试 · \(formatBenchmarkFileSize(fileSize)) 文件 · \(runs) 轮 · \(benchmarkDataPatternTitle(dataPattern))"
+        }
+    }
+
+    private func englishProfileUseDescription(_ profile: BenchmarkProfile) -> String {
+        switch profile.baseProfileID {
+        case "default":
+            return "Default: balanced general-purpose disk performance test for most SSDs, HDDs, and external drives."
+        case "peak-nvme":
+            return "Peak / NVMe: use for high-performance NVMe or Thunderbolt storage when you want controller peak throughput."
+        case "real-world":
+            return "RealWorld: lighter queue depths and mixed work for app launches, project folders, and everyday file activity."
+        case "demo":
+            return "Demo / Light: quick validation with low write volume; useful for a fast sanity check."
+        case "custom":
+            return "Custom: temporary verification profile with mixed rows, useful when checking a specific workload."
+        default:
+            return "\(profile.name): user-defined benchmark profile."
+        }
+    }
+
+    private func chineseProfileUseDescription(_ profile: BenchmarkProfile) -> String {
+        switch profile.baseProfileID {
+        case "default":
+            return "默认：均衡、通用的硬盘性能测试，适合大多数 SSD、HDD 和外接盘。"
+        case "peak-nvme":
+            return "峰值 / NVMe：适合高性能 NVMe 或雷电存储，用来看控制器峰值吞吐。"
+        case "real-world":
+            return "真实场景：队列深度更贴近日常使用，并包含混合负载，适合应用启动、项目目录和普通文件操作。"
+        case "demo":
+            return "演示 / 轻量：写入量低、完成快，适合快速确认目标文件夹和磁盘状态。"
+        case "custom":
+            return "自定义：用于临时验证特定负载，包含混合测试行。"
+        default:
+            return "\(profile.name)：用户定义的测速配置。"
         }
     }
 
@@ -215,6 +287,9 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "No SMART Attributes": "无 SMART 属性",
         "SMART data is unavailable for this drive.": "此磁盘的 SMART 数据不可用。",
         "Profile": "配置",
+        "Runs": "测试次数",
+        "Test Size": "测试文件大小",
+        "Data Pattern": "数据模式",
         "No writable volume": "没有可写卷",
         "Run": "运行",
         "Cancel": "取消",
@@ -320,6 +395,14 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Failed": "失败",
         "Verified": "已验证"
     ]
+}
+
+struct BenchmarkConfigurationDescription: Equatable {
+    var profileUse: String
+    var runs: String
+    var fileSize: String
+    var dataPattern: String
+    var testTerms: String
 }
 
 struct SmartAttributeDisplay: Equatable {

@@ -511,11 +511,39 @@ private struct BenchmarkView: View {
     @Environment(\.appLanguage) private var language
 
     @AppStorage("benchmarkTargetFolder") private var targetFolderPath = ""
+    @AppStorage("benchmarkRunCount") private var selectedRunCount = BenchmarkProfile.defaultRuns
+    @AppStorage("benchmarkFileSizeBytes") private var selectedFileSizeBytes = Int(BenchmarkProfile.defaultTestSize)
+    @AppStorage("benchmarkDataPattern") private var selectedDataPatternRaw = BenchmarkProfile.defaultDataPattern.rawValue
     @State private var selectedProfileID = BenchmarkProfile.default.id
     @State private var confirmWrite = false
 
-    private var profile: BenchmarkProfile {
+    private var baseProfile: BenchmarkProfile {
         BenchmarkProfile.presets.first(where: { $0.id == selectedProfileID }) ?? .default
+    }
+
+    private var profile: BenchmarkProfile {
+        baseProfile.configured(
+            runs: selectedRunCount,
+            fileSizeBytes: selectedBenchmarkFileSizeBytes,
+            dataPattern: selectedDataPattern
+        )
+    }
+
+    private var selectedBenchmarkFileSizeBytes: Int64 {
+        Int64(selectedFileSizeBytes)
+    }
+
+    private var selectedDataPattern: BenchmarkDataPattern {
+        BenchmarkDataPattern(rawValue: selectedDataPatternRaw) ?? BenchmarkProfile.defaultDataPattern
+    }
+
+    private var configurationDescription: BenchmarkConfigurationDescription {
+        language.benchmarkConfigurationDescription(
+            profile: baseProfile,
+            runs: profile.runs,
+            fileSizeBytes: profile.testFileSizeBytes,
+            dataPattern: selectedDataPattern
+        )
     }
 
     private var driveResults: [BenchmarkResult] {
@@ -545,7 +573,9 @@ private struct BenchmarkView: View {
                 benchmarkHeader
                 benchmarkControls
                 targetFolderControl
-                progressAndErrors
+                if shouldShowProgressAndErrors {
+                    progressAndErrors
+                }
                 BenchmarkResultMatrixView(profile: profile, results: profileResults)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -571,44 +601,98 @@ private struct BenchmarkView: View {
                     .lineLimit(1)
             }
             Spacer()
-            Text(language.benchmarkFooter(testCount: profile.tests.count, fileSize: profile.testFileSizeBytes, runs: profile.runs))
+            Text(language.benchmarkFooter(testCount: profile.tests.count, fileSize: profile.testFileSizeBytes, runs: profile.runs, dataPattern: selectedDataPattern))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
 
     private var benchmarkControls: some View {
-        HStack(spacing: 10) {
-            Picker(language.t("Profile"), selection: $selectedProfileID) {
-                ForEach(BenchmarkProfile.presets) { profile in
-                    Text(language.profileName(profile)).tag(profile.id)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .bottom, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.t("Profile"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Picker(language.t("Profile"), selection: $selectedProfileID) {
+                        ForEach(BenchmarkProfile.presets) { profile in
+                            Text(language.profileName(profile)).tag(profile.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 154)
+                    .disabled(viewModel.isBenchmarking)
                 }
-            }
-            .frame(width: 190)
 
-            Spacer(minLength: 12)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.t("Runs"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Picker(language.t("Runs"), selection: $selectedRunCount) {
+                        ForEach(BenchmarkProfile.runCountOptions, id: \.self) { count in
+                            Text("\(count)").tag(count)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 72)
+                    .disabled(viewModel.isBenchmarking)
+                }
 
-            Button {
-                requestBenchmarkStart()
-            } label: {
-                Label(language.t("Run"), systemImage: "play.fill")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!targetFolderIsUsable || viewModel.isBenchmarking)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.t("Test Size"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Picker(language.t("Test Size"), selection: $selectedFileSizeBytes) {
+                        ForEach(BenchmarkProfile.fileSizeOptions, id: \.self) { size in
+                            Text(formatBenchmarkFileSize(size)).tag(Int(size))
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 112)
+                    .disabled(viewModel.isBenchmarking)
+                }
 
-            Button {
-                viewModel.cancelBenchmark()
-            } label: {
-                Label(language.t("Cancel"), systemImage: "stop.fill")
-            }
-            .disabled(!viewModel.isBenchmarking)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.t("Data Pattern"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Picker(language.t("Data Pattern"), selection: $selectedDataPatternRaw) {
+                        ForEach(BenchmarkDataPattern.allCases) { pattern in
+                            Text(language.benchmarkDataPatternTitle(pattern)).tag(pattern.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 142)
+                    .disabled(viewModel.isBenchmarking)
+                }
 
-            Button {
-                saveResults()
-            } label: {
-                Label(language.t("Save Results"), systemImage: "tray.and.arrow.down")
+                Spacer(minLength: 12)
+
+                Button {
+                    requestBenchmarkStart()
+                } label: {
+                    Label(language.t("Run"), systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!targetFolderIsUsable || viewModel.isBenchmarking)
+
+                Button {
+                    viewModel.cancelBenchmark()
+                } label: {
+                    Label(language.t("Cancel"), systemImage: "stop.fill")
+                }
+                .disabled(!viewModel.isBenchmarking)
+
+                Button {
+                    saveResults()
+                } label: {
+                    Label(language.t("Save Results"), systemImage: "tray.and.arrow.down")
+                }
+                .disabled(driveResults.isEmpty)
             }
-            .disabled(driveResults.isEmpty)
+
+            BenchmarkConfigurationDescriptionView(description: configurationDescription)
         }
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -659,6 +743,10 @@ private struct BenchmarkView: View {
             return language.t("Choose a writable target folder")
         }
         return targetFolderIsUsable ? language.t("Target folder is writable") : language.t("Target folder is not writable")
+    }
+
+    private var shouldShowProgressAndErrors: Bool {
+        viewModel.isBenchmarking || viewModel.benchmarkError != nil || !targetFolderIsUsable
     }
 
     private var progressAndErrors: some View {
@@ -735,6 +823,35 @@ private struct BenchmarkView: View {
             viewModel.benchmarkError = "Selected target folder is not writable."
             return false
         }
+    }
+}
+
+private struct BenchmarkConfigurationDescriptionView: View {
+    let description: BenchmarkConfigurationDescription
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(description.profileUse)
+                .font(.caption)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            BenchmarkConfigurationLine(text: description.runs)
+            BenchmarkConfigurationLine(text: description.fileSize)
+            BenchmarkConfigurationLine(text: description.dataPattern)
+            BenchmarkConfigurationLine(text: description.testTerms)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct BenchmarkConfigurationLine: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

@@ -109,15 +109,24 @@ final class DITViewModel: ObservableObject {
         benchmarkError = nil
         isBenchmarking = true
         benchmarkProgress = BenchmarkProgress(currentTestLabel: "Starting", completed: 0, total: profile.tests.count * max(1, profile.runs), message: "Creating benchmark file")
+        replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: [])
         defer {
             isBenchmarking = false
         }
 
         do {
-            let results = try await benchmarkRunner.run(profile: profile, drive: drive, volumePath: targetVolume) { [weak self] progress in
-                self?.benchmarkProgress = progress
-            }
-            benchmarkResults = results
+            let results = try await benchmarkRunner.run(
+                profile: profile,
+                drive: drive,
+                volumePath: targetVolume,
+                progress: { [weak self] progress in
+                    self?.benchmarkProgress = progress
+                },
+                result: { [weak self] result in
+                    self?.upsertBenchmarkResult(result)
+                }
+            )
+            replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: results)
         } catch {
             benchmarkError = error.localizedDescription
         }
@@ -129,6 +138,19 @@ final class DITViewModel: ObservableObject {
 
     func refreshExternalSupport() {
         externalSupport = externalDetector.detect()
+    }
+
+    private func upsertBenchmarkResult(_ result: BenchmarkResult) {
+        if let index = benchmarkResults.firstIndex(where: { $0.driveID == result.driveID && $0.profileID == result.profileID && $0.testID == result.testID }) {
+            benchmarkResults[index] = result
+        } else {
+            benchmarkResults.append(result)
+        }
+    }
+
+    private func replaceBenchmarkResults(driveID: String, profileID: String, with results: [BenchmarkResult]) {
+        benchmarkResults.removeAll { $0.driveID == driveID && $0.profileID == profileID }
+        benchmarkResults.append(contentsOf: results)
     }
 
     static var preview: DITViewModel {
@@ -220,25 +242,26 @@ private final class PreviewBenchmarkRunner: BenchmarkRunning {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping (BenchmarkProgress) -> Void,
+        result: @escaping (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
         progress(BenchmarkProgress(currentTestLabel: "Preview", completed: 1, total: 1, message: "Preview complete"))
-        return [
-            BenchmarkResult(
-                driveID: drive.id,
-                volumePath: volumePath,
-                profileID: profile.id,
-                profileName: profile.name,
-                testID: "preview",
-                testLabel: "SEQ1M Q1T1",
-                operation: .read,
-                measuredAt: Date(),
-                bestMegabytesPerSecond: 4800,
-                iops: 4577,
-                latencyMicroseconds: 218,
-                bytesTransferred: 1_073_741_824
-            )
-        ]
+        let previewResult = BenchmarkResult(
+            driveID: drive.id,
+            volumePath: volumePath,
+            profileID: profile.id,
+            profileName: profile.name,
+            testID: "preview",
+            testLabel: "SEQ1M Q1T1",
+            operation: .read,
+            measuredAt: Date(),
+            bestMegabytesPerSecond: 4800,
+            iops: 4577,
+            latencyMicroseconds: 218,
+            bytesTransferred: 1_073_741_824
+        )
+        result(previewResult)
+        return [previewResult]
     }
 
     func cancel() {}

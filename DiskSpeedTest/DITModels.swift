@@ -205,6 +205,25 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
     var tests: [BenchmarkTest]
 
     static let defaultTestSize: Int64 = 1_073_741_824
+    static let defaultRuns = 3
+    static let defaultDataPattern = BenchmarkDataPattern.random
+    static let runCountOptions = Array(1...9)
+    static let fileSizeOptions: [Int64] = [
+        16 * 1_024 * 1_024,
+        64 * 1_024 * 1_024,
+        256 * 1_024 * 1_024,
+        1_024 * 1_024 * 1_024,
+        2 * 1_024 * 1_024 * 1_024,
+        4 * 1_024 * 1_024 * 1_024,
+        8 * 1_024 * 1_024 * 1_024,
+        16 * 1_024 * 1_024 * 1_024,
+        32 * 1_024 * 1_024 * 1_024,
+        64 * 1_024 * 1_024 * 1_024
+    ]
+
+    var baseProfileID: String {
+        id.components(separatedBy: "@").first ?? id
+    }
 
     static var presets: [BenchmarkProfile] {
         [.default, .peakNVMe, .realWorld, .demoLight, .custom]
@@ -215,7 +234,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
             id: "default",
             name: "Default",
             testSize: defaultTestSize,
-            runs: 3,
+            runs: defaultRuns,
             duration: 5,
             rows: [
                 (.sequential, 1_048_576, 8, 1),
@@ -344,6 +363,27 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
         }
         return BenchmarkProfile(id: id, name: name, testFileSizeBytes: testSize, runs: runs, tests: tests)
     }
+
+    func configured(runs requestedRuns: Int, fileSizeBytes requestedFileSizeBytes: Int64, dataPattern: BenchmarkDataPattern) -> BenchmarkProfile {
+        let safeRuns = min(max(requestedRuns, Self.runCountOptions.first ?? 1), Self.runCountOptions.last ?? 9)
+        let safeFileSizeBytes = max(Self.fileSizeOptions.first ?? Self.defaultTestSize, requestedFileSizeBytes)
+        let fingerprint = "r\(safeRuns)-s\(safeFileSizeBytes)-\(dataPattern.rawValue)"
+        let configuredTests = tests.map { test in
+            var configuredTest = test
+            let baseTestID = test.id.components(separatedBy: "@").first ?? test.id
+            configuredTest.id = "\(baseTestID)@\(fingerprint)"
+            configuredTest.testSizeBytes = safeFileSizeBytes
+            configuredTest.dataPattern = dataPattern
+            return configuredTest
+        }
+        return BenchmarkProfile(
+            id: "\(baseProfileID)@\(fingerprint)",
+            name: name,
+            testFileSizeBytes: safeFileSizeBytes,
+            runs: safeRuns,
+            tests: configuredTests
+        )
+    }
 }
 
 struct BenchmarkResult: Identifiable, Codable, Hashable {
@@ -386,4 +426,16 @@ func formatBytes(_ bytes: Int) -> String {
 
 func formatByteCount(_ bytes: Int64) -> String {
     ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+}
+
+func formatBenchmarkFileSize(_ bytes: Int64) -> String {
+    let gib: Int64 = 1_024 * 1_024 * 1_024
+    let mib: Int64 = 1_024 * 1_024
+    if bytes >= gib, bytes % gib == 0 {
+        return "\(bytes / gib) GiB"
+    }
+    if bytes >= mib, bytes % mib == 0 {
+        return "\(bytes / mib) MiB"
+    }
+    return formatByteCount(bytes)
 }
