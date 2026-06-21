@@ -517,6 +517,7 @@ private struct BenchmarkView: View {
     @AppStorage("benchmarkUsesTrimmedAverage") private var usesTrimmedAverage = BenchmarkProfile.defaultUsesTrimmedAverage
     @State private var selectedProfileID = BenchmarkProfile.default.id
     @State private var confirmWrite = false
+    private let progressContentLeadingInset: CGFloat = 6
 
     private var baseProfile: BenchmarkProfile {
         BenchmarkProfile.presets.first(where: { $0.id == selectedProfileID }) ?? .default
@@ -653,13 +654,13 @@ private struct BenchmarkView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .frame(width: 154, alignment: .leading)
-                    Picker(language.t("Profile"), selection: $selectedProfileID) {
+                    Picker("", selection: $selectedProfileID) {
                         ForEach(BenchmarkProfile.presets) { profile in
                             Text(language.profileName(profile)).tag(profile.id)
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 154)
+                    .frame(width: 154, alignment: .leading)
                     .disabled(viewModel.isBenchmarking)
                 }
 
@@ -668,13 +669,13 @@ private struct BenchmarkView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .frame(width: 72, alignment: .leading)
-                    Picker(language.t("Runs"), selection: $selectedRunCount) {
+                    Picker("", selection: $selectedRunCount) {
                         ForEach(BenchmarkProfile.runCountOptions, id: \.self) { count in
                             Text("\(count)").tag(count)
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 72)
+                    .frame(width: 72, alignment: .leading)
                     .disabled(viewModel.isBenchmarking)
                 }
 
@@ -683,7 +684,7 @@ private struct BenchmarkView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .frame(width: 112, alignment: .leading)
-                    Picker(language.t("Test Size"), selection: $selectedFileSizeBytes) {
+                    Picker("", selection: $selectedFileSizeBytes) {
                         ForEach(BenchmarkProfile.fileSizeOptions, id: \.self) { size in
                             Text(formatBenchmarkFileSize(size))
                                 .tag(Int(size))
@@ -691,7 +692,7 @@ private struct BenchmarkView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 112)
+                    .frame(width: 112, alignment: .leading)
                     .disabled(viewModel.isBenchmarking)
                 }
 
@@ -700,25 +701,29 @@ private struct BenchmarkView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .frame(width: 142, alignment: .leading)
-                    Picker(language.t("Data Pattern"), selection: $selectedDataPatternRaw) {
+                    Picker("", selection: $selectedDataPatternRaw) {
                         ForEach(BenchmarkDataPattern.allCases) { pattern in
                             Text(language.benchmarkDataPatternTitle(pattern)).tag(pattern.rawValue)
                         }
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
-                    .frame(width: 142)
+                    .frame(width: 142, alignment: .leading)
                     .disabled(viewModel.isBenchmarking)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(language.t("Trimmed Avg"))
+                    Text(language.t("Trim Outliers"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .frame(width: 94, alignment: .leading)
-                    Toggle("", isOn: $usesTrimmedAverage)
+                        .frame(width: 116, alignment: .leading)
+                    Picker("", selection: $usesTrimmedAverage) {
+                        Text(language.t("Off")).tag(false)
+                        Text(language.t("On")).tag(true)
+                    }
                         .labelsHidden()
-                        .frame(width: 94, height: 28, alignment: .leading)
+                        .pickerStyle(.segmented)
+                        .frame(width: 116, height: 28, alignment: .leading)
                         .help(language.t("Run two extra measured passes, discard fastest and slowest, then average the rest."))
                         .disabled(viewModel.isBenchmarking)
                 }
@@ -814,11 +819,13 @@ private struct BenchmarkView: View {
     private var progressAndErrors: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let progress = viewModel.benchmarkProgress, viewModel.isBenchmarking {
-                ProgressView(value: progress.fraction)
-                    .padding(.leading, 10)
-                Text("\(language.progressLabel(progress.currentTestLabel)): \(progressStatusText(progress))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    ProgressView(value: progress.fraction)
+                    Text("\(language.progressLabel(progress.currentTestLabel)): \(progressStatusText(progress))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.leading, progressContentLeadingInset)
             }
 
             if let error = viewModel.benchmarkError {
