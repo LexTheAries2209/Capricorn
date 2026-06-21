@@ -91,23 +91,30 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         profile: BenchmarkProfile,
         runs: Int,
         fileSizeBytes: Int64,
-        dataPattern: BenchmarkDataPattern
+        dataPattern: BenchmarkDataPattern,
+        usesTrimmedAverage: Bool
     ) -> BenchmarkConfigurationDescription {
         switch self {
         case .english:
-            let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: runs)
+            let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: runs, usesTrimmedAverage: usesTrimmedAverage)
+            let runsDescription = usesTrimmedAverage
+                ? "Runs: \(runs) selected, executed as 1 warm-up plus \(measuredRuns) measured passes. The fastest and slowest measured passes are removed, then the rest are averaged."
+                : "Runs: \(runs) selected, executed as 1 warm-up plus \(measuredRuns) measured pass\(measuredRuns == 1 ? "" : "es"). All measured passes are averaged."
             return BenchmarkConfigurationDescription(
                 profileUse: englishProfileUseDescription(profile),
-                runs: "Runs: \(runs) selected, executed as 1 warm-up plus \(measuredRuns) measured passes. The fastest and slowest measured passes are removed, then the rest are averaged.",
+                runs: runsDescription,
                 fileSize: "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) complete temporary file. Reads and writes transfer the full file size; elapsed time comes from the actual transfer.",
                 dataPattern: "Data pattern: \(benchmarkDataPatternTitle(dataPattern)). Random is closer to incompressible real data; 0 Fill can expose compression, dedupe, or controller peak behavior.",
                 testTerms: "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Each row runs read first, then write, before moving to the next row. Passes inside one read/write item pause 1 second; scored items still pause 5 seconds."
             )
         case .simplifiedChinese:
-            let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: runs)
+            let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: runs, usesTrimmedAverage: usesTrimmedAverage)
+            let runsDescription = usesTrimmedAverage
+                ? "测试次数：界面选择 \(runs)；实际执行 1 轮预热 + \(measuredRuns) 轮正式测量，去掉最高和最低后对剩余结果取平均。"
+                : "测试次数：界面选择 \(runs)；实际执行 1 轮预热 + \(measuredRuns) 轮正式测量，对全部正式结果取普通平均。"
             return BenchmarkConfigurationDescription(
                 profileUse: chineseProfileUseDescription(profile),
-                runs: "测试次数：界面选择 \(runs)；实际执行 1 轮预热 + \(measuredRuns) 轮正式测量，去掉最高和最低后对剩余结果取平均。",
+                runs: runsDescription,
                 fileSize: "测试文件大小：使用完整的 \(formatBenchmarkFileSize(fileSizeBytes)) 临时文件。读取和写入都会传输完整文件大小，耗时由真实传输决定。",
                 dataPattern: "数据模式：\(benchmarkDataPatternTitle(dataPattern))。随机数据更接近不可压缩真实负载；0 填充适合观察压缩、去重或控制器峰值，结果可能偏高。",
                 testTerms: "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。每一行先读取、再写入，然后进入下一行；同一个读/写项目的各轮之间间隔 1 秒，已计分项目之间仍间隔 5 秒。"
@@ -132,12 +139,14 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
     }
 
-    func benchmarkFooter(testCount: Int, fileSize: Int64, runs: Int, dataPattern: BenchmarkDataPattern) -> String {
+    func benchmarkFooter(testCount: Int, fileSize: Int64, runs: Int, dataPattern: BenchmarkDataPattern, usesTrimmedAverage: Bool) -> String {
         switch self {
         case .english:
-            return "\(testCount) tests · \(formatBenchmarkFileSize(fileSize)) file · \(runs)+2 avg runs · \(benchmarkDataPatternTitle(dataPattern))"
+            let averageText = usesTrimmedAverage ? "\(runs)+2 trimmed avg" : "\(runs) avg run\(runs == 1 ? "" : "s")"
+            return "\(testCount) tests · \(formatBenchmarkFileSize(fileSize)) file · \(averageText) · \(benchmarkDataPatternTitle(dataPattern))"
         case .simplifiedChinese:
-            return "\(testCount) 项测试 · \(formatBenchmarkFileSize(fileSize)) 文件 · \(runs)+2 轮平均 · \(benchmarkDataPatternTitle(dataPattern))"
+            let averageText = usesTrimmedAverage ? "\(runs)+2 去极值平均" : "\(runs) 轮普通平均"
+            return "\(testCount) 项测试 · \(formatBenchmarkFileSize(fileSize)) 文件 · \(averageText) · \(benchmarkDataPatternTitle(dataPattern))"
         }
     }
 
@@ -301,6 +310,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Runs": "测试次数",
         "Test Size": "测试文件大小",
         "Data Pattern": "数据模式",
+        "Trimmed Avg": "去极值平均",
+        "Run two extra measured passes, discard fastest and slowest, then average the rest.": "额外执行 2 轮正式测量，去掉最快和最慢后再平均。",
         "No writable volume": "没有可写卷",
         "Run": "运行",
         "Cancel": "取消",

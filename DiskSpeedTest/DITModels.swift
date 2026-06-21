@@ -202,11 +202,13 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
     var name: String
     var testFileSizeBytes: Int64
     var runs: Int
+    var usesTrimmedAverage: Bool = false
     var tests: [BenchmarkTest]
 
     static let defaultTestSize: Int64 = 1_073_741_824
     static let defaultRuns = 3
     static let defaultDataPattern = BenchmarkDataPattern.random
+    static let defaultUsesTrimmedAverage = false
     static let runCountOptions = Array(1...9)
     static let fileSizeOptions: [Int64] = [
         16 * 1_024 * 1_024,
@@ -361,13 +363,19 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
                 ))
             }
         }
-        return BenchmarkProfile(id: id, name: name, testFileSizeBytes: testSize, runs: runs, tests: tests)
+        return BenchmarkProfile(id: id, name: name, testFileSizeBytes: testSize, runs: runs, usesTrimmedAverage: defaultUsesTrimmedAverage, tests: tests)
     }
 
-    func configured(runs requestedRuns: Int, fileSizeBytes requestedFileSizeBytes: Int64, dataPattern: BenchmarkDataPattern) -> BenchmarkProfile {
+    func configured(
+        runs requestedRuns: Int,
+        fileSizeBytes requestedFileSizeBytes: Int64,
+        dataPattern: BenchmarkDataPattern,
+        usesTrimmedAverage: Bool = defaultUsesTrimmedAverage
+    ) -> BenchmarkProfile {
         let safeRuns = min(max(requestedRuns, Self.runCountOptions.first ?? 1), Self.runCountOptions.last ?? 9)
         let safeFileSizeBytes = max(Self.fileSizeOptions.first ?? Self.defaultTestSize, requestedFileSizeBytes)
-        let fingerprint = "r\(safeRuns)-s\(safeFileSizeBytes)-\(dataPattern.rawValue)"
+        let averageMode = usesTrimmedAverage ? "trim" : "plain"
+        let fingerprint = "r\(safeRuns)-s\(safeFileSizeBytes)-\(dataPattern.rawValue)-\(averageMode)"
         let configuredTests = tests.map { test in
             var configuredTest = test
             let baseTestID = test.id.components(separatedBy: "@").first ?? test.id
@@ -381,6 +389,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
             name: name,
             testFileSizeBytes: safeFileSizeBytes,
             runs: safeRuns,
+            usesTrimmedAverage: usesTrimmedAverage,
             tests: configuredTests
         )
     }

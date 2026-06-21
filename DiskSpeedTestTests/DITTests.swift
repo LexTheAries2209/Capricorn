@@ -118,24 +118,31 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(profile.testFileSizeBytes, fileSize)
         XCTAssertTrue(profile.tests.allSatisfy { $0.testSizeBytes == fileSize })
         XCTAssertTrue(profile.tests.allSatisfy { $0.dataPattern == .zeroFill })
+        XCTAssertFalse(profile.usesTrimmedAverage)
         XCTAssertTrue(profile.id.contains("r5"))
         XCTAssertTrue(profile.id.contains("zeroFill"))
+        XCTAssertTrue(profile.id.contains("plain"))
     }
 
     func testBenchmarkProfileConfigurationSeparatesResultIDs() {
         let random = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .random)
         let zeroFill = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .zeroFill)
         let larger = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: 4 * 1_024 * 1_024 * 1_024, dataPattern: .random)
+        let trimmedAverage = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .random, usesTrimmedAverage: true)
 
         XCTAssertNotEqual(random.id, zeroFill.id)
         XCTAssertNotEqual(random.id, larger.id)
+        XCTAssertNotEqual(random.id, trimmedAverage.id)
         XCTAssertEqual(random.baseProfileID, BenchmarkProfile.default.id)
+        XCTAssertFalse(random.usesTrimmedAverage)
+        XCTAssertTrue(trimmedAverage.usesTrimmedAverage)
     }
 
     func testBenchmarkDefaultsMatchDiskMarkControls() {
         XCTAssertEqual(BenchmarkProfile.defaultRuns, 3)
         XCTAssertEqual(BenchmarkProfile.defaultTestSize, 1_073_741_824)
         XCTAssertEqual(BenchmarkProfile.defaultDataPattern, .random)
+        XCTAssertFalse(BenchmarkProfile.defaultUsesTrimmedAverage)
         XCTAssertEqual(BenchmarkProfile.runCountOptions, Array(1...9))
         XCTAssertTrue(BenchmarkProfile.fileSizeOptions.contains(BenchmarkProfile.defaultTestSize))
     }
@@ -153,10 +160,16 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(progress.fraction, 0.25, accuracy: 0.0001)
     }
 
-    func testBenchmarkSelectedRunCountAddsTwoMeasuredRuns() {
-        XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 1), 3)
-        XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 3), 5)
-        XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 9), 11)
+    func testBenchmarkSelectedRunCountAddsTwoMeasuredRunsWhenTrimmedAverageEnabled() {
+        XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 1, usesTrimmedAverage: true), 3)
+        XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 3, usesTrimmedAverage: true), 5)
+        XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 9, usesTrimmedAverage: true), 11)
+    }
+
+    func testBenchmarkSelectedRunCountIsExactWhenTrimmedAverageDisabled() {
+        XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 1, usesTrimmedAverage: false), 1)
+        XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 3, usesTrimmedAverage: false), 3)
+        XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 9, usesTrimmedAverage: false), 9)
     }
 
     func testBenchmarkMeasurementReducerDropsExtremesAndAverages() {
@@ -166,7 +179,7 @@ final class DITTests: XCTestCase {
             BenchmarkRunMeasurement(megabytesPerSecond: 300, iops: 30, latencyMicroseconds: 30, bytesTransferred: 3_000),
             BenchmarkRunMeasurement(megabytesPerSecond: 400, iops: 40, latencyMicroseconds: 20, bytesTransferred: 4_000),
             BenchmarkRunMeasurement(megabytesPerSecond: 900, iops: 90, latencyMicroseconds: 10, bytesTransferred: 9_000)
-        ])
+        ], usesTrimmedAverage: true)
 
         XCTAssertEqual(summary.megabytesPerSecond, 300, accuracy: 0.001)
         XCTAssertEqual(summary.iops, 30, accuracy: 0.001)
@@ -174,18 +187,40 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(summary.bytesTransferred, 3_000)
     }
 
+    func testBenchmarkMeasurementReducerAveragesAllRunsWhenTrimmedAverageDisabled() {
+        let summary = BenchmarkMeasurementReducer.summarize([
+            BenchmarkRunMeasurement(megabytesPerSecond: 100, iops: 10, latencyMicroseconds: 50, bytesTransferred: 1_000),
+            BenchmarkRunMeasurement(megabytesPerSecond: 200, iops: 20, latencyMicroseconds: 40, bytesTransferred: 2_000),
+            BenchmarkRunMeasurement(megabytesPerSecond: 900, iops: 90, latencyMicroseconds: 10, bytesTransferred: 9_000)
+        ], usesTrimmedAverage: false)
+
+        XCTAssertEqual(summary.megabytesPerSecond, 400, accuracy: 0.001)
+        XCTAssertEqual(summary.iops, 40, accuracy: 0.001)
+        XCTAssertEqual(summary.latencyMicroseconds, 100.0 / 3.0, accuracy: 0.001)
+        XCTAssertEqual(summary.bytesTransferred, 4_000)
+    }
+
     func testBenchmarkConfigurationDescriptionIsLocalized() {
         let english = AppLanguage.english.benchmarkConfigurationDescription(
             profile: .default,
             runs: 3,
             fileSizeBytes: BenchmarkProfile.defaultTestSize,
-            dataPattern: .random
+            dataPattern: .random,
+            usesTrimmedAverage: true
         )
         let chinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
             profile: .default,
             runs: 3,
             fileSizeBytes: BenchmarkProfile.defaultTestSize,
-            dataPattern: .random
+            dataPattern: .random,
+            usesTrimmedAverage: true
+        )
+        let plainChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
+            profile: .default,
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesTrimmedAverage: false
         )
 
         XCTAssertTrue(english.profileUse.contains("Default"))
@@ -199,6 +234,7 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(chinese.profileUse.contains("默认"))
         XCTAssertTrue(chinese.runs.contains("3"))
         XCTAssertTrue(chinese.runs.contains("5"))
+        XCTAssertTrue(plainChinese.runs.contains("普通平均"))
         XCTAssertTrue(chinese.fileSize.contains("1 GiB"))
         XCTAssertTrue(chinese.fileSize.contains("完整"))
         XCTAssertTrue(chinese.dataPattern.contains("随机"))
@@ -338,8 +374,8 @@ final class DITTests: XCTestCase {
         lock.lock()
         let names = createdNames
         lock.unlock()
-        XCTAssertEqual(names.count, 4)
-        XCTAssertEqual(Set(names).count, 4)
+        XCTAssertEqual(names.count, 2)
+        XCTAssertEqual(Set(names).count, 2)
         XCTAssertTrue(names.allSatisfy { $0.hasPrefix("Disk-Speed-Test-") })
         XCTAssertTrue(names.allSatisfy { $0.contains("write-run") })
     }
@@ -455,7 +491,7 @@ final class DITTests: XCTestCase {
         lock.lock()
         let waits = requestedWaits
         lock.unlock()
-        XCTAssertEqual(waits, [1, 1, 1])
+        XCTAssertEqual(waits, [1])
     }
 
     private static func fixtureDrive() -> DriveDevice {

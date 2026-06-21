@@ -108,7 +108,7 @@ final class DITViewModel: ObservableObject {
 
         benchmarkError = nil
         isBenchmarking = true
-        let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs)
+        let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs, usesTrimmedAverage: profile.usesTrimmedAverage)
         benchmarkProgress = BenchmarkProgress(
             currentTestLabel: "Starting",
             completed: 0,

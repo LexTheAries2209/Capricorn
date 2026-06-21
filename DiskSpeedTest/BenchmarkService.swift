@@ -46,17 +46,17 @@ struct BenchmarkRunMeasurement: Equatable {
 }
 
 enum BenchmarkMeasurementReducer {
-    static func measuredRunCount(for selectedRuns: Int) -> Int {
-        max(3, selectedRuns + 2)
+    static func measuredRunCount(for selectedRuns: Int, usesTrimmedAverage: Bool = false) -> Int {
+        usesTrimmedAverage ? max(3, selectedRuns + 2) : max(1, selectedRuns)
     }
 
-    static func summarize(_ measurements: [BenchmarkRunMeasurement]) -> BenchmarkRunMeasurement {
+    static func summarize(_ measurements: [BenchmarkRunMeasurement], usesTrimmedAverage: Bool = false) -> BenchmarkRunMeasurement {
         guard !measurements.isEmpty else {
             return BenchmarkRunMeasurement(megabytesPerSecond: 0, iops: 0, latencyMicroseconds: 0, bytesTransferred: 0)
         }
 
         let averagedMeasurements: ArraySlice<BenchmarkRunMeasurement>
-        if measurements.count > 2 {
+        if usesTrimmedAverage, measurements.count > 2 {
             let sorted = measurements.sorted { $0.megabytesPerSecond < $1.megabytesPerSecond }
             averagedMeasurements = sorted.dropFirst().dropLast()
         } else {
@@ -190,7 +190,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             cleanupBenchmarkFiles(in: volumeURL)
         }
 
-        let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs)
+        let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs, usesTrimmedAverage: profile.usesTrimmedAverage)
         let orderedTests = orderedTestsByProfileRows(profile.tests)
         let totalSteps = profile.tests.count * (measuredRuns + 1)
         var completedSteps = 0
@@ -423,7 +423,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             }
         }
 
-        let average = BenchmarkMeasurementReducer.summarize(measurements)
+        let average = BenchmarkMeasurementReducer.summarize(measurements, usesTrimmedAverage: profile.usesTrimmedAverage)
         return BenchmarkResult(
             driveID: drive.id,
             volumePath: volumePath,
