@@ -180,6 +180,7 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(english.runs.contains("5"))
         XCTAssertTrue(english.fileSize.contains("full file"))
         XCTAssertTrue(english.testTerms.contains("5-second"))
+        XCTAssertTrue(english.testTerms.contains("Each row"))
         XCTAssertTrue(english.testTerms.contains("SEQ"))
         XCTAssertTrue(chinese.profileUse.contains("默认"))
         XCTAssertTrue(chinese.runs.contains("3"))
@@ -188,6 +189,7 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(chinese.fileSize.contains("完整"))
         XCTAssertTrue(chinese.dataPattern.contains("随机"))
         XCTAssertTrue(chinese.testTerms.contains("SEQ"))
+        XCTAssertTrue(chinese.testTerms.contains("每一行"))
         XCTAssertTrue(chinese.testTerms.contains("间隔 5 秒"))
     }
 
@@ -236,7 +238,7 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(leftovers.isEmpty)
     }
 
-    func testBenchmarkRunnerPublishesEachCompletedResult() async throws {
+    func testBenchmarkRunnerPublishesEachRowReadThenWrite() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -246,7 +248,7 @@ final class DITTests: XCTestCase {
             DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
         ]
         let read = BenchmarkTest(
-            id: "unit-read",
+            id: "unit-read-a",
             label: "SEQ1M Q1T1",
             accessPattern: .sequential,
             operation: .read,
@@ -258,28 +260,28 @@ final class DITTests: XCTestCase {
             dataPattern: .zeroFill,
             writePercentForMixed: 0
         )
-        let write = BenchmarkTest(
-            id: "unit-write",
-            label: "SEQ1M Q1T1",
-            accessPattern: .sequential,
-            operation: .write,
-            blockSizeBytes: 4_096,
-            queueDepth: 1,
-            threads: 1,
-            durationSeconds: 0.05,
-            testSizeBytes: 65_536,
-            dataPattern: .zeroFill,
-            writePercentForMixed: 100
-        )
-        let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 65_536, runs: 1, tests: [read, write])
+        var write = read
+        write.id = "unit-write-a"
+        write.operation = .write
+        write.writePercentForMixed = 100
+        var readB = read
+        readB.id = "unit-read-b"
+        readB.label = "RND4K Q1T1"
+        readB.accessPattern = .random
+        var writeB = readB
+        writeB.id = "unit-write-b"
+        writeB.operation = .write
+        writeB.writePercentForMixed = 100
+
+        let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 65_536, runs: 1, tests: [read, write, readB, writeB])
         var publishedTestIDs: [String] = []
 
         let results = try await NativeBenchmarkRunner(operationIntervalSeconds: 0).run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
             publishedTestIDs.append(result.testID)
         }
 
-        XCTAssertEqual(results.map(\.testID), ["unit-read", "unit-write"])
-        XCTAssertEqual(publishedTestIDs, ["unit-read", "unit-write"])
+        XCTAssertEqual(results.map(\.testID), ["unit-read-a", "unit-write-a", "unit-read-b", "unit-write-b"])
+        XCTAssertEqual(publishedTestIDs, ["unit-read-a", "unit-write-a", "unit-read-b", "unit-write-b"])
         XCTAssertTrue(results.allSatisfy { $0.bytesTransferred == 65_536 })
     }
 

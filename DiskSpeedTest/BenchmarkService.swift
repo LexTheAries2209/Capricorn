@@ -183,7 +183,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         }
 
         let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs)
-        let orderedTests = orderedTestsForCrystalFlow(profile.tests)
+        let orderedTests = orderedTestsByProfileRows(profile.tests)
         let totalSteps = profile.tests.count * measuredRuns
         var completedSteps = 0
         var results: [BenchmarkResult] = []
@@ -244,10 +244,8 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         return results
     }
 
-    private func orderedTestsForCrystalFlow(_ tests: [BenchmarkTest]) -> [BenchmarkTest] {
-        [.read, .write, .mixed].flatMap { operation in
-            tests.filter { $0.operation == operation }
-        }
+    private func orderedTestsByProfileRows(_ tests: [BenchmarkTest]) -> [BenchmarkTest] {
+        tests
     }
 
     private func withBenchmarkFile<T>(at url: URL, body: (Int32) throws -> T) throws -> T {

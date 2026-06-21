@@ -101,7 +101,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
                 runs: "Runs: \(runs) selected, executed as 1 warm-up plus \(measuredRuns) measured passes. The fastest and slowest measured passes are removed, then the rest are averaged.",
                 fileSize: "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) complete temporary file. Reads and writes transfer the full file size; elapsed time comes from the actual transfer.",
                 dataPattern: "Data pattern: \(benchmarkDataPatternTitle(dataPattern)). Random is closer to incompressible real data; 0 Fill can expose compression, dedupe, or controller peak behavior.",
-                testTerms: "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Read tests run before write tests, with a 5-second pause between scored items."
+                testTerms: "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Each row runs read first, then write, before moving to the next row, with a 5-second pause between scored items."
             )
         case .simplifiedChinese:
             let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: runs)
@@ -110,7 +110,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
                 runs: "测试次数：界面选择 \(runs)；实际执行 1 轮预热 + \(measuredRuns) 轮正式测量，去掉最高和最低后对剩余结果取平均。",
                 fileSize: "测试文件大小：使用完整的 \(formatBenchmarkFileSize(fileSizeBytes)) 临时文件。读取和写入都会传输完整文件大小，耗时由真实传输决定。",
                 dataPattern: "数据模式：\(benchmarkDataPatternTitle(dataPattern))。随机数据更接近不可压缩真实负载；0 填充适合观察压缩、去重或控制器峰值，结果可能偏高。",
-                testTerms: "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。先执行读取组，再执行写入组，已计分项目之间间隔 5 秒。"
+                testTerms: "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。每一行先读取、再写入，然后进入下一行，已计分项目之间间隔 5 秒。"
             )
         }
     }
