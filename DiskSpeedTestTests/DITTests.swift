@@ -140,6 +140,19 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(BenchmarkProfile.fileSizeOptions.contains(BenchmarkProfile.defaultTestSize))
     }
 
+    func testBenchmarkProgressIncludesCurrentPhaseBytesInFraction() {
+        let progress = BenchmarkProgress(
+            currentTestLabel: "RND4K Q1T1",
+            completed: 2,
+            total: 10,
+            message: "Read run 1/3",
+            phaseCompletedBytes: 512,
+            phaseTotalBytes: 1_024
+        )
+
+        XCTAssertEqual(progress.fraction, 0.25, accuracy: 0.0001)
+    }
+
     func testBenchmarkSelectedRunCountAddsTwoMeasuredRuns() {
         XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 1), 3)
         XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 3), 5)

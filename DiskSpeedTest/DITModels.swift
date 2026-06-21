@@ -407,10 +407,18 @@ struct BenchmarkProgress: Equatable {
     var completed: Int
     var total: Int
     var message: String
+    var phaseCompletedBytes: Int64 = 0
+    var phaseTotalBytes: Int64 = 0
 
     var fraction: Double {
         guard total > 0 else { return 0 }
-        return min(1, max(0, Double(completed) / Double(total)))
+        let phaseFraction: Double
+        if phaseTotalBytes > 0 {
+            phaseFraction = min(1, max(0, Double(phaseCompletedBytes) / Double(phaseTotalBytes)))
+        } else {
+            phaseFraction = 0
+        }
+        return min(1, max(0, (Double(completed) + phaseFraction) / Double(total)))
     }
 }
 

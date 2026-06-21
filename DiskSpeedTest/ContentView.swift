@@ -790,7 +790,7 @@ private struct BenchmarkView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let progress = viewModel.benchmarkProgress, viewModel.isBenchmarking {
                 ProgressView(value: progress.fraction)
-                Text("\(language.progressLabel(progress.currentTestLabel)): \(language.statusMessage(progress.message))")
+                Text("\(language.progressLabel(progress.currentTestLabel)): \(progressStatusText(progress))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -814,6 +814,14 @@ private struct BenchmarkView: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+    }
+
+    private func progressStatusText(_ progress: BenchmarkProgress) -> String {
+        var text = language.statusMessage(progress.message)
+        if progress.phaseTotalBytes > 0 {
+            text += " · \(formatBenchmarkFileSize(progress.phaseCompletedBytes)) / \(formatBenchmarkFileSize(progress.phaseTotalBytes))"
+        }
+        return text
     }
 
     private func chooseTargetFolder() {

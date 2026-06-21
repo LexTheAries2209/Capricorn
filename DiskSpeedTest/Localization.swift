@@ -194,6 +194,15 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             let operation = String(message.dropFirst("Preparing ".count))
             return "正在准备\(statusMessage(operation))"
         }
+        if message == "Read warm-up" {
+            return "读取预热"
+        }
+        if message == "Write warm-up" {
+            return "写入预热"
+        }
+        if message == "Mixed warm-up" {
+            return "混合预热"
+        }
         if message.hasPrefix("Read run ") {
             return message.replacingOccurrences(of: "Read run ", with: "读取第 ")
                 .replacingOccurrences(of: "/", with: "/")
@@ -388,6 +397,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Creating benchmark files": "正在创建测速文件",
         "Preparing test file": "正在准备测试文件",
         "Preparing complete test file": "正在准备完整测试文件，不计入成绩",
+        "Flushing prepared test file": "正在刷新准备文件",
+        "Flushing writes": "正在刷新写入",
         "Waiting between tests": "测试间隔等待中",
         "Waiting between passes": "轮次间隔等待中",
         "Benchmark cancelled.": "测速已取消。",

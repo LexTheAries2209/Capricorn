@@ -192,7 +192,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
         let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs)
         let orderedTests = orderedTestsByProfileRows(profile.tests)
-        let totalSteps = profile.tests.count * measuredRuns
+        let totalSteps = profile.tests.count * (measuredRuns + 1)
         var completedSteps = 0
         var results: [BenchmarkResult] = []
         let runID = UUID().uuidString
@@ -284,6 +284,17 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     }
 
     private func prepareCompleteTestFile(fd: Int32, size: Int64, blockSize: Int, pattern: BenchmarkDataPattern) throws {
+        try prepareCompleteTestFile(fd: fd, size: size, blockSize: blockSize, pattern: pattern, progressReporter: nil)
+    }
+
+    private func prepareCompleteTestFile(
+        fd: Int32,
+        size: Int64,
+        blockSize: Int,
+        pattern: BenchmarkDataPattern,
+        progressReporter: ByteProgressReporter?,
+        flushStarted: (() -> Void)? = nil
+    ) throws {
         try resizeFile(fd: fd, size: 0)
 
         let bufferSize = max(4_096, min(blockSize, 1_048_576))
@@ -291,13 +302,17 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         defer { buffer.deallocate() }
 
         var offset: Int64 = 0
+        progressReporter?.set(0, force: true)
         while offset < size {
             try checkCancelled()
             let count = min(bufferSize, Int(size - offset))
             fill(buffer, count: count, pattern: pattern)
             _ = try transfer(fd: fd, buffer: buffer, count: count, offset: offset, shouldWrite: true)
             offset += Int64(count)
+            progressReporter?.set(offset)
         }
+        progressReporter?.finish()
+        flushStarted?()
         if fsync(fd) != 0 {
             throw BenchmarkError.ioFailed("Could not flush prepared benchmark file.")
         }
@@ -320,37 +335,81 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         for runIndex in 0...measuredRuns {
             try checkCancelled()
             let isWarmup = runIndex == 0
+            let passMessage = passStatusMessage(for: test, runIndex: runIndex, measuredRuns: measuredRuns)
+            notify(progress, BenchmarkProgress(
+                currentTestLabel: test.label,
+                completed: completedSteps,
+                total: totalSteps,
+                message: passMessage
+            ))
+
             let testFile = benchmarkFileURL(in: volumeURL, runID: runID, test: test, runIndex: runIndex)
+            let phaseCompletedSteps = completedSteps
             let measurement = try withBenchmarkFile(at: testFile) { fd in
                 if test.operation != .write {
+                    let prepareReporter = byteProgressReporter(
+                        test: test,
+                        completedSteps: phaseCompletedSteps,
+                        totalSteps: totalSteps,
+                        message: "Preparing complete test file",
+                        progress: progress
+                    )
                     notify(progress, BenchmarkProgress(
                         currentTestLabel: test.label,
-                        completed: completedSteps,
+                        completed: phaseCompletedSteps,
                         total: totalSteps,
-                        message: "Preparing complete test file"
+                        message: "Preparing complete test file",
+                        phaseCompletedBytes: 0,
+                        phaseTotalBytes: test.testSizeBytes
                     ))
                     try prepareCompleteTestFile(
                         fd: fd,
                         size: test.testSizeBytes,
                         blockSize: test.blockSizeBytes,
-                        pattern: test.dataPattern
+                        pattern: test.dataPattern,
+                        progressReporter: prepareReporter,
+                        flushStarted: {
+                            self.publishPhaseProgress(
+                                test: test,
+                                completedSteps: phaseCompletedSteps,
+                                totalSteps: totalSteps,
+                                message: "Flushing prepared test file",
+                                completedBytes: test.testSizeBytes,
+                                progress: progress
+                            )
+                        }
                     )
                 } else {
                     try resizeFile(fd: fd, size: test.testSizeBytes)
                 }
-                return try perform(test: test, fd: fd)
+                notify(progress, BenchmarkProgress(
+                    currentTestLabel: test.label,
+                    completed: phaseCompletedSteps,
+                    total: totalSteps,
+                    message: passMessage,
+                    phaseCompletedBytes: 0,
+                    phaseTotalBytes: test.testSizeBytes
+                ))
+                return try perform(
+                    test: test,
+                    fd: fd,
+                    completedSteps: phaseCompletedSteps,
+                    totalSteps: totalSteps,
+                    message: passMessage,
+                    progress: progress
+                )
             }
 
             if !isWarmup {
                 measurements.append(measurement)
-                completedSteps += 1
-                notify(progress, BenchmarkProgress(
-                    currentTestLabel: test.label,
-                    completed: completedSteps,
-                    total: totalSteps,
-                    message: "\(test.operation.title) run \(runIndex)/\(measuredRuns)"
-                ))
             }
+            completedSteps += 1
+            notify(progress, BenchmarkProgress(
+                currentTestLabel: test.label,
+                completed: completedSteps,
+                total: totalSteps,
+                message: passMessage
+            ))
 
             if runIndex < measuredRuns {
                 try checkCancelled()
@@ -381,17 +440,131 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         )
     }
 
+    private func passStatusMessage(for test: BenchmarkTest, runIndex: Int, measuredRuns: Int) -> String {
+        if runIndex == 0 {
+            return "\(test.operation.title) warm-up"
+        }
+        return "\(test.operation.title) run \(runIndex)/\(measuredRuns)"
+    }
+
+    private final class ByteProgressReporter {
+        private let totalBytes: Int64
+        private let minimumIntervalNanoseconds: UInt64
+        private let onReport: (Int64) -> Void
+        private let lock = NSLock()
+        private var completedBytes: Int64 = 0
+        private var lastReportNanoseconds = DispatchTime.now().uptimeNanoseconds
+
+        init(totalBytes: Int64, minimumIntervalNanoseconds: UInt64 = 250_000_000, onReport: @escaping (Int64) -> Void) {
+            self.totalBytes = max(0, totalBytes)
+            self.minimumIntervalNanoseconds = minimumIntervalNanoseconds
+            self.onReport = onReport
+        }
+
+        func add(_ bytes: Int64) {
+            let reportBytes: Int64?
+            lock.lock()
+            completedBytes = min(totalBytes, max(0, completedBytes + bytes))
+            let now = DispatchTime.now().uptimeNanoseconds
+            if completedBytes >= totalBytes || now - lastReportNanoseconds >= minimumIntervalNanoseconds {
+                lastReportNanoseconds = now
+                reportBytes = completedBytes
+            } else {
+                reportBytes = nil
+            }
+            lock.unlock()
+
+            if let reportBytes {
+                onReport(reportBytes)
+            }
+        }
+
+        func set(_ bytes: Int64, force: Bool = false) {
+            let reportBytes: Int64?
+            lock.lock()
+            completedBytes = min(totalBytes, max(0, bytes))
+            let now = DispatchTime.now().uptimeNanoseconds
+            if force || completedBytes >= totalBytes || now - lastReportNanoseconds >= minimumIntervalNanoseconds {
+                lastReportNanoseconds = now
+                reportBytes = completedBytes
+            } else {
+                reportBytes = nil
+            }
+            lock.unlock()
+
+            if let reportBytes {
+                onReport(reportBytes)
+            }
+        }
+
+        func finish() {
+            set(totalBytes, force: true)
+        }
+    }
+
+    private func byteProgressReporter(
+        test: BenchmarkTest,
+        completedSteps: Int,
+        totalSteps: Int,
+        message: String,
+        progress: @escaping (BenchmarkProgress) -> Void
+    ) -> ByteProgressReporter {
+        ByteProgressReporter(totalBytes: test.testSizeBytes) { [weak self] completedBytes in
+            guard let self else { return }
+            self.notify(progress, BenchmarkProgress(
+                currentTestLabel: test.label,
+                completed: completedSteps,
+                total: totalSteps,
+                message: message,
+                phaseCompletedBytes: completedBytes,
+                phaseTotalBytes: test.testSizeBytes
+            ))
+        }
+    }
+
+    private func publishPhaseProgress(
+        test: BenchmarkTest,
+        completedSteps: Int,
+        totalSteps: Int,
+        message: String,
+        completedBytes: Int64,
+        progress: @escaping (BenchmarkProgress) -> Void
+    ) {
+        notify(progress, BenchmarkProgress(
+            currentTestLabel: test.label,
+            completed: completedSteps,
+            total: totalSteps,
+            message: message,
+            phaseCompletedBytes: completedBytes,
+            phaseTotalBytes: test.testSizeBytes
+        ))
+    }
+
     private struct TransferRequest {
         var offset: Int64
         var count: Int
     }
 
-    private func perform(test: BenchmarkTest, fd: Int32) throws -> BenchmarkRunMeasurement {
+    private func perform(
+        test: BenchmarkTest,
+        fd: Int32,
+        completedSteps: Int,
+        totalSteps: Int,
+        message: String,
+        progress: @escaping (BenchmarkProgress) -> Void
+    ) throws -> BenchmarkRunMeasurement {
         let threadCount = max(1, test.threads)
         let queueDepth = max(1, test.queueDepth)
         let blockSize = max(512, test.blockSizeBytes)
         let fileSize = max(Int64(blockSize), test.testSizeBytes)
         let aggregateLock = NSLock()
+        let progressReporter = byteProgressReporter(
+            test: test,
+            completedSteps: completedSteps,
+            totalSteps: totalSteps,
+            message: message,
+            progress: progress
+        )
         var assignedBytes: Int64 = 0
         var nextSequentialOffset: Int64 = 0
         var totalBytes: Int64 = 0
@@ -399,6 +572,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         var minLatencyMicros = Double.greatestFiniteMagnitude
         var firstError: Error?
 
+        progressReporter.set(0, force: true)
         let started = DispatchTime.now().uptimeNanoseconds
         DispatchQueue.concurrentPerform(iterations: threadCount) { _ in
             let buffer = UnsafeMutableRawPointer.allocate(byteCount: blockSize, alignment: 4_096)
@@ -439,12 +613,13 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                         if shouldWrite {
                             fill(buffer, count: request.count, pattern: test.dataPattern)
                         }
-                        _ = try transfer(fd: fd, buffer: buffer, count: request.count, offset: request.offset, shouldWrite: shouldWrite)
+                        let transferred = try transfer(fd: fd, buffer: buffer, count: request.count, offset: request.offset, shouldWrite: shouldWrite)
                         let opFinished = DispatchTime.now().uptimeNanoseconds
 
-                        localBytes += Int64(request.count)
+                        localBytes += Int64(transferred)
                         localOperations += 1
                         localMinLatency = min(localMinLatency, Double(opFinished - opStarted) / 1_000)
+                        progressReporter.add(Int64(transferred))
                     } catch {
                         aggregateLock.lock()
                         if firstError == nil {
@@ -472,7 +647,16 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
         if let firstError { throw firstError }
 
+        progressReporter.finish()
         if test.operation == .write || test.operation == .mixed {
+            publishPhaseProgress(
+                test: test,
+                completedSteps: completedSteps,
+                totalSteps: totalSteps,
+                message: "Flushing writes",
+                completedBytes: test.testSizeBytes,
+                progress: progress
+            )
             if fsync(fd) != 0 {
                 throw BenchmarkError.ioFailed("Could not flush benchmark writes.")
             }
@@ -485,6 +669,17 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             iops: Double(totalOperations) / elapsed,
             latencyMicroseconds: minLatencyMicros.isFinite ? minLatencyMicros : 0,
             bytesTransferred: totalBytes
+        )
+    }
+
+    private func perform(test: BenchmarkTest, fd: Int32) throws -> BenchmarkRunMeasurement {
+        try perform(
+            test: test,
+            fd: fd,
+            completedSteps: 0,
+            totalSteps: 0,
+            message: test.operation.title,
+            progress: { _ in }
         )
     }
 
@@ -558,12 +753,16 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     }
 
     private static func defaultOperationSleeper(seconds: TimeInterval, isCancelled: () -> Bool) throws {
-        let deadline = Date().addingTimeInterval(seconds)
-        while Date() < deadline {
+        let durationNanoseconds = UInt64(max(0, seconds) * 1_000_000_000)
+        let deadline = DispatchTime.now().uptimeNanoseconds + durationNanoseconds
+        while true {
+            let now = DispatchTime.now().uptimeNanoseconds
+            guard now < deadline else { break }
             if isCancelled() {
                 throw BenchmarkError.cancelled
             }
-            Thread.sleep(forTimeInterval: min(0.1, max(0, deadline.timeIntervalSinceNow)))
+            let remainingSeconds = Double(deadline - now) / 1_000_000_000
+            Thread.sleep(forTimeInterval: min(0.1, max(0, remainingSeconds)))
         }
     }
 
