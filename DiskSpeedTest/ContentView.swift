@@ -567,6 +567,29 @@ private struct BenchmarkView: View {
             && FileManager.default.isWritableFile(atPath: targetFolderPath)
     }
 
+    private var targetFolderAvailableCapacity: Int64 {
+        guard targetFolderIsUsable, let targetFolderURL else { return 0 }
+        return BenchmarkStorageValidator.availableCapacity(for: targetFolderURL)
+    }
+
+    private var selectedFileSizeHasSpace: Bool {
+        guard targetFolderIsUsable else { return false }
+        return BenchmarkStorageValidator.isFileSizeAvailable(profile.testFileSizeBytes, availableCapacity: targetFolderAvailableCapacity)
+    }
+
+    private var hasAnyAvailableFileSize: Bool {
+        guard targetFolderIsUsable else { return false }
+        return BenchmarkStorageValidator.largestAvailableFileSize(from: BenchmarkProfile.fileSizeOptions, availableCapacity: targetFolderAvailableCapacity) != nil
+    }
+
+    private var canRunBenchmark: Bool {
+        targetFolderIsUsable && selectedFileSizeHasSpace && !viewModel.isBenchmarking
+    }
+
+    private var targetFolderStatusIsReady: Bool {
+        targetFolderIsUsable && selectedFileSizeHasSpace
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -580,7 +603,13 @@ private struct BenchmarkView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .confirmationDialog(language.t("Benchmark writes a temporary test file to the selected target folder."), isPresented: $confirmWrite) {
+        .onAppear {
+            adjustSelectedFileSizeForTarget()
+        }
+        .onChange(of: targetFolderPath) { _, _ in
+            adjustSelectedFileSizeForTarget()
+        }
+        .confirmationDialog(language.t("Benchmark writes a complete temporary test file to the selected target folder."), isPresented: $confirmWrite) {
             Button(language.t("Run Benchmark"), role: .destructive) {
                 Task { await viewModel.runBenchmark(profile: profile, volumePath: targetFolderPath) }
             }
@@ -644,7 +673,9 @@ private struct BenchmarkView: View {
                         .foregroundStyle(.secondary)
                     Picker(language.t("Test Size"), selection: $selectedFileSizeBytes) {
                         ForEach(BenchmarkProfile.fileSizeOptions, id: \.self) { size in
-                            Text(formatBenchmarkFileSize(size)).tag(Int(size))
+                            Text(formatBenchmarkFileSize(size))
+                                .tag(Int(size))
+                                .disabled(!isFileSizeSelectable(size))
                         }
                     }
                     .labelsHidden()
@@ -675,7 +706,7 @@ private struct BenchmarkView: View {
                     Label(language.t("Run"), systemImage: "play.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!targetFolderIsUsable || viewModel.isBenchmarking)
+                .disabled(!canRunBenchmark)
 
                 Button {
                     viewModel.cancelBenchmark()
@@ -715,9 +746,9 @@ private struct BenchmarkView: View {
                 }
                 .buttonStyle(.bordered)
 
-                Label(targetFolderStatusText, systemImage: targetFolderIsUsable ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                Label(targetFolderStatusText, systemImage: targetFolderStatusIsReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                     .font(.caption)
-                    .foregroundStyle(targetFolderIsUsable ? .green : .orange)
+                    .foregroundStyle(targetFolderStatusIsReady ? .green : .orange)
                     .lineLimit(1)
 
                 Spacer(minLength: 8)
@@ -742,11 +773,17 @@ private struct BenchmarkView: View {
         if targetFolderPath.isEmpty {
             return language.t("Choose a writable target folder")
         }
+        if targetFolderIsUsable, !hasAnyAvailableFileSize {
+            return language.t("Not enough free space for the smallest test size")
+        }
+        if targetFolderIsUsable, !selectedFileSizeHasSpace {
+            return language.t("Selected test size exceeds available free space")
+        }
         return targetFolderIsUsable ? language.t("Target folder is writable") : language.t("Target folder is not writable")
     }
 
     private var shouldShowProgressAndErrors: Bool {
-        viewModel.isBenchmarking || viewModel.benchmarkError != nil || !targetFolderIsUsable
+        viewModel.isBenchmarking || viewModel.benchmarkError != nil || !canRunBenchmark
     }
 
     private var progressAndErrors: some View {
@@ -765,6 +802,14 @@ private struct BenchmarkView: View {
             } else if !targetFolderIsUsable {
                 Label(language.t("Select a target folder before starting the speed test."), systemImage: "folder.badge.plus")
                     .foregroundStyle(.secondary)
+                    .font(.caption)
+            } else if !hasAnyAvailableFileSize {
+                Label(language.t("Not enough free space for the smallest test size"), systemImage: "internaldrive")
+                    .foregroundStyle(.orange)
+                    .font(.caption)
+            } else if !selectedFileSizeHasSpace {
+                Label(language.t("Selected test size exceeds available free space"), systemImage: "internaldrive")
+                    .foregroundStyle(.orange)
                     .font(.caption)
             }
         }
@@ -789,6 +834,7 @@ private struct BenchmarkView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         targetFolderPath = url.path
         viewModel.benchmarkError = nil
+        adjustSelectedFileSizeForTarget()
     }
 
     private func requestBenchmarkStart() {
@@ -816,12 +862,34 @@ private struct BenchmarkView: View {
         do {
             try Data().write(to: probeURL, options: .atomic)
             try? FileManager.default.removeItem(at: probeURL)
-            viewModel.benchmarkError = nil
-            return true
         } catch {
             try? FileManager.default.removeItem(at: probeURL)
             viewModel.benchmarkError = "Selected target folder is not writable."
             return false
+        }
+
+        let available = BenchmarkStorageValidator.availableCapacity(for: targetFolderURL)
+        let required = BenchmarkStorageValidator.requiredSpace(for: profile.testFileSizeBytes)
+        guard BenchmarkStorageValidator.isFileSizeAvailable(profile.testFileSizeBytes, availableCapacity: available) else {
+            viewModel.benchmarkError = BenchmarkError.insufficientSpace(required: required, available: available).localizedDescription
+            return false
+        }
+
+        viewModel.benchmarkError = nil
+        return true
+    }
+
+    private func isFileSizeSelectable(_ fileSizeBytes: Int64) -> Bool {
+        guard targetFolderIsUsable else { return true }
+        return BenchmarkStorageValidator.isFileSizeAvailable(fileSizeBytes, availableCapacity: targetFolderAvailableCapacity)
+    }
+
+    private func adjustSelectedFileSizeForTarget() {
+        guard targetFolderIsUsable else { return }
+        let selectedSize = Int64(selectedFileSizeBytes)
+        guard !BenchmarkStorageValidator.isFileSizeAvailable(selectedSize, availableCapacity: targetFolderAvailableCapacity) else { return }
+        if let fallback = BenchmarkStorageValidator.largestAvailableFileSize(from: BenchmarkProfile.fileSizeOptions, availableCapacity: targetFolderAvailableCapacity) {
+            selectedFileSizeBytes = Int(fallback)
         }
     }
 }

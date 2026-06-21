@@ -95,20 +95,22 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     ) -> BenchmarkConfigurationDescription {
         switch self {
         case .english:
+            let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: runs)
             return BenchmarkConfigurationDescription(
                 profileUse: englishProfileUseDescription(profile),
-                runs: "Runs: \(runs) measured pass\(runs == 1 ? "" : "es") after one warm-up. More runs improve stability and take longer.",
-                fileSize: "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) temporary file. Larger files reduce cache effects but need more free space.",
+                runs: "Runs: \(runs) selected, executed as 1 warm-up plus \(measuredRuns) measured passes. The fastest and slowest measured passes are removed, then the rest are averaged.",
+                fileSize: "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) complete temporary file. Reads and writes transfer the full file size; elapsed time comes from the actual transfer.",
                 dataPattern: "Data pattern: \(benchmarkDataPatternTitle(dataPattern)). Random is closer to incompressible real data; 0 Fill can expose compression, dedupe, or controller peak behavior.",
-                testTerms: "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Higher Q/T can show parallel peak speed, while Q1T1 is closer to single-app responsiveness."
+                testTerms: "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Read tests run before write tests, with a 5-second pause between scored items."
             )
         case .simplifiedChinese:
+            let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: runs)
             return BenchmarkConfigurationDescription(
                 profileUse: chineseProfileUseDescription(profile),
-                runs: "测试次数：\(runs) 轮正式测量，另有 1 轮预热不计入结果。次数越多越稳定，但耗时更长。",
-                fileSize: "测试文件大小：\(formatBenchmarkFileSize(fileSizeBytes)) 临时文件。文件越大越能降低缓存影响，但需要更多可用空间。",
+                runs: "测试次数：界面选择 \(runs)；实际执行 1 轮预热 + \(measuredRuns) 轮正式测量，去掉最高和最低后对剩余结果取平均。",
+                fileSize: "测试文件大小：使用完整的 \(formatBenchmarkFileSize(fileSizeBytes)) 临时文件。读取和写入都会传输完整文件大小，耗时由真实传输决定。",
                 dataPattern: "数据模式：\(benchmarkDataPatternTitle(dataPattern))。随机数据更接近不可压缩真实负载；0 填充适合观察压缩、去重或控制器峰值，结果可能偏高。",
-                testTerms: "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。更高的 Q/T 更容易跑出并行峰值，Q1T1 更接近单个应用的响应速度。"
+                testTerms: "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。先执行读取组，再执行写入组，已计分项目之间间隔 5 秒。"
             )
         }
     }
@@ -133,9 +135,9 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     func benchmarkFooter(testCount: Int, fileSize: Int64, runs: Int, dataPattern: BenchmarkDataPattern) -> String {
         switch self {
         case .english:
-            return "\(testCount) tests · \(formatBenchmarkFileSize(fileSize)) file · \(runs) run\(runs == 1 ? "" : "s") · \(benchmarkDataPatternTitle(dataPattern))"
+            return "\(testCount) tests · \(formatBenchmarkFileSize(fileSize)) file · \(runs)+2 avg runs · \(benchmarkDataPatternTitle(dataPattern))"
         case .simplifiedChinese:
-            return "\(testCount) 项测试 · \(formatBenchmarkFileSize(fileSize)) 文件 · \(runs) 轮 · \(benchmarkDataPatternTitle(dataPattern))"
+            return "\(testCount) 项测试 · \(formatBenchmarkFileSize(fileSize)) 文件 · \(runs)+2 轮平均 · \(benchmarkDataPatternTitle(dataPattern))"
         }
     }
 
@@ -301,11 +303,15 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Choose a writable target folder": "请选择可写目标文件夹",
         "Target folder is writable": "目标文件夹可写",
         "Target folder is not writable": "目标文件夹不可写",
+        "Not enough free space for the smallest test size": "可用空间不足，无法运行最小测试文件",
+        "Selected test size exceeds available free space": "所选测试文件大小超过可用空间",
         "Choose a writable folder where a temporary benchmark file can be created.": "选择一个可创建临时测速文件的可写文件夹。",
         "Use Folder": "使用文件夹",
         "Select a target folder before starting the speed test.": "开始测速前请选择目标文件夹。",
         "Benchmark writes a temporary test file to the selected volume.": "测速会在所选卷中写入一个临时测试文件。",
         "Benchmark writes a temporary test file to the selected target folder.": "测速会在所选目标文件夹中写入一个临时测试文件。",
+        "Benchmark writes temporary test files to the selected target folder.": "测速会在所选目标文件夹中写入临时测试文件。",
+        "Benchmark writes a complete temporary test file to the selected target folder.": "测速会在所选目标文件夹中写入一个完整的临时测试文件。",
         "Benchmark configuration and write target": "测速配置与写入目标",
         "Write target folder": "写入目标文件夹",
         "Write target folder:": "写入目标文件夹：",
@@ -316,6 +322,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Run Benchmark": "运行测速",
         "No Results": "无结果",
         "Run a benchmark profile to populate the read/write matrix.": "运行一个测速配置以生成读取/写入结果矩阵。",
+        "Run a benchmark profile to populate the write/read matrix.": "运行一个测速配置以生成写入/读取结果矩阵。",
         "Test": "测试",
         "Op": "操作",
         "Latency": "延迟",
@@ -378,8 +385,15 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "The benchmark target must be a folder.": "测速目标必须是文件夹。",
         "Selected target folder is not writable.": "所选目标文件夹不可写。",
         "Creating benchmark file": "正在创建测速文件",
+        "Creating benchmark files": "正在创建测速文件",
+        "Preparing test file": "正在准备测试文件",
+        "Preparing complete test file": "正在准备完整测试文件，不计入成绩",
+        "Waiting between tests": "测试间隔等待中",
         "Benchmark cancelled.": "测速已取消。",
         "Could not preallocate benchmark file.": "无法预分配测速文件。",
+        "Could not resize benchmark file.": "无法调整测速文件大小。",
+        "Could not flush prepared benchmark file.": "无法刷新准备好的测速文件。",
+        "Could not flush benchmark writes.": "无法刷新测速写入。",
         "Could not prepare read-test data.": "无法准备读取测试数据。",
         "Write test failed.": "写入测试失败。",
         "Read test failed.": "读取测试失败。",

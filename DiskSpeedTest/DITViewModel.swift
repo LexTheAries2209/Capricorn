@@ -108,7 +108,12 @@ final class DITViewModel: ObservableObject {
 
         benchmarkError = nil
         isBenchmarking = true
-        benchmarkProgress = BenchmarkProgress(currentTestLabel: "Starting", completed: 0, total: profile.tests.count * max(1, profile.runs), message: "Creating benchmark file")
+        benchmarkProgress = BenchmarkProgress(
+            currentTestLabel: "Starting",
+            completed: 0,
+            total: profile.tests.count * BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs),
+            message: "Preparing complete test file"
+        )
         replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: [])
         defer {
             isBenchmarking = false
