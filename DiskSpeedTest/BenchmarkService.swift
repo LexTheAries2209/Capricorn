@@ -111,10 +111,13 @@ enum BenchmarkStorageValidator {
 
 final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     typealias OperationSleeper = (_ seconds: TimeInterval, _ isCancelled: () -> Bool) throws -> Void
+    typealias BenchmarkFileEventHandler = (_ url: URL) -> Void
 
     private let fileManager: FileManager
     private let operationIntervalSeconds: TimeInterval
+    private let passIntervalSeconds: TimeInterval
     private let operationSleeper: OperationSleeper
+    private let fileEventHandler: BenchmarkFileEventHandler?
     private let lock = NSLock()
     private var cancelled = false
     private let benchmarkFilePrefix = "Disk-Speed-Test-"
@@ -123,11 +126,15 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     init(
         fileManager: FileManager = .default,
         operationIntervalSeconds: TimeInterval = 5,
-        operationSleeper: OperationSleeper? = nil
+        passIntervalSeconds: TimeInterval = 1,
+        operationSleeper: OperationSleeper? = nil,
+        fileEventHandler: BenchmarkFileEventHandler? = nil
     ) {
         self.fileManager = fileManager
         self.operationIntervalSeconds = operationIntervalSeconds
+        self.passIntervalSeconds = passIntervalSeconds
         self.operationSleeper = operationSleeper ?? Self.defaultOperationSleeper
+        self.fileEventHandler = fileEventHandler
     }
 
     func cancel() {
@@ -189,55 +196,40 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         var completedSteps = 0
         var results: [BenchmarkResult] = []
         let runID = UUID().uuidString
-        let testFile = volumeURL.appendingPathComponent("\(benchmarkFilePrefix)\(runID).tmp")
 
-        try withBenchmarkFile(at: testFile) { fd in
+        for (index, test) in orderedTests.enumerated() {
+            try checkCancelled()
             notify(progress, BenchmarkProgress(
-                currentTestLabel: "Preparing test file",
+                currentTestLabel: test.label,
                 completed: completedSteps,
                 total: totalSteps,
-                message: "Preparing complete test file"
+                message: "Preparing \(test.operation.title)"
             ))
-            try prepareCompleteTestFile(
-                fd: fd,
-                size: maxTestSize,
-                blockSize: profile.tests.map(\.blockSizeBytes).max() ?? 1_048_576,
-                pattern: profile.tests.first?.dataPattern ?? .random
-            )
 
-            for (index, test) in orderedTests.enumerated() {
+            let completedResult = try runMeasuredTest(
+                profile: profile,
+                drive: drive,
+                volumePath: volumePath,
+                volumeURL: volumeURL,
+                runID: runID,
+                test: test,
+                measuredRuns: measuredRuns,
+                completedSteps: &completedSteps,
+                totalSteps: totalSteps,
+                progress: progress
+            )
+            results.append(completedResult)
+            notify(result, completedResult)
+
+            if index < orderedTests.count - 1 {
                 try checkCancelled()
                 notify(progress, BenchmarkProgress(
                     currentTestLabel: test.label,
                     completed: completedSteps,
                     total: totalSteps,
-                    message: "Preparing \(test.operation.title)"
+                    message: "Waiting between tests"
                 ))
-
-                let completedResult = try runMeasuredTest(
-                    profile: profile,
-                    drive: drive,
-                    volumePath: volumePath,
-                    test: test,
-                    fd: fd,
-                    measuredRuns: measuredRuns,
-                    completedSteps: &completedSteps,
-                    totalSteps: totalSteps,
-                    progress: progress
-                )
-                results.append(completedResult)
-                notify(result, completedResult)
-
-                if index < orderedTests.count - 1 {
-                    try checkCancelled()
-                    notify(progress, BenchmarkProgress(
-                        currentTestLabel: test.label,
-                        completed: completedSteps,
-                        total: totalSteps,
-                        message: "Waiting between tests"
-                    ))
-                    try waitBetweenOperations()
-                }
+                try waitBetweenOperations()
             }
         }
 
@@ -249,10 +241,24 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         tests
     }
 
+    private func benchmarkFileURL(in volumeURL: URL, runID: String, test: BenchmarkTest, runIndex: Int) -> URL {
+        let label = sanitizedFileToken(test.label)
+        return volumeURL.appendingPathComponent("\(benchmarkFilePrefix)\(runID)-\(label)-\(test.operation.rawValue)-run\(runIndex)-\(UUID().uuidString).tmp")
+    }
+
+    private func sanitizedFileToken(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics
+        let scalars = value.unicodeScalars.map { scalar -> Character in
+            allowed.contains(scalar) ? Character(scalar) : "-"
+        }
+        return String(scalars).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    }
+
     private func withBenchmarkFile<T>(at url: URL, body: (Int32) throws -> T) throws -> T {
         let path = url.path
         let fd = open(path, O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR)
         guard fd >= 0 else { throw BenchmarkError.openFailed(path) }
+        fileEventHandler?(url)
         defer {
             close(fd)
             try? fileManager.removeItem(at: url)
@@ -283,12 +289,12 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         let bufferSize = max(4_096, min(blockSize, 1_048_576))
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: bufferSize, alignment: 4_096)
         defer { buffer.deallocate() }
-        fill(buffer, count: bufferSize, pattern: pattern)
 
         var offset: Int64 = 0
         while offset < size {
             try checkCancelled()
             let count = min(bufferSize, Int(size - offset))
+            fill(buffer, count: count, pattern: pattern)
             _ = try transfer(fd: fd, buffer: buffer, count: count, offset: offset, shouldWrite: true)
             offset += Int64(count)
         }
@@ -301,8 +307,9 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
+        volumeURL: URL,
+        runID: String,
         test: BenchmarkTest,
-        fd: Int32,
         measuredRuns: Int,
         completedSteps: inout Int,
         totalSteps: Int,
@@ -313,7 +320,27 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         for runIndex in 0...measuredRuns {
             try checkCancelled()
             let isWarmup = runIndex == 0
-            let measurement = try perform(test: test, fd: fd)
+            let testFile = benchmarkFileURL(in: volumeURL, runID: runID, test: test, runIndex: runIndex)
+            let measurement = try withBenchmarkFile(at: testFile) { fd in
+                if test.operation != .write {
+                    notify(progress, BenchmarkProgress(
+                        currentTestLabel: test.label,
+                        completed: completedSteps,
+                        total: totalSteps,
+                        message: "Preparing complete test file"
+                    ))
+                    try prepareCompleteTestFile(
+                        fd: fd,
+                        size: test.testSizeBytes,
+                        blockSize: test.blockSizeBytes,
+                        pattern: test.dataPattern
+                    )
+                } else {
+                    try resizeFile(fd: fd, size: test.testSizeBytes)
+                }
+                return try perform(test: test, fd: fd)
+            }
+
             if !isWarmup {
                 measurements.append(measurement)
                 completedSteps += 1
@@ -323,6 +350,17 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                     total: totalSteps,
                     message: "\(test.operation.title) run \(runIndex)/\(measuredRuns)"
                 ))
+            }
+
+            if runIndex < measuredRuns {
+                try checkCancelled()
+                notify(progress, BenchmarkProgress(
+                    currentTestLabel: test.label,
+                    completed: completedSteps,
+                    total: totalSteps,
+                    message: "Waiting between passes"
+                ))
+                try waitBetweenPasses()
             }
         }
 
@@ -365,7 +403,6 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         DispatchQueue.concurrentPerform(iterations: threadCount) { _ in
             let buffer = UnsafeMutableRawPointer.allocate(byteCount: blockSize, alignment: 4_096)
             defer { buffer.deallocate() }
-            fill(buffer, count: blockSize, pattern: test.dataPattern)
 
             var localBytes: Int64 = 0
             var localOperations: Int64 = 0
@@ -399,6 +436,9 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                     let shouldWrite = shouldWrite(test: test)
                     let opStarted = DispatchTime.now().uptimeNanoseconds
                     do {
+                        if shouldWrite {
+                            fill(buffer, count: request.count, pattern: test.dataPattern)
+                        }
                         _ = try transfer(fd: fd, buffer: buffer, count: request.count, offset: request.offset, shouldWrite: shouldWrite)
                         let opFinished = DispatchTime.now().uptimeNanoseconds
 
@@ -508,6 +548,12 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private func waitBetweenOperations() throws {
         guard operationIntervalSeconds > 0 else { return }
         try operationSleeper(operationIntervalSeconds) { self.isCancelled() }
+        try checkCancelled()
+    }
+
+    private func waitBetweenPasses() throws {
+        guard passIntervalSeconds > 0 else { return }
+        try operationSleeper(passIntervalSeconds) { self.isCancelled() }
         try checkCancelled()
     }
 

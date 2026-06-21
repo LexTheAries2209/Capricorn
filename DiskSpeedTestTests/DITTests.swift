@@ -179,7 +179,8 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(english.dataPattern.contains("Random"))
         XCTAssertTrue(english.runs.contains("5"))
         XCTAssertTrue(english.fileSize.contains("full file"))
-        XCTAssertTrue(english.testTerms.contains("5-second"))
+        XCTAssertTrue(english.testTerms.contains("1 second"))
+        XCTAssertTrue(english.testTerms.contains("5 seconds"))
         XCTAssertTrue(english.testTerms.contains("Each row"))
         XCTAssertTrue(english.testTerms.contains("SEQ"))
         XCTAssertTrue(chinese.profileUse.contains("默认"))
@@ -190,6 +191,7 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(chinese.dataPattern.contains("随机"))
         XCTAssertTrue(chinese.testTerms.contains("SEQ"))
         XCTAssertTrue(chinese.testTerms.contains("每一行"))
+        XCTAssertTrue(chinese.testTerms.contains("间隔 1 秒"))
         XCTAssertTrue(chinese.testTerms.contains("间隔 5 秒"))
     }
 
@@ -230,7 +232,7 @@ final class DITTests: XCTestCase {
         )
         let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 65_536, runs: 1, tests: [test])
 
-        let results = try await NativeBenchmarkRunner(operationIntervalSeconds: 0).run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
+        let results = try await NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0).run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results.first?.bytesTransferred, 65_536)
 
@@ -278,13 +280,55 @@ final class DITTests: XCTestCase {
         let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 65_536, runs: 1, tests: [read, write, readB, writeB])
         var publishedTestIDs: [String] = []
 
-        let results = try await NativeBenchmarkRunner(operationIntervalSeconds: 0).run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
+        let results = try await NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0).run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
             publishedTestIDs.append(result.testID)
         }
 
         XCTAssertEqual(results.map(\.testID), ["unit-read-a", "unit-write-a", "unit-read-b", "unit-write-b"])
         XCTAssertEqual(publishedTestIDs, ["unit-read-a", "unit-write-a", "unit-read-b", "unit-write-b"])
         XCTAssertTrue(results.allSatisfy { $0.bytesTransferred == 65_536 })
+    }
+
+    func testBenchmarkRunnerUsesUniqueFilesForWritePasses() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+        let write = BenchmarkTest(
+            id: "unit-write",
+            label: "SEQ1M Q1T1",
+            accessPattern: .sequential,
+            operation: .write,
+            blockSizeBytes: 4_096,
+            queueDepth: 1,
+            threads: 1,
+            durationSeconds: 0.05,
+            testSizeBytes: 32_768,
+            dataPattern: .random,
+            writePercentForMixed: 100
+        )
+        let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 32_768, runs: 1, tests: [write])
+        let lock = NSLock()
+        var createdNames: [String] = []
+        let runner = NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0, fileEventHandler: { url in
+            lock.lock()
+            createdNames.append(url.lastPathComponent)
+            lock.unlock()
+        })
+
+        _ = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
+
+        lock.lock()
+        let names = createdNames
+        lock.unlock()
+        XCTAssertEqual(names.count, 4)
+        XCTAssertEqual(Set(names).count, 4)
+        XCTAssertTrue(names.allSatisfy { $0.hasPrefix("Disk-Speed-Test-") })
+        XCTAssertTrue(names.allSatisfy { $0.contains("write-run") })
     }
 
     func testBenchmarkRunnerIgnoresFixedDurationAndTransfersCompleteFile() async throws {
@@ -311,7 +355,7 @@ final class DITTests: XCTestCase {
         )
         let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 131_072, runs: 1, tests: [read])
 
-        let results = try await NativeBenchmarkRunner(operationIntervalSeconds: 0).run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
+        let results = try await NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0).run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
 
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results.first?.bytesTransferred, 131_072)
@@ -346,7 +390,7 @@ final class DITTests: XCTestCase {
         let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 8_192, runs: 1, tests: [read, write])
         let lock = NSLock()
         var requestedWaits: [TimeInterval] = []
-        let runner = NativeBenchmarkRunner(operationIntervalSeconds: 5) { seconds, isCancelled in
+        let runner = NativeBenchmarkRunner(operationIntervalSeconds: 5, passIntervalSeconds: 0) { seconds, isCancelled in
             XCTAssertFalse(isCancelled())
             lock.lock()
             requestedWaits.append(seconds)
@@ -359,6 +403,46 @@ final class DITTests: XCTestCase {
         let waits = requestedWaits
         lock.unlock()
         XCTAssertEqual(waits, [5])
+    }
+
+    func testBenchmarkRunnerRequestsOneSecondBetweenPasses() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+        let write = BenchmarkTest(
+            id: "unit-write",
+            label: "SEQ4K Q1T1",
+            accessPattern: .sequential,
+            operation: .write,
+            blockSizeBytes: 4_096,
+            queueDepth: 1,
+            threads: 1,
+            durationSeconds: 0.001,
+            testSizeBytes: 8_192,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 100
+        )
+        let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 8_192, runs: 1, tests: [write])
+        let lock = NSLock()
+        var requestedWaits: [TimeInterval] = []
+        let runner = NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 1) { seconds, isCancelled in
+            XCTAssertFalse(isCancelled())
+            lock.lock()
+            requestedWaits.append(seconds)
+            lock.unlock()
+        }
+
+        _ = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
+
+        lock.lock()
+        let waits = requestedWaits
+        lock.unlock()
+        XCTAssertEqual(waits, [1, 1, 1])
     }
 
     private static func fixtureDrive() -> DriveDevice {
