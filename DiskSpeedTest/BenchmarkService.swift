@@ -117,7 +117,8 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private let operationSleeper: OperationSleeper
     private let lock = NSLock()
     private var cancelled = false
-    private let benchmarkFilePrefix = ".dit-benchmark-"
+    private let benchmarkFilePrefix = "Disk-Speed-Test-"
+    private let legacyBenchmarkFilePrefixes = [".dit-benchmark-"]
 
     init(
         fileManager: FileManager = .default,
@@ -264,7 +265,8 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
     private func cleanupBenchmarkFiles(in url: URL) {
         guard let contents = try? fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) else { return }
-        for file in contents where file.lastPathComponent.hasPrefix(benchmarkFilePrefix) {
+        let removablePrefixes = [benchmarkFilePrefix] + legacyBenchmarkFilePrefixes
+        for file in contents where removablePrefixes.contains(where: { file.lastPathComponent.hasPrefix($0) }) {
             try? fileManager.removeItem(at: file)
         }
     }

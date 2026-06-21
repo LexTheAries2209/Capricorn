@@ -858,7 +858,7 @@ private struct BenchmarkView: View {
             return false
         }
 
-        let probeURL = targetFolderURL.appendingPathComponent(".dit-write-check-\(UUID().uuidString)")
+        let probeURL = targetFolderURL.appendingPathComponent("Disk-Speed-Test-write-check-\(UUID().uuidString)")
         do {
             try Data().write(to: probeURL, options: .atomic)
             try? FileManager.default.removeItem(at: probeURL)

@@ -234,7 +234,9 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results.first?.bytesTransferred, 65_536)
 
-        let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter { $0.hasPrefix(".dit-benchmark-") }
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
+            $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")
+        }
         XCTAssertTrue(leftovers.isEmpty)
     }
 
