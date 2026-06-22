@@ -122,6 +122,23 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
     }
 
+    func benchmarkConfirmationConfiguration(
+        profile: BenchmarkProfile,
+        runs: Int,
+        fileSizeBytes: Int64,
+        dataPattern: BenchmarkDataPattern,
+        usesTrimmedAverage: Bool
+    ) -> String {
+        switch self {
+        case .english:
+            let trimState = usesTrimmedAverage ? "On" : "Off"
+            return "Benchmark settings\nProfile-\(profileName(profile)); runs-\(runs); test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-\(trimState)"
+        case .simplifiedChinese:
+            let trimState = usesTrimmedAverage ? "开启" : "关闭"
+            return "测试配置\n配置-\(profileName(profile))；测试次数-\(runs)；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-\(trimState)"
+        }
+    }
+
     func healthSummary(driveCount: Int, warningCount: Int) -> String {
         switch self {
         case .english:
@@ -311,7 +328,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Test Size": "测试文件大小",
         "Data Pattern": "数据模式",
         "Trimmed Avg": "去极值平均",
-        "Trim Outliers": "多次测试去极值",
+        "Trim Outliers": "加量测试去极值",
         "Off": "关闭",
         "On": "开启",
         "Run two extra measured passes, discard fastest and slowest, then average the rest.": "额外执行 2 轮正式测量，去掉最快和最慢后再平均。",

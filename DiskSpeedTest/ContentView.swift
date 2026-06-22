@@ -619,7 +619,7 @@ private struct BenchmarkView: View {
             }
             Button(language.t("Cancel"), role: .cancel) {}
         } message: {
-            Text("\(language.t("Write tests can temporarily use free space and stress storage."))\n\(language.t("Write target folder:"))\n\(targetFolderPath)")
+            Text("\(language.t("Write tests can temporarily use free space and stress storage."))\n\(language.benchmarkConfirmationConfiguration(profile: baseProfile, runs: selectedRunCount, fileSizeBytes: selectedBenchmarkFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: usesTrimmedAverage))\n\(language.t("Write target folder:"))\n\(targetFolderPath)")
         }
     }
 
