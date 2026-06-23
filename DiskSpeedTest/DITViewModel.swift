@@ -24,7 +24,7 @@ final class DITViewModel: ObservableObject {
     init(
         inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(),
         smartService: SmartSnapshotService = SmartSnapshotService(),
-        benchmarkRunner: BenchmarkRunning = NativeBenchmarkRunner(),
+        benchmarkRunner: BenchmarkRunning = BenchmarkRunnerRouter(),
         externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator()
     ) {

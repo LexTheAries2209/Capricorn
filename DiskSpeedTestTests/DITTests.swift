@@ -203,6 +203,47 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(configured.tests.allSatisfy { $0.dataPattern == .zeroFill })
     }
 
+    func testBenchmarkAsyncTestProfilePresetAndConfiguration() throws {
+        let testProfile = try XCTUnwrap(BenchmarkProfile.presets.first { $0.baseProfileID == "test" })
+
+        XCTAssertEqual(testProfile.name, "Test")
+        XCTAssertEqual(testProfile.engine, .asyncQueue)
+        XCTAssertEqual(testProfile.executionMode, .finite)
+        XCTAssertEqual(testProfile.tests.map(\.label), [
+            "SEQ1MiB Q1T1",
+            "SEQ1MiB Q1T1",
+            "SEQ1MiB Q1T2",
+            "SEQ1MiB Q1T2",
+            "SEQ1MiB Q1T4",
+            "SEQ1MiB Q1T4",
+            "SEQ1MiB Q8T1",
+            "SEQ1MiB Q8T1",
+            "SEQ1MiB Q8T2",
+            "SEQ1MiB Q8T2",
+            "SEQ1MiB Q8T4",
+            "SEQ1MiB Q8T4"
+        ])
+        XCTAssertEqual(testProfile.tests.map(\.operation), [.read, .write, .read, .write, .read, .write, .read, .write, .read, .write, .read, .write])
+        XCTAssertEqual(testProfile.tests.map(\.queueDepth), [1, 1, 1, 1, 1, 1, 8, 8, 8, 8, 8, 8])
+        XCTAssertEqual(testProfile.tests.map(\.threads), [1, 1, 2, 2, 4, 4, 1, 1, 2, 2, 4, 4])
+        XCTAssertEqual(testProfile.tests.map(\.blockSizeBytes), Array(repeating: 1_048_576, count: 12))
+        XCTAssertFalse(testProfile.tests.contains { $0.queueDepth == 32 })
+
+        let configured = testProfile.configured(
+            runs: 4,
+            fileSizeBytes: 256 * 1_024 * 1_024,
+            dataPattern: .zeroFill,
+            usesTrimmedAverage: true
+        )
+
+        XCTAssertEqual(configured.engine, .asyncQueue)
+        XCTAssertEqual(configured.runs, 4)
+        XCTAssertTrue(configured.usesTrimmedAverage)
+        XCTAssertTrue(configured.id.contains("r4"))
+        XCTAssertTrue(configured.id.contains("zeroFill"))
+        XCTAssertTrue(configured.id.contains("trim"))
+    }
+
     func testBenchmarkTargetFolderMatcherDetectsFolderInsideSelectedDriveMount() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         let target = root.appendingPathComponent("Benchmarks")
@@ -285,6 +326,17 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(summary.bytesTransferred, 4_000)
     }
 
+    func testBenchmarkMeasurementReducerAveragesAsyncTransferAndFlushMetrics() {
+        let summary = BenchmarkMeasurementReducer.summarize([
+            BenchmarkRunMeasurement(megabytesPerSecond: 100, iops: 10, latencyMicroseconds: 50, bytesTransferred: 1_000, transferMegabytesPerSecond: 140, flushMilliseconds: 20),
+            BenchmarkRunMeasurement(megabytesPerSecond: 200, iops: 20, latencyMicroseconds: 40, bytesTransferred: 2_000, transferMegabytesPerSecond: 260, flushMilliseconds: 40)
+        ])
+
+        XCTAssertEqual(summary.megabytesPerSecond, 150, accuracy: 0.001)
+        XCTAssertEqual(summary.transferMegabytesPerSecond ?? 0, 200, accuracy: 0.001)
+        XCTAssertEqual(summary.flushMilliseconds ?? 0, 30, accuracy: 0.001)
+    }
+
     func testBenchmarkConfigurationDescriptionIsLocalized() {
         let english = AppLanguage.english.benchmarkConfigurationDescription(
             profile: .default,
@@ -326,6 +378,18 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(chinese.testTerms.contains("SEQ"))
         XCTAssertTrue(chinese.testTerms.contains("每一行"))
         XCTAssertFalse(chinese.testTerms.contains("间隔"))
+
+        let asyncChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
+            profile: .asyncTest,
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesTrimmedAverage: false
+        )
+        XCTAssertEqual(AppLanguage.simplifiedChinese.profileName(.asyncTest), "测试")
+        XCTAssertTrue(asyncChinese.profileUse.contains("异步"))
+        XCTAssertTrue(asyncChinese.testTerms.contains("POSIX AIO"))
+        XCTAssertTrue(asyncChinese.testTerms.contains("刷盘"))
 
         let loopChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
             profile: .loop,
@@ -490,6 +554,57 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(Set(names).count, 2)
         XCTAssertTrue(names.allSatisfy { $0.hasPrefix("Disk-Speed-Test-") })
         XCTAssertTrue(names.allSatisfy { $0.contains("write-run") })
+    }
+
+    func testAsyncQueueBenchmarkRunnerPublishesTransferAndFlushMetrics() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+        let write = BenchmarkTest(
+            id: "async-write",
+            label: "SEQ4K Q2T1",
+            accessPattern: .sequential,
+            operation: .write,
+            blockSizeBytes: 4_096,
+            queueDepth: 2,
+            threads: 1,
+            durationSeconds: 0.001,
+            testSizeBytes: 65_536,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 100
+        )
+        let profile = BenchmarkProfile(
+            id: "async-unit",
+            name: "Async Unit",
+            testFileSizeBytes: 65_536,
+            runs: 1,
+            engine: .asyncQueue,
+            tests: [write]
+        )
+        var published: [BenchmarkResult] = []
+        let runner = AsyncQueueBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0)
+
+        let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
+            published.append(result)
+        }
+
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(published.count, 1)
+        let result = try XCTUnwrap(results.first)
+        XCTAssertEqual(result.bytesTransferred, 65_536)
+        XCTAssertNotNil(result.transferMegabytesPerSecond)
+        XCTAssertNotNil(result.flushMilliseconds)
+        XCTAssertGreaterThanOrEqual(result.transferMegabytesPerSecond ?? 0, result.bestMegabytesPerSecond)
+
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
+            $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")
+        }
+        XCTAssertTrue(leftovers.isEmpty)
     }
 
     func testBenchmarkRunnerIgnoresFixedDurationAndTransfersCompleteFile() async throws {

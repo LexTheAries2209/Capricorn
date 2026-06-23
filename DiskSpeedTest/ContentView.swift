@@ -1122,6 +1122,7 @@ private struct CrystalTestLabelCell: View {
 private struct CrystalSpeedCell: View {
     let result: BenchmarkResult?
     let maximumSpeed: Double
+    @Environment(\.appLanguage) private var language
 
     private var fillFraction: Double {
         guard let result else { return 0 }
@@ -1146,12 +1147,16 @@ private struct CrystalSpeedCell: View {
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
-                Text(detailText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                VStack(alignment: .trailing, spacing: 1) {
+                    ForEach(Array(detailLines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                    }
+                }
             }
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -1168,9 +1173,29 @@ private struct CrystalSpeedCell: View {
         return String(format: "%.2f", result.bestMegabytesPerSecond)
     }
 
-    private var detailText: String {
-        guard let result else { return "MB/s" }
-        return String(format: "MB/s   %.0f IOPS   %.0f us", result.iops, result.latencyMicroseconds)
+    private var detailLines: [String] {
+        guard let result else { return ["MB/s"] }
+        if result.transferMegabytesPerSecond != nil || result.flushMilliseconds != nil {
+            var lines: [String] = []
+            if let transfer = result.transferMegabytesPerSecond {
+                lines.append(String(format: "%@ %.0f MB/s", transferLabel, transfer))
+            }
+            if let flush = result.flushMilliseconds {
+                lines.append(String(format: "%@ %.0f ms", flushLabel, flush))
+            }
+            if !lines.isEmpty {
+                return lines
+            }
+        }
+        return [String(format: "MB/s   %.0f IOPS   %.0f us", result.iops, result.latencyMicroseconds)]
+    }
+
+    private var transferLabel: String {
+        language == .simplifiedChinese ? "传输" : "transfer"
+    }
+
+    private var flushLabel: String {
+        language == .simplifiedChinese ? "刷盘" : "fsync"
     }
 }
 

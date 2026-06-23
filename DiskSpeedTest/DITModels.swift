@@ -247,6 +247,13 @@ enum BenchmarkExecutionMode: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum BenchmarkEngine: String, Codable, CaseIterable, Identifiable {
+    case synchronous
+    case asyncQueue
+
+    var id: String { rawValue }
+}
+
 struct BenchmarkTest: Identifiable, Codable, Hashable {
     var id: String
     var label: String
@@ -272,6 +279,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
     var runs: Int
     var usesTrimmedAverage: Bool = false
     var executionMode: BenchmarkExecutionMode = .finite
+    var engine: BenchmarkEngine = .synchronous
     var tests: [BenchmarkTest]
 
     static let defaultTestSize: Int64 = 1_073_741_824
@@ -297,7 +305,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
     }
 
     static var presets: [BenchmarkProfile] {
-        [.default, .peakNVMe, .realWorld, .demoLight, .custom, .loop, .extremeLoop]
+        [.default, .peakNVMe, .realWorld, .demoLight, .custom, .asyncTest, .loop, .extremeLoop]
     }
 
     static var `default`: BenchmarkProfile {
@@ -378,6 +386,25 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
         )
     }
 
+    static var asyncTest: BenchmarkProfile {
+        makeProfile(
+            id: "test",
+            name: "Test",
+            testSize: defaultTestSize,
+            runs: defaultRuns,
+            duration: 5,
+            rows: [
+                (.sequential, 1_048_576, 1, 1),
+                (.sequential, 1_048_576, 1, 2),
+                (.sequential, 1_048_576, 1, 4),
+                (.sequential, 1_048_576, 8, 1),
+                (.sequential, 1_048_576, 8, 2),
+                (.sequential, 1_048_576, 8, 4)
+            ],
+            engine: .asyncQueue
+        )
+    }
+
     static var loop: BenchmarkProfile {
         makeProfile(
             id: "loop",
@@ -417,7 +444,8 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
         duration: TimeInterval,
         rows: [(BenchmarkAccessPattern, Int, Int, Int)],
         includeMixed: Bool = false,
-        executionMode: BenchmarkExecutionMode = .finite
+        executionMode: BenchmarkExecutionMode = .finite,
+        engine: BenchmarkEngine = .synchronous
     ) -> BenchmarkProfile {
         var tests: [BenchmarkTest] = []
         for (index, row) in rows.enumerated() {
@@ -471,6 +499,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
             runs: runs,
             usesTrimmedAverage: defaultUsesTrimmedAverage,
             executionMode: executionMode,
+            engine: engine,
             tests: tests
         )
     }
@@ -507,6 +536,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
             runs: safeRuns,
             usesTrimmedAverage: safeUsesTrimmedAverage,
             executionMode: executionMode,
+            engine: engine,
             tests: configuredTests
         )
     }
@@ -526,6 +556,8 @@ struct BenchmarkResult: Identifiable, Codable, Hashable {
     var iops: Double
     var latencyMicroseconds: Double
     var bytesTransferred: Int64
+    var transferMegabytesPerSecond: Double? = nil
+    var flushMilliseconds: Double? = nil
 }
 
 struct BenchmarkProgress: Equatable {
