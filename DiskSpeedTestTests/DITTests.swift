@@ -169,6 +169,60 @@ final class DITTests: XCTestCase {
         XCTAssertFalse(configured.id.contains("trim"))
     }
 
+    func testBenchmarkExtremeLoopProfilePresetAndConfiguration() throws {
+        let extreme = try XCTUnwrap(BenchmarkProfile.presets.first { $0.baseProfileID == "loop-extreme" })
+
+        XCTAssertEqual(extreme.name, "Extreme Loop")
+        XCTAssertEqual(extreme.executionMode, .loopUntilCancelled)
+        XCTAssertEqual(extreme.tests.count, 6)
+        XCTAssertEqual(extreme.tests.map(\.label), [
+            "SEQ1MiB Q8T1",
+            "SEQ1MiB Q8T1",
+            "SEQ4MiB Q8T4",
+            "SEQ4MiB Q8T4",
+            "SEQ1MiB Q32T4",
+            "SEQ1MiB Q32T4"
+        ])
+        XCTAssertEqual(extreme.tests.map(\.operation), [.read, .write, .read, .write, .read, .write])
+        XCTAssertEqual(extreme.tests.map(\.blockSizeBytes), [1_048_576, 1_048_576, 4_194_304, 4_194_304, 1_048_576, 1_048_576])
+        XCTAssertEqual(extreme.tests.map(\.queueDepth), [8, 8, 8, 8, 32, 32])
+        XCTAssertEqual(extreme.tests.map(\.threads), [1, 1, 4, 4, 4, 4])
+        XCTAssertFalse(extreme.tests.contains { $0.operation == .mixed })
+
+        let configured = extreme.configured(
+            runs: 9,
+            fileSizeBytes: 4 * 1_024 * 1_024 * 1_024,
+            dataPattern: .zeroFill,
+            usesTrimmedAverage: true
+        )
+
+        XCTAssertEqual(configured.executionMode, .loopUntilCancelled)
+        XCTAssertEqual(configured.runs, 1)
+        XCTAssertFalse(configured.usesTrimmedAverage)
+        XCTAssertTrue(configured.id.hasPrefix("loop-extreme@loop-s"))
+        XCTAssertTrue(configured.tests.allSatisfy { $0.dataPattern == .zeroFill })
+    }
+
+    func testBenchmarkTargetFolderMatcherDetectsFolderInsideSelectedDriveMount() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        let target = root.appendingPathComponent("Benchmarks")
+        let other = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: other)
+        }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+
+        XCTAssertTrue(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(target.path, drive: drive))
+        XCTAssertFalse(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(other.path, drive: drive))
+    }
+
     func testBenchmarkDefaultsMatchDiskMarkControls() {
         XCTAssertEqual(BenchmarkProfile.defaultRuns, 3)
         XCTAssertEqual(BenchmarkProfile.defaultTestSize, 1_073_741_824)
@@ -284,6 +338,18 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(loopChinese.runs.contains("持续运行"))
         XCTAssertTrue(loopChinese.runs.contains("最新完成"))
         XCTAssertTrue(loopChinese.testTerms.contains("无间隔重复"))
+
+        let extremeLoopChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
+            profile: .extremeLoop,
+            runs: 9,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesTrimmedAverage: true
+        )
+        XCTAssertTrue(extremeLoopChinese.profileUse.contains("极限循环"))
+        XCTAssertTrue(extremeLoopChinese.testTerms.contains("SEQ4M Q8T4"))
+        XCTAssertTrue(extremeLoopChinese.testTerms.contains("SEQ1M Q32T4"))
+
         XCTAssertEqual(
             AppLanguage.simplifiedChinese.progressLabel("Loop 3 - SEQ1MiB Q8T1 Write"),
             "循环第 3 轮 - SEQ1MiB Q8T1 写入"

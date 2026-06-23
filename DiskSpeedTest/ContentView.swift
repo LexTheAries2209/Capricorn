@@ -598,6 +598,27 @@ private struct BenchmarkView: View {
         targetFolderIsUsable && selectedFileSizeHasSpace
     }
 
+    private var targetFolderDriveMismatch: Bool {
+        guard targetFolderIsUsable else { return false }
+        return !BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(targetFolderPath, drive: drive)
+    }
+
+    private var targetFolderStatusSymbol: String {
+        targetFolderStatusIsReady && !targetFolderDriveMismatch ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+    }
+
+    private var targetFolderStatusColor: Color {
+        targetFolderStatusIsReady && !targetFolderDriveMismatch ? .green : .orange
+    }
+
+    private var benchmarkConfirmationMessage: String {
+        var message = "\(language.t("Write tests can temporarily use free space and stress storage."))\n\(language.benchmarkConfirmationConfiguration(profile: profile, runs: profile.runs, fileSizeBytes: profile.testFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: profile.usesTrimmedAverage))\n\(language.t("Write target folder:"))\n\(targetFolderPath)"
+        if targetFolderDriveMismatch {
+            message += "\n\(language.t("Benchmark will measure the target folder volume, not the selected drive."))"
+        }
+        return message
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -623,7 +644,7 @@ private struct BenchmarkView: View {
             }
             Button(language.t("Cancel"), role: .cancel) {}
         } message: {
-            Text("\(language.t("Write tests can temporarily use free space and stress storage."))\n\(language.benchmarkConfirmationConfiguration(profile: profile, runs: profile.runs, fileSizeBytes: profile.testFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: profile.usesTrimmedAverage))\n\(language.t("Write target folder:"))\n\(targetFolderPath)")
+            Text(benchmarkConfirmationMessage)
         }
     }
 
@@ -781,9 +802,9 @@ private struct BenchmarkView: View {
                 }
                 .buttonStyle(.bordered)
 
-                Label(targetFolderStatusText, systemImage: targetFolderStatusIsReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                Label(targetFolderStatusText, systemImage: targetFolderStatusSymbol)
                     .font(.caption)
-                    .foregroundStyle(targetFolderStatusIsReady ? .green : .orange)
+                    .foregroundStyle(targetFolderStatusColor)
                     .lineLimit(1)
 
                 Spacer(minLength: 8)
@@ -795,6 +816,13 @@ private struct BenchmarkView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if targetFolderDriveMismatch {
+                Label(language.t("Benchmark will measure the target folder volume, not the selected drive."), systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -813,6 +841,9 @@ private struct BenchmarkView: View {
         }
         if targetFolderIsUsable, !selectedFileSizeHasSpace {
             return language.t("Selected test size exceeds available free space")
+        }
+        if targetFolderDriveMismatch {
+            return language.t("Target folder is writable but not on selected drive")
         }
         return targetFolderIsUsable ? language.t("Target folder is writable") : language.t("Target folder is not writable")
     }

@@ -100,6 +100,67 @@ struct DriveDevice: Identifiable, Codable, Hashable {
     }
 }
 
+enum BenchmarkTargetFolderMatcher {
+    static func targetFolderBelongsToDrive(_ folderPath: String, drive: DriveDevice) -> Bool {
+        matchingVolume(for: folderPath, drive: drive) != nil
+    }
+
+    static func matchingVolume(for folderPath: String, drive: DriveDevice) -> DriveDevice.Volume? {
+        guard !folderPath.isEmpty else { return nil }
+        let folderPath = normalizedPath(folderPath)
+        let folderVolumeRoot = volumeRootPath(for: folderPath)
+        let mountedVolumes = drive.volumes
+            .compactMap { volume -> (DriveDevice.Volume, String)? in
+                guard let mountPoint = volume.mountPoint else { return nil }
+                return (volume, normalizedPath(mountPoint))
+            }
+            .sorted { $0.1.count > $1.1.count }
+
+        for (volume, mountPath) in mountedVolumes {
+            if let folderVolumeRoot,
+               let mountVolumeRoot = volumeRootPath(for: mountPath),
+               mountPath == mountVolumeRoot,
+               folderVolumeRoot == mountVolumeRoot {
+                return volume
+            }
+            if path(folderPath, isInsideOrEqualTo: mountPath) {
+                return volume
+            }
+        }
+
+        return nil
+    }
+
+    private static func normalizedPath(_ path: String) -> String {
+        let resolved = URL(fileURLWithPath: path, isDirectory: true)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+            .path
+        return trimmingTrailingSlash(resolved)
+    }
+
+    private static func volumeRootPath(for path: String) -> String? {
+        let url = URL(fileURLWithPath: path, isDirectory: true)
+        guard let values = try? url.resourceValues(forKeys: [.volumeURLKey]),
+              let volumeURL = values.allValues[.volumeURLKey] as? URL else {
+            return nil
+        }
+        return trimmingTrailingSlash(volumeURL.standardizedFileURL.resolvingSymlinksInPath().path)
+    }
+
+    private static func path(_ path: String, isInsideOrEqualTo parentPath: String) -> Bool {
+        if parentPath == "/" {
+            return path == "/" || path.hasPrefix("/")
+        }
+        return path == parentPath || path.hasPrefix(parentPath + "/")
+    }
+
+    private static func trimmingTrailingSlash(_ path: String) -> String {
+        guard path.count > 1 else { return path }
+        return path.hasSuffix("/") ? String(path.dropLast()) : path
+    }
+}
+
 struct SmartAttribute: Identifiable, Codable, Hashable {
     var id: String
     var name: String
@@ -236,7 +297,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
     }
 
     static var presets: [BenchmarkProfile] {
-        [.default, .peakNVMe, .realWorld, .demoLight, .custom, .loop]
+        [.default, .peakNVMe, .realWorld, .demoLight, .custom, .loop, .extremeLoop]
     }
 
     static var `default`: BenchmarkProfile {
@@ -327,6 +388,22 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
             rows: [
                 (.sequential, 1_048_576, 1, 1),
                 (.sequential, 1_048_576, 8, 1)
+            ],
+            executionMode: .loopUntilCancelled
+        )
+    }
+
+    static var extremeLoop: BenchmarkProfile {
+        makeProfile(
+            id: "loop-extreme",
+            name: "Extreme Loop",
+            testSize: defaultTestSize,
+            runs: 1,
+            duration: 5,
+            rows: [
+                (.sequential, 1_048_576, 8, 1),
+                (.sequential, 4_194_304, 8, 4),
+                (.sequential, 1_048_576, 32, 4)
             ],
             executionMode: .loopUntilCancelled
         )

@@ -71,6 +71,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             case "demo": "演示 / 轻量"
             case "custom": "自定义"
             case "loop": "循环"
+            case "loop-extreme": "极限循环"
             default: profile.name
             }
         }
@@ -103,7 +104,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
                     runs: "Loop mode: runs continuously until you stop it manually. The matrix shows the latest completed pass for each read/write item.",
                     fileSize: "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) complete temporary file. Reads and writes transfer the full file size; elapsed time comes from the actual transfer.",
                     dataPattern: "Data pattern: \(benchmarkDataPatternTitle(dataPattern)). Random is closer to incompressible real data; 0 Fill can expose compression, dedupe, or controller peak behavior.",
-                    testTerms: "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. Loop runs SEQ1M Q1T1 read/write, then SEQ1M Q8T1 read/write, and repeats without waiting."
+                    testTerms: englishLoopTestTermsDescription(profile)
                 )
             case .simplifiedChinese:
                 return BenchmarkConfigurationDescription(
@@ -111,7 +112,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
                     runs: "循环模式：会持续运行直到手动停止；矩阵显示每个读/写项目最新完成的一轮结果。",
                     fileSize: "测试文件大小：使用完整的 \(formatBenchmarkFileSize(fileSizeBytes)) 临时文件。读取和写入都会传输完整文件大小，耗时由真实传输决定。",
                     dataPattern: "数据模式：\(benchmarkDataPatternTitle(dataPattern))。随机数据更接近不可压缩真实负载；0 填充适合观察压缩、去重或控制器峰值，结果可能偏高。",
-                    testTerms: "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。循环会依次执行 SEQ1M Q1T1 读取/写入、SEQ1M Q8T1 读取/写入，并且无间隔重复。"
+                    testTerms: chineseLoopTestTermsDescription(profile)
                 )
             }
         }
@@ -221,6 +222,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             return "Custom: temporary verification profile with mixed rows, useful when checking a specific workload."
         case "loop":
             return "Loop: continuous SEQ1M Q1T1 and Q8T1 read/write pressure test for observing peak performance, heat, and sustained drop-off."
+        case "loop-extreme":
+            return "Extreme Loop: higher-pressure sequential profile for fast NVMe drives, using wider blocks and more worker threads to probe peak sustained throughput."
         default:
             return "\(profile.name): user-defined benchmark profile."
         }
@@ -240,9 +243,25 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             return "自定义：用于临时验证特定负载，包含混合测试行。"
         case "loop":
             return "循环：持续执行 SEQ1M Q1T1 和 Q8T1 读写压力测试，用于观察峰值性能、温度影响和持续掉速。"
+        case "loop-extreme":
+            return "极限循环：面向高性能 NVMe 的更高压力顺序读写配置，使用更大的块和更多工作线程来观察持续峰值吞吐。"
         default:
             return "\(profile.name)：用户定义的测速配置。"
         }
+    }
+
+    private func englishLoopTestTermsDescription(_ profile: BenchmarkProfile) -> String {
+        if profile.baseProfileID == "loop-extreme" {
+            return "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. Extreme Loop runs SEQ1M Q8T1, SEQ4M Q8T4, and SEQ1M Q32T4 read/write, then repeats without waiting."
+        }
+        return "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. Loop runs SEQ1M Q1T1 read/write, then SEQ1M Q8T1 read/write, and repeats without waiting."
+    }
+
+    private func chineseLoopTestTermsDescription(_ profile: BenchmarkProfile) -> String {
+        if profile.baseProfileID == "loop-extreme" {
+            return "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。极限循环会依次执行 SEQ1M Q8T1、SEQ4M Q8T4、SEQ1M Q32T4 读取/写入，并且无间隔重复。"
+        }
+        return "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。循环会依次执行 SEQ1M Q1T1 读取/写入、SEQ1M Q8T1 读取/写入，并且无间隔重复。"
     }
 
     func statusMessage(_ message: String) -> String {
@@ -411,6 +430,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Choose a writable target folder": "请选择可写目标文件夹",
         "Target folder is writable": "目标文件夹可写",
         "Target folder is not writable": "目标文件夹不可写",
+        "Target folder is writable but not on selected drive": "目标文件夹可写，但不在当前选中的磁盘上",
+        "Benchmark will measure the target folder volume, not the selected drive.": "测速会测量目标文件夹所在卷，而不是当前选中的磁盘。",
         "Not enough free space for the smallest test size": "可用空间不足，无法运行最小测试文件",
         "Selected test size exceeds available free space": "所选测试文件大小超过可用空间",
         "Choose a writable folder where a temporary benchmark file can be created.": "选择一个可创建临时测速文件的可写文件夹。",
