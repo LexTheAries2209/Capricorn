@@ -1230,82 +1230,212 @@ private struct HistoryReportView: View {
     let smartHistory: [SmartHistoryRecord]
     let benchmarkHistory: [BenchmarkHistoryRecord]
     @AppStorage("includeSerialsInReports") private var includeSerialsInReports = false
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
+    @State private var showHiddenHistory = false
+
+    private var visibleSmartHistory: [SmartHistoryRecord] {
+        HistoryVisibility.visible(smartHistory)
+    }
+
+    private var hiddenSmartHistory: [SmartHistoryRecord] {
+        HistoryVisibility.hidden(smartHistory)
+    }
+
+    private var visibleBenchmarkHistory: [BenchmarkHistoryRecord] {
+        HistoryVisibility.visible(benchmarkHistory)
+    }
+
+    private var hiddenBenchmarkHistory: [BenchmarkHistoryRecord] {
+        HistoryVisibility.hidden(benchmarkHistory)
+    }
+
+    private var hasHiddenHistory: Bool {
+        !hiddenSmartHistory.isEmpty || !hiddenBenchmarkHistory.isEmpty
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text(language.t("History & Reports"))
-                    .font(.title2.bold())
-                Spacer()
-                Toggle(language.t("Include serials"), isOn: $includeSerialsInReports)
-                    .toggleStyle(.checkbox)
-            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text(language.t("History & Reports"))
+                        .font(.title2.bold())
+                    Spacer()
+                    Toggle(language.t("Include serials"), isOn: $includeSerialsInReports)
+                        .toggleStyle(.checkbox)
+                }
 
-            HStack {
-                Button {
-                    copy(ReportExporter.jsonReport(drive: drive, snapshot: snapshot, benchmarkResults: benchmarkResults, includeSerial: includeSerialsInReports))
-                } label: {
-                    Label(language.t("Copy JSON"), systemImage: "doc.on.doc")
+                HStack {
+                    Button {
+                        copy(ReportExporter.jsonReport(drive: drive, snapshot: snapshot, benchmarkResults: benchmarkResults, includeSerial: includeSerialsInReports))
+                    } label: {
+                        Label(language.t("Copy JSON"), systemImage: "doc.on.doc")
+                    }
+                    Button {
+                        copy(ReportExporter.csvReport(results: benchmarkResults))
+                    } label: {
+                        Label(language.t("Copy CSV"), systemImage: "tablecells")
+                    }
+                    Button {
+                        copy(ReportExporter.textReport(drive: drive, snapshot: snapshot, results: benchmarkResults, includeSerial: includeSerialsInReports))
+                    } label: {
+                        Label(language.t("Copy Text"), systemImage: "text.page")
+                    }
                 }
-                Button {
-                    copy(ReportExporter.csvReport(results: benchmarkResults))
-                } label: {
-                    Label(language.t("Copy CSV"), systemImage: "tablecells")
-                }
-                Button {
-                    copy(ReportExporter.textReport(drive: drive, snapshot: snapshot, results: benchmarkResults, includeSerial: includeSerialsInReports))
-                } label: {
-                    Label(language.t("Copy Text"), systemImage: "text.page")
-                }
-            }
 
-            HStack(alignment: .top, spacing: 16) {
-                InfoPanel(title: language.t("SMART Snapshots"), symbol: "clock") {
-                    if smartHistory.isEmpty {
-                        Text(language.t("No saved snapshots yet."))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(smartHistory.prefix(8)) { item in
-                            HStack {
-                                HealthBadge(status: item.health, compact: true)
-                                VStack(alignment: .leading) {
-                                    Text(item.capturedAt.formatted(date: .abbreviated, time: .standard))
-                                    Text(language.statusMessage(item.summary))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                                Spacer()
+                HStack(alignment: .top, spacing: 16) {
+                    InfoPanel(title: language.t("SMART Snapshots"), symbol: "clock") {
+                        if visibleSmartHistory.isEmpty {
+                            Text(hiddenSmartHistory.isEmpty ? language.t("No saved snapshots yet.") : language.t("No visible snapshots. Hidden snapshots can be restored below."))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(visibleSmartHistory.prefix(8)) { item in
+                                smartHistoryRow(item, isHidden: false)
+                                Divider()
                             }
-                            Divider()
+                        }
+                    }
+                    InfoPanel(title: language.t("Benchmark Runs"), symbol: "chart.xyaxis.line") {
+                        if visibleBenchmarkHistory.isEmpty {
+                            Text(hiddenBenchmarkHistory.isEmpty ? language.t("No saved benchmark results yet.") : language.t("No visible benchmark results. Hidden benchmark results can be restored below."))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(visibleBenchmarkHistory.prefix(8)) { item in
+                                benchmarkHistoryRow(item, isHidden: false)
+                                Divider()
+                            }
                         }
                     }
                 }
-                InfoPanel(title: language.t("Benchmark Runs"), symbol: "chart.xyaxis.line") {
-                    if benchmarkHistory.isEmpty {
-                        Text(language.t("No saved benchmark results yet."))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(benchmarkHistory.prefix(8)) { item in
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text("\(item.testLabel) \(language.operationTitle(item.operation))")
-                                    Text(item.measuredAt.formatted(date: .abbreviated, time: .standard))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
-                                    .monospacedDigit()
-                            }
-                            Divider()
-                        }
+
+                if hasHiddenHistory {
+                    hiddenHistoryDisclosure
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var hiddenHistoryDisclosure: some View {
+        DisclosureGroup(isExpanded: $showHiddenHistory) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(language.t("Hidden records remain in the local database and can be restored here."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        restoreAllHiddenHistory()
+                    } label: {
+                        Label(language.t("Restore All"), systemImage: "arrow.counterclockwise")
                     }
+                    .controlSize(.small)
+                }
+
+                if !hiddenSmartHistory.isEmpty {
+                    Text(language.t("SMART Snapshots"))
+                        .font(.subheadline.bold())
+                    ForEach(hiddenSmartHistory) { item in
+                        smartHistoryRow(item, isHidden: true)
+                        Divider()
+                    }
+                }
+
+                if !hiddenBenchmarkHistory.isEmpty {
+                    Text(language.t("Benchmark Runs"))
+                        .font(.subheadline.bold())
+                    ForEach(hiddenBenchmarkHistory) { item in
+                        benchmarkHistoryRow(item, isHidden: true)
+                        Divider()
+                    }
+                }
+            }
+            .padding(.top, 10)
+        } label: {
+            Label(language.t("Manage Hidden Records"), systemImage: "eye.slash")
+                .font(.headline)
+        }
+        .padding(14)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.separator.opacity(0.45), lineWidth: 1)
+        }
+    }
+
+    private func smartHistoryRow(_ item: SmartHistoryRecord, isHidden: Bool) -> some View {
+        HStack {
+            HealthBadge(status: item.health, compact: true)
+            VStack(alignment: .leading) {
+                Text(item.capturedAt.formatted(date: .abbreviated, time: .standard))
+                Text(language.statusMessage(item.summary))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            historyVisibilityButton(isHidden: isHidden) {
+                if isHidden {
+                    restoreHistory(item)
+                } else {
+                    hideHistory(item)
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func benchmarkHistoryRow(_ item: BenchmarkHistoryRecord, isHidden: Bool) -> some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text("\(item.testLabel) \(language.operationTitle(item.operation))")
+                Text(item.measuredAt.formatted(date: .abbreviated, time: .standard))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
+                .monospacedDigit()
+            historyVisibilityButton(isHidden: isHidden) {
+                if isHidden {
+                    restoreHistory(item)
+                } else {
+                    hideHistory(item)
+                }
+            }
+        }
+    }
+
+    private func historyVisibilityButton(isHidden: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: isHidden ? "arrow.uturn.backward" : "eye.slash")
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .foregroundStyle(.secondary)
+        .help(language.t(isHidden ? "Restore" : "Hide from history"))
+        .accessibilityLabel(language.t(isHidden ? "Restore" : "Hide from history"))
+    }
+
+    private func hideHistory<T: HistoryDisplayRecord>(_ item: T) {
+        HistoryVisibility.hide(item)
+        saveHistoryVisibilityChange()
+    }
+
+    private func restoreHistory<T: HistoryDisplayRecord>(_ item: T) {
+        HistoryVisibility.restore(item)
+        saveHistoryVisibilityChange()
+    }
+
+    private func restoreAllHiddenHistory() {
+        HistoryVisibility.restoreAll(hiddenSmartHistory)
+        HistoryVisibility.restoreAll(hiddenBenchmarkHistory)
+        saveHistoryVisibilityChange()
+    }
+
+    private func saveHistoryVisibilityChange() {
+        try? modelContext.save()
     }
 
     private func copy(_ string: String) {

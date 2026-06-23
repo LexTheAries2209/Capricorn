@@ -12,6 +12,7 @@ final class SmartHistoryRecord {
     var lifeRemainingPercent: Int?
     var summary: String
     var encodedSnapshot: Data?
+    var hiddenAt: Date?
 
     init(drive: DriveDevice, snapshot: SmartSnapshot) {
         self.id = UUID()
@@ -23,6 +24,7 @@ final class SmartHistoryRecord {
         self.lifeRemainingPercent = snapshot.lifeRemainingPercent
         self.summary = snapshot.summary
         self.encodedSnapshot = try? JSONEncoder.dit.encode(snapshot)
+        self.hiddenAt = nil
     }
 
     var health: HealthStatus {
@@ -43,6 +45,7 @@ final class BenchmarkHistoryRecord {
     var bestMegabytesPerSecond: Double
     var iops: Double
     var latencyMicroseconds: Double
+    var hiddenAt: Date?
 
     init(drive: DriveDevice, result: BenchmarkResult) {
         self.id = UUID()
@@ -56,10 +59,43 @@ final class BenchmarkHistoryRecord {
         self.bestMegabytesPerSecond = result.bestMegabytesPerSecond
         self.iops = result.iops
         self.latencyMicroseconds = result.latencyMicroseconds
+        self.hiddenAt = nil
     }
 
     var operation: BenchmarkOperation {
         BenchmarkOperation(rawValue: operationRaw) ?? .read
+    }
+}
+
+protocol HistoryDisplayRecord: AnyObject {
+    var driveID: String { get }
+    var hiddenAt: Date? { get set }
+}
+
+extension SmartHistoryRecord: HistoryDisplayRecord {}
+extension BenchmarkHistoryRecord: HistoryDisplayRecord {}
+
+enum HistoryVisibility {
+    static func visible<T: HistoryDisplayRecord>(_ records: [T]) -> [T] {
+        records.filter { $0.hiddenAt == nil }
+    }
+
+    static func hidden<T: HistoryDisplayRecord>(_ records: [T]) -> [T] {
+        records.filter { $0.hiddenAt != nil }
+    }
+
+    static func hide<T: HistoryDisplayRecord>(_ record: T, at date: Date = Date()) {
+        record.hiddenAt = date
+    }
+
+    static func restore<T: HistoryDisplayRecord>(_ record: T) {
+        record.hiddenAt = nil
+    }
+
+    static func restoreAll<T: HistoryDisplayRecord>(_ records: [T], driveID: String? = nil) {
+        for record in records where driveID == nil || record.driveID == driveID {
+            record.hiddenAt = nil
+        }
     }
 }
 

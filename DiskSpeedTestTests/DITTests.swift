@@ -620,6 +620,57 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(leftovers.isEmpty)
     }
 
+    func testHistoryVisibilitySeparatesVisibleAndHiddenSmartRecords() {
+        let drive = Self.fixtureDrive()
+        let snapshot = Self.fixtureSnapshot(for: drive)
+        let visible = SmartHistoryRecord(drive: drive, snapshot: snapshot)
+        let hidden = SmartHistoryRecord(drive: drive, snapshot: snapshot)
+
+        HistoryVisibility.hide(hidden, at: Date(timeIntervalSince1970: 1))
+
+        XCTAssertEqual(HistoryVisibility.visible([visible, hidden]).map(\.id), [visible.id])
+        XCTAssertEqual(HistoryVisibility.hidden([visible, hidden]).map(\.id), [hidden.id])
+        XCTAssertNil(visible.hiddenAt)
+        XCTAssertNotNil(hidden.hiddenAt)
+    }
+
+    func testHistoryVisibilitySeparatesVisibleAndHiddenBenchmarkRecords() {
+        let drive = Self.fixtureDrive()
+        let visible = BenchmarkHistoryRecord(drive: drive, result: Self.fixtureBenchmarkResult(for: drive))
+        let hidden = BenchmarkHistoryRecord(drive: drive, result: Self.fixtureBenchmarkResult(for: drive))
+
+        HistoryVisibility.hide(hidden, at: Date(timeIntervalSince1970: 1))
+
+        XCTAssertEqual(HistoryVisibility.visible([visible, hidden]).map(\.id), [visible.id])
+        XCTAssertEqual(HistoryVisibility.hidden([visible, hidden]).map(\.id), [hidden.id])
+    }
+
+    func testHistoryVisibilityRestoresSingleRecord() {
+        let drive = Self.fixtureDrive()
+        let record = SmartHistoryRecord(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
+
+        HistoryVisibility.hide(record, at: Date(timeIntervalSince1970: 1))
+        HistoryVisibility.restore(record)
+
+        XCTAssertNil(record.hiddenAt)
+        XCTAssertEqual(HistoryVisibility.visible([record]).map(\.id), [record.id])
+    }
+
+    func testHistoryVisibilityRestoreAllCanLimitToCurrentDrive() {
+        let drive = Self.fixtureDrive()
+        var otherDrive = drive
+        otherDrive.bsdName = "disk9"
+        let currentDriveRecord = SmartHistoryRecord(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
+        let otherDriveRecord = SmartHistoryRecord(drive: otherDrive, snapshot: Self.fixtureSnapshot(for: otherDrive))
+
+        HistoryVisibility.hide(currentDriveRecord, at: Date(timeIntervalSince1970: 1))
+        HistoryVisibility.hide(otherDriveRecord, at: Date(timeIntervalSince1970: 2))
+        HistoryVisibility.restoreAll([currentDriveRecord, otherDriveRecord], driveID: drive.id)
+
+        XCTAssertNil(currentDriveRecord.hiddenAt)
+        XCTAssertNotNil(otherDriveRecord.hiddenAt)
+    }
+
     private static func fixtureDrive() -> DriveDevice {
         DriveDevice(
             bsdName: "disk0",
@@ -640,6 +691,42 @@ final class DITTests: XCTestCase {
             volumes: [],
             model: "APPLE SSD AP1024Z",
             serialNumber: "SN"
+        )
+    }
+
+    private static func fixtureSnapshot(for drive: DriveDevice) -> SmartSnapshot {
+        SmartSnapshot(
+            driveID: drive.id,
+            capturedAt: Date(timeIntervalSince1970: 1_000),
+            health: .good,
+            summary: "OK",
+            providerStatuses: [ProviderStatus(name: "Fixture", state: .available, message: "OK")],
+            attributes: [],
+            temperatureCelsius: 32,
+            lifeRemainingPercent: 98,
+            powerOnHours: 120,
+            powerCycleCount: 4,
+            mediaErrors: 0,
+            unsafeShutdowns: 0,
+            smartStatusRaw: "Verified",
+            selfTestStatus: nil
+        )
+    }
+
+    private static func fixtureBenchmarkResult(for drive: DriveDevice) -> BenchmarkResult {
+        BenchmarkResult(
+            driveID: drive.id,
+            volumePath: "/tmp",
+            profileID: "unit",
+            profileName: "Unit",
+            testID: "unit-read",
+            testLabel: "SEQ1M Q1T1",
+            operation: .read,
+            measuredAt: Date(timeIntervalSince1970: 1_000),
+            bestMegabytesPerSecond: 1_234.5,
+            iops: 100,
+            latencyMicroseconds: 10,
+            bytesTransferred: 65_536
         )
     }
 
