@@ -70,6 +70,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             case "real-world": "真实场景"
             case "demo": "演示 / 轻量"
             case "custom": "自定义"
+            case "loop": "循环"
             default: profile.name
             }
         }
@@ -94,6 +95,27 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         dataPattern: BenchmarkDataPattern,
         usesTrimmedAverage: Bool
     ) -> BenchmarkConfigurationDescription {
+        if profile.executionMode == .loopUntilCancelled {
+            switch self {
+            case .english:
+                return BenchmarkConfigurationDescription(
+                    profileUse: englishProfileUseDescription(profile),
+                    runs: "Loop mode: runs continuously until you stop it manually. The matrix shows the latest completed pass for each read/write item.",
+                    fileSize: "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) complete temporary file. Reads and writes transfer the full file size; elapsed time comes from the actual transfer.",
+                    dataPattern: "Data pattern: \(benchmarkDataPatternTitle(dataPattern)). Random is closer to incompressible real data; 0 Fill can expose compression, dedupe, or controller peak behavior.",
+                    testTerms: "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. Loop runs SEQ1M Q1T1 read/write, then SEQ1M Q8T1 read/write, and repeats without waiting."
+                )
+            case .simplifiedChinese:
+                return BenchmarkConfigurationDescription(
+                    profileUse: chineseProfileUseDescription(profile),
+                    runs: "循环模式：会持续运行直到手动停止；矩阵显示每个读/写项目最新完成的一轮结果。",
+                    fileSize: "测试文件大小：使用完整的 \(formatBenchmarkFileSize(fileSizeBytes)) 临时文件。读取和写入都会传输完整文件大小，耗时由真实传输决定。",
+                    dataPattern: "数据模式：\(benchmarkDataPatternTitle(dataPattern))。随机数据更接近不可压缩真实负载；0 填充适合观察压缩、去重或控制器峰值，结果可能偏高。",
+                    testTerms: "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。循环会依次执行 SEQ1M Q1T1 读取/写入、SEQ1M Q8T1 读取/写入，并且无间隔重复。"
+                )
+            }
+        }
+
         switch self {
         case .english:
             let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: runs, usesTrimmedAverage: usesTrimmedAverage)
@@ -129,6 +151,15 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         dataPattern: BenchmarkDataPattern,
         usesTrimmedAverage: Bool
     ) -> String {
+        if profile.executionMode == .loopUntilCancelled {
+            switch self {
+            case .english:
+                return "Benchmark settings\nProfile-\(profileName(profile)); runs-loop until stopped; test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-not used"
+            case .simplifiedChinese:
+                return "测试配置\n配置-\(profileName(profile))；测试次数-循环直到手动停止；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-不使用"
+            }
+        }
+
         switch self {
         case .english:
             let trimState = usesTrimmedAverage ? "On" : "Off"
@@ -156,7 +187,16 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
     }
 
-    func benchmarkFooter(testCount: Int, fileSize: Int64, runs: Int, dataPattern: BenchmarkDataPattern, usesTrimmedAverage: Bool) -> String {
+    func benchmarkFooter(testCount: Int, fileSize: Int64, runs: Int, dataPattern: BenchmarkDataPattern, usesTrimmedAverage: Bool, executionMode: BenchmarkExecutionMode = .finite) -> String {
+        if executionMode == .loopUntilCancelled {
+            switch self {
+            case .english:
+                return "Loop · \(formatBenchmarkFileSize(fileSize)) file · \(benchmarkDataPatternTitle(dataPattern)) · latest pass"
+            case .simplifiedChinese:
+                return "循环测试 · \(formatBenchmarkFileSize(fileSize)) 文件 · \(benchmarkDataPatternTitle(dataPattern)) · 最新一轮"
+            }
+        }
+
         switch self {
         case .english:
             let averageText = usesTrimmedAverage ? "\(runs)+2 trimmed avg" : "\(runs) avg run\(runs == 1 ? "" : "s")"
@@ -179,6 +219,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             return "Demo / Light: quick validation with low write volume; useful for a fast sanity check."
         case "custom":
             return "Custom: temporary verification profile with mixed rows, useful when checking a specific workload."
+        case "loop":
+            return "Loop: continuous SEQ1M Q1T1 and Q8T1 read/write pressure test for observing peak performance, heat, and sustained drop-off."
         default:
             return "\(profile.name): user-defined benchmark profile."
         }
@@ -196,6 +238,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             return "演示 / 轻量：写入量低、完成快，适合快速确认目标文件夹和磁盘状态。"
         case "custom":
             return "自定义：用于临时验证特定负载，包含混合测试行。"
+        case "loop":
+            return "循环：持续执行 SEQ1M Q1T1 和 Q8T1 读写压力测试，用于观察峰值性能、温度影响和持续掉速。"
         default:
             return "\(profile.name)：用户定义的测速配置。"
         }
@@ -241,6 +285,18 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             return message.replacingOccurrences(of: "Mixed run ", with: "混合第 ")
                 .replacingOccurrences(of: "/", with: "/")
         }
+        if message.hasPrefix("Loop "), let separatorRange = message.range(of: " - ") {
+            let round = message[..<separatorRange.lowerBound].replacingOccurrences(of: "Loop ", with: "")
+            var item = String(message[separatorRange.upperBound...])
+            if item.hasSuffix(" Read") {
+                item = String(item.dropLast(" Read".count)) + " 读取"
+            } else if item.hasSuffix(" Write") {
+                item = String(item.dropLast(" Write".count)) + " 写入"
+            } else if item.hasSuffix(" Mixed") {
+                item = String(item.dropLast(" Mixed".count)) + " 混合"
+            }
+            return "循环第 \(round) 轮 - \(item)"
+        }
         if message.hasPrefix("Insufficient free space.") {
             return message
                 .replacingOccurrences(of: "Insufficient free space.", with: "可用空间不足。")
@@ -275,6 +331,18 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
     func progressLabel(_ label: String) -> String {
         guard self == .simplifiedChinese else { return label }
+        if label.hasPrefix("Loop "), let separatorRange = label.range(of: " - ") {
+            let round = label[..<separatorRange.lowerBound].replacingOccurrences(of: "Loop ", with: "")
+            var item = String(label[separatorRange.upperBound...])
+            if item.hasSuffix(" Read") {
+                item = String(item.dropLast(" Read".count)) + " 读取"
+            } else if item.hasSuffix(" Write") {
+                item = String(item.dropLast(" Write".count)) + " 写入"
+            } else if item.hasSuffix(" Mixed") {
+                item = String(item.dropLast(" Mixed".count)) + " 混合"
+            }
+            return "循环第 \(round) 轮 - \(item)"
+        }
         return Self.zhHansMessages[label] ?? label
     }
 
@@ -432,6 +500,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Flushing writes": "正在刷新写入",
         "Waiting between tests": "测试间隔等待中",
         "Waiting between passes": "轮次间隔等待中",
+        "Loop running": "循环测试中",
+        "Loop stopped": "循环测试已停止",
         "Benchmark cancelled.": "测速已取消。",
         "Could not preallocate benchmark file.": "无法预分配测速文件。",
         "Could not resize benchmark file.": "无法调整测速文件大小。",

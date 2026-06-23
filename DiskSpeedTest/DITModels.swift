@@ -179,6 +179,13 @@ enum BenchmarkDataPattern: String, Codable, CaseIterable, Identifiable {
     var title: String { self == .random ? "Random" : "0 Fill" }
 }
 
+enum BenchmarkExecutionMode: String, Codable, CaseIterable, Identifiable {
+    case finite
+    case loopUntilCancelled
+
+    var id: String { rawValue }
+}
+
 struct BenchmarkTest: Identifiable, Codable, Hashable {
     var id: String
     var label: String
@@ -203,6 +210,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
     var testFileSizeBytes: Int64
     var runs: Int
     var usesTrimmedAverage: Bool = false
+    var executionMode: BenchmarkExecutionMode = .finite
     var tests: [BenchmarkTest]
 
     static let defaultTestSize: Int64 = 1_073_741_824
@@ -228,7 +236,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
     }
 
     static var presets: [BenchmarkProfile] {
-        [.default, .peakNVMe, .realWorld, .demoLight, .custom]
+        [.default, .peakNVMe, .realWorld, .demoLight, .custom, .loop]
     }
 
     static var `default`: BenchmarkProfile {
@@ -309,6 +317,21 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
         )
     }
 
+    static var loop: BenchmarkProfile {
+        makeProfile(
+            id: "loop",
+            name: "Loop",
+            testSize: defaultTestSize,
+            runs: 1,
+            duration: 5,
+            rows: [
+                (.sequential, 1_048_576, 1, 1),
+                (.sequential, 1_048_576, 8, 1)
+            ],
+            executionMode: .loopUntilCancelled
+        )
+    }
+
     static func makeProfile(
         id: String,
         name: String,
@@ -316,7 +339,8 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
         runs: Int,
         duration: TimeInterval,
         rows: [(BenchmarkAccessPattern, Int, Int, Int)],
-        includeMixed: Bool = false
+        includeMixed: Bool = false,
+        executionMode: BenchmarkExecutionMode = .finite
     ) -> BenchmarkProfile {
         var tests: [BenchmarkTest] = []
         for (index, row) in rows.enumerated() {
@@ -363,7 +387,15 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
                 ))
             }
         }
-        return BenchmarkProfile(id: id, name: name, testFileSizeBytes: testSize, runs: runs, usesTrimmedAverage: defaultUsesTrimmedAverage, tests: tests)
+        return BenchmarkProfile(
+            id: id,
+            name: name,
+            testFileSizeBytes: testSize,
+            runs: runs,
+            usesTrimmedAverage: defaultUsesTrimmedAverage,
+            executionMode: executionMode,
+            tests: tests
+        )
     }
 
     func configured(
@@ -372,10 +404,17 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
         dataPattern: BenchmarkDataPattern,
         usesTrimmedAverage: Bool = defaultUsesTrimmedAverage
     ) -> BenchmarkProfile {
-        let safeRuns = min(max(requestedRuns, Self.runCountOptions.first ?? 1), Self.runCountOptions.last ?? 9)
+        let isLooping = executionMode == .loopUntilCancelled
+        let safeRuns = isLooping ? 1 : min(max(requestedRuns, Self.runCountOptions.first ?? 1), Self.runCountOptions.last ?? 9)
         let safeFileSizeBytes = max(Self.fileSizeOptions.first ?? Self.defaultTestSize, requestedFileSizeBytes)
-        let averageMode = usesTrimmedAverage ? "trim" : "plain"
-        let fingerprint = "r\(safeRuns)-s\(safeFileSizeBytes)-\(dataPattern.rawValue)-\(averageMode)"
+        let safeUsesTrimmedAverage = isLooping ? false : usesTrimmedAverage
+        let fingerprint: String
+        if isLooping {
+            fingerprint = "loop-s\(safeFileSizeBytes)-\(dataPattern.rawValue)"
+        } else {
+            let averageMode = safeUsesTrimmedAverage ? "trim" : "plain"
+            fingerprint = "r\(safeRuns)-s\(safeFileSizeBytes)-\(dataPattern.rawValue)-\(averageMode)"
+        }
         let configuredTests = tests.map { test in
             var configuredTest = test
             let baseTestID = test.id.components(separatedBy: "@").first ?? test.id
@@ -389,7 +428,8 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
             name: name,
             testFileSizeBytes: safeFileSizeBytes,
             runs: safeRuns,
-            usesTrimmedAverage: usesTrimmedAverage,
+            usesTrimmedAverage: safeUsesTrimmedAverage,
+            executionMode: executionMode,
             tests: configuredTests
         )
     }

@@ -138,6 +138,37 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(trimmedAverage.usesTrimmedAverage)
     }
 
+    func testBenchmarkLoopProfilePresetAndConfiguration() throws {
+        let loop = try XCTUnwrap(BenchmarkProfile.presets.first { $0.baseProfileID == "loop" })
+
+        XCTAssertEqual(loop.name, "Loop")
+        XCTAssertEqual(loop.executionMode, .loopUntilCancelled)
+        XCTAssertEqual(loop.tests.count, 4)
+        XCTAssertEqual(loop.tests.map(\.label), ["SEQ1MiB Q1T1", "SEQ1MiB Q1T1", "SEQ1MiB Q8T1", "SEQ1MiB Q8T1"])
+        XCTAssertEqual(loop.tests.map(\.operation), [.read, .write, .read, .write])
+        XCTAssertTrue(loop.tests.allSatisfy { $0.accessPattern == .sequential })
+        XCTAssertTrue(loop.tests.allSatisfy { $0.blockSizeBytes == 1_048_576 })
+        XCTAssertFalse(loop.tests.contains { $0.operation == .mixed })
+
+        let fileSize: Int64 = 8 * 1_024 * 1_024 * 1_024
+        let configured = loop.configured(
+            runs: 9,
+            fileSizeBytes: fileSize,
+            dataPattern: .zeroFill,
+            usesTrimmedAverage: true
+        )
+
+        XCTAssertEqual(configured.executionMode, .loopUntilCancelled)
+        XCTAssertEqual(configured.runs, 1)
+        XCTAssertFalse(configured.usesTrimmedAverage)
+        XCTAssertEqual(configured.testFileSizeBytes, fileSize)
+        XCTAssertTrue(configured.tests.allSatisfy { $0.testSizeBytes == fileSize })
+        XCTAssertTrue(configured.tests.allSatisfy { $0.dataPattern == .zeroFill })
+        XCTAssertTrue(configured.id.contains("loop-s\(fileSize)-zeroFill"))
+        XCTAssertFalse(configured.id.contains("r9"))
+        XCTAssertFalse(configured.id.contains("trim"))
+    }
+
     func testBenchmarkDefaultsMatchDiskMarkControls() {
         XCTAssertEqual(BenchmarkProfile.defaultRuns, 3)
         XCTAssertEqual(BenchmarkProfile.defaultTestSize, 1_073_741_824)
@@ -227,10 +258,10 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(english.dataPattern.contains("Random"))
         XCTAssertTrue(english.runs.contains("5"))
         XCTAssertTrue(english.fileSize.contains("full file"))
-        XCTAssertTrue(english.testTerms.contains("1 second"))
-        XCTAssertTrue(english.testTerms.contains("5 seconds"))
         XCTAssertTrue(english.testTerms.contains("Each row"))
         XCTAssertTrue(english.testTerms.contains("SEQ"))
+        XCTAssertFalse(english.testTerms.contains("1 second"))
+        XCTAssertFalse(english.testTerms.contains("5 seconds"))
         XCTAssertTrue(chinese.profileUse.contains("默认"))
         XCTAssertTrue(chinese.runs.contains("3"))
         XCTAssertTrue(chinese.runs.contains("5"))
@@ -240,8 +271,23 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(chinese.dataPattern.contains("随机"))
         XCTAssertTrue(chinese.testTerms.contains("SEQ"))
         XCTAssertTrue(chinese.testTerms.contains("每一行"))
-        XCTAssertTrue(chinese.testTerms.contains("间隔 1 秒"))
-        XCTAssertTrue(chinese.testTerms.contains("间隔 5 秒"))
+        XCTAssertFalse(chinese.testTerms.contains("间隔"))
+
+        let loopChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
+            profile: .loop,
+            runs: 9,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesTrimmedAverage: true
+        )
+        XCTAssertTrue(loopChinese.profileUse.contains("循环"))
+        XCTAssertTrue(loopChinese.runs.contains("持续运行"))
+        XCTAssertTrue(loopChinese.runs.contains("最新完成"))
+        XCTAssertTrue(loopChinese.testTerms.contains("无间隔重复"))
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.progressLabel("Loop 3 - SEQ1MiB Q8T1 Write"),
+            "循环第 3 轮 - SEQ1MiB Q8T1 写入"
+        )
     }
 
     func testBenchmarkStorageValidatorFiltersUnavailableFileSizes() {
@@ -492,6 +538,86 @@ final class DITTests: XCTestCase {
         let waits = requestedWaits
         lock.unlock()
         XCTAssertEqual(waits, [1])
+    }
+
+    func testBenchmarkLoopRunnerPublishesLatestPassAndStopsWithoutWaiting() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+        let readQ1 = BenchmarkTest(
+            id: "loop-read-q1",
+            label: "SEQ1M Q1T1",
+            accessPattern: .sequential,
+            operation: .read,
+            blockSizeBytes: 4_096,
+            queueDepth: 1,
+            threads: 1,
+            durationSeconds: 0.001,
+            testSizeBytes: 8_192,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 0
+        )
+        var writeQ1 = readQ1
+        writeQ1.id = "loop-write-q1"
+        writeQ1.operation = .write
+        writeQ1.writePercentForMixed = 100
+        var readQ8 = readQ1
+        readQ8.id = "loop-read-q8"
+        readQ8.label = "SEQ1M Q8T1"
+        readQ8.queueDepth = 8
+        var writeQ8 = readQ8
+        writeQ8.id = "loop-write-q8"
+        writeQ8.operation = .write
+        writeQ8.writePercentForMixed = 100
+        let profile = BenchmarkProfile(
+            id: "unit-loop",
+            name: "Unit Loop",
+            testFileSizeBytes: 8_192,
+            runs: 9,
+            usesTrimmedAverage: true,
+            executionMode: .loopUntilCancelled,
+            tests: [readQ1, writeQ1, readQ8, writeQ8]
+        )
+
+        let lock = NSLock()
+        var requestedWaits: [TimeInterval] = []
+        var published: [BenchmarkResult] = []
+        let runner = NativeBenchmarkRunner(operationIntervalSeconds: 5, passIntervalSeconds: 1) { seconds, _ in
+            lock.lock()
+            requestedWaits.append(seconds)
+            lock.unlock()
+        }
+
+        let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
+            lock.lock()
+            published.append(result)
+            let shouldCancel = published.count == 8
+            lock.unlock()
+            if shouldCancel {
+                runner.cancel()
+            }
+        }
+
+        lock.lock()
+        let waits = requestedWaits
+        let publishedIDs = published.map(\.testID)
+        lock.unlock()
+
+        let expectedCycle = ["loop-read-q1", "loop-write-q1", "loop-read-q8", "loop-write-q8"]
+        XCTAssertEqual(publishedIDs, expectedCycle + expectedCycle)
+        XCTAssertEqual(results.map(\.testID), expectedCycle)
+        XCTAssertTrue(results.allSatisfy { $0.bytesTransferred == 8_192 })
+        XCTAssertTrue(waits.isEmpty)
+
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
+            $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")
+        }
+        XCTAssertTrue(leftovers.isEmpty)
     }
 
     private static func fixtureDrive() -> DriveDevice {

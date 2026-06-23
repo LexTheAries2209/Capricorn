@@ -109,11 +109,12 @@ final class DITViewModel: ObservableObject {
         benchmarkError = nil
         isBenchmarking = true
         let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs, usesTrimmedAverage: profile.usesTrimmedAverage)
+        let isLooping = profile.executionMode == .loopUntilCancelled
         benchmarkProgress = BenchmarkProgress(
             currentTestLabel: "Starting",
             completed: 0,
-            total: profile.tests.count * (measuredRuns + 1),
-            message: "Preparing complete test file"
+            total: isLooping ? max(1, profile.tests.count) : profile.tests.count * (measuredRuns + 1),
+            message: isLooping ? "Loop running" : "Preparing complete test file"
         )
         replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: [])
         defer {

@@ -532,6 +532,10 @@ private struct BenchmarkView: View {
         )
     }
 
+    private var selectedProfileIsLooping: Bool {
+        baseProfile.executionMode == .loopUntilCancelled
+    }
+
     private var selectedBenchmarkFileSizeBytes: Int64 {
         Int64(selectedFileSizeBytes)
     }
@@ -546,7 +550,7 @@ private struct BenchmarkView: View {
             runs: profile.runs,
             fileSizeBytes: profile.testFileSizeBytes,
             dataPattern: selectedDataPattern,
-            usesTrimmedAverage: usesTrimmedAverage
+            usesTrimmedAverage: profile.usesTrimmedAverage
         )
     }
 
@@ -619,7 +623,7 @@ private struct BenchmarkView: View {
             }
             Button(language.t("Cancel"), role: .cancel) {}
         } message: {
-            Text("\(language.t("Write tests can temporarily use free space and stress storage."))\n\(language.benchmarkConfirmationConfiguration(profile: baseProfile, runs: selectedRunCount, fileSizeBytes: selectedBenchmarkFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: usesTrimmedAverage))\n\(language.t("Write target folder:"))\n\(targetFolderPath)")
+            Text("\(language.t("Write tests can temporarily use free space and stress storage."))\n\(language.benchmarkConfirmationConfiguration(profile: profile, runs: profile.runs, fileSizeBytes: profile.testFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: profile.usesTrimmedAverage))\n\(language.t("Write target folder:"))\n\(targetFolderPath)")
         }
     }
 
@@ -639,7 +643,8 @@ private struct BenchmarkView: View {
                 fileSize: profile.testFileSizeBytes,
                 runs: profile.runs,
                 dataPattern: selectedDataPattern,
-                usesTrimmedAverage: usesTrimmedAverage
+                usesTrimmedAverage: profile.usesTrimmedAverage,
+                executionMode: profile.executionMode
             ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -676,7 +681,7 @@ private struct BenchmarkView: View {
                     }
                     .labelsHidden()
                     .frame(width: 72, alignment: .leading)
-                    .disabled(viewModel.isBenchmarking)
+                    .disabled(viewModel.isBenchmarking || selectedProfileIsLooping)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -725,7 +730,7 @@ private struct BenchmarkView: View {
                         .pickerStyle(.segmented)
                         .frame(width: 116, height: 28, alignment: .leading)
                         .help(language.t("Run two extra measured passes, discard fastest and slowest, then average the rest."))
-                        .disabled(viewModel.isBenchmarking)
+                        .disabled(viewModel.isBenchmarking || selectedProfileIsLooping)
                 }
 
                 Spacer(minLength: 12)
