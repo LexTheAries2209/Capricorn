@@ -538,6 +538,9 @@ private struct DiskActivityView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @State private var saveMessage: String?
+    @State private var showHiddenActivityHistory = false
+    private let activityHistoryScrollThreshold = 10
+    private let activityHistoryRowHeight: CGFloat = 58
 
     private var selectedDriveID: String {
         viewModel.liveActivitySelectedDriveID ?? initialDrive.id
@@ -553,6 +556,10 @@ private struct DiskActivityView: View {
 
     private var selectedDriveHistory: [DiskActivityHistoryRecord] {
         HistoryVisibility.visible(activityHistory.filter { $0.driveID == selectedDrive.id })
+    }
+
+    private var selectedDriveHiddenHistory: [DiskActivityHistoryRecord] {
+        HistoryVisibility.hidden(activityHistory.filter { $0.driveID == selectedDrive.id })
     }
 
     private var summary: DiskActivitySummary {
@@ -700,18 +707,70 @@ private struct DiskActivityView: View {
     private var historyList: some View {
         InfoPanel(title: language.t("Live Activity History"), symbol: "clock.arrow.circlepath") {
             if selectedDriveHistory.isEmpty {
-                Text(language.t("No saved activity records yet."))
+                Text(selectedDriveHiddenHistory.isEmpty ? language.t("No saved activity records yet.") : language.t("No visible activity records. Hidden activity records can be restored below."))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(selectedDriveHistory.prefix(8)) { item in
-                    activityHistoryRow(item)
+                activityHistoryRows(selectedDriveHistory, isHidden: false)
+            }
+
+            if !selectedDriveHiddenHistory.isEmpty {
+                hiddenActivityHistoryDisclosure
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func activityHistoryRows(_ items: [DiskActivityHistoryRecord], isHidden: Bool) -> some View {
+        if items.count > activityHistoryScrollThreshold {
+            ScrollView(.vertical) {
+                activityHistoryRowsContent(items, isHidden: isHidden)
+            }
+            .frame(height: CGFloat(activityHistoryScrollThreshold) * activityHistoryRowHeight)
+            .scrollIndicators(.visible)
+        } else {
+            activityHistoryRowsContent(items, isHidden: isHidden)
+        }
+    }
+
+    private func activityHistoryRowsContent(_ items: [DiskActivityHistoryRecord], isHidden: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                activityHistoryRow(item, isHidden: isHidden)
+                    .padding(.vertical, 8)
+                if index < items.count - 1 {
                     Divider()
                 }
             }
         }
     }
 
-    private func activityHistoryRow(_ item: DiskActivityHistoryRecord) -> some View {
+    private var hiddenActivityHistoryDisclosure: some View {
+        DisclosureGroup(isExpanded: $showHiddenActivityHistory) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(language.t("Hidden records remain in the local database and can be restored here."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        restoreAllHiddenActivityHistory()
+                    } label: {
+                        Label(language.t("Restore All"), systemImage: "arrow.counterclockwise")
+                    }
+                    .controlSize(.small)
+                }
+
+                activityHistoryRows(selectedDriveHiddenHistory, isHidden: true)
+            }
+            .padding(.top, 8)
+        } label: {
+            Label(language.t("Manage Hidden Records"), systemImage: "eye.slash")
+                .font(.headline)
+        }
+        .padding(.top, 8)
+    }
+
+    private func activityHistoryRow(_ item: DiskActivityHistoryRecord, isHidden: Bool) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.endedAt.formatted(date: .abbreviated, time: .standard))
@@ -740,7 +799,46 @@ private struct DiskActivityView: View {
             .buttonStyle(.borderless)
             .help(language.t("Load Chart"))
             .disabled(viewModel.isLiveActivityMonitoring)
+
+            activityHistoryVisibilityButton(isHidden: isHidden) {
+                if isHidden {
+                    restoreActivityHistory(item)
+                } else {
+                    hideActivityHistory(item)
+                }
+            }
         }
+    }
+
+    private func activityHistoryVisibilityButton(isHidden: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: isHidden ? "arrow.uturn.backward" : "eye.slash")
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .foregroundStyle(.secondary)
+        .help(language.t(isHidden ? "Restore" : "Hide from history"))
+        .accessibilityLabel(language.t(isHidden ? "Restore" : "Hide from history"))
+    }
+
+    private func hideActivityHistory(_ item: DiskActivityHistoryRecord) {
+        HistoryVisibility.hide(item)
+        saveHistoryVisibilityChange()
+    }
+
+    private func restoreActivityHistory(_ item: DiskActivityHistoryRecord) {
+        HistoryVisibility.restore(item)
+        saveHistoryVisibilityChange()
+    }
+
+    private func restoreAllHiddenActivityHistory() {
+        HistoryVisibility.restoreAll(selectedDriveHiddenHistory)
+        saveHistoryVisibilityChange()
+    }
+
+    private func saveHistoryVisibilityChange() {
+        try? modelContext.save()
     }
 
     private func saveActivityHistory() {
@@ -1865,7 +1963,8 @@ private struct HistoryReportView: View {
                         title: language.t("SMART Snapshots"),
                         symbol: "clock",
                         count: visibleSmartHistory.count,
-                        emptyText: hiddenSmartHistory.isEmpty ? language.t("No saved snapshots yet.") : language.t("No visible snapshots. Hidden snapshots can be restored below.")
+                        emptyText: hiddenSmartHistory.isEmpty ? language.t("No saved snapshots yet.") : language.t("No visible snapshots. Hidden snapshots can be restored below."),
+                        hideAll: { hideAllHistory(visibleSmartHistory) }
                     ) {
                         historyRows(visibleSmartHistory) { item in
                             smartHistoryRow(item, isHidden: false)
@@ -1876,7 +1975,8 @@ private struct HistoryReportView: View {
                         title: language.t("Benchmark Runs"),
                         symbol: "chart.xyaxis.line",
                         count: visibleBenchmarkHistory.count,
-                        emptyText: hiddenBenchmarkHistory.isEmpty ? language.t("No saved benchmark results yet.") : language.t("No visible benchmark results. Hidden benchmark results can be restored below.")
+                        emptyText: hiddenBenchmarkHistory.isEmpty ? language.t("No saved benchmark results yet.") : language.t("No visible benchmark results. Hidden benchmark results can be restored below."),
+                        hideAll: { hideAllHistory(visibleBenchmarkHistory) }
                     ) {
                         historyRows(visibleBenchmarkHistory) { item in
                             benchmarkHistoryRow(item, isHidden: false)
@@ -1887,7 +1987,8 @@ private struct HistoryReportView: View {
                         title: language.t("Live Activity History"),
                         symbol: "waveform.path.ecg.rectangle",
                         count: visibleActivityHistory.count,
-                        emptyText: hiddenActivityHistory.isEmpty ? language.t("No saved activity records yet.") : language.t("No visible activity records. Hidden activity records can be restored below.")
+                        emptyText: hiddenActivityHistory.isEmpty ? language.t("No saved activity records yet.") : language.t("No visible activity records. Hidden activity records can be restored below."),
+                        hideAll: { hideAllHistory(visibleActivityHistory) }
                     ) {
                         historyRows(visibleActivityHistory) { item in
                             activityHistoryRow(item, isHidden: false)
@@ -1915,9 +2016,22 @@ private struct HistoryReportView: View {
         symbol: String,
         count: Int,
         emptyText: String,
+        hideAll: @escaping () -> Void,
         @ViewBuilder rows: () -> Rows
     ) -> some View {
-        InfoPanel(title: title, symbol: symbol) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Label(title, systemImage: symbol)
+                    .font(.headline)
+                Spacer(minLength: 8)
+                Button(action: hideAll) {
+                    Label(language.t("Hide All"), systemImage: "eye.slash")
+                }
+                .controlSize(.small)
+                .disabled(count == 0)
+                .help(language.t("Hide All"))
+            }
+
             if count == 0 {
                 Text(emptyText)
                     .foregroundStyle(.secondary)
@@ -1931,6 +2045,13 @@ private struct HistoryReportView: View {
             } else {
                 rows()
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.separator.opacity(0.45), lineWidth: 1)
         }
         .frame(minWidth: 260, maxWidth: .infinity, alignment: .topLeading)
     }
@@ -2091,6 +2212,11 @@ private struct HistoryReportView: View {
 
     private func restoreHistory<T: HistoryDisplayRecord>(_ item: T) {
         HistoryVisibility.restore(item)
+        saveHistoryVisibilityChange()
+    }
+
+    private func hideAllHistory<T: HistoryDisplayRecord>(_ records: [T]) {
+        HistoryVisibility.hideAll(records)
         saveHistoryVisibilityChange()
     }
 

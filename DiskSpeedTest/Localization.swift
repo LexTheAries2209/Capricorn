@@ -515,6 +515,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "No saved benchmark results yet.": "还没有保存的测速结果。",
         "No visible benchmark results. Hidden benchmark results can be restored below.": "当前没有显示中的测速记录，隐藏记录可在下方找回。",
         "Hide from history": "从历史中隐藏",
+        "Hide All": "全部隐藏",
         "Manage Hidden Records": "管理隐藏记录",
         "Restore": "恢复",
         "Restore All": "恢复全部",

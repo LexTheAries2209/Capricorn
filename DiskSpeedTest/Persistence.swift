@@ -145,6 +145,12 @@ enum HistoryVisibility {
         record.hiddenAt = date
     }
 
+    static func hideAll<T: HistoryDisplayRecord>(_ records: [T], at date: Date = Date(), driveID: String? = nil) {
+        for record in records where driveID == nil || record.driveID == driveID {
+            record.hiddenAt = date
+        }
+    }
+
     static func restore<T: HistoryDisplayRecord>(_ record: T) {
         record.hiddenAt = nil
     }

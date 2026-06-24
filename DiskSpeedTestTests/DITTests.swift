@@ -1192,6 +1192,21 @@ final class DITTests: XCTestCase {
         XCTAssertNotNil(otherDriveRecord.hiddenAt)
     }
 
+    func testHistoryVisibilityHideAllCanLimitToCurrentDrive() {
+        let drive = Self.fixtureDrive()
+        var otherDrive = drive
+        otherDrive.bsdName = "disk9"
+        let currentDriveRecord = SmartHistoryRecord(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
+        let otherDriveRecord = SmartHistoryRecord(drive: otherDrive, snapshot: Self.fixtureSnapshot(for: otherDrive))
+
+        HistoryVisibility.hideAll([currentDriveRecord, otherDriveRecord], at: Date(timeIntervalSince1970: 1), driveID: drive.id)
+
+        XCTAssertNotNil(currentDriveRecord.hiddenAt)
+        XCTAssertNil(otherDriveRecord.hiddenAt)
+        XCTAssertEqual(HistoryVisibility.visible([currentDriveRecord, otherDriveRecord]).map(\.id), [otherDriveRecord.id])
+        XCTAssertEqual(HistoryVisibility.hidden([currentDriveRecord, otherDriveRecord]).map(\.id), [currentDriveRecord.id])
+    }
+
     private static func fixtureDrive() -> DriveDevice {
         DriveDevice(
             bsdName: "disk0",
