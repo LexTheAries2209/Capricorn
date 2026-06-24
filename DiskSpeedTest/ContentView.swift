@@ -1774,6 +1774,13 @@ private struct CustomBenchmarkRowsEditor: View {
     @Binding var executionMode: BenchmarkExecutionMode
     let isDisabled: Bool
     @Environment(\.appLanguage) private var language
+    private let typeColumnWidth: CGFloat = 88
+    private let blockSizeColumnWidth: CGFloat = 116
+    private let queueColumnWidth: CGFloat = 62
+    private let threadColumnWidth: CGFloat = 62
+    private let mixedColumnWidth: CGFloat = 112
+    private let deleteColumnWidth: CGFloat = 42
+    private let columnSpacing: CGFloat = 8
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1796,19 +1803,19 @@ private struct CustomBenchmarkRowsEditor: View {
                 .disabled(isDisabled || rows.count >= BenchmarkCustomRow.maxRows)
             }
 
-            HStack(alignment: .bottom, spacing: 10) {
+            HStack(alignment: .bottom, spacing: columnSpacing) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(language.t("Engine"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .frame(width: 132, alignment: .leading)
+                        .frame(width: typeColumnWidth, alignment: .leading)
                     Picker("", selection: $engine) {
                         Text(language.t("Sync")).tag(BenchmarkEngine.synchronous)
                         Text(language.t("Async")).tag(BenchmarkEngine.asyncQueue)
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
-                    .frame(width: 132)
+                    .frame(width: typeColumnWidth, alignment: .leading)
                     .help(language.t("Async uses POSIX AIO queue depth; Sync uses worker threads with blocking file I/O."))
                 }
 
@@ -1816,14 +1823,14 @@ private struct CustomBenchmarkRowsEditor: View {
                     Text(language.t("Loop"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .frame(width: 112, alignment: .leading)
+                        .frame(width: blockSizeColumnWidth, alignment: .leading)
                     Picker("", selection: $executionMode) {
                         Text(language.t("Off")).tag(BenchmarkExecutionMode.finite)
                         Text(language.t("On")).tag(BenchmarkExecutionMode.loopUntilCancelled)
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
-                    .frame(width: 112)
+                    .frame(width: blockSizeColumnWidth, alignment: .leading)
                     .help(language.t("Loop repeats the custom groups until you stop it manually."))
                 }
 
@@ -1835,33 +1842,33 @@ private struct CustomBenchmarkRowsEditor: View {
             .disabled(isDisabled)
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
+                HStack(spacing: columnSpacing) {
                     Text(language.t("Type"))
-                        .frame(width: 88, alignment: .leading)
+                        .frame(width: typeColumnWidth, alignment: .leading)
                     Text(language.t("Block Size"))
-                        .frame(width: 116, alignment: .leading)
+                        .frame(width: blockSizeColumnWidth, alignment: .leading)
                     Text("Q")
-                        .frame(width: 62, alignment: .leading)
+                        .frame(width: queueColumnWidth, alignment: .leading)
                     Text("T")
-                        .frame(width: 62, alignment: .leading)
+                        .frame(width: threadColumnWidth, alignment: .leading)
                     Text(language.t("Mixed"))
-                        .frame(width: 112, alignment: .leading)
+                        .frame(width: mixedColumnWidth, alignment: .leading)
                     Spacer(minLength: 0)
                     Text(language.t("Delete"))
-                        .frame(width: 42, alignment: .trailing)
+                        .frame(width: deleteColumnWidth, alignment: .trailing)
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
                 ForEach(rows.indices, id: \.self) { index in
-                    HStack(spacing: 8) {
+                    HStack(spacing: columnSpacing) {
                         Picker("", selection: $rows[index].accessPattern) {
                             Text("SEQ").tag(BenchmarkAccessPattern.sequential)
                             Text("RND").tag(BenchmarkAccessPattern.random)
                         }
                         .labelsHidden()
                         .pickerStyle(.segmented)
-                        .frame(width: 88)
+                        .frame(width: typeColumnWidth, alignment: .leading)
 
                         Picker("", selection: $rows[index].blockSizeBytes) {
                             ForEach(BenchmarkCustomRow.blockSizeOptions, id: \.self) { size in
@@ -1869,7 +1876,7 @@ private struct CustomBenchmarkRowsEditor: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 116)
+                        .frame(width: blockSizeColumnWidth, alignment: .leading)
 
                         Picker("", selection: $rows[index].queueDepth) {
                             ForEach(BenchmarkCustomRow.queueDepthOptions, id: \.self) { depth in
@@ -1877,7 +1884,7 @@ private struct CustomBenchmarkRowsEditor: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 62)
+                        .frame(width: queueColumnWidth, alignment: .leading)
 
                         Picker("", selection: $rows[index].threads) {
                             ForEach(BenchmarkCustomRow.threadOptions, id: \.self) { threadCount in
@@ -1885,7 +1892,7 @@ private struct CustomBenchmarkRowsEditor: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 62)
+                        .frame(width: threadColumnWidth, alignment: .leading)
 
                         Picker("", selection: $rows[index].includeMixed) {
                             Text(language.t("Off")).tag(false)
@@ -1893,7 +1900,7 @@ private struct CustomBenchmarkRowsEditor: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.segmented)
-                        .frame(width: 112)
+                        .frame(width: mixedColumnWidth, alignment: .leading)
 
                         Text(rows[index].label.replacingOccurrences(of: "MiB", with: "M").replacingOccurrences(of: "KiB", with: "K"))
                             .font(.caption.monospacedDigit())

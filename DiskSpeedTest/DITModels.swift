@@ -375,7 +375,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
     }
 
     static var presets: [BenchmarkProfile] {
-        [.default, .peakNVMe, .realWorld, .demoLight, .custom, .asyncTest, .loop, .extremeLoop]
+        [.default, .peakNVMe, .realWorld, .demoLight, .custom]
     }
 
     static var `default`: BenchmarkProfile {

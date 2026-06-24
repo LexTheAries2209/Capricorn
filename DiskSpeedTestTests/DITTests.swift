@@ -254,110 +254,13 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(async.engine, .asyncQueue)
     }
 
-    func testBenchmarkLoopProfilePresetAndConfiguration() throws {
-        let loop = try XCTUnwrap(BenchmarkProfile.presets.first { $0.baseProfileID == "loop" })
+    func testBenchmarkExperimentalProfilesAreHiddenFromPresets() {
+        let presetIDs = BenchmarkProfile.presets.map(\.baseProfileID)
 
-        XCTAssertEqual(loop.name, "Loop")
-        XCTAssertEqual(loop.executionMode, .loopUntilCancelled)
-        XCTAssertEqual(loop.tests.count, 4)
-        XCTAssertEqual(loop.tests.map(\.label), ["SEQ1MiB Q1T1", "SEQ1MiB Q1T1", "SEQ1MiB Q8T1", "SEQ1MiB Q8T1"])
-        XCTAssertEqual(loop.tests.map(\.operation), [.read, .write, .read, .write])
-        XCTAssertTrue(loop.tests.allSatisfy { $0.accessPattern == .sequential })
-        XCTAssertTrue(loop.tests.allSatisfy { $0.blockSizeBytes == 1_048_576 })
-        XCTAssertFalse(loop.tests.contains { $0.operation == .mixed })
-
-        let fileSize: Int64 = 8 * 1_024 * 1_024 * 1_024
-        let configured = loop.configured(
-            runs: 9,
-            fileSizeBytes: fileSize,
-            dataPattern: .zeroFill,
-            usesTrimmedAverage: true
-        )
-
-        XCTAssertEqual(configured.executionMode, .loopUntilCancelled)
-        XCTAssertEqual(configured.runs, 1)
-        XCTAssertFalse(configured.usesTrimmedAverage)
-        XCTAssertEqual(configured.testFileSizeBytes, fileSize)
-        XCTAssertTrue(configured.tests.allSatisfy { $0.testSizeBytes == fileSize })
-        XCTAssertTrue(configured.tests.allSatisfy { $0.dataPattern == .zeroFill })
-        XCTAssertTrue(configured.id.contains("loop-s\(fileSize)-zeroFill"))
-        XCTAssertFalse(configured.id.contains("r9"))
-        XCTAssertFalse(configured.id.contains("trim"))
-    }
-
-    func testBenchmarkExtremeLoopProfilePresetAndConfiguration() throws {
-        let extreme = try XCTUnwrap(BenchmarkProfile.presets.first { $0.baseProfileID == "loop-extreme" })
-
-        XCTAssertEqual(extreme.name, "Extreme Loop")
-        XCTAssertEqual(extreme.executionMode, .loopUntilCancelled)
-        XCTAssertEqual(extreme.tests.count, 6)
-        XCTAssertEqual(extreme.tests.map(\.label), [
-            "SEQ1MiB Q8T1",
-            "SEQ1MiB Q8T1",
-            "SEQ4MiB Q8T4",
-            "SEQ4MiB Q8T4",
-            "SEQ1MiB Q32T4",
-            "SEQ1MiB Q32T4"
-        ])
-        XCTAssertEqual(extreme.tests.map(\.operation), [.read, .write, .read, .write, .read, .write])
-        XCTAssertEqual(extreme.tests.map(\.blockSizeBytes), [1_048_576, 1_048_576, 4_194_304, 4_194_304, 1_048_576, 1_048_576])
-        XCTAssertEqual(extreme.tests.map(\.queueDepth), [8, 8, 8, 8, 32, 32])
-        XCTAssertEqual(extreme.tests.map(\.threads), [1, 1, 4, 4, 4, 4])
-        XCTAssertFalse(extreme.tests.contains { $0.operation == .mixed })
-
-        let configured = extreme.configured(
-            runs: 9,
-            fileSizeBytes: 4 * 1_024 * 1_024 * 1_024,
-            dataPattern: .zeroFill,
-            usesTrimmedAverage: true
-        )
-
-        XCTAssertEqual(configured.executionMode, .loopUntilCancelled)
-        XCTAssertEqual(configured.runs, 1)
-        XCTAssertFalse(configured.usesTrimmedAverage)
-        XCTAssertTrue(configured.id.hasPrefix("loop-extreme@loop-s"))
-        XCTAssertTrue(configured.tests.allSatisfy { $0.dataPattern == .zeroFill })
-    }
-
-    func testBenchmarkAsyncTestProfilePresetAndConfiguration() throws {
-        let testProfile = try XCTUnwrap(BenchmarkProfile.presets.first { $0.baseProfileID == "test" })
-
-        XCTAssertEqual(testProfile.name, "Test")
-        XCTAssertEqual(testProfile.engine, .asyncQueue)
-        XCTAssertEqual(testProfile.executionMode, .finite)
-        XCTAssertEqual(testProfile.tests.map(\.label), [
-            "SEQ1MiB Q1T1",
-            "SEQ1MiB Q1T1",
-            "SEQ1MiB Q1T2",
-            "SEQ1MiB Q1T2",
-            "SEQ1MiB Q1T4",
-            "SEQ1MiB Q1T4",
-            "SEQ1MiB Q8T1",
-            "SEQ1MiB Q8T1",
-            "SEQ1MiB Q8T2",
-            "SEQ1MiB Q8T2",
-            "SEQ1MiB Q8T4",
-            "SEQ1MiB Q8T4"
-        ])
-        XCTAssertEqual(testProfile.tests.map(\.operation), [.read, .write, .read, .write, .read, .write, .read, .write, .read, .write, .read, .write])
-        XCTAssertEqual(testProfile.tests.map(\.queueDepth), [1, 1, 1, 1, 1, 1, 8, 8, 8, 8, 8, 8])
-        XCTAssertEqual(testProfile.tests.map(\.threads), [1, 1, 2, 2, 4, 4, 1, 1, 2, 2, 4, 4])
-        XCTAssertEqual(testProfile.tests.map(\.blockSizeBytes), Array(repeating: 1_048_576, count: 12))
-        XCTAssertFalse(testProfile.tests.contains { $0.queueDepth == 32 })
-
-        let configured = testProfile.configured(
-            runs: 4,
-            fileSizeBytes: 256 * 1_024 * 1_024,
-            dataPattern: .zeroFill,
-            usesTrimmedAverage: true
-        )
-
-        XCTAssertEqual(configured.engine, .asyncQueue)
-        XCTAssertEqual(configured.runs, 4)
-        XCTAssertTrue(configured.usesTrimmedAverage)
-        XCTAssertTrue(configured.id.contains("r4"))
-        XCTAssertTrue(configured.id.contains("zeroFill"))
-        XCTAssertTrue(configured.id.contains("trim"))
+        XCTAssertEqual(presetIDs, ["default", "peak-nvme", "real-world", "demo", "custom"])
+        XCTAssertFalse(presetIDs.contains("test"))
+        XCTAssertFalse(presetIDs.contains("loop"))
+        XCTAssertFalse(presetIDs.contains("loop-extreme"))
     }
 
     func testBenchmarkTargetFolderMatcherDetectsFolderInsideSelectedDriveMount() throws {
@@ -817,40 +720,32 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(chinese.testTerms.contains("每一行"))
         XCTAssertFalse(chinese.testTerms.contains("间隔"))
 
-        let asyncChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
-            profile: .asyncTest,
+        let asyncCustomChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
+            profile: BenchmarkProfile.custom(rows: BenchmarkCustomRow.defaultRows, engine: .asyncQueue),
             runs: 3,
             fileSizeBytes: BenchmarkProfile.defaultTestSize,
             dataPattern: .random,
             usesTrimmedAverage: false
         )
-        XCTAssertEqual(AppLanguage.simplifiedChinese.profileName(.asyncTest), "测试")
-        XCTAssertTrue(asyncChinese.profileUse.contains("异步"))
-        XCTAssertTrue(asyncChinese.testTerms.contains("POSIX AIO"))
-        XCTAssertTrue(asyncChinese.testTerms.contains("刷盘"))
+        XCTAssertEqual(AppLanguage.simplifiedChinese.profileName(.custom), "自定义")
+        XCTAssertTrue(asyncCustomChinese.profileUse.contains("自定义"))
+        XCTAssertTrue(asyncCustomChinese.testTerms.contains("POSIX AIO"))
+        XCTAssertTrue(asyncCustomChinese.testTerms.contains("刷盘"))
 
-        let loopChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
-            profile: .loop,
+        let customLoopChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
+            profile: BenchmarkProfile.custom(
+                rows: BenchmarkCustomRow.defaultRows,
+                executionMode: .loopUntilCancelled
+            ),
             runs: 9,
             fileSizeBytes: BenchmarkProfile.defaultTestSize,
             dataPattern: .random,
             usesTrimmedAverage: true
         )
-        XCTAssertTrue(loopChinese.profileUse.contains("循环"))
-        XCTAssertTrue(loopChinese.runs.contains("持续运行"))
-        XCTAssertTrue(loopChinese.runs.contains("最新完成"))
-        XCTAssertTrue(loopChinese.testTerms.contains("无间隔重复"))
-
-        let extremeLoopChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
-            profile: .extremeLoop,
-            runs: 9,
-            fileSizeBytes: BenchmarkProfile.defaultTestSize,
-            dataPattern: .random,
-            usesTrimmedAverage: true
-        )
-        XCTAssertTrue(extremeLoopChinese.profileUse.contains("极限循环"))
-        XCTAssertTrue(extremeLoopChinese.testTerms.contains("SEQ4M Q8T4"))
-        XCTAssertTrue(extremeLoopChinese.testTerms.contains("SEQ1M Q32T4"))
+        XCTAssertTrue(customLoopChinese.profileUse.contains("自定义"))
+        XCTAssertTrue(customLoopChinese.runs.contains("持续运行"))
+        XCTAssertTrue(customLoopChinese.runs.contains("最新完成"))
+        XCTAssertTrue(customLoopChinese.testTerms.contains("自定义循环"))
 
         XCTAssertEqual(
             AppLanguage.simplifiedChinese.progressLabel("Loop 3 - SEQ1MiB Q8T1 Write"),
