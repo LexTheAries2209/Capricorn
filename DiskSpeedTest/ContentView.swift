@@ -240,7 +240,7 @@ private struct DriveDetailView: View {
                 benchmarkResults: viewModel.benchmarkResults.filter { $0.driveID == drive.id },
                 smartHistory: smartHistory,
                 benchmarkHistory: benchmarkHistory,
-                activityHistory: activityHistory
+                activityHistory: activityHistory.filter { $0.driveID == drive.id }
             )
             .tabItem { Label(language.t("History"), systemImage: "clock.arrow.circlepath") }
         }
@@ -1778,6 +1778,8 @@ private struct HistoryReportView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @State private var showHiddenHistory = false
+    private let historyScrollThreshold = 12
+    private let historyRowHeight: CGFloat = 58
 
     private var visibleSmartHistory: [SmartHistoryRecord] {
         HistoryVisibility.visible(smartHistory)
@@ -1836,41 +1838,41 @@ private struct HistoryReportView: View {
                     }
                 }
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16)], alignment: .leading, spacing: 16) {
-                    InfoPanel(title: language.t("SMART Snapshots"), symbol: "clock") {
-                        if visibleSmartHistory.isEmpty {
-                            Text(hiddenSmartHistory.isEmpty ? language.t("No saved snapshots yet.") : language.t("No visible snapshots. Hidden snapshots can be restored below."))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(visibleSmartHistory.prefix(8)) { item in
-                                smartHistoryRow(item, isHidden: false)
-                                Divider()
-                            }
+                VStack(alignment: .leading, spacing: 12) {
+                    historyPanel(
+                        title: language.t("SMART Snapshots"),
+                        symbol: "clock",
+                        count: visibleSmartHistory.count,
+                        emptyText: hiddenSmartHistory.isEmpty ? language.t("No saved snapshots yet.") : language.t("No visible snapshots. Hidden snapshots can be restored below.")
+                    ) {
+                        historyRows(visibleSmartHistory) { item in
+                            smartHistoryRow(item, isHidden: false)
                         }
                     }
-                    InfoPanel(title: language.t("Benchmark Runs"), symbol: "chart.xyaxis.line") {
-                        if visibleBenchmarkHistory.isEmpty {
-                            Text(hiddenBenchmarkHistory.isEmpty ? language.t("No saved benchmark results yet.") : language.t("No visible benchmark results. Hidden benchmark results can be restored below."))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(visibleBenchmarkHistory.prefix(8)) { item in
-                                benchmarkHistoryRow(item, isHidden: false)
-                                Divider()
-                            }
+
+                    historyPanel(
+                        title: language.t("Benchmark Runs"),
+                        symbol: "chart.xyaxis.line",
+                        count: visibleBenchmarkHistory.count,
+                        emptyText: hiddenBenchmarkHistory.isEmpty ? language.t("No saved benchmark results yet.") : language.t("No visible benchmark results. Hidden benchmark results can be restored below.")
+                    ) {
+                        historyRows(visibleBenchmarkHistory) { item in
+                            benchmarkHistoryRow(item, isHidden: false)
                         }
                     }
-                    InfoPanel(title: language.t("Live Activity History"), symbol: "waveform.path.ecg.rectangle") {
-                        if visibleActivityHistory.isEmpty {
-                            Text(hiddenActivityHistory.isEmpty ? language.t("No saved activity records yet.") : language.t("No visible activity records. Hidden activity records can be restored below."))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(visibleActivityHistory.prefix(8)) { item in
-                                activityHistoryRow(item, isHidden: false)
-                                Divider()
-                            }
+
+                    historyPanel(
+                        title: language.t("Live Activity History"),
+                        symbol: "waveform.path.ecg.rectangle",
+                        count: visibleActivityHistory.count,
+                        emptyText: hiddenActivityHistory.isEmpty ? language.t("No saved activity records yet.") : language.t("No visible activity records. Hidden activity records can be restored below.")
+                    ) {
+                        historyRows(visibleActivityHistory) { item in
+                            activityHistoryRow(item, isHidden: false)
                         }
                     }
                 }
+                .frame(maxWidth: 760, alignment: .leading)
 
                 if hasHiddenHistory {
                     hiddenHistoryDisclosure
@@ -1879,6 +1881,50 @@ private struct HistoryReportView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var historyScrollHeight: CGFloat {
+        CGFloat(historyScrollThreshold) * historyRowHeight
+    }
+
+    @ViewBuilder
+    private func historyPanel<Rows: View>(
+        title: String,
+        symbol: String,
+        count: Int,
+        emptyText: String,
+        @ViewBuilder rows: () -> Rows
+    ) -> some View {
+        InfoPanel(title: title, symbol: symbol) {
+            if count == 0 {
+                Text(emptyText)
+                    .foregroundStyle(.secondary)
+            } else if count > historyScrollThreshold {
+                ScrollView(.vertical) {
+                    rows()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: historyScrollHeight)
+                .scrollIndicators(.visible)
+            } else {
+                rows()
+            }
+        }
+    }
+
+    private func historyRows<Record: Identifiable, Row: View>(
+        _ items: [Record],
+        @ViewBuilder row: @escaping (Record) -> Row
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                row(item)
+                    .padding(.vertical, 8)
+                if index < items.count - 1 {
+                    Divider()
+                }
+            }
+        }
     }
 
     private var hiddenHistoryDisclosure: some View {
@@ -1982,9 +2028,8 @@ private struct HistoryReportView: View {
     private func activityHistoryRow(_ item: DiskActivityHistoryRecord, isHidden: Bool) -> some View {
         HStack {
             VStack(alignment: .leading) {
-                Text("\(item.driveName) (\(item.bsdName))")
-                    .lineLimit(1)
-                Text("\(item.endedAt.formatted(date: .abbreviated, time: .standard)) · \(DiskActivityChartScale.formatDuration(item.durationSeconds)) · \(item.sampleCount) \(language.t("samples")) · \(item.sampleInterval.title)")
+                Text(item.endedAt.formatted(date: .abbreviated, time: .standard))
+                Text("\(DiskActivityChartScale.formatDuration(item.durationSeconds)) · \(item.sampleCount) \(language.t("samples")) · \(item.sampleInterval.title)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
