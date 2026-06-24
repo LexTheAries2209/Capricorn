@@ -1006,6 +1006,19 @@ private struct DiskActivityView: View {
 
     private var historyList: some View {
         InfoPanel(title: language.t("Live Activity History"), symbol: "clock.arrow.circlepath") {
+            if !selectedDriveHistory.isEmpty {
+                HStack {
+                    Spacer()
+                    Button {
+                        hideAllVisibleActivityHistory()
+                    } label: {
+                        Label(language.t("Hide All"), systemImage: "eye.slash")
+                    }
+                    .controlSize(.small)
+                    .help(language.t("Hide All"))
+                }
+            }
+
             if selectedDriveHistory.isEmpty {
                 Text(selectedDriveHiddenHistory.isEmpty ? language.t("No saved activity records yet.") : language.t("No visible activity records. Hidden activity records can be restored below."))
                     .foregroundStyle(.secondary)
@@ -1134,6 +1147,11 @@ private struct DiskActivityView: View {
 
     private func restoreAllHiddenActivityHistory() {
         HistoryVisibility.restoreAll(selectedDriveHiddenHistory)
+        saveHistoryVisibilityChange()
+    }
+
+    private func hideAllVisibleActivityHistory() {
+        HistoryVisibility.hideAll(selectedDriveHistory, driveID: selectedDrive.id)
         saveHistoryVisibilityChange()
     }
 
