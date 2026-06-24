@@ -1216,12 +1216,23 @@ private struct BenchmarkView: View {
     @AppStorage("benchmarkFileSizeBytes") private var selectedFileSizeBytes = Int(BenchmarkProfile.defaultTestSize)
     @AppStorage("benchmarkDataPattern") private var selectedDataPatternRaw = BenchmarkProfile.defaultDataPattern.rawValue
     @AppStorage("benchmarkUsesTrimmedAverage") private var usesTrimmedAverage = BenchmarkProfile.defaultUsesTrimmedAverage
+    @AppStorage("benchmarkCustomRowsJSON") private var customRowsJSON = ""
+    @AppStorage("benchmarkCustomEngine") private var customEngineRaw = BenchmarkEngine.synchronous.rawValue
+    @AppStorage("benchmarkCustomExecutionMode") private var customExecutionModeRaw = BenchmarkExecutionMode.finite.rawValue
     @State private var selectedProfileID = BenchmarkProfile.default.id
     @State private var confirmWrite = false
     private let progressContentLeadingInset: CGFloat = 6
 
     private var baseProfile: BenchmarkProfile {
-        BenchmarkProfile.presets.first(where: { $0.id == selectedProfileID }) ?? .default
+        let preset = BenchmarkProfile.presets.first(where: { $0.id == selectedProfileID }) ?? .default
+        if preset.baseProfileID == "custom" {
+            return BenchmarkProfile.custom(
+                rows: customRows,
+                engine: selectedCustomEngine,
+                executionMode: selectedCustomExecutionMode
+            )
+        }
+        return preset
     }
 
     private var profile: BenchmarkProfile {
@@ -1237,12 +1248,67 @@ private struct BenchmarkView: View {
         baseProfile.executionMode == .loopUntilCancelled
     }
 
+    private var selectedProfileIsCustom: Bool {
+        selectedProfileID == BenchmarkProfile.custom.id
+    }
+
     private var selectedBenchmarkFileSizeBytes: Int64 {
         Int64(selectedFileSizeBytes)
     }
 
     private var selectedDataPattern: BenchmarkDataPattern {
         BenchmarkDataPattern(rawValue: selectedDataPatternRaw) ?? BenchmarkProfile.defaultDataPattern
+    }
+
+    private var selectedCustomEngine: BenchmarkEngine {
+        get {
+            BenchmarkEngine(rawValue: customEngineRaw) ?? .synchronous
+        }
+        nonmutating set {
+            customEngineRaw = newValue.rawValue
+        }
+    }
+
+    private var selectedCustomExecutionMode: BenchmarkExecutionMode {
+        get {
+            BenchmarkExecutionMode(rawValue: customExecutionModeRaw) ?? .finite
+        }
+        nonmutating set {
+            customExecutionModeRaw = newValue.rawValue
+        }
+    }
+
+    private var customRows: [BenchmarkCustomRow] {
+        get {
+            BenchmarkCustomRow.decodeList(from: customRowsJSON)
+        }
+        nonmutating set {
+            customRowsJSON = BenchmarkCustomRow.encodeList(newValue)
+        }
+    }
+
+    private var customRowsBinding: Binding<[BenchmarkCustomRow]> {
+        Binding {
+            customRows
+        } set: { nextRows in
+            customRows = nextRows
+        }
+    }
+
+    private var customEngineBinding: Binding<BenchmarkEngine> {
+        Binding {
+            selectedCustomEngine
+        } set: { nextEngine in
+            selectedCustomEngine = nextEngine
+        }
+    }
+
+    private var customExecutionModeBinding: Binding<BenchmarkExecutionMode> {
+        Binding {
+            selectedCustomExecutionMode
+        } set: { nextMode in
+            selectedCustomExecutionMode = nextMode
+        }
     }
 
     private var configurationDescription: BenchmarkConfigurationDescription {
@@ -1339,6 +1405,12 @@ private struct BenchmarkView: View {
         .onChange(of: targetFolderPath) { _, _ in
             adjustSelectedFileSizeForTarget()
         }
+        .onChange(of: customExecutionModeRaw) { _, _ in
+            adjustSelectedFileSizeForTarget()
+        }
+        .onChange(of: customRowsJSON) { _, _ in
+            adjustSelectedFileSizeForTarget()
+        }
         .confirmationDialog(language.t("Benchmark writes a complete temporary test file to the selected target folder."), isPresented: $confirmWrite) {
             Button(language.t("Run Benchmark"), role: .destructive) {
                 Task { await viewModel.runBenchmark(profile: profile, volumePath: targetFolderPath) }
@@ -1366,7 +1438,8 @@ private struct BenchmarkView: View {
                 runs: profile.runs,
                 dataPattern: selectedDataPattern,
                 usesTrimmedAverage: profile.usesTrimmedAverage,
-                executionMode: profile.executionMode
+                executionMode: profile.executionMode,
+                engine: profile.engine
             ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -1481,6 +1554,14 @@ private struct BenchmarkView: View {
             }
 
             BenchmarkConfigurationDescriptionView(description: configurationDescription)
+            if selectedProfileIsCustom {
+                CustomBenchmarkRowsEditor(
+                    rows: customRowsBinding,
+                    engine: customEngineBinding,
+                    executionMode: customExecutionModeBinding,
+                    isDisabled: viewModel.isBenchmarking
+                )
+            }
         }
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -1684,6 +1765,172 @@ private struct BenchmarkView: View {
         if let fallback = BenchmarkProfile.fileSizeOptions.last(where: { isFileSizeSelectable($0) }) {
             selectedFileSizeBytes = Int(fallback)
         }
+    }
+}
+
+private struct CustomBenchmarkRowsEditor: View {
+    @Binding var rows: [BenchmarkCustomRow]
+    @Binding var engine: BenchmarkEngine
+    @Binding var executionMode: BenchmarkExecutionMode
+    let isDisabled: Bool
+    @Environment(\.appLanguage) private var language
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+                .padding(.top, 2)
+
+            HStack(alignment: .firstTextBaseline) {
+                Label(language.t("Custom Test Groups"), systemImage: "slider.horizontal.3")
+                    .font(.headline)
+                Text(language.t("Each group creates read/write tests; mixed adds a 30% write / 70% read item."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    addRow()
+                } label: {
+                    Label(language.t("Add Group"), systemImage: "plus")
+                }
+                .controlSize(.small)
+                .disabled(isDisabled || rows.count >= BenchmarkCustomRow.maxRows)
+            }
+
+            HStack(alignment: .bottom, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.t("Engine"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 132, alignment: .leading)
+                    Picker("", selection: $engine) {
+                        Text(language.t("Sync")).tag(BenchmarkEngine.synchronous)
+                        Text(language.t("Async")).tag(BenchmarkEngine.asyncQueue)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 132)
+                    .help(language.t("Async uses POSIX AIO queue depth; Sync uses worker threads with blocking file I/O."))
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.t("Loop"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 112, alignment: .leading)
+                    Picker("", selection: $executionMode) {
+                        Text(language.t("Off")).tag(BenchmarkExecutionMode.finite)
+                        Text(language.t("On")).tag(BenchmarkExecutionMode.loopUntilCancelled)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 112)
+                    .help(language.t("Loop repeats the custom groups until you stop it manually."))
+                }
+
+                Text(language.t("Loop mode ignores test count and extra trimmed testing."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .disabled(isDisabled)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(language.t("Type"))
+                        .frame(width: 88, alignment: .leading)
+                    Text(language.t("Block Size"))
+                        .frame(width: 116, alignment: .leading)
+                    Text("Q")
+                        .frame(width: 62, alignment: .leading)
+                    Text("T")
+                        .frame(width: 62, alignment: .leading)
+                    Text(language.t("Mixed"))
+                        .frame(width: 112, alignment: .leading)
+                    Spacer(minLength: 0)
+                    Text(language.t("Delete"))
+                        .frame(width: 42, alignment: .trailing)
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+                ForEach(rows.indices, id: \.self) { index in
+                    HStack(spacing: 8) {
+                        Picker("", selection: $rows[index].accessPattern) {
+                            Text("SEQ").tag(BenchmarkAccessPattern.sequential)
+                            Text("RND").tag(BenchmarkAccessPattern.random)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 88)
+
+                        Picker("", selection: $rows[index].blockSizeBytes) {
+                            ForEach(BenchmarkCustomRow.blockSizeOptions, id: \.self) { size in
+                                Text(formatBytes(size)).tag(size)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 116)
+
+                        Picker("", selection: $rows[index].queueDepth) {
+                            ForEach(BenchmarkCustomRow.queueDepthOptions, id: \.self) { depth in
+                                Text("\(depth)").tag(depth)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 62)
+
+                        Picker("", selection: $rows[index].threads) {
+                            ForEach(BenchmarkCustomRow.threadOptions, id: \.self) { threadCount in
+                                Text("\(threadCount)").tag(threadCount)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 62)
+
+                        Picker("", selection: $rows[index].includeMixed) {
+                            Text(language.t("Off")).tag(false)
+                            Text(language.t("On")).tag(true)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 112)
+
+                        Text(rows[index].label.replacingOccurrences(of: "MiB", with: "M").replacingOccurrences(of: "KiB", with: "K"))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Button {
+                            removeRow(at: index)
+                        } label: {
+                            Image(systemName: "trash")
+                                .frame(width: 18, height: 18)
+                        }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                        .foregroundStyle(.secondary)
+                        .help(language.t("Delete"))
+                        .disabled(isDisabled || rows.count <= 1)
+                    }
+                    .disabled(isDisabled)
+                }
+            }
+
+            Text(language.t("Maximum 4 groups."))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func addRow() {
+        guard rows.count < BenchmarkCustomRow.maxRows else { return }
+        rows.append(BenchmarkCustomRow.newRow(index: rows.count))
+    }
+
+    private func removeRow(at index: Int) {
+        guard rows.count > 1, rows.indices.contains(index) else { return }
+        rows.remove(at: index)
     }
 }
 

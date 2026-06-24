@@ -107,6 +107,15 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
     }
 
+    func benchmarkEngineTitle(_ engine: BenchmarkEngine) -> String {
+        switch self {
+        case .english:
+            return engine == .asyncQueue ? "Async" : "Sync"
+        case .simplifiedChinese:
+            return engine == .asyncQueue ? "异步" : "同步"
+        }
+    }
+
     func benchmarkConfigurationDescription(
         profile: BenchmarkProfile,
         runs: Int,
@@ -141,9 +150,14 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             let runsDescription = usesTrimmedAverage
                 ? "Runs: \(runs) selected, executed as 1 warm-up plus \(measuredRuns) measured passes. The fastest and slowest measured passes are removed, then the rest are averaged."
                 : "Runs: \(runs) selected, executed as 1 warm-up plus \(measuredRuns) measured pass\(measuredRuns == 1 ? "" : "es"). All measured passes are averaged."
-            let testTerms = profile.engine == .asyncQueue
-                ? "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. The Test profile compares Q1 and Q8 across T1/T2/T4 using POSIX AIO; write cells show durable speed after fsync, with transfer speed and fsync time underneath."
-                : "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Each row runs read first, then write, before moving to the next row."
+            let testTerms: String
+            if profile.engine == .asyncQueue, profile.baseProfileID == "test" {
+                testTerms = "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. The Test profile compares Q1 and Q8 across T1/T2/T4 using POSIX AIO; write cells show durable speed after fsync, with transfer speed and fsync time underneath."
+            } else if profile.engine == .asyncQueue {
+                testTerms = "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. This custom profile uses POSIX AIO queue depth; write cells show durable speed after fsync, with transfer speed and fsync time underneath."
+            } else {
+                testTerms = "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Each row runs read first, then write, before moving to the next row."
+            }
             return BenchmarkConfigurationDescription(
                 profileUse: englishProfileUseDescription(profile),
                 runs: runsDescription,
@@ -156,9 +170,14 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             let runsDescription = usesTrimmedAverage
                 ? "测试次数：界面选择 \(runs)；实际执行 1 轮预热 + \(measuredRuns) 轮正式测量，去掉最高和最低后对剩余结果取平均。"
                 : "测试次数：界面选择 \(runs)；实际执行 1 轮预热 + \(measuredRuns) 轮正式测量，对全部正式结果取普通平均。"
-            let testTerms = profile.engine == .asyncQueue
-                ? "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。测试配置使用 POSIX AIO，对比 Q1 与 Q8 在 T1/T2/T4 下的表现；写入主数值为 fsync 后落盘速度，单元格下方显示传输速度和刷盘耗时。"
-                : "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。每一行先读取、再写入，然后进入下一行。"
+            let testTerms: String
+            if profile.engine == .asyncQueue, profile.baseProfileID == "test" {
+                testTerms = "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。测试配置使用 POSIX AIO，对比 Q1 与 Q8 在 T1/T2/T4 下的表现；写入主数值为 fsync 后落盘速度，单元格下方显示传输速度和刷盘耗时。"
+            } else if profile.engine == .asyncQueue {
+                testTerms = "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。此自定义配置使用 POSIX AIO 队列深度；写入主数值为 fsync 后落盘速度，单元格下方显示传输速度和刷盘耗时。"
+            } else {
+                testTerms = "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。每一行先读取、再写入，然后进入下一行。"
+            }
             return BenchmarkConfigurationDescription(
                 profileUse: chineseProfileUseDescription(profile),
                 runs: runsDescription,
@@ -179,19 +198,19 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         if profile.executionMode == .loopUntilCancelled {
             switch self {
             case .english:
-                return "Benchmark settings\nProfile-\(profileName(profile)); runs-loop until stopped; test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-not used"
+                return "Benchmark settings\nProfile-\(profileName(profile)); engine-\(benchmarkEngineTitle(profile.engine)); runs-loop until stopped; test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-not used"
             case .simplifiedChinese:
-                return "测试配置\n配置-\(profileName(profile))；测试次数-循环直到手动停止；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-不使用"
+                return "测试配置\n配置-\(profileName(profile))；引擎-\(benchmarkEngineTitle(profile.engine))；测试次数-循环直到手动停止；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-不使用"
             }
         }
 
         switch self {
         case .english:
             let trimState = usesTrimmedAverage ? "On" : "Off"
-            return "Benchmark settings\nProfile-\(profileName(profile)); runs-\(runs); test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-\(trimState)"
+            return "Benchmark settings\nProfile-\(profileName(profile)); engine-\(benchmarkEngineTitle(profile.engine)); runs-\(runs); test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-\(trimState)"
         case .simplifiedChinese:
             let trimState = usesTrimmedAverage ? "开启" : "关闭"
-            return "测试配置\n配置-\(profileName(profile))；测试次数-\(runs)；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-\(trimState)"
+            return "测试配置\n配置-\(profileName(profile))；引擎-\(benchmarkEngineTitle(profile.engine))；测试次数-\(runs)；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-\(trimState)"
         }
     }
 
@@ -212,23 +231,24 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
     }
 
-    func benchmarkFooter(testCount: Int, fileSize: Int64, runs: Int, dataPattern: BenchmarkDataPattern, usesTrimmedAverage: Bool, executionMode: BenchmarkExecutionMode = .finite) -> String {
+    func benchmarkFooter(testCount: Int, fileSize: Int64, runs: Int, dataPattern: BenchmarkDataPattern, usesTrimmedAverage: Bool, executionMode: BenchmarkExecutionMode = .finite, engine: BenchmarkEngine = .synchronous) -> String {
+        let engineText = benchmarkEngineTitle(engine)
         if executionMode == .loopUntilCancelled {
             switch self {
             case .english:
-                return "Loop · \(formatBenchmarkFileSize(fileSize)) file · \(benchmarkDataPatternTitle(dataPattern)) · latest pass"
+                return "Loop · \(engineText) · \(formatBenchmarkFileSize(fileSize)) file · \(benchmarkDataPatternTitle(dataPattern)) · latest pass"
             case .simplifiedChinese:
-                return "循环测试 · \(formatBenchmarkFileSize(fileSize)) 文件 · \(benchmarkDataPatternTitle(dataPattern)) · 最新一轮"
+                return "循环测试 · \(engineText) · \(formatBenchmarkFileSize(fileSize)) 文件 · \(benchmarkDataPatternTitle(dataPattern)) · 最新一轮"
             }
         }
 
         switch self {
         case .english:
             let averageText = usesTrimmedAverage ? "\(runs)+2 trimmed avg" : "\(runs) avg run\(runs == 1 ? "" : "s")"
-            return "\(testCount) tests · \(formatBenchmarkFileSize(fileSize)) file · \(averageText) · \(benchmarkDataPatternTitle(dataPattern))"
+            return "\(testCount) tests · \(engineText) · \(formatBenchmarkFileSize(fileSize)) file · \(averageText) · \(benchmarkDataPatternTitle(dataPattern))"
         case .simplifiedChinese:
             let averageText = usesTrimmedAverage ? "\(runs)+2 去极值平均" : "\(runs) 轮普通平均"
-            return "\(testCount) 项测试 · \(formatBenchmarkFileSize(fileSize)) 文件 · \(averageText) · \(benchmarkDataPatternTitle(dataPattern))"
+            return "\(testCount) 项测试 · \(engineText) · \(formatBenchmarkFileSize(fileSize)) 文件 · \(averageText) · \(benchmarkDataPatternTitle(dataPattern))"
         }
     }
 
@@ -243,7 +263,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case "demo":
             return "Demo / Light: quick validation with low write volume; useful for a fast sanity check."
         case "custom":
-            return "Custom: temporary verification profile with mixed rows, useful when checking a specific workload."
+            return "Custom: editable test groups for checking a specific SEQ/RND, block size, queue depth, thread count, and optional mixed workload."
         case "test":
             return "Test: experimental asynchronous profile for comparing Q1/Q8 and T1/T2/T4 behavior, transfer speed, and durable speed after fsync."
         case "loop":
@@ -266,7 +286,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case "demo":
             return "演示 / 轻量：写入量低、完成快，适合快速确认目标文件夹和磁盘状态。"
         case "custom":
-            return "自定义：用于临时验证特定负载，包含混合测试行。"
+            return "自定义：可编辑测试项目组，用于指定 SEQ/RND、块大小、队列深度、线程数和可选混合负载。"
         case "test":
             return "测试：实验性的异步配置，用于对比 Q1/Q8 与 T1/T2/T4 表现、传输速度和 fsync 后落盘速度。"
         case "loop":
@@ -279,6 +299,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 
     private func englishLoopTestTermsDescription(_ profile: BenchmarkProfile) -> String {
+        if profile.baseProfileID == "custom" {
+            let engineText = profile.engine == .asyncQueue ? " using POSIX AIO queue depth" : ""
+            return "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Custom Loop repeats the editable read/write groups\(engineText) until you stop it manually."
+        }
         if profile.baseProfileID == "loop-extreme" {
             return "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. Extreme Loop runs SEQ1M Q8T1, SEQ4M Q8T4, and SEQ1M Q32T4 read/write, then repeats without waiting."
         }
@@ -286,6 +310,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 
     private func chineseLoopTestTermsDescription(_ profile: BenchmarkProfile) -> String {
+        if profile.baseProfileID == "custom" {
+            let engineText = profile.engine == .asyncQueue ? "，并使用 POSIX AIO 队列深度" : ""
+            return "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。自定义循环会重复执行可编辑读写项目组\(engineText)，直到手动停止。"
+        }
         if profile.baseProfileID == "loop-extreme" {
             return "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。极限循环会依次执行 SEQ1M Q8T1、SEQ4M Q8T4、SEQ1M Q32T4 读取/写入，并且无间隔重复。"
         }
@@ -449,6 +477,20 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Runs": "测试次数",
         "Test Size": "测试文件大小",
         "Data Pattern": "数据模式",
+        "Custom Test Groups": "自定义测试项目组",
+        "Each group creates read/write tests; mixed adds a 30% write / 70% read item.": "每个项目组会生成读取/写入测试；开启混合会额外添加约 30% 写入 / 70% 读取的混合项。",
+        "Engine": "引擎",
+        "Sync": "同步",
+        "Async": "异步",
+        "Async uses POSIX AIO queue depth; Sync uses worker threads with blocking file I/O.": "异步使用 POSIX AIO 队列深度；同步使用工作线程执行阻塞式文件 I/O。",
+        "Loop repeats the custom groups until you stop it manually.": "循环会重复执行自定义项目组，直到手动停止。",
+        "Loop mode ignores test count and extra trimmed testing.": "循环模式会忽略测试次数和加量测试去极值。",
+        "Add Group": "添加项目组",
+        "Type": "类型",
+        "Block Size": "块大小",
+        "Mixed": "混合",
+        "Delete": "删除",
+        "Maximum 4 groups.": "最多 4 个项目组。",
         "Trimmed Avg": "去极值平均",
         "Trim Outliers": "加量测试去极值",
         "Off": "关闭",

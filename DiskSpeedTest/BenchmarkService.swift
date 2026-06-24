@@ -367,6 +367,17 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             cleanupBenchmarkFiles(in: volumeURL)
         }
 
+        if profile.executionMode == .loopUntilCancelled {
+            return try runLooping(
+                profile: profile,
+                drive: drive,
+                volumePath: volumePath,
+                volumeURL: volumeURL,
+                progress: progress,
+                result: result
+            )
+        }
+
         let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs, usesTrimmedAverage: profile.usesTrimmedAverage)
         let totalSteps = profile.tests.count * (measuredRuns + 1)
         let runID = UUID().uuidString
@@ -411,6 +422,281 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
         notify(progress, BenchmarkProgress(currentTestLabel: "Complete", completed: totalSteps, total: totalSteps, message: "Benchmark complete"))
         return results
+    }
+
+    private func runLooping(
+        profile: BenchmarkProfile,
+        drive: DriveDevice,
+        volumePath: String,
+        volumeURL: URL,
+        progress: @escaping (BenchmarkProgress) -> Void,
+        result: @escaping (BenchmarkResult) -> Void
+    ) throws -> [BenchmarkResult] {
+        let orderedTests = profile.tests
+        let totalSteps = max(1, orderedTests.count)
+        let runID = UUID().uuidString
+        var latestResultsByTestID: [String: BenchmarkResult] = [:]
+        var preparedReadFiles: [String: BenchmarkOpenFile] = [:]
+        var loopIndex = 1
+        defer {
+            preparedReadFiles.values.forEach { $0.closeAndRemove() }
+        }
+
+        do {
+            while true {
+                for (index, test) in orderedTests.enumerated() {
+                    try checkCancelled()
+                    let displayLabel = loopProgressLabel(loopIndex: loopIndex, test: test)
+                    notify(progress, BenchmarkProgress(
+                        currentTestLabel: displayLabel,
+                        completed: index,
+                        total: totalSteps,
+                        message: "Loop running"
+                    ))
+
+                    let completedResult = try runSingleLoopTest(
+                        profile: profile,
+                        drive: drive,
+                        volumePath: volumePath,
+                        volumeURL: volumeURL,
+                        runID: runID,
+                        test: test,
+                        loopIndex: loopIndex,
+                        completedSteps: index,
+                        totalSteps: totalSteps,
+                        displayLabel: displayLabel,
+                        preparedReadFiles: &preparedReadFiles,
+                        progress: progress
+                    )
+                    latestResultsByTestID[completedResult.testID] = completedResult
+                    notify(result, completedResult)
+
+                    notify(progress, BenchmarkProgress(
+                        currentTestLabel: displayLabel,
+                        completed: index + 1,
+                        total: totalSteps,
+                        message: "Loop running"
+                    ))
+                }
+                loopIndex += 1
+            }
+        } catch BenchmarkError.cancelled {
+            notify(progress, BenchmarkProgress(
+                currentTestLabel: "Complete",
+                completed: totalSteps,
+                total: totalSteps,
+                message: "Loop stopped"
+            ))
+            return orderedTests.compactMap { latestResultsByTestID[$0.id] }
+        }
+    }
+
+    private func loopProgressLabel(loopIndex: Int, test: BenchmarkTest) -> String {
+        "Loop \(loopIndex) - \(test.label) \(test.operation.title)"
+    }
+
+    private func runSingleLoopTest(
+        profile: BenchmarkProfile,
+        drive: DriveDevice,
+        volumePath: String,
+        volumeURL: URL,
+        runID: String,
+        test: BenchmarkTest,
+        loopIndex: Int,
+        completedSteps: Int,
+        totalSteps: Int,
+        displayLabel: String,
+        preparedReadFiles: inout [String: BenchmarkOpenFile],
+        progress: @escaping (BenchmarkProgress) -> Void
+    ) throws -> BenchmarkResult {
+        if test.operation == .read {
+            let preparedFile = try preparedLoopReadFile(
+                in: volumeURL,
+                runID: runID,
+                test: test,
+                completedSteps: completedSteps,
+                totalSteps: totalSteps,
+                displayLabel: displayLabel,
+                preparedReadFiles: &preparedReadFiles,
+                progress: progress
+            )
+            notify(progress, BenchmarkProgress(
+                currentTestLabel: displayLabel,
+                completed: completedSteps,
+                total: totalSteps,
+                message: "Loop running",
+                phaseCompletedBytes: 0,
+                phaseTotalBytes: test.testSizeBytes
+            ))
+            let measurement = try performAsync(
+                test: test,
+                fd: preparedFile.fd,
+                completedSteps: completedSteps,
+                totalSteps: totalSteps,
+                message: "Loop running",
+                progress: progress,
+                displayLabel: displayLabel
+            )
+            return loopResult(
+                profile: profile,
+                drive: drive,
+                volumePath: volumePath,
+                test: test,
+                measurement: measurement
+            )
+        }
+
+        let testFile = benchmarkFileURL(in: volumeURL, runID: runID, test: test, runIndex: loopIndex)
+        let measurement = try withBenchmarkFile(at: testFile) { fd in
+            if test.operation != .write {
+                let prepareReporter = byteProgressReporter(
+                    test: test,
+                    displayLabel: displayLabel,
+                    completedSteps: completedSteps,
+                    totalSteps: totalSteps,
+                    message: "Preparing complete test file",
+                    progress: progress
+                )
+                notify(progress, BenchmarkProgress(
+                    currentTestLabel: displayLabel,
+                    completed: completedSteps,
+                    total: totalSteps,
+                    message: "Preparing complete test file",
+                    phaseCompletedBytes: 0,
+                    phaseTotalBytes: test.testSizeBytes
+                ))
+                try prepareCompleteTestFile(
+                    fd: fd,
+                    size: test.testSizeBytes,
+                    blockSize: test.blockSizeBytes,
+                    pattern: test.dataPattern,
+                    progressReporter: prepareReporter,
+                    flushStarted: {
+                        self.publishPhaseProgress(
+                            test: test,
+                            displayLabel: displayLabel,
+                            completedSteps: completedSteps,
+                            totalSteps: totalSteps,
+                            message: "Flushing prepared test file",
+                            completedBytes: test.testSizeBytes,
+                            progress: progress
+                        )
+                    }
+                )
+            } else {
+                try resizeFile(fd: fd, size: test.testSizeBytes)
+            }
+
+            notify(progress, BenchmarkProgress(
+                currentTestLabel: displayLabel,
+                completed: completedSteps,
+                total: totalSteps,
+                message: "Loop running",
+                phaseCompletedBytes: 0,
+                phaseTotalBytes: test.testSizeBytes
+            ))
+            return try performAsync(
+                test: test,
+                fd: fd,
+                completedSteps: completedSteps,
+                totalSteps: totalSteps,
+                message: "Loop running",
+                progress: progress,
+                displayLabel: displayLabel
+            )
+        }
+
+        return loopResult(
+            profile: profile,
+            drive: drive,
+            volumePath: volumePath,
+            test: test,
+            measurement: measurement
+        )
+    }
+
+    private func preparedLoopReadFile(
+        in volumeURL: URL,
+        runID: String,
+        test: BenchmarkTest,
+        completedSteps: Int,
+        totalSteps: Int,
+        displayLabel: String,
+        preparedReadFiles: inout [String: BenchmarkOpenFile],
+        progress: @escaping (BenchmarkProgress) -> Void
+    ) throws -> BenchmarkOpenFile {
+        if let existing = preparedReadFiles[test.id] {
+            return existing
+        }
+
+        let testFile = benchmarkFileURL(in: volumeURL, runID: runID, test: test, runIndex: 0)
+        let openFile = try openBenchmarkFile(at: testFile, fileManager: fileManager, fileEventHandler: fileEventHandler)
+        do {
+            let prepareReporter = byteProgressReporter(
+                test: test,
+                displayLabel: displayLabel,
+                completedSteps: completedSteps,
+                totalSteps: totalSteps,
+                message: "Preparing complete test file",
+                progress: progress
+            )
+            notify(progress, BenchmarkProgress(
+                currentTestLabel: displayLabel,
+                completed: completedSteps,
+                total: totalSteps,
+                message: "Preparing complete test file",
+                phaseCompletedBytes: 0,
+                phaseTotalBytes: test.testSizeBytes
+            ))
+            try prepareCompleteTestFile(
+                fd: openFile.fd,
+                size: test.testSizeBytes,
+                blockSize: test.blockSizeBytes,
+                pattern: test.dataPattern,
+                progressReporter: prepareReporter,
+                flushStarted: {
+                    self.publishPhaseProgress(
+                        test: test,
+                        displayLabel: displayLabel,
+                        completedSteps: completedSteps,
+                        totalSteps: totalSteps,
+                        message: "Flushing prepared test file",
+                        completedBytes: test.testSizeBytes,
+                        progress: progress
+                    )
+                }
+            )
+            preparedReadFiles[test.id] = openFile
+            return openFile
+        } catch {
+            openFile.closeAndRemove()
+            throw error
+        }
+    }
+
+    private func loopResult(
+        profile: BenchmarkProfile,
+        drive: DriveDevice,
+        volumePath: String,
+        test: BenchmarkTest,
+        measurement: BenchmarkRunMeasurement
+    ) -> BenchmarkResult {
+        BenchmarkResult(
+            driveID: drive.id,
+            volumePath: volumePath,
+            profileID: profile.id,
+            profileName: profile.name,
+            testID: test.id,
+            testLabel: test.label,
+            operation: test.operation,
+            measuredAt: Date(),
+            bestMegabytesPerSecond: measurement.megabytesPerSecond,
+            iops: measurement.iops,
+            latencyMicroseconds: measurement.latencyMicroseconds,
+            bytesTransferred: measurement.bytesTransferred,
+            transferMegabytesPerSecond: measurement.transferMegabytesPerSecond,
+            flushMilliseconds: measurement.flushMilliseconds
+        )
     }
 
     private func runMeasuredTest(
@@ -676,13 +962,15 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         completedSteps: Int,
         totalSteps: Int,
         message: String,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping (BenchmarkProgress) -> Void,
+        displayLabel: String? = nil
     ) throws -> BenchmarkRunMeasurement {
         let requestDepth = max(1, test.queueDepth * max(1, test.threads))
         let blockSize = max(512, test.blockSizeBytes)
         let fileSize = max(Int64(blockSize), test.testSizeBytes)
         let progressReporter = byteProgressReporter(
             test: test,
+            displayLabel: displayLabel,
             completedSteps: completedSteps,
             totalSteps: totalSteps,
             message: message,
@@ -794,6 +1082,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         if test.operation == .write || test.operation == .mixed {
             publishPhaseProgress(
                 test: test,
+                displayLabel: displayLabel,
                 completedSteps: completedSteps,
                 totalSteps: totalSteps,
                 message: "Flushing writes",
@@ -937,15 +1226,17 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
     private func byteProgressReporter(
         test: BenchmarkTest,
+        displayLabel: String? = nil,
         completedSteps: Int,
         totalSteps: Int,
         message: String,
         progress: @escaping (BenchmarkProgress) -> Void
     ) -> ByteProgressReporter {
-        ByteProgressReporter(totalBytes: test.testSizeBytes) { [weak self] completedBytes in
+        let currentTestLabel = displayLabel ?? test.label
+        return ByteProgressReporter(totalBytes: test.testSizeBytes) { [weak self] completedBytes in
             guard let self else { return }
             self.notify(progress, BenchmarkProgress(
-                currentTestLabel: test.label,
+                currentTestLabel: currentTestLabel,
                 completed: completedSteps,
                 total: totalSteps,
                 message: message,
@@ -957,6 +1248,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
     private func publishPhaseProgress(
         test: BenchmarkTest,
+        displayLabel: String? = nil,
         completedSteps: Int,
         totalSteps: Int,
         message: String,
@@ -964,7 +1256,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         progress: @escaping (BenchmarkProgress) -> Void
     ) {
         notify(progress, BenchmarkProgress(
-            currentTestLabel: test.label,
+            currentTestLabel: displayLabel ?? test.label,
             completed: completedSteps,
             total: totalSteps,
             message: message,

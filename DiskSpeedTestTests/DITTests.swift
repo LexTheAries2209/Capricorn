@@ -138,6 +138,122 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(trimmedAverage.usesTrimmedAverage)
     }
 
+    func testBenchmarkCustomRowsDefaultGenerateCurrentCustomTests() {
+        let profile = BenchmarkProfile.custom(rows: BenchmarkCustomRow.defaultRows)
+
+        XCTAssertEqual(profile.baseProfileID, "custom")
+        XCTAssertEqual(profile.tests.map(\.label), [
+            "SEQ1MiB Q1T1",
+            "SEQ1MiB Q1T1",
+            "SEQ1MiB Q1T1 Mix",
+            "RND4KiB Q4T1",
+            "RND4KiB Q4T1",
+            "RND4KiB Q4T1 Mix"
+        ])
+        XCTAssertEqual(profile.tests.map(\.operation), [.read, .write, .mixed, .read, .write, .mixed])
+        XCTAssertEqual(profile.tests.filter { $0.operation == .mixed }.map(\.writePercentForMixed), [30, 30])
+    }
+
+    func testBenchmarkCustomRowsGenerateMixedPerGroup() {
+        let rows = [
+            BenchmarkCustomRow(id: "a", accessPattern: .sequential, blockSizeBytes: 1_048_576, queueDepth: 1, threads: 1, includeMixed: false),
+            BenchmarkCustomRow(id: "b", accessPattern: .random, blockSizeBytes: 4_096, queueDepth: 8, threads: 2, includeMixed: true)
+        ]
+
+        let profile = BenchmarkProfile.custom(rows: rows)
+
+        XCTAssertEqual(profile.tests.map(\.label), [
+            "SEQ1MiB Q1T1",
+            "SEQ1MiB Q1T1",
+            "RND4KiB Q8T2",
+            "RND4KiB Q8T2",
+            "RND4KiB Q8T2 Mix"
+        ])
+        XCTAssertEqual(profile.tests.map(\.operation), [.read, .write, .read, .write, .mixed])
+    }
+
+    func testBenchmarkCustomRowsAreLimitedAndFallbackToDefaults() {
+        let fiveRows = (0..<5).map { index in
+            BenchmarkCustomRow(id: "row-\(index)", accessPattern: .sequential, blockSizeBytes: 1_048_576, queueDepth: 1, threads: 1, includeMixed: false)
+        }
+
+        XCTAssertEqual(BenchmarkCustomRow.sanitized(fiveRows).count, BenchmarkCustomRow.maxRows)
+        XCTAssertEqual(BenchmarkCustomRow.sanitized([]), BenchmarkCustomRow.defaultRows)
+    }
+
+    func testBenchmarkCustomRowsPersistThroughJSONAndFallbackOnInvalidJSON() {
+        let rows = [
+            BenchmarkCustomRow(id: "a", accessPattern: .random, blockSizeBytes: 65_536, queueDepth: 16, threads: 4, includeMixed: true)
+        ]
+
+        let encoded = BenchmarkCustomRow.encodeList(rows)
+        XCTAssertEqual(BenchmarkCustomRow.decodeList(from: encoded), rows)
+        XCTAssertEqual(BenchmarkCustomRow.decodeList(from: "not-json"), BenchmarkCustomRow.defaultRows)
+    }
+
+    func testBenchmarkCustomProfileIDChangesWhenRowsChange() {
+        let baseRows = [
+            BenchmarkCustomRow(id: "a", accessPattern: .sequential, blockSizeBytes: 1_048_576, queueDepth: 1, threads: 1, includeMixed: true)
+        ]
+        let changedRows = [
+            BenchmarkCustomRow(id: "a", accessPattern: .sequential, blockSizeBytes: 4_194_304, queueDepth: 1, threads: 1, includeMixed: true)
+        ]
+
+        let first = BenchmarkProfile.custom(rows: baseRows).configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .random)
+        let second = BenchmarkProfile.custom(rows: changedRows).configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .random)
+
+        XCTAssertNotEqual(first.id, second.id)
+        XCTAssertTrue(first.id.contains("rows-"))
+        XCTAssertEqual(first.baseProfileID, "custom")
+    }
+
+    func testBenchmarkCustomProfileAppliesEngineAndLoopOptions() {
+        let rows = [
+            BenchmarkCustomRow(id: "a", accessPattern: .sequential, blockSizeBytes: 1_048_576, queueDepth: 8, threads: 2, includeMixed: false)
+        ]
+
+        let asyncLoop = BenchmarkProfile.custom(
+            rows: rows,
+            engine: .asyncQueue,
+            executionMode: .loopUntilCancelled
+        ).configured(
+            runs: 9,
+            fileSizeBytes: 2 * 1_024 * 1_024 * 1_024,
+            dataPattern: .zeroFill,
+            usesTrimmedAverage: true
+        )
+
+        XCTAssertEqual(asyncLoop.engine, .asyncQueue)
+        XCTAssertEqual(asyncLoop.executionMode, .loopUntilCancelled)
+        XCTAssertEqual(asyncLoop.runs, 1)
+        XCTAssertFalse(asyncLoop.usesTrimmedAverage)
+        XCTAssertTrue(asyncLoop.id.contains("rows-"))
+        XCTAssertTrue(asyncLoop.id.contains("loop-s"))
+        XCTAssertTrue(asyncLoop.id.contains("engine-asyncQueue"))
+        XCTAssertTrue(asyncLoop.tests.allSatisfy { $0.dataPattern == .zeroFill })
+    }
+
+    func testBenchmarkCustomProfileIDChangesWhenEngineChanges() {
+        let rows = [
+            BenchmarkCustomRow(id: "a", accessPattern: .random, blockSizeBytes: 4_096, queueDepth: 8, threads: 1, includeMixed: true)
+        ]
+
+        let sync = BenchmarkProfile.custom(rows: rows, engine: .synchronous).configured(
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random
+        )
+        let async = BenchmarkProfile.custom(rows: rows, engine: .asyncQueue).configured(
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random
+        )
+
+        XCTAssertNotEqual(sync.id, async.id)
+        XCTAssertEqual(sync.engine, .synchronous)
+        XCTAssertEqual(async.engine, .asyncQueue)
+    }
+
     func testBenchmarkLoopProfilePresetAndConfiguration() throws {
         let loop = try XCTUnwrap(BenchmarkProfile.presets.first { $0.baseProfileID == "loop" })
 
@@ -1108,6 +1224,91 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(results.first?.bytesTransferred, 65_536)
         XCTAssertEqual(names.count, 1)
         XCTAssertTrue(names.first?.contains("read-run0") == true)
+    }
+
+    func testAsyncQueueBenchmarkRunnerLoopPublishesLatestPassAndStopsWithoutWaiting() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+        let read = BenchmarkTest(
+            id: "async-loop-read",
+            label: "SEQ4K Q2T1",
+            accessPattern: .sequential,
+            operation: .read,
+            blockSizeBytes: 4_096,
+            queueDepth: 2,
+            threads: 1,
+            durationSeconds: 0.001,
+            testSizeBytes: 8_192,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 0
+        )
+        var write = read
+        write.id = "async-loop-write"
+        write.operation = .write
+        write.writePercentForMixed = 100
+        let profile = BenchmarkProfile(
+            id: "async-loop-unit",
+            name: "Async Loop Unit",
+            testFileSizeBytes: 8_192,
+            runs: 9,
+            executionMode: .loopUntilCancelled,
+            engine: .asyncQueue,
+            tests: [read, write]
+        )
+
+        let lock = NSLock()
+        var requestedWaits: [TimeInterval] = []
+        var published: [BenchmarkResult] = []
+        var createdNames: [String] = []
+        let runner = AsyncQueueBenchmarkRunner(
+            operationIntervalSeconds: 5,
+            passIntervalSeconds: 1,
+            operationSleeper: { seconds, _ in
+                lock.lock()
+                requestedWaits.append(seconds)
+                lock.unlock()
+            },
+            fileEventHandler: { url in
+                lock.lock()
+                createdNames.append(url.lastPathComponent)
+                lock.unlock()
+            }
+        )
+
+        let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
+            lock.lock()
+            published.append(result)
+            let shouldCancel = published.count == 4
+            lock.unlock()
+            if shouldCancel {
+                runner.cancel()
+            }
+        }
+
+        lock.lock()
+        let waits = requestedWaits
+        let publishedIDs = published.map(\.testID)
+        let names = createdNames
+        lock.unlock()
+
+        let expectedCycle = ["async-loop-read", "async-loop-write"]
+        XCTAssertEqual(publishedIDs, expectedCycle + expectedCycle)
+        XCTAssertEqual(results.map(\.testID), expectedCycle)
+        XCTAssertTrue(results.allSatisfy { $0.bytesTransferred == 8_192 })
+        XCTAssertTrue(waits.isEmpty)
+        XCTAssertEqual(names.filter { $0.contains("-read-run") }.count, 1)
+        XCTAssertEqual(names.filter { $0.contains("-write-run") }.count, 2)
+
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
+            $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")
+        }
+        XCTAssertTrue(leftovers.isEmpty)
     }
 
     func testBenchmarkRunnerIgnoresFixedDurationAndTransfersCompleteFile() async throws {
