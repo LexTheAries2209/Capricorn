@@ -421,6 +421,193 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(record.samples, samples)
     }
 
+    func testDiskActivityWorkloadFullDiskUses95PercentOfAvailableCapacity() {
+        let gib: Int64 = 1_024 * 1_024 * 1_024
+        let mib: Int64 = 1_024 * 1_024
+        let available = 100 * gib + DiskActivityWorkloadStorageValidator.safetyMarginBytes
+        let usable = available - DiskActivityWorkloadStorageValidator.safetyMarginBytes
+        let expectedSingle = (Int64(Double(usable) * 0.95) / mib) * mib
+        let expectedMixed = ((Int64(Double(usable) * 0.95) / 2) / mib) * mib
+
+        XCTAssertEqual(
+            DiskActivityWorkloadStorageValidator.resolvedFileSize(for: .fullDisk95, operation: .write, availableCapacity: available),
+            expectedSingle
+        )
+        XCTAssertEqual(
+            DiskActivityWorkloadStorageValidator.resolvedFileSize(for: .fullDisk95, operation: .mixed, availableCapacity: available),
+            expectedMixed
+        )
+        XCTAssertEqual(
+            DiskActivityWorkloadStorageValidator.requiredSpace(fileSizeBytes: expectedSingle, operation: .write),
+            expectedSingle + DiskActivityWorkloadStorageValidator.safetyMarginBytes
+        )
+        XCTAssertEqual(
+            DiskActivityWorkloadStorageValidator.requiredSpace(fileSizeBytes: expectedMixed, operation: .mixed),
+            expectedMixed * 2 + DiskActivityWorkloadStorageValidator.safetyMarginBytes
+        )
+    }
+
+    func testDiskActivityWorkloadAvailabilityAccountsForMixedTwoFileFootprint() {
+        let fileSize = DiskActivityWorkloadFileSize.gib32.fixedBytes!
+        let required = DiskActivityWorkloadStorageValidator.requiredSpace(fileSizeBytes: fileSize, operation: .mixed)
+
+        XCTAssertFalse(DiskActivityWorkloadStorageValidator.isFileSizeAvailable(.gib32, operation: .mixed, availableCapacity: required - 1))
+        XCTAssertTrue(DiskActivityWorkloadStorageValidator.isFileSizeAvailable(.gib32, operation: .mixed, availableCapacity: required))
+        XCTAssertEqual(required, fileSize * 2 + DiskActivityWorkloadStorageValidator.safetyMarginBytes)
+    }
+
+    func testDiskActivityWorkloadRunnerPreparesReadFileAndCleansUp() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let drive = Self.fixtureDrive(mountedAt: root.path)
+        let names = LockedArray<String>()
+        let progressValues = LockedArray<DiskActivityWorkloadProgress>()
+        let runner = NativeDiskActivityWorkloadRunner(fileEventHandler: { url in
+            names.append(url.lastPathComponent)
+        })
+
+        try await runner.run(
+            configuration: DiskActivityWorkloadConfiguration(
+                targetFolderURL: root,
+                operation: .read,
+                fileSizeOption: .gib32,
+                fileSizeBytes: 32_768,
+                loopEnabled: false
+            ),
+            drive: drive
+        ) { progress in
+            progressValues.append(progress)
+        }
+
+        XCTAssertEqual(names.snapshot.filter { $0.contains("read-source") }.count, 1)
+        XCTAssertTrue(progressValues.snapshot.contains { $0.phase == .preparingReadFile })
+        XCTAssertTrue(progressValues.snapshot.contains { $0.phase == .reading && $0.completedBytes == 32_768 })
+
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
+            $0.hasPrefix("Disk-Speed-Test-Activity-")
+        }
+        XCTAssertTrue(leftovers.isEmpty)
+    }
+
+    func testDiskActivityWorkloadRunnerMixedUsesSeparateReadAndWriteFiles() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let drive = Self.fixtureDrive(mountedAt: root.path)
+        let names = LockedArray<String>()
+        let progressValues = LockedArray<DiskActivityWorkloadProgress>()
+        let runner = NativeDiskActivityWorkloadRunner(fileEventHandler: { url in
+            names.append(url.lastPathComponent)
+        })
+
+        try await runner.run(
+            configuration: DiskActivityWorkloadConfiguration(
+                targetFolderURL: root,
+                operation: .mixed,
+                fileSizeOption: .gib32,
+                fileSizeBytes: 65_536,
+                loopEnabled: false
+            ),
+            drive: drive
+        ) { progress in
+            progressValues.append(progress)
+        }
+
+        let createdNames = names.snapshot
+        XCTAssertEqual(createdNames.filter { $0.contains("read-source") }.count, 1)
+        XCTAssertEqual(createdNames.filter { $0.contains("mixed-write") }.count, 1)
+        XCTAssertEqual(Set(createdNames).count, createdNames.count)
+        XCTAssertTrue(progressValues.snapshot.contains { $0.phase == .mixed && $0.totalBytes == 131_072 })
+
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
+            $0.hasPrefix("Disk-Speed-Test-Activity-")
+        }
+        XCTAssertTrue(leftovers.isEmpty)
+    }
+
+    func testDiskActivityWorkloadRunnerLoopCancelsAndCleansUp() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let drive = Self.fixtureDrive(mountedAt: root.path)
+        let names = LockedArray<String>()
+        let runner = NativeDiskActivityWorkloadRunner(fileEventHandler: { url in
+            names.append(url.lastPathComponent)
+        })
+
+        do {
+            try await runner.run(
+                configuration: DiskActivityWorkloadConfiguration(
+                    targetFolderURL: root,
+                    operation: .write,
+                    fileSizeOption: .gib32,
+                    fileSizeBytes: 16_384,
+                    loopEnabled: true
+                ),
+                drive: drive
+            ) { progress in
+                if progress.loopIndex >= 2, progress.phase == .writing {
+                    runner.cancel()
+                }
+            }
+            XCTFail("Expected cancellation")
+        } catch BenchmarkError.cancelled {
+        }
+
+        XCTAssertGreaterThanOrEqual(names.snapshot.filter { $0.contains("-write-loop") }.count, 2)
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
+            $0.hasPrefix("Disk-Speed-Test-Activity-")
+        }
+        XCTAssertTrue(leftovers.isEmpty)
+    }
+
+    @MainActor
+    func testLiveActivityWorkloadAutoStartsMonitoringAndStopsWithoutClearingChart() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let drive = Self.fixtureDrive(mountedAt: root.path)
+        let reader = FakeDiskActivityReader(counters: [
+            DiskActivityCounters(timestamp: Date(timeIntervalSince1970: 1), readBytes: 0, writeBytes: 0),
+            DiskActivityCounters(timestamp: Date(timeIntervalSince1970: 2), readBytes: 1_000_000, writeBytes: 2_000_000)
+        ])
+        let workloadRunner = FakeDiskActivityWorkloadRunner()
+        let model = DITViewModel(
+            diskActivityProvider: FakeDiskActivityProvider(reader: reader),
+            liveActivityWorkloadRunner: workloadRunner
+        )
+        model.drives = [drive]
+        model.liveActivitySelectedDriveID = drive.id
+
+        model.startLiveActivityWorkload(
+            configuration: DiskActivityWorkloadConfiguration(
+                targetFolderURL: root,
+                operation: .write,
+                fileSizeOption: .gib32,
+                fileSizeBytes: 16_384,
+                loopEnabled: true
+            ),
+            drive: drive,
+            interval: .tenth
+        )
+
+        XCTAssertTrue(model.isLiveActivityWorkloadRunning)
+        XCTAssertTrue(model.isLiveActivityMonitoring)
+
+        model.stopLiveActivityWorkload()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertFalse(model.isLiveActivityWorkloadRunning)
+        XCTAssertTrue(model.isLiveActivityMonitoring)
+        XCTAssertNil(model.liveActivityWorkloadError)
+        model.stopLiveActivityMonitoring()
+    }
+
     func testBenchmarkSelectedRunCountAddsTwoMeasuredRunsWhenTrimmedAverageEnabled() {
         XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 1, usesTrimmedAverage: true), 3)
         XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 3, usesTrimmedAverage: true), 5)
@@ -1230,6 +1417,14 @@ final class DITTests: XCTestCase {
         )
     }
 
+    private static func fixtureDrive(mountedAt mountPoint: String) -> DriveDevice {
+        var drive = fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: mountPoint, sizeBytes: 1_000_000_000, isWritable: true, isSystem: false)
+        ]
+        return drive
+    }
+
     private static func fixtureSnapshot(for drive: DriveDevice) -> SmartSnapshot {
         SmartSnapshot(
             driveID: drive.id,
@@ -1435,5 +1630,45 @@ private final class FakeDiskActivityReader: DiskActivityCounterReading, @uncheck
         let value = values[min(index, values.count - 1)]
         index += 1
         return value
+    }
+}
+
+private final class FakeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    func run(
+        configuration: DiskActivityWorkloadConfiguration,
+        drive: DriveDevice,
+        progress: @escaping (DiskActivityWorkloadProgress) -> Void
+    ) async throws {
+        progress(DiskActivityWorkloadProgress(
+            operation: configuration.operation,
+            phase: .writing,
+            loopIndex: 1,
+            completedBytes: 0,
+            totalBytes: configuration.fileSizeBytes,
+            message: "Writing workload file"
+        ))
+
+        while !isCancelled {
+            if Task.isCancelled {
+                throw BenchmarkError.cancelled
+            }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        throw BenchmarkError.cancelled
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+
+    private var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
     }
 }

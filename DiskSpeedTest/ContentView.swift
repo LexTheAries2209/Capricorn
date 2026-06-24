@@ -535,6 +535,10 @@ private struct DiskActivityView: View {
     @ObservedObject var viewModel: DITViewModel
     let activityHistory: [DiskActivityHistoryRecord]
     @AppStorage("diskActivitySampleInterval") private var selectedIntervalSeconds = DiskActivitySampleInterval.default.seconds
+    @AppStorage("diskActivityWorkloadTargetFolder") private var workloadTargetFolderPath = ""
+    @AppStorage("diskActivityWorkloadOperation") private var workloadOperationRaw = DiskActivityWorkloadOperation.write.rawValue
+    @AppStorage("diskActivityWorkloadFileSize") private var workloadFileSizeRaw = DiskActivityWorkloadFileSize.gib32.rawValue
+    @AppStorage("diskActivityWorkloadLoopEnabled") private var workloadLoopEnabled = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @State private var saveMessage: String?
@@ -552,6 +556,57 @@ private struct DiskActivityView: View {
 
     private var selectedInterval: DiskActivitySampleInterval {
         DiskActivitySampleInterval(rawValue: selectedIntervalSeconds) ?? .default
+    }
+
+    private var workloadOperation: DiskActivityWorkloadOperation {
+        DiskActivityWorkloadOperation(rawValue: workloadOperationRaw) ?? .write
+    }
+
+    private var workloadFileSizeOption: DiskActivityWorkloadFileSize {
+        DiskActivityWorkloadFileSize(rawValue: workloadFileSizeRaw) ?? .gib32
+    }
+
+    private var workloadTargetFolderURL: URL? {
+        guard !workloadTargetFolderPath.isEmpty else { return nil }
+        return URL(fileURLWithPath: workloadTargetFolderPath, isDirectory: true)
+    }
+
+    private var workloadTargetFolderIsUsable: Bool {
+        guard !workloadTargetFolderPath.isEmpty else { return false }
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: workloadTargetFolderPath, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+            && FileManager.default.isWritableFile(atPath: workloadTargetFolderPath)
+    }
+
+    private var workloadTargetAvailableCapacity: Int64 {
+        guard workloadTargetFolderIsUsable, let workloadTargetFolderURL else { return 0 }
+        return DiskActivityWorkloadStorageValidator.availableCapacity(for: workloadTargetFolderURL)
+    }
+
+    private var workloadResolvedFileSize: Int64? {
+        guard workloadTargetFolderIsUsable else { return nil }
+        return DiskActivityWorkloadStorageValidator.resolvedFileSize(
+            for: workloadFileSizeOption,
+            operation: workloadOperation,
+            availableCapacity: workloadTargetAvailableCapacity
+        )
+    }
+
+    private var workloadTargetDriveMismatch: Bool {
+        guard workloadTargetFolderIsUsable else { return false }
+        return !BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(workloadTargetFolderPath, drive: selectedDrive)
+    }
+
+    private var canStartWorkload: Bool {
+        guard !viewModel.isLiveActivityWorkloadRunning,
+              workloadTargetFolderIsUsable,
+              !workloadTargetDriveMismatch,
+              let fileSize = workloadResolvedFileSize else {
+            return false
+        }
+        let required = DiskActivityWorkloadStorageValidator.requiredSpace(fileSizeBytes: fileSize, operation: workloadOperation)
+        return workloadTargetAvailableCapacity >= required
     }
 
     private var selectedDriveHistory: [DiskActivityHistoryRecord] {
@@ -576,6 +631,7 @@ private struct DiskActivityView: View {
             VStack(alignment: .leading, spacing: 14) {
                 header
                 controls
+                workloadPanel
                 DiskActivityChartView(
                     title: language.t("Live Disk Activity"),
                     samples: viewModel.liveActivitySamples,
@@ -591,6 +647,15 @@ private struct DiskActivityView: View {
             if viewModel.liveActivitySelectedDriveID == nil {
                 viewModel.liveActivitySelectedDriveID = initialDrive.id
             }
+            adjustWorkloadFileSizeForTarget()
+        }
+        .onChange(of: workloadTargetFolderPath) { _, _ in
+            viewModel.liveActivityWorkloadError = nil
+            adjustWorkloadFileSizeForTarget()
+        }
+        .onChange(of: workloadOperationRaw) { _, _ in
+            viewModel.liveActivityWorkloadError = nil
+            adjustWorkloadFileSizeForTarget()
         }
     }
 
@@ -617,7 +682,7 @@ private struct DiskActivityView: View {
                 }
                 .labelsHidden()
                 .frame(width: 280, alignment: .leading)
-                .disabled(viewModel.isLiveActivityMonitoring)
+                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning)
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -632,7 +697,7 @@ private struct DiskActivityView: View {
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .frame(width: 220, alignment: .leading)
-                .disabled(viewModel.isLiveActivityMonitoring)
+                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning)
             }
 
             Spacer(minLength: 10)
@@ -644,7 +709,7 @@ private struct DiskActivityView: View {
                 Label(language.t("Start Monitoring"), systemImage: "play.fill")
             }
             .buttonStyle(.borderedProminent)
-            .disabled(viewModel.isLiveActivityMonitoring || viewModel.drives.isEmpty)
+            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.drives.isEmpty)
 
             Button {
                 viewModel.stopLiveActivityMonitoring()
@@ -658,7 +723,7 @@ private struct DiskActivityView: View {
             } label: {
                 Label(language.t("Save to History"), systemImage: "tray.and.arrow.down")
             }
-            .disabled(viewModel.isLiveActivityMonitoring || viewModel.liveActivitySamples.isEmpty)
+            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.liveActivitySamples.isEmpty)
 
             Button {
                 saveMessage = nil
@@ -666,7 +731,7 @@ private struct DiskActivityView: View {
             } label: {
                 Label(language.t("Clear Chart"), systemImage: "xmark.circle")
             }
-            .disabled(viewModel.isLiveActivityMonitoring || viewModel.liveActivitySamples.isEmpty)
+            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.liveActivitySamples.isEmpty)
         }
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -682,6 +747,241 @@ private struct DiskActivityView: View {
         } set: { nextValue in
             viewModel.liveActivitySelectedDriveID = nextValue
             saveMessage = nil
+        }
+    }
+
+    private var workloadPanel: some View {
+        InfoPanel(title: language.t("Large File Workload"), symbol: "bolt.horizontal.circle") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .bottom, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(language.t("Target Folder"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            chooseWorkloadTargetFolder()
+                        } label: {
+                            Label(workloadTargetFolderPath.isEmpty ? language.t("Choose Target Folder") : language.t("Change Folder"), systemImage: "folder.badge.gearshape")
+                        }
+                        .disabled(viewModel.isLiveActivityWorkloadRunning)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(language.t("Workload"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Picker("", selection: $workloadOperationRaw) {
+                            ForEach(DiskActivityWorkloadOperation.allCases) { operation in
+                                Text(language.activityWorkloadOperationTitle(operation)).tag(operation.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 230)
+                        .disabled(viewModel.isLiveActivityWorkloadRunning)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(language.t("Large File Size"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Picker("", selection: $workloadFileSizeRaw) {
+                            ForEach(DiskActivityWorkloadFileSize.allCases) { option in
+                                Text(workloadFileSizeTitle(option))
+                                    .tag(option.rawValue)
+                                    .disabled(!isWorkloadFileSizeSelectable(option))
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 170)
+                        .disabled(viewModel.isLiveActivityWorkloadRunning)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(language.t("Loop"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Picker("", selection: $workloadLoopEnabled) {
+                            Text(language.t("Off")).tag(false)
+                            Text(language.t("On")).tag(true)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 110)
+                        .disabled(viewModel.isLiveActivityWorkloadRunning)
+                    }
+
+                    Spacer(minLength: 10)
+
+                    Button {
+                        startWorkload()
+                    } label: {
+                        Label(language.t("Start Workload"), systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canStartWorkload)
+
+                    Button {
+                        viewModel.stopLiveActivityWorkload()
+                    } label: {
+                        Label(language.t("Stop Workload"), systemImage: "stop.fill")
+                    }
+                    .disabled(!viewModel.isLiveActivityWorkloadRunning)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Label(workloadTargetStatusText, systemImage: workloadTargetStatusSymbol)
+                        .font(.caption)
+                        .foregroundStyle(workloadTargetStatusColor)
+                    Text(workloadTargetFolderPath.isEmpty ? language.t("No target folder selected") : workloadTargetFolderPath)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(language.t("Large file workload creates temporary files and may stress or wear storage."))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let progress = viewModel.liveActivityWorkloadProgress {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ProgressView(value: progress.fraction)
+                        Text(workloadProgressText(progress))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let error = viewModel.liveActivityWorkloadError {
+                    Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private var workloadTargetStatusText: String {
+        if workloadTargetFolderPath.isEmpty {
+            return language.t("Choose a writable target folder")
+        }
+        guard workloadTargetFolderIsUsable else {
+            return language.t("Target folder is not writable")
+        }
+        if workloadTargetDriveMismatch {
+            return language.t("Workload target folder must be on the selected drive")
+        }
+        guard let fileSize = workloadResolvedFileSize else {
+            return language.t("Not enough free space for the selected workload")
+        }
+        let required = DiskActivityWorkloadStorageValidator.requiredSpace(fileSizeBytes: fileSize, operation: workloadOperation)
+        if workloadTargetAvailableCapacity < required {
+            return language.t("Selected workload size exceeds available free space")
+        }
+        return language.t("Target folder is writable")
+    }
+
+    private var workloadTargetStatusSymbol: String {
+        canStartWorkload ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+    }
+
+    private var workloadTargetStatusColor: Color {
+        canStartWorkload ? .green : .orange
+    }
+
+    private func workloadFileSizeTitle(_ option: DiskActivityWorkloadFileSize) -> String {
+        if option == .fullDisk95 {
+            guard workloadTargetFolderIsUsable,
+                  let size = DiskActivityWorkloadStorageValidator.resolvedFileSize(
+                    for: option,
+                    operation: workloadOperation,
+                    availableCapacity: workloadTargetAvailableCapacity
+                  ) else {
+                return language.t("Full Disk (95%)")
+            }
+            let suffix = workloadOperation == .mixed ? " x2" : ""
+            return "\(language.t("Full Disk (95%)")) · \(formatBenchmarkFileSize(size))\(suffix)"
+        }
+        guard let fixedBytes = option.fixedBytes else {
+            return language.t("Full Disk (95%)")
+        }
+        return formatBenchmarkFileSize(fixedBytes)
+    }
+
+    private func isWorkloadFileSizeSelectable(_ option: DiskActivityWorkloadFileSize) -> Bool {
+        guard workloadTargetFolderIsUsable else { return true }
+        return DiskActivityWorkloadStorageValidator.isFileSizeAvailable(
+            option,
+            operation: workloadOperation,
+            availableCapacity: workloadTargetAvailableCapacity
+        )
+    }
+
+    private func workloadProgressText(_ progress: DiskActivityWorkloadProgress) -> String {
+        var parts = [
+            "\(language.t("Loop")) \(progress.loopIndex)",
+            language.statusMessage(progress.message)
+        ]
+        if progress.totalBytes > 0 {
+            parts.append("\(formatBenchmarkFileSize(progress.completedBytes)) / \(formatBenchmarkFileSize(progress.totalBytes))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func chooseWorkloadTargetFolder() {
+        let panel = NSOpenPanel()
+        panel.title = language.t("Choose Target Folder")
+        panel.message = language.t("Choose a writable folder where large temporary workload files can be created.")
+        panel.prompt = language.t("Use Folder")
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        if let workloadTargetFolderURL {
+            panel.directoryURL = workloadTargetFolderURL
+        } else if let fallback = selectedDrive.benchmarkMountPoint {
+            panel.directoryURL = URL(fileURLWithPath: fallback, isDirectory: true)
+        }
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        workloadTargetFolderPath = url.path
+        viewModel.liveActivityWorkloadError = nil
+        adjustWorkloadFileSizeForTarget()
+    }
+
+    private func startWorkload() {
+        guard let targetURL = workloadTargetFolderURL,
+              let fileSize = workloadResolvedFileSize else {
+            viewModel.liveActivityWorkloadError = "Choose a writable target folder before starting."
+            return
+        }
+        guard canStartWorkload else {
+            viewModel.liveActivityWorkloadError = workloadTargetStatusText
+            return
+        }
+
+        saveMessage = nil
+        viewModel.startLiveActivityWorkload(
+            configuration: DiskActivityWorkloadConfiguration(
+                targetFolderURL: targetURL,
+                operation: workloadOperation,
+                fileSizeOption: workloadFileSizeOption,
+                fileSizeBytes: fileSize,
+                loopEnabled: workloadLoopEnabled
+            ),
+            drive: selectedDrive,
+            interval: selectedInterval
+        )
+    }
+
+    private func adjustWorkloadFileSizeForTarget() {
+        guard workloadTargetFolderIsUsable else { return }
+        guard !isWorkloadFileSizeSelectable(workloadFileSizeOption) else { return }
+        if let fallback = DiskActivityWorkloadStorageValidator.largestAvailableFileSizeOption(
+            operation: workloadOperation,
+            availableCapacity: workloadTargetAvailableCapacity
+        ) {
+            workloadFileSizeRaw = fallback.rawValue
         }
     }
 

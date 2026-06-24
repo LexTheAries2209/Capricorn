@@ -21,6 +21,9 @@ final class DITViewModel: ObservableObject {
     @Published var liveActivityStartedAt: Date?
     @Published var liveActivityEndedAt: Date?
     @Published var liveActivityError: String?
+    @Published var liveActivityWorkloadProgress: DiskActivityWorkloadProgress?
+    @Published var liveActivityWorkloadError: String?
+    @Published var isLiveActivityWorkloadRunning = false
     @Published var externalSupport: ExternalSupportStatus
     @Published var showVirtualDisks = false
 
@@ -30,16 +33,19 @@ final class DITViewModel: ObservableObject {
     private let smartService: SmartSnapshotService
     private let benchmarkRunner: BenchmarkRunning
     private let diskActivityProvider: DiskActivityProviding
+    private let liveActivityWorkloadRunner: DiskActivityWorkloadRunning
     private let externalDetector: ExternalDriveSupportDetector
     private let notificationCoordinator: NotificationCoordinator
     private var diskActivityTask: Task<Void, Never>?
     private var liveActivityTask: Task<Void, Never>?
+    private var liveActivityWorkloadTask: Task<Void, Never>?
 
     init(
         inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(),
         smartService: SmartSnapshotService = SmartSnapshotService(),
         benchmarkRunner: BenchmarkRunning = BenchmarkRunnerRouter(),
         diskActivityProvider: DiskActivityProviding = IOKitDiskActivityProvider(),
+        liveActivityWorkloadRunner: DiskActivityWorkloadRunning = NativeDiskActivityWorkloadRunner(),
         externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator()
     ) {
@@ -47,6 +53,7 @@ final class DITViewModel: ObservableObject {
         self.smartService = smartService
         self.benchmarkRunner = benchmarkRunner
         self.diskActivityProvider = diskActivityProvider
+        self.liveActivityWorkloadRunner = liveActivityWorkloadRunner
         self.externalDetector = externalDetector
         self.notificationCoordinator = notificationCoordinator
         self.externalSupport = externalDetector.detect()
@@ -166,6 +173,7 @@ final class DITViewModel: ObservableObject {
     }
 
     func startLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {
+        guard !isLiveActivityWorkloadRunning else { return }
         stopLiveActivityMonitoring()
         liveActivitySelectedDriveID = drive.id
         liveActivityStartedAt = Date()
@@ -192,22 +200,113 @@ final class DITViewModel: ObservableObject {
     }
 
     func clearLiveActivity() {
-        guard !isLiveActivityMonitoring else { return }
+        guard !isLiveActivityMonitoring, !isLiveActivityWorkloadRunning else { return }
         liveActivitySamples = []
         currentLiveActivity = nil
         liveActivityStartedAt = nil
         liveActivityEndedAt = nil
         liveActivityError = nil
+        liveActivityWorkloadError = nil
+        liveActivityWorkloadProgress = nil
     }
 
     func loadLiveActivityRecord(_ record: DiskActivityHistoryRecord) {
-        guard !isLiveActivityMonitoring else { return }
+        guard !isLiveActivityMonitoring, !isLiveActivityWorkloadRunning else { return }
         liveActivitySelectedDriveID = record.driveID
         liveActivityStartedAt = record.startedAt
         liveActivityEndedAt = record.endedAt
         liveActivitySamples = record.samples
         currentLiveActivity = record.samples.last
         liveActivityError = nil
+    }
+
+    func startLiveActivityWorkload(
+        configuration: DiskActivityWorkloadConfiguration,
+        drive: DriveDevice,
+        interval: DiskActivitySampleInterval
+    ) {
+        guard !isLiveActivityWorkloadRunning else { return }
+        guard BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(configuration.targetFolderURL.path, drive: drive) else {
+            liveActivityWorkloadError = "Workload target folder must be on the selected drive."
+            return
+        }
+
+        liveActivitySelectedDriveID = drive.id
+        liveActivityWorkloadError = nil
+        liveActivityWorkloadProgress = DiskActivityWorkloadProgress(
+            operation: configuration.operation,
+            phase: .starting,
+            loopIndex: 1,
+            completedBytes: 0,
+            totalBytes: configuration.fileSizeBytes,
+            message: "Starting workload"
+        )
+        isLiveActivityWorkloadRunning = true
+
+        if !isLiveActivityMonitoring {
+            startLiveActivityMonitoringForWorkload(drive: drive, interval: interval)
+        }
+
+        let runner = liveActivityWorkloadRunner
+        liveActivityWorkloadTask = Task { [weak self] in
+            do {
+                try await runner.run(configuration: configuration, drive: drive) { progress in
+                    Task { @MainActor [weak self] in
+                        self?.liveActivityWorkloadProgress = progress
+                    }
+                }
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.liveActivityWorkloadProgress = DiskActivityWorkloadProgress(
+                        operation: configuration.operation,
+                        phase: .complete,
+                        loopIndex: self.liveActivityWorkloadProgress?.loopIndex ?? 1,
+                        completedBytes: configuration.fileSizeBytes,
+                        totalBytes: configuration.fileSizeBytes,
+                        message: "Workload complete"
+                    )
+                    self.isLiveActivityWorkloadRunning = false
+                    self.liveActivityWorkloadTask = nil
+                }
+            } catch BenchmarkError.cancelled {
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.liveActivityWorkloadProgress = DiskActivityWorkloadProgress(
+                        operation: configuration.operation,
+                        phase: .stopped,
+                        loopIndex: self.liveActivityWorkloadProgress?.loopIndex ?? 1,
+                        completedBytes: self.liveActivityWorkloadProgress?.completedBytes ?? 0,
+                        totalBytes: self.liveActivityWorkloadProgress?.totalBytes ?? configuration.fileSizeBytes,
+                        message: "Workload stopped"
+                    )
+                    self.isLiveActivityWorkloadRunning = false
+                    self.liveActivityWorkloadTask = nil
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.liveActivityWorkloadError = error.localizedDescription
+                    self.isLiveActivityWorkloadRunning = false
+                    self.liveActivityWorkloadTask = nil
+                }
+            }
+        }
+    }
+
+    func stopLiveActivityWorkload() {
+        guard isLiveActivityWorkloadRunning else { return }
+        liveActivityWorkloadProgress = liveActivityWorkloadProgress.map {
+            DiskActivityWorkloadProgress(
+                operation: $0.operation,
+                phase: .stopped,
+                loopIndex: $0.loopIndex,
+                completedBytes: $0.completedBytes,
+                totalBytes: $0.totalBytes,
+                message: "Stopping workload"
+            )
+        }
+        liveActivityWorkloadRunner.cancel()
+        liveActivityWorkloadTask?.cancel()
     }
 
     func refreshExternalSupport() {
@@ -235,6 +334,23 @@ final class DITViewModel: ObservableObject {
             guard let self else { return }
             self.currentDiskActivity = sample
             self.diskActivitySamples = DiskActivitySeries.appending(sample, to: self.diskActivitySamples)
+        }
+    }
+
+    private func startLiveActivityMonitoringForWorkload(drive: DriveDevice, interval: DiskActivitySampleInterval) {
+        stopLiveActivityMonitoring()
+        liveActivitySelectedDriveID = drive.id
+        liveActivityStartedAt = Date()
+        liveActivityEndedAt = nil
+        liveActivitySamples = []
+        currentLiveActivity = nil
+        liveActivityError = nil
+        isLiveActivityMonitoring = true
+
+        liveActivityTask = makeDiskActivityTask(for: drive, interval: interval) { [weak self] sample in
+            guard let self else { return }
+            self.currentLiveActivity = sample
+            self.liveActivitySamples = DiskActivitySeries.appending(sample, to: self.liveActivitySamples)
         }
     }
 

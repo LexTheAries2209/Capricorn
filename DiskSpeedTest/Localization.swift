@@ -59,6 +59,23 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
     }
 
+    func activityWorkloadOperationTitle(_ operation: DiskActivityWorkloadOperation) -> String {
+        switch self {
+        case .english:
+            return switch operation {
+            case .read: "Read"
+            case .write: "Write"
+            case .mixed: "Mixed"
+            }
+        case .simplifiedChinese:
+            return switch operation {
+            case .read: "读取"
+            case .write: "写入"
+            case .mixed: "读写混合"
+            }
+        }
+    }
+
     func profileName(_ profile: BenchmarkProfile) -> String {
         switch self {
         case .english:
@@ -449,6 +466,18 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Stop Monitoring": "停止监控",
         "Save to History": "保存到历史",
         "Clear Chart": "清空图表",
+        "Large File Workload": "大文件负载",
+        "Workload": "负载",
+        "Large File Size": "大文件大小",
+        "Loop": "循环",
+        "Start Workload": "开始负载",
+        "Stop Workload": "停止负载",
+        "Full Disk (95%)": "全盘 (95%)",
+        "Large file workload creates temporary files and may stress or wear storage.": "大文件负载会创建临时文件，并可能给存储带来持续压力和写入磨损。",
+        "Choose a writable folder where large temporary workload files can be created.": "选择一个可创建大临时负载文件的可写文件夹。",
+        "Workload target folder must be on the selected drive": "负载目标文件夹必须位于当前选中的磁盘",
+        "Not enough free space for the selected workload": "可用空间不足，无法运行所选负载",
+        "Selected workload size exceeds available free space": "所选负载大小超过可用空间",
         "Elapsed": "已运行",
         "Samples": "采样点",
         "samples": "个采样点",
@@ -583,6 +612,20 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Benchmark complete": "测速完成",
         "Starting": "开始",
         "Complete": "完成",
+        "Starting workload": "正在启动负载",
+        "Preparing read workload file": "正在准备读取负载文件",
+        "Reading workload file": "正在读取负载文件",
+        "Writing workload file": "正在写入负载文件",
+        "Running mixed workload": "正在运行读写混合负载",
+        "Flushing workload writes": "正在刷新负载写入",
+        "Cleaning workload files": "正在清理负载文件",
+        "Workload complete": "负载完成",
+        "Workload stopped": "负载已停止",
+        "Stopping workload": "正在停止负载",
+        "Workload target folder must be on the selected drive.": "负载目标文件夹必须位于当前选中的磁盘。",
+        "Could not flush workload writes.": "无法刷新负载写入。",
+        "Write workload failed.": "写入负载失败。",
+        "Read workload failed.": "读取负载失败。",
         "Preview": "预览",
         "Preview complete": "预览完成",
         "Read": "读取",
