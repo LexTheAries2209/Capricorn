@@ -37,7 +37,7 @@ struct ContentView: View {
                     benchmarkHistory: benchmarkHistory.filter { $0.driveID == drive.id },
                     activityHistory: activityHistory,
                     saveSnapshot: { exportFolderPath in saveSnapshot(drive: drive, exportFolderPath: exportFolderPath) },
-                    saveBenchmarkResults: { saveBenchmarkResults(drive: drive) }
+                    saveBenchmarkResults: { results in saveBenchmarkResults(drive: drive, results: results) }
                 )
             } else {
                 ContentUnavailableView(
@@ -177,8 +177,8 @@ struct ContentView: View {
         return "DiskSmart-\(safeName.isEmpty ? drive.bsdName : safeName)-\(stamp).json"
     }
 
-    private func saveBenchmarkResults(drive: DriveDevice) {
-        for result in viewModel.benchmarkResults where result.driveID == drive.id {
+    private func saveBenchmarkResults(drive: DriveDevice, results: [BenchmarkResult]) {
+        for result in results {
             modelContext.insert(BenchmarkHistoryRecord(drive: drive, result: result))
         }
         try? modelContext.save()
@@ -232,7 +232,7 @@ private struct DriveDetailView: View {
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
     let saveSnapshot: (String?) -> String
-    let saveBenchmarkResults: () -> Void
+    let saveBenchmarkResults: ([BenchmarkResult]) -> Void
     @Environment(\.appLanguage) private var language
 
     var body: some View {
@@ -438,6 +438,7 @@ private struct SmartAttributesView: View {
                     systemImage: "questionmark.folder",
                     description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
                 )
+                .frame(maxWidth: .infinity, alignment: .center)
             }
 
             if showsExternalSupportHelp {
@@ -1231,7 +1232,7 @@ private struct ActivityMetricTile: View {
 private struct BenchmarkView: View {
     let drive: DriveDevice
     @ObservedObject var viewModel: DITViewModel
-    let saveResults: () -> Void
+    let saveResults: ([BenchmarkResult]) -> Void
     @Environment(\.appLanguage) private var language
 
     @AppStorage("benchmarkTargetFolder") private var targetFolderPath = ""
@@ -1569,11 +1570,11 @@ private struct BenchmarkView: View {
                 .disabled(!viewModel.isBenchmarking)
 
                 Button {
-                    saveResults()
+                    saveResults(profileResults)
                 } label: {
                     Label(language.t("Save Results"), systemImage: "tray.and.arrow.down")
                 }
-                .disabled(driveResults.isEmpty)
+                .disabled(profileResults.isEmpty)
             }
 
             BenchmarkConfigurationDescriptionView(description: configurationDescription)
