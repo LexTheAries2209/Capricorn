@@ -288,9 +288,6 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
     static let defaultUsesTrimmedAverage = false
     static let runCountOptions = Array(1...9)
     static let fileSizeOptions: [Int64] = [
-        16 * 1_024 * 1_024,
-        64 * 1_024 * 1_024,
-        256 * 1_024 * 1_024,
         1_024 * 1_024 * 1_024,
         2 * 1_024 * 1_024 * 1_024,
         4 * 1_024 * 1_024 * 1_024,
@@ -344,7 +341,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
         makeProfile(
             id: "real-world",
             name: "RealWorld",
-            testSize: 536_870_912,
+            testSize: defaultTestSize,
             runs: 2,
             duration: 3,
             rows: [
@@ -361,7 +358,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
         makeProfile(
             id: "demo",
             name: "Demo / Light",
-            testSize: 67_108_864,
+            testSize: defaultTestSize,
             runs: 1,
             duration: 1,
             rows: [
@@ -375,7 +372,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
         makeProfile(
             id: "custom",
             name: "Custom",
-            testSize: 268_435_456,
+            testSize: defaultTestSize,
             runs: 2,
             duration: 2,
             rows: [

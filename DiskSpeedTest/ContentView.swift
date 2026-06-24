@@ -7,6 +7,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistory: [SmartHistoryRecord]
     @Query(sort: \BenchmarkHistoryRecord.measuredAt, order: .reverse) private var benchmarkHistory: [BenchmarkHistoryRecord]
+    @Query(sort: \DiskActivityHistoryRecord.endedAt, order: .reverse) private var activityHistory: [DiskActivityHistoryRecord]
     @AppStorage("appLanguage") private var languageRawValue = AppLanguage.english.rawValue
 
     @MainActor
@@ -34,6 +35,7 @@ struct ContentView: View {
                     viewModel: viewModel,
                     smartHistory: smartHistory.filter { $0.driveID == drive.id },
                     benchmarkHistory: benchmarkHistory.filter { $0.driveID == drive.id },
+                    activityHistory: activityHistory,
                     saveSnapshot: { exportFolderPath in saveSnapshot(drive: drive, exportFolderPath: exportFolderPath) },
                     saveBenchmarkResults: { saveBenchmarkResults(drive: drive) }
                 )
@@ -215,6 +217,7 @@ private struct DriveDetailView: View {
     @ObservedObject var viewModel: DITViewModel
     let smartHistory: [SmartHistoryRecord]
     let benchmarkHistory: [BenchmarkHistoryRecord]
+    let activityHistory: [DiskActivityHistoryRecord]
     let saveSnapshot: (String?) -> String
     let saveBenchmarkResults: () -> Void
     @Environment(\.appLanguage) private var language
@@ -227,6 +230,8 @@ private struct DriveDetailView: View {
                 .tabItem { Label("SMART", systemImage: "list.bullet.rectangle") }
             BenchmarkView(drive: drive, viewModel: viewModel, saveResults: saveBenchmarkResults)
                 .tabItem { Label(language.t("Benchmark"), systemImage: "speedometer") }
+            DiskActivityView(initialDrive: drive, viewModel: viewModel, activityHistory: activityHistory)
+                .tabItem { Label(language.t("Live Activity"), systemImage: "waveform.path.ecg.rectangle") }
             ExternalSupportView(status: viewModel.externalSupport, refresh: viewModel.refreshExternalSupport)
                 .tabItem { Label(language.t("External"), systemImage: "externaldrive.connected.to.line.below") }
             HistoryReportView(
@@ -234,7 +239,8 @@ private struct DriveDetailView: View {
                 snapshot: snapshot,
                 benchmarkResults: viewModel.benchmarkResults.filter { $0.driveID == drive.id },
                 smartHistory: smartHistory,
-                benchmarkHistory: benchmarkHistory
+                benchmarkHistory: benchmarkHistory,
+                activityHistory: activityHistory.filter { $0.driveID == drive.id }
             )
             .tabItem { Label(language.t("History"), systemImage: "clock.arrow.circlepath") }
         }
@@ -501,6 +507,265 @@ private struct SmartAttributeNameCell: View {
                 .truncationMode(.tail)
         }
         .help(display.help)
+    }
+}
+
+private struct DiskActivityView: View {
+    let initialDrive: DriveDevice
+    @ObservedObject var viewModel: DITViewModel
+    let activityHistory: [DiskActivityHistoryRecord]
+    @AppStorage("diskActivitySampleInterval") private var selectedIntervalSeconds = DiskActivitySampleInterval.default.seconds
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.appLanguage) private var language
+    @State private var saveMessage: String?
+
+    private var selectedDriveID: String {
+        viewModel.liveActivitySelectedDriveID ?? initialDrive.id
+    }
+
+    private var selectedDrive: DriveDevice {
+        viewModel.drives.first(where: { $0.id == selectedDriveID }) ?? initialDrive
+    }
+
+    private var selectedInterval: DiskActivitySampleInterval {
+        DiskActivitySampleInterval(rawValue: selectedIntervalSeconds) ?? .default
+    }
+
+    private var selectedDriveHistory: [DiskActivityHistoryRecord] {
+        HistoryVisibility.visible(activityHistory.filter { $0.driveID == selectedDrive.id })
+    }
+
+    private var summary: DiskActivitySummary {
+        let fallbackEnd = viewModel.isLiveActivityMonitoring ? Date() : viewModel.liveActivityEndedAt
+        return DiskActivityStatistics.summarize(
+            samples: viewModel.liveActivitySamples,
+            startedAt: viewModel.liveActivityStartedAt,
+            endedAt: fallbackEnd
+        )
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                controls
+                DiskActivityChartView(
+                    title: language.t("Live Disk Activity"),
+                    samples: viewModel.liveActivitySamples,
+                    current: viewModel.currentLiveActivity,
+                    style: .expanded
+                )
+                metricGrid
+                historyList
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .onAppear {
+            if viewModel.liveActivitySelectedDriveID == nil {
+                viewModel.liveActivitySelectedDriveID = initialDrive.id
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(language.t("Live Activity"))
+                .font(.largeTitle.bold())
+            Text(language.t("Monitors total I/O reported by macOS for the selected physical disk."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var controls: some View {
+        HStack(alignment: .bottom, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(language.t("Drive"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Picker("", selection: selectedDriveBinding) {
+                    ForEach(viewModel.drives) { drive in
+                        Text("\(drive.displayName) (\(drive.bsdName))").tag(drive.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 280, alignment: .leading)
+                .disabled(viewModel.isLiveActivityMonitoring)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(language.t("Sample Interval"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Picker("", selection: $selectedIntervalSeconds) {
+                    ForEach(DiskActivitySampleInterval.allCases) { interval in
+                        Text(interval.title).tag(interval.seconds)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 220, alignment: .leading)
+                .disabled(viewModel.isLiveActivityMonitoring)
+            }
+
+            Spacer(minLength: 10)
+
+            Button {
+                saveMessage = nil
+                viewModel.startLiveActivityMonitoring(drive: selectedDrive, interval: selectedInterval)
+            } label: {
+                Label(language.t("Start Monitoring"), systemImage: "play.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(viewModel.isLiveActivityMonitoring || viewModel.drives.isEmpty)
+
+            Button {
+                viewModel.stopLiveActivityMonitoring()
+            } label: {
+                Label(language.t("Stop Monitoring"), systemImage: "stop.fill")
+            }
+            .disabled(!viewModel.isLiveActivityMonitoring)
+
+            Button {
+                saveActivityHistory()
+            } label: {
+                Label(language.t("Save to History"), systemImage: "tray.and.arrow.down")
+            }
+            .disabled(viewModel.isLiveActivityMonitoring || viewModel.liveActivitySamples.isEmpty)
+
+            Button {
+                saveMessage = nil
+                viewModel.clearLiveActivity()
+            } label: {
+                Label(language.t("Clear Chart"), systemImage: "xmark.circle")
+            }
+            .disabled(viewModel.isLiveActivityMonitoring || viewModel.liveActivitySamples.isEmpty)
+        }
+        .padding(10)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.separator.opacity(0.45), lineWidth: 1)
+        }
+    }
+
+    private var selectedDriveBinding: Binding<String> {
+        Binding {
+            selectedDriveID
+        } set: { nextValue in
+            viewModel.liveActivitySelectedDriveID = nextValue
+            saveMessage = nil
+        }
+    }
+
+    private var metricGrid: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let saveMessage {
+                Label(language.t(saveMessage), systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+
+            HStack(spacing: 10) {
+                ActivityMetricTile(title: language.t("Elapsed"), value: DiskActivityChartScale.formatDuration(summary.durationSeconds), symbol: "timer")
+                ActivityMetricTile(title: language.t("Samples"), value: "\(summary.sampleCount)", symbol: "point.3.connected.trianglepath.dotted")
+                ActivityMetricTile(title: "\(language.operationTitle(.read)) \(language.t("Peak"))", value: DiskActivityFormatter.speed(summary.peakReadMegabytesPerSecond), symbol: "arrow.down.circle")
+                ActivityMetricTile(title: "\(language.operationTitle(.write)) \(language.t("Peak"))", value: DiskActivityFormatter.speed(summary.peakWriteMegabytesPerSecond), symbol: "arrow.up.circle")
+                ActivityMetricTile(title: "\(language.operationTitle(.read)) \(language.t("Average"))", value: DiskActivityFormatter.speed(summary.averageReadMegabytesPerSecond), symbol: "chart.line.downtrend.xyaxis")
+                ActivityMetricTile(title: "\(language.operationTitle(.write)) \(language.t("Average"))", value: DiskActivityFormatter.speed(summary.averageWriteMegabytesPerSecond), symbol: "chart.line.uptrend.xyaxis")
+            }
+        }
+    }
+
+    private var historyList: some View {
+        InfoPanel(title: language.t("Live Activity History"), symbol: "clock.arrow.circlepath") {
+            if selectedDriveHistory.isEmpty {
+                Text(language.t("No saved activity records yet."))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(selectedDriveHistory.prefix(8)) { item in
+                    activityHistoryRow(item)
+                    Divider()
+                }
+            }
+        }
+    }
+
+    private func activityHistoryRow(_ item: DiskActivityHistoryRecord) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.endedAt.formatted(date: .abbreviated, time: .standard))
+                Text("\(language.t("Elapsed")) \(DiskActivityChartScale.formatDuration(item.durationSeconds)) · \(item.sampleCount) \(language.t("samples")) · \(item.sampleInterval.title)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(language.operationTitle(.read)) \(DiskActivityFormatter.speed(item.peakReadMegabytesPerSecond))")
+                Text("\(language.operationTitle(.write)) \(DiskActivityFormatter.speed(item.peakWriteMegabytesPerSecond))")
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+
+            Button {
+                selectedIntervalSeconds = item.sampleInterval.seconds
+                saveMessage = nil
+                viewModel.loadLiveActivityRecord(item)
+            } label: {
+                Image(systemName: "chart.xyaxis.line")
+                    .frame(width: 18, height: 18)
+            }
+            .buttonStyle(.borderless)
+            .help(language.t("Load Chart"))
+            .disabled(viewModel.isLiveActivityMonitoring)
+        }
+    }
+
+    private func saveActivityHistory() {
+        let start = viewModel.liveActivityStartedAt ?? viewModel.liveActivitySamples.first?.timestamp ?? Date()
+        let end = viewModel.liveActivityEndedAt ?? viewModel.liveActivitySamples.last?.timestamp ?? Date()
+        let record = DiskActivityHistoryRecord(
+            drive: selectedDrive,
+            samples: viewModel.liveActivitySamples,
+            sampleInterval: selectedInterval,
+            startedAt: start,
+            endedAt: end
+        )
+        modelContext.insert(record)
+        do {
+            try modelContext.save()
+            saveMessage = "Activity record saved to history."
+        } catch {
+            saveMessage = "Could not save activity record."
+        }
+    }
+}
+
+private struct ActivityMetricTile: View {
+    let title: String
+    let value: String
+    let symbol: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Label(title, systemImage: symbol)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(value)
+                .font(.headline.monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.separator.opacity(0.35), lineWidth: 1)
+        }
     }
 }
 
@@ -856,6 +1121,12 @@ private struct BenchmarkView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let progress = viewModel.benchmarkProgress, viewModel.isBenchmarking {
                 VStack(alignment: .leading, spacing: 8) {
+                    DiskActivityChartView(
+                        title: language.t("Live Disk Activity"),
+                        samples: viewModel.diskActivitySamples,
+                        current: viewModel.currentDiskActivity,
+                        style: .compact
+                    )
                     ProgressView(value: progress.fraction)
                     Text("\(language.progressLabel(progress.currentTestLabel)): \(progressStatusText(progress))")
                         .font(.caption)
@@ -962,6 +1233,9 @@ private struct BenchmarkView: View {
     }
 
     private func adjustSelectedFileSizeForTarget() {
+        if let minimumSize = BenchmarkProfile.fileSizeOptions.first, Int64(selectedFileSizeBytes) < minimumSize {
+            selectedFileSizeBytes = Int(minimumSize)
+        }
         guard targetFolderIsUsable else { return }
         let selectedSize = Int64(selectedFileSizeBytes)
         guard !BenchmarkStorageValidator.isFileSizeAvailable(selectedSize, availableCapacity: targetFolderAvailableCapacity) else { return }
@@ -997,6 +1271,214 @@ private struct BenchmarkConfigurationLine: View {
             .font(.caption2)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct DiskActivityChartView: View {
+    enum Style {
+        case compact
+        case expanded
+
+        var chartHeight: CGFloat {
+            switch self {
+            case .compact: 92
+            case .expanded: 220
+            }
+        }
+
+        var yAxisWidth: CGFloat {
+            switch self {
+            case .compact: 54
+            case .expanded: 68
+            }
+        }
+
+        var font: Font {
+            switch self {
+            case .compact: .caption2
+            case .expanded: .caption
+            }
+        }
+    }
+
+    let title: String
+    let samples: [DiskActivitySample]
+    let current: DiskActivitySample?
+    let style: Style
+    @Environment(\.appLanguage) private var language
+
+    private var readSpeed: Double {
+        current?.readMegabytesPerSecond ?? 0
+    }
+
+    private var writeSpeed: Double {
+        current?.writeMegabytesPerSecond ?? 0
+    }
+
+    private var graphMaximumSpeed: Double {
+        max(samples.flatMap { [$0.readMegabytesPerSecond, $0.writeMegabytesPerSecond] }.max() ?? 0, 1)
+    }
+
+    private var yTicks: [Double] {
+        DiskActivityChartScale.yTicks(maxSpeed: graphMaximumSpeed)
+    }
+
+    private var xTicks: [DiskActivityChartTick] {
+        DiskActivityChartScale.xTicks(for: samples)
+    }
+
+    private var durationSeconds: TimeInterval {
+        DiskActivityChartScale.durationSeconds(for: samples)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Text(title)
+                    .font(.caption.bold())
+
+                Spacer(minLength: 8)
+
+                speedLegend(title: language.operationTitle(.read), value: readSpeed, color: .blue)
+                speedLegend(title: language.operationTitle(.write), value: writeSpeed, color: .green)
+            }
+
+            HStack(alignment: .top, spacing: 6) {
+                yAxisLabels
+                    .frame(width: style.yAxisWidth, height: style.chartHeight)
+
+                VStack(spacing: 4) {
+                    Canvas { context, size in
+                        let rect = CGRect(origin: .zero, size: size)
+                        let background = Path(roundedRect: rect, cornerRadius: 6)
+                        context.fill(background, with: .color(Color(nsColor: .controlBackgroundColor)))
+                        context.stroke(background, with: .color(Color(nsColor: .separatorColor).opacity(0.45)), lineWidth: 1)
+
+                        let plotRect = rect.insetBy(dx: 8, dy: 7)
+                        drawGrid(in: plotRect, context: context)
+                        drawSeries(\.readMegabytesPerSecond, color: .blue, in: plotRect, context: context, canvasWidth: size.width)
+                        drawSeries(\.writeMegabytesPerSecond, color: .green, in: plotRect, context: context, canvasWidth: size.width)
+                    }
+                    .frame(height: style.chartHeight)
+
+                    xAxisLabels
+                }
+            }
+            .accessibilityLabel(Text(title))
+            .accessibilityValue(Text("\(language.operationTitle(.read)) \(DiskActivityFormatter.speed(readSpeed)), \(language.operationTitle(.write)) \(DiskActivityFormatter.speed(writeSpeed))"))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var yAxisLabels: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(yTicks.reversed()), id: \.self) { tick in
+                Text(DiskActivityFormatter.speed(tick))
+                    .font(style.font.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+                    .frame(maxHeight: .infinity, alignment: .center)
+            }
+        }
+    }
+
+    private var xAxisLabels: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(xTicks.enumerated()), id: \.offset) { index, tick in
+                Text(tick.label)
+                    .font(style.font.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: index == 0 ? .leading : (index == xTicks.count - 1 ? .trailing : .center))
+            }
+        }
+        .frame(height: 14)
+    }
+
+    private func speedLegend(title: String, value: Double, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text("\(title) \(DiskActivityFormatter.speed(value))")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+    }
+
+    private func drawGrid(in rect: CGRect, context: GraphicsContext) {
+        var path = Path()
+        let maxSpeed = yTicks.last ?? 1
+        for tick in yTicks {
+            let fraction = maxSpeed > 0 ? tick / maxSpeed : 0
+            let y = rect.maxY - rect.height * CGFloat(fraction)
+            path.move(to: CGPoint(x: rect.minX, y: y))
+            path.addLine(to: CGPoint(x: rect.maxX, y: y))
+        }
+        if durationSeconds > 0 {
+            for tick in xTicks {
+                let fraction = tick.value / durationSeconds
+                let x = rect.minX + rect.width * CGFloat(fraction)
+                path.move(to: CGPoint(x: x, y: rect.minY))
+                path.addLine(to: CGPoint(x: x, y: rect.maxY))
+            }
+        }
+        context.stroke(path, with: .color(Color(nsColor: .separatorColor).opacity(0.25)), lineWidth: 0.5)
+    }
+
+    private func drawSeries(
+        _ keyPath: KeyPath<DiskActivitySample, Double>,
+        color: Color,
+        in rect: CGRect,
+        context: GraphicsContext,
+        canvasWidth: CGFloat
+    ) {
+        guard samples.count >= 2 else {
+            drawBaseline(color: color, in: rect, context: context)
+            return
+        }
+
+        let maxSpeed = max(yTicks.last ?? graphMaximumSpeed, 1)
+        let visibleSamples = downsampledSamples(maxCount: max(2, Int(canvasWidth)))
+        let firstTimestamp = samples.first?.timestamp ?? visibleSamples.first?.timestamp ?? Date()
+        let duration = max(durationSeconds, 0.0001)
+        var path = Path()
+
+        for (index, sample) in visibleSamples.enumerated() {
+            let value = max(0, sample[keyPath: keyPath])
+            let fraction = min(1, value / maxSpeed)
+            let elapsed = max(0, sample.timestamp.timeIntervalSince(firstTimestamp))
+            let point = CGPoint(
+                x: rect.minX + rect.width * CGFloat(min(1, elapsed / duration)),
+                y: rect.maxY - rect.height * CGFloat(fraction)
+            )
+            if index == 0 {
+                path.move(to: point)
+            } else {
+                path.addLine(to: point)
+            }
+        }
+
+        context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+    }
+
+    private func drawBaseline(color: Color, in rect: CGRect, context: GraphicsContext) {
+        var path = Path()
+        let y = rect.maxY
+        path.move(to: CGPoint(x: rect.minX, y: y))
+        path.addLine(to: CGPoint(x: rect.maxX, y: y))
+        context.stroke(path, with: .color(color.opacity(0.35)), lineWidth: 1)
+    }
+
+    private func downsampledSamples(maxCount: Int) -> [DiskActivitySample] {
+        guard samples.count > maxCount, maxCount > 2 else { return samples }
+        let step = Double(samples.count - 1) / Double(maxCount - 1)
+        return (0..<maxCount).map { index in
+            samples[min(samples.count - 1, Int((Double(index) * step).rounded()))]
+        }
     }
 }
 
@@ -1285,6 +1767,7 @@ private struct HistoryReportView: View {
     let benchmarkResults: [BenchmarkResult]
     let smartHistory: [SmartHistoryRecord]
     let benchmarkHistory: [BenchmarkHistoryRecord]
+    let activityHistory: [DiskActivityHistoryRecord]
     @AppStorage("includeSerialsInReports") private var includeSerialsInReports = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
@@ -1306,8 +1789,16 @@ private struct HistoryReportView: View {
         HistoryVisibility.hidden(benchmarkHistory)
     }
 
+    private var visibleActivityHistory: [DiskActivityHistoryRecord] {
+        HistoryVisibility.visible(activityHistory)
+    }
+
+    private var hiddenActivityHistory: [DiskActivityHistoryRecord] {
+        HistoryVisibility.hidden(activityHistory)
+    }
+
     private var hasHiddenHistory: Bool {
-        !hiddenSmartHistory.isEmpty || !hiddenBenchmarkHistory.isEmpty
+        !hiddenSmartHistory.isEmpty || !hiddenBenchmarkHistory.isEmpty || !hiddenActivityHistory.isEmpty
     }
 
     var body: some View {
@@ -1339,7 +1830,7 @@ private struct HistoryReportView: View {
                     }
                 }
 
-                HStack(alignment: .top, spacing: 16) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 16)], alignment: .leading, spacing: 16) {
                     InfoPanel(title: language.t("SMART Snapshots"), symbol: "clock") {
                         if visibleSmartHistory.isEmpty {
                             Text(hiddenSmartHistory.isEmpty ? language.t("No saved snapshots yet.") : language.t("No visible snapshots. Hidden snapshots can be restored below."))
@@ -1358,6 +1849,17 @@ private struct HistoryReportView: View {
                         } else {
                             ForEach(visibleBenchmarkHistory.prefix(8)) { item in
                                 benchmarkHistoryRow(item, isHidden: false)
+                                Divider()
+                            }
+                        }
+                    }
+                    InfoPanel(title: language.t("Live Activity History"), symbol: "waveform.path.ecg.rectangle") {
+                        if visibleActivityHistory.isEmpty {
+                            Text(hiddenActivityHistory.isEmpty ? language.t("No saved activity records yet.") : language.t("No visible activity records. Hidden activity records can be restored below."))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(visibleActivityHistory.prefix(8)) { item in
+                                activityHistoryRow(item, isHidden: false)
                                 Divider()
                             }
                         }
@@ -1403,6 +1905,15 @@ private struct HistoryReportView: View {
                         .font(.subheadline.bold())
                     ForEach(hiddenBenchmarkHistory) { item in
                         benchmarkHistoryRow(item, isHidden: true)
+                        Divider()
+                    }
+                }
+
+                if !hiddenActivityHistory.isEmpty {
+                    Text(language.t("Live Activity History"))
+                        .font(.subheadline.bold())
+                    ForEach(hiddenActivityHistory) { item in
+                        activityHistoryRow(item, isHidden: true)
                         Divider()
                     }
                 }
@@ -1462,6 +1973,30 @@ private struct HistoryReportView: View {
         }
     }
 
+    private func activityHistoryRow(_ item: DiskActivityHistoryRecord, isHidden: Bool) -> some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text(item.endedAt.formatted(date: .abbreviated, time: .standard))
+                Text("\(DiskActivityChartScale.formatDuration(item.durationSeconds)) · \(item.sampleCount) \(language.t("samples")) · \(item.sampleInterval.title)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 1) {
+                Text("\(language.operationTitle(.read)) \(DiskActivityFormatter.speed(item.peakReadMegabytesPerSecond))")
+                Text("\(language.operationTitle(.write)) \(DiskActivityFormatter.speed(item.peakWriteMegabytesPerSecond))")
+            }
+            .font(.caption.monospacedDigit())
+            historyVisibilityButton(isHidden: isHidden) {
+                if isHidden {
+                    restoreHistory(item)
+                } else {
+                    hideHistory(item)
+                }
+            }
+        }
+    }
+
     private func historyVisibilityButton(isHidden: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: isHidden ? "arrow.uturn.backward" : "eye.slash")
@@ -1487,6 +2022,7 @@ private struct HistoryReportView: View {
     private func restoreAllHiddenHistory() {
         HistoryVisibility.restoreAll(hiddenSmartHistory)
         HistoryVisibility.restoreAll(hiddenBenchmarkHistory)
+        HistoryVisibility.restoreAll(hiddenActivityHistory)
         saveHistoryVisibilityChange()
     }
 
@@ -1614,5 +2150,5 @@ private extension ProviderState {
 
 #Preview {
     ContentView(viewModel: .preview)
-        .modelContainer(for: [SmartHistoryRecord.self, BenchmarkHistoryRecord.self, AppSettingsRecord.self], inMemory: true)
+        .modelContainer(for: [SmartHistoryRecord.self, BenchmarkHistoryRecord.self, DiskActivityHistoryRecord.self, AppSettingsRecord.self], inMemory: true)
 }

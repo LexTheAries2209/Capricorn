@@ -16,7 +16,7 @@ struct DiskSpeedTestApp: App {
                 .frame(minWidth: 1101, minHeight: 732)
         }
         .defaultSize(width: 1101, height: 732)
-        .modelContainer(for: [SmartHistoryRecord.self, BenchmarkHistoryRecord.self, AppSettingsRecord.self])
+        .modelContainer(for: [SmartHistoryRecord.self, BenchmarkHistoryRecord.self, DiskActivityHistoryRecord.self, AppSettingsRecord.self])
 
         MenuBarExtra("DIT", systemImage: menuBarSymbol) {
             VStack(alignment: .leading, spacing: 8) {

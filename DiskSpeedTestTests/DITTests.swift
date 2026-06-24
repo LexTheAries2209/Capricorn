@@ -270,7 +270,22 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(BenchmarkProfile.defaultDataPattern, .random)
         XCTAssertFalse(BenchmarkProfile.defaultUsesTrimmedAverage)
         XCTAssertEqual(BenchmarkProfile.runCountOptions, Array(1...9))
+        XCTAssertEqual(BenchmarkProfile.fileSizeOptions.first, BenchmarkProfile.defaultTestSize)
         XCTAssertTrue(BenchmarkProfile.fileSizeOptions.contains(BenchmarkProfile.defaultTestSize))
+        XCTAssertTrue(BenchmarkProfile.fileSizeOptions.allSatisfy { $0 >= BenchmarkProfile.defaultTestSize })
+        XCTAssertTrue(BenchmarkProfile.presets.allSatisfy { $0.testFileSizeBytes >= BenchmarkProfile.defaultTestSize })
+        XCTAssertTrue(BenchmarkProfile.presets.flatMap(\.tests).allSatisfy { $0.testSizeBytes >= BenchmarkProfile.defaultTestSize })
+    }
+
+    func testBenchmarkProfileConfigurationClampsSubGigabyteFileSize() {
+        let profile = BenchmarkProfile.default.configured(
+            runs: 3,
+            fileSizeBytes: 256 * 1_024 * 1_024,
+            dataPattern: .random
+        )
+
+        XCTAssertEqual(profile.testFileSizeBytes, BenchmarkProfile.defaultTestSize)
+        XCTAssertTrue(profile.tests.allSatisfy { $0.testSizeBytes == BenchmarkProfile.defaultTestSize })
     }
 
     func testBenchmarkProgressIncludesCurrentPhaseBytesInFraction() {
@@ -284,6 +299,122 @@ final class DITTests: XCTestCase {
         )
 
         XCTAssertEqual(progress.fraction, 0.25, accuracy: 0.0001)
+    }
+
+    func testDiskActivityRateCalculatorComputesDecimalMegabytesPerSecond() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let previous = DiskActivityCounters(timestamp: start, readBytes: 1_000, writeBytes: 2_000)
+        let current = DiskActivityCounters(
+            timestamp: start.addingTimeInterval(1),
+            readBytes: 1_001_000,
+            writeBytes: 2_002_000
+        )
+
+        let sample = DiskActivityRateCalculator.sample(previous: previous, current: current)
+
+        XCTAssertEqual(sample.readMegabytesPerSecond, 1.0, accuracy: 0.0001)
+        XCTAssertEqual(sample.writeMegabytesPerSecond, 2.0, accuracy: 0.0001)
+    }
+
+    func testDiskActivityRateCalculatorClampsCounterResetToZero() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let previous = DiskActivityCounters(timestamp: start, readBytes: 4_000, writeBytes: 8_000)
+        let current = DiskActivityCounters(timestamp: start.addingTimeInterval(0.5), readBytes: 3_000, writeBytes: 7_000)
+
+        let sample = DiskActivityRateCalculator.sample(previous: previous, current: current)
+
+        XCTAssertEqual(sample.readMegabytesPerSecond, 0)
+        XCTAssertEqual(sample.writeMegabytesPerSecond, 0)
+    }
+
+    func testDiskActivitySeriesKeepsLatestSamplesInsideLimit() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        var samples: [DiskActivitySample] = []
+
+        for index in 0..<5 {
+            let sample = DiskActivitySample(
+                timestamp: start.addingTimeInterval(Double(index)),
+                readMegabytesPerSecond: Double(index),
+                writeMegabytesPerSecond: Double(index * 2)
+            )
+            samples = DiskActivitySeries.appending(sample, to: samples, limit: 3)
+        }
+
+        XCTAssertEqual(samples.map(\.readMegabytesPerSecond), [2, 3, 4])
+        XCTAssertEqual(samples.map(\.writeMegabytesPerSecond), [4, 6, 8])
+    }
+
+    func testDiskActivitySampleIntervalsAreFixed() {
+        XCTAssertEqual(DiskActivitySampleInterval.allCases.map(\.seconds), [0.1, 0.2, 0.5, 1.0])
+        XCTAssertEqual(DiskActivitySampleInterval.default, .half)
+        XCTAssertEqual(DITViewModel.benchmarkActivityInterval, .half)
+    }
+
+    func testDiskActivityMonitorUsesSelectedIntervalAndCachedReader() async {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let reader = FakeDiskActivityReader(counters: [
+            DiskActivityCounters(timestamp: start, readBytes: 0, writeBytes: 0),
+            DiskActivityCounters(timestamp: start.addingTimeInterval(0.1), readBytes: 100_000, writeBytes: 200_000)
+        ])
+        let provider = FakeDiskActivityProvider(reader: reader)
+        let waitRequests = LockedArray<UInt64>()
+        let samples = LockedArray<DiskActivitySample>()
+        let monitor = DiskActivityMonitor(provider: provider) { nanoseconds in
+            waitRequests.append(nanoseconds)
+            if waitRequests.snapshot.count >= 2 {
+                throw CancellationError()
+            }
+        }
+
+        await monitor.run(bsdName: "disk0", interval: .tenth) { sample in
+            samples.append(sample)
+        }
+
+        XCTAssertEqual(provider.readerCallCount, 1)
+        XCTAssertEqual(provider.fallbackCounterCallCount, 0)
+        XCTAssertEqual(waitRequests.snapshot, [100_000_000, 100_000_000])
+        XCTAssertEqual(samples.snapshot.count, 2)
+        XCTAssertEqual(samples.snapshot.last?.readMegabytesPerSecond ?? 0, 1.0, accuracy: 0.0001)
+        XCTAssertEqual(samples.snapshot.last?.writeMegabytesPerSecond ?? 0, 2.0, accuracy: 0.0001)
+    }
+
+    func testDiskActivityChartScaleCreatesDurationAndSpeedTicks() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let samples = [
+            DiskActivitySample(timestamp: start, readMegabytesPerSecond: 0, writeMegabytesPerSecond: 0),
+            DiskActivitySample(timestamp: start.addingTimeInterval(45), readMegabytesPerSecond: 300, writeMegabytesPerSecond: 120),
+            DiskActivitySample(timestamp: start.addingTimeInterval(90), readMegabytesPerSecond: 432, writeMegabytesPerSecond: 60)
+        ]
+
+        XCTAssertEqual(DiskActivityChartScale.durationSeconds(for: samples), 90, accuracy: 0.0001)
+        XCTAssertEqual(DiskActivityChartScale.xTicks(for: samples).map(\.label), ["0s", "45s", "1m30s"])
+        XCTAssertEqual(DiskActivityChartScale.yTicks(maxSpeed: 432), [0, 125, 250, 375, 500])
+    }
+
+    func testDiskActivityHistoryRecordEncodesSamplesAndSummary() {
+        let drive = Self.fixtureDrive()
+        let start = Date(timeIntervalSince1970: 1_000)
+        let samples = [
+            DiskActivitySample(timestamp: start, readMegabytesPerSecond: 10, writeMegabytesPerSecond: 20),
+            DiskActivitySample(timestamp: start.addingTimeInterval(1), readMegabytesPerSecond: 30, writeMegabytesPerSecond: 50)
+        ]
+
+        let record = DiskActivityHistoryRecord(
+            drive: drive,
+            samples: samples,
+            sampleInterval: .half,
+            startedAt: start,
+            endedAt: start.addingTimeInterval(1)
+        )
+
+        XCTAssertEqual(record.driveID, drive.id)
+        XCTAssertEqual(record.sampleInterval, .half)
+        XCTAssertEqual(record.durationSeconds, 1)
+        XCTAssertEqual(record.peakReadMegabytesPerSecond, 30)
+        XCTAssertEqual(record.peakWriteMegabytesPerSecond, 50)
+        XCTAssertEqual(record.averageReadMegabytesPerSecond, 20)
+        XCTAssertEqual(record.averageWriteMegabytesPerSecond, 35)
+        XCTAssertEqual(record.samples, samples)
     }
 
     func testBenchmarkSelectedRunCountAddsTwoMeasuredRunsWhenTrimmedAverageEnabled() {
@@ -826,6 +957,17 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(HistoryVisibility.hidden([visible, hidden]).map(\.id), [hidden.id])
     }
 
+    func testHistoryVisibilitySeparatesVisibleAndHiddenActivityRecords() {
+        let drive = Self.fixtureDrive()
+        let visible = Self.fixtureActivityRecord(for: drive)
+        let hidden = Self.fixtureActivityRecord(for: drive)
+
+        HistoryVisibility.hide(hidden, at: Date(timeIntervalSince1970: 1))
+
+        XCTAssertEqual(HistoryVisibility.visible([visible, hidden]).map(\.id), [visible.id])
+        XCTAssertEqual(HistoryVisibility.hidden([visible, hidden]).map(\.id), [hidden.id])
+    }
+
     func testHistoryVisibilityRestoresSingleRecord() {
         let drive = Self.fixtureDrive()
         let record = SmartHistoryRecord(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
@@ -908,6 +1050,20 @@ final class DITTests: XCTestCase {
             iops: 100,
             latencyMicroseconds: 10,
             bytesTransferred: 65_536
+        )
+    }
+
+    private static func fixtureActivityRecord(for drive: DriveDevice) -> DiskActivityHistoryRecord {
+        let start = Date(timeIntervalSince1970: 1_000)
+        return DiskActivityHistoryRecord(
+            drive: drive,
+            samples: [
+                DiskActivitySample(timestamp: start, readMegabytesPerSecond: 1, writeMegabytesPerSecond: 2),
+                DiskActivitySample(timestamp: start.addingTimeInterval(1), readMegabytesPerSecond: 3, writeMegabytesPerSecond: 4)
+            ],
+            sampleInterval: .half,
+            startedAt: start,
+            endedAt: start.addingTimeInterval(1)
         )
     }
 
@@ -994,4 +1150,77 @@ final class DITTests: XCTestCase {
       "open_error": "IOCreatePlugInInterfaceForService failed"
     }
     """
+}
+
+private final class LockedArray<Element>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Element] = []
+
+    var snapshot: [Element] {
+        lock.lock()
+        defer { lock.unlock() }
+        return values
+    }
+
+    func append(_ value: Element) {
+        lock.lock()
+        values.append(value)
+        lock.unlock()
+    }
+}
+
+private final class FakeDiskActivityProvider: DiskActivityProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private let fakeReader: FakeDiskActivityReader
+    private var readerCalls = 0
+    private var fallbackCounterCalls = 0
+
+    init(reader: FakeDiskActivityReader) {
+        self.fakeReader = reader
+    }
+
+    var readerCallCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return readerCalls
+    }
+
+    var fallbackCounterCallCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return fallbackCounterCalls
+    }
+
+    func reader(forBSDName bsdName: String) -> DiskActivityCounterReading? {
+        lock.lock()
+        readerCalls += 1
+        lock.unlock()
+        return fakeReader
+    }
+
+    func counters(forBSDName bsdName: String) -> DiskActivityCounters? {
+        lock.lock()
+        fallbackCounterCalls += 1
+        lock.unlock()
+        return nil
+    }
+}
+
+private final class FakeDiskActivityReader: DiskActivityCounterReading, @unchecked Sendable {
+    private let lock = NSLock()
+    private let values: [DiskActivityCounters]
+    private var index = 0
+
+    init(counters: [DiskActivityCounters]) {
+        self.values = counters
+    }
+
+    func counters() -> DiskActivityCounters? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !values.isEmpty else { return nil }
+        let value = values[min(index, values.count - 1)]
+        index += 1
+        return value
+    }
 }

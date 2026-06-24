@@ -67,6 +67,62 @@ final class BenchmarkHistoryRecord {
     }
 }
 
+@Model
+final class DiskActivityHistoryRecord {
+    @Attribute(.unique) var id: UUID
+    var driveID: String
+    var driveName: String
+    var bsdName: String
+    var startedAt: Date
+    var endedAt: Date
+    var sampleIntervalSeconds: Double
+    var durationSeconds: Double
+    var peakReadMegabytesPerSecond: Double
+    var peakWriteMegabytesPerSecond: Double
+    var averageReadMegabytesPerSecond: Double
+    var averageWriteMegabytesPerSecond: Double
+    var sampleCount: Int
+    var encodedSamples: Data?
+    var hiddenAt: Date?
+
+    init(
+        drive: DriveDevice,
+        samples: [DiskActivitySample],
+        sampleInterval: DiskActivitySampleInterval,
+        startedAt: Date,
+        endedAt: Date
+    ) {
+        let summary = DiskActivityStatistics.summarize(samples: samples, startedAt: startedAt, endedAt: endedAt)
+        self.id = UUID()
+        self.driveID = drive.id
+        self.driveName = drive.displayName
+        self.bsdName = drive.bsdName
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.sampleIntervalSeconds = sampleInterval.seconds
+        self.durationSeconds = summary.durationSeconds
+        self.peakReadMegabytesPerSecond = summary.peakReadMegabytesPerSecond
+        self.peakWriteMegabytesPerSecond = summary.peakWriteMegabytesPerSecond
+        self.averageReadMegabytesPerSecond = summary.averageReadMegabytesPerSecond
+        self.averageWriteMegabytesPerSecond = summary.averageWriteMegabytesPerSecond
+        self.sampleCount = summary.sampleCount
+        self.encodedSamples = try? JSONEncoder.dit.encode(samples)
+        self.hiddenAt = nil
+    }
+
+    var sampleInterval: DiskActivitySampleInterval {
+        DiskActivitySampleInterval(rawValue: sampleIntervalSeconds) ?? .default
+    }
+
+    var samples: [DiskActivitySample] {
+        guard let encodedSamples,
+              let decoded = try? JSONDecoder.dit.decode([DiskActivitySample].self, from: encodedSamples) else {
+            return []
+        }
+        return decoded
+    }
+}
+
 protocol HistoryDisplayRecord: AnyObject {
     var driveID: String { get }
     var hiddenAt: Date? { get set }
@@ -74,6 +130,7 @@ protocol HistoryDisplayRecord: AnyObject {
 
 extension SmartHistoryRecord: HistoryDisplayRecord {}
 extension BenchmarkHistoryRecord: HistoryDisplayRecord {}
+extension DiskActivityHistoryRecord: HistoryDisplayRecord {}
 
 enum HistoryVisibility {
     static func visible<T: HistoryDisplayRecord>(_ records: [T]) -> [T] {

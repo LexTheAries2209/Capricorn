@@ -12,25 +12,41 @@ final class DITViewModel: ObservableObject {
     @Published var benchmarkResults: [BenchmarkResult] = []
     @Published var benchmarkError: String?
     @Published var isBenchmarking = false
+    @Published var diskActivitySamples: [DiskActivitySample] = []
+    @Published var currentDiskActivity: DiskActivitySample?
+    @Published var liveActivitySamples: [DiskActivitySample] = []
+    @Published var currentLiveActivity: DiskActivitySample?
+    @Published var isLiveActivityMonitoring = false
+    @Published var liveActivitySelectedDriveID: String?
+    @Published var liveActivityStartedAt: Date?
+    @Published var liveActivityEndedAt: Date?
+    @Published var liveActivityError: String?
     @Published var externalSupport: ExternalSupportStatus
     @Published var showVirtualDisks = false
+
+    static let benchmarkActivityInterval = DiskActivitySampleInterval.default
 
     private let inventoryProvider: DiskInventoryProviding
     private let smartService: SmartSnapshotService
     private let benchmarkRunner: BenchmarkRunning
+    private let diskActivityProvider: DiskActivityProviding
     private let externalDetector: ExternalDriveSupportDetector
     private let notificationCoordinator: NotificationCoordinator
+    private var diskActivityTask: Task<Void, Never>?
+    private var liveActivityTask: Task<Void, Never>?
 
     init(
         inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(),
         smartService: SmartSnapshotService = SmartSnapshotService(),
         benchmarkRunner: BenchmarkRunning = BenchmarkRunnerRouter(),
+        diskActivityProvider: DiskActivityProviding = IOKitDiskActivityProvider(),
         externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator()
     ) {
         self.inventoryProvider = inventoryProvider
         self.smartService = smartService
         self.benchmarkRunner = benchmarkRunner
+        self.diskActivityProvider = diskActivityProvider
         self.externalDetector = externalDetector
         self.notificationCoordinator = notificationCoordinator
         self.externalSupport = externalDetector.detect()
@@ -78,6 +94,9 @@ final class DITViewModel: ObservableObject {
             if selectedDriveID == nil || !loadedDrives.contains(where: { $0.id == selectedDriveID }) {
                 selectedDriveID = loadedDrives.first?.id
             }
+            if liveActivitySelectedDriveID == nil || !loadedDrives.contains(where: { $0.id == liveActivitySelectedDriveID }) {
+                liveActivitySelectedDriveID = selectedDriveID ?? loadedDrives.first?.id
+            }
 
             refreshMessage = "Reading SMART data..."
             var nextSnapshots: [String: SmartSnapshot] = [:]
@@ -116,8 +135,10 @@ final class DITViewModel: ObservableObject {
             total: isLooping ? max(1, profile.tests.count) : profile.tests.count * (measuredRuns + 1),
             message: isLooping ? "Loop running" : "Preparing complete test file"
         )
+        startDiskActivityMonitoring(for: drive)
         replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: [])
         defer {
+            stopDiskActivityMonitoring()
             isBenchmarking = false
         }
 
@@ -141,6 +162,52 @@ final class DITViewModel: ObservableObject {
 
     func cancelBenchmark() {
         benchmarkRunner.cancel()
+        stopDiskActivityMonitoring()
+    }
+
+    func startLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {
+        stopLiveActivityMonitoring()
+        liveActivitySelectedDriveID = drive.id
+        liveActivityStartedAt = Date()
+        liveActivityEndedAt = nil
+        liveActivitySamples = []
+        currentLiveActivity = nil
+        liveActivityError = nil
+        isLiveActivityMonitoring = true
+
+        liveActivityTask = makeDiskActivityTask(for: drive, interval: interval) { [weak self] sample in
+            guard let self else { return }
+            self.currentLiveActivity = sample
+            self.liveActivitySamples = DiskActivitySeries.appending(sample, to: self.liveActivitySamples)
+        }
+    }
+
+    func stopLiveActivityMonitoring() {
+        liveActivityTask?.cancel()
+        liveActivityTask = nil
+        if isLiveActivityMonitoring {
+            liveActivityEndedAt = Date()
+        }
+        isLiveActivityMonitoring = false
+    }
+
+    func clearLiveActivity() {
+        guard !isLiveActivityMonitoring else { return }
+        liveActivitySamples = []
+        currentLiveActivity = nil
+        liveActivityStartedAt = nil
+        liveActivityEndedAt = nil
+        liveActivityError = nil
+    }
+
+    func loadLiveActivityRecord(_ record: DiskActivityHistoryRecord) {
+        guard !isLiveActivityMonitoring else { return }
+        liveActivitySelectedDriveID = record.driveID
+        liveActivityStartedAt = record.startedAt
+        liveActivityEndedAt = record.endedAt
+        liveActivitySamples = record.samples
+        currentLiveActivity = record.samples.last
+        liveActivityError = nil
     }
 
     func refreshExternalSupport() {
@@ -158,6 +225,39 @@ final class DITViewModel: ObservableObject {
     private func replaceBenchmarkResults(driveID: String, profileID: String, with results: [BenchmarkResult]) {
         benchmarkResults.removeAll { $0.driveID == driveID && $0.profileID == profileID }
         benchmarkResults.append(contentsOf: results)
+    }
+
+    private func startDiskActivityMonitoring(for drive: DriveDevice) {
+        stopDiskActivityMonitoring()
+        diskActivitySamples = []
+        currentDiskActivity = nil
+        diskActivityTask = makeDiskActivityTask(for: drive, interval: Self.benchmarkActivityInterval) { [weak self] sample in
+            guard let self else { return }
+            self.currentDiskActivity = sample
+            self.diskActivitySamples = DiskActivitySeries.appending(sample, to: self.diskActivitySamples)
+        }
+    }
+
+    private func stopDiskActivityMonitoring() {
+        diskActivityTask?.cancel()
+        diskActivityTask = nil
+    }
+
+    private func makeDiskActivityTask(
+        for drive: DriveDevice,
+        interval: DiskActivitySampleInterval,
+        onSample: @MainActor @escaping (DiskActivitySample) -> Void
+    ) -> Task<Void, Never> {
+        let provider = diskActivityProvider
+        let bsdName = drive.bsdName
+        return Task.detached(priority: .utility) {
+            let monitor = DiskActivityMonitor(provider: provider)
+            await monitor.run(bsdName: bsdName, interval: interval) { sample in
+                await MainActor.run {
+                    onSample(sample)
+                }
+            }
+        }
     }
 
     static var preview: DITViewModel {
