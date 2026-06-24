@@ -1838,7 +1838,7 @@ private struct HistoryReportView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 16) {
                     historyPanel(
                         title: language.t("SMART Snapshots"),
                         symbol: "clock",
@@ -1872,7 +1872,7 @@ private struct HistoryReportView: View {
                         }
                     }
                 }
-                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
 
                 if hasHiddenHistory {
                     hiddenHistoryDisclosure
@@ -1910,6 +1910,7 @@ private struct HistoryReportView: View {
                 rows()
             }
         }
+        .frame(minWidth: 260, maxWidth: .infinity, alignment: .topLeading)
     }
 
     private func historyRows<Record: Identifiable, Row: View>(
