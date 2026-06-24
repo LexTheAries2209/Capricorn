@@ -19,6 +19,73 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(drive.benchmarkMountPoint, "/System/Volumes/Data")
     }
 
+    func testNetworkMountParserDetectsMountedNetworkVolumes() {
+        let output = """
+        /dev/disk3s1 on / (apfs, sealed, local, read-only, journaled)
+        //lex@nas.local/Media on /Volumes/Media (smbfs, nodev, nosuid, mounted by lex)
+        server:/exports/project on /Volumes/Project (nfs, nodev, nosuid)
+        map auto_home on /System/Volumes/Data/home (autofs, automounted, nobrowse)
+        """
+
+        let entries = NetworkVolumeMountParser.parse(output)
+
+        XCTAssertEqual(entries.map(\.fileSystemType), ["smbfs", "nfs"])
+        XCTAssertEqual(entries.map(\.source), ["//lex@nas.local/Media", "server:/exports/project"])
+        XCTAssertEqual(entries.map(\.mountPoint), ["/Volumes/Media", "/Volumes/Project"])
+        XCTAssertEqual(NetworkVolumeMountParser.protocolDisplayName(for: entries[0].fileSystemType), "SMB")
+        XCTAssertEqual(NetworkVolumeMountParser.protocolDisplayName(for: entries[1].fileSystemType), "NFS")
+    }
+
+    func testNetworkMountInventoryProviderCreatesBenchmarkableNetworkDrive() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        let target = root.appendingPathComponent("Benchmarks")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let output = "//lex@nas.local/Media on \(root.path) (smbfs, nodev, nosuid, mounted by lex)\n"
+        let provider = NetworkMountInventoryProvider(runner: StaticCommandRunner(stdout: output))
+
+        let drives = try await provider.loadNetworkDrives()
+        let drive = try XCTUnwrap(drives.first)
+
+        XCTAssertTrue(drive.isNetwork)
+        XCTAssertEqual(drive.protocolName, "SMB")
+        XCTAssertEqual(drive.displayName, root.lastPathComponent)
+        XCTAssertEqual(drive.benchmarkMountPoint, root.path)
+        XCTAssertTrue(drive.isWritable)
+        XCTAssertTrue(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(target.path, drive: drive))
+    }
+
+    func testDriveDeviceDecodesOlderRecordsWithoutNetworkFlag() throws {
+        let encoded = try JSONEncoder().encode(Self.fixtureDrive())
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "isNetwork")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(DriveDevice.self, from: legacyData)
+
+        XCTAssertFalse(decoded.isNetwork)
+        XCTAssertEqual(decoded.bsdName, "disk0")
+    }
+
+    func testNetworkDriveSmartProvidersReturnUnavailableReason() async throws {
+        var drive = Self.fixtureDrive()
+        drive.isNetwork = true
+        drive.bsdName = "network-smb-media"
+        drive.deviceNode = "//lex@nas.local/Media"
+        drive.protocolName = "SMB"
+
+        let nativeSnapshotValue = await NativeSmartProvider().snapshot(for: drive)
+        let smartctlSnapshotValue = await SmartctlSmartProvider().snapshot(for: drive)
+        let nativeSnapshot = try XCTUnwrap(nativeSnapshotValue)
+        let smartctlSnapshot = try XCTUnwrap(smartctlSnapshotValue)
+
+        XCTAssertEqual(nativeSnapshot.health, .unavailable)
+        XCTAssertEqual(smartctlSnapshot.health, .unavailable)
+        XCTAssertEqual(nativeSnapshot.summary, "Network volumes do not expose local SMART data.")
+        XCTAssertEqual(smartctlSnapshot.summary, "Network volumes do not expose local SMART data.")
+    }
+
     func testSmartctlNVMeParserExtractsHealthFields() {
         let drive = Self.fixtureDrive()
         let snapshot = SmartctlParser.parseSnapshot(Self.smartctlNVMeFixture.data(using: .utf8)!, drive: drive, providerName: "smartctl", exitStatus: 0)
@@ -1670,6 +1737,20 @@ private final class LockedArray<Element>: @unchecked Sendable {
         lock.lock()
         values.append(value)
         lock.unlock()
+    }
+}
+
+private struct StaticCommandRunner: CommandRunning {
+    var stdout: String
+    var stderr: String = ""
+    var terminationStatus: Int32 = 0
+
+    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        CommandResult(
+            stdout: Data(stdout.utf8),
+            stderr: Data(stderr.utf8),
+            terminationStatus: terminationStatus
+        )
     }
 }
 

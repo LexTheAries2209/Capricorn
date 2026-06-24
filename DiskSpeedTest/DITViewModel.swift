@@ -113,7 +113,7 @@ final class DITViewModel: ObservableObject {
                 notificationCoordinator.notifyIfNeeded(drive: drive, snapshot: snapshot)
             }
             snapshots = nextSnapshots
-            refreshMessage = loadedDrives.isEmpty ? "No physical drives found." : "Last refreshed \(Date().formatted(date: .omitted, time: .standard))"
+            refreshMessage = loadedDrives.isEmpty ? "No physical or network drives found." : "Last refreshed \(Date().formatted(date: .omitted, time: .standard))"
         } catch {
             refreshMessage = error.localizedDescription
         }
@@ -181,6 +181,14 @@ final class DITViewModel: ObservableObject {
         liveActivitySamples = []
         currentLiveActivity = nil
         liveActivityError = nil
+
+        guard !drive.isNetwork else {
+            liveActivityStartedAt = nil
+            liveActivityError = "Network drives do not provide per-disk IOKit activity counters."
+            isLiveActivityMonitoring = false
+            return
+        }
+
         isLiveActivityMonitoring = true
 
         liveActivityTask = makeDiskActivityTask(for: drive, interval: interval) { [weak self] sample in
@@ -243,8 +251,10 @@ final class DITViewModel: ObservableObject {
         )
         isLiveActivityWorkloadRunning = true
 
-        if !isLiveActivityMonitoring {
+        if !isLiveActivityMonitoring, !drive.isNetwork {
             startLiveActivityMonitoringForWorkload(drive: drive, interval: interval)
+        } else if drive.isNetwork {
+            liveActivityError = "Network drives do not provide per-disk IOKit activity counters."
         }
 
         let runner = liveActivityWorkloadRunner
@@ -330,6 +340,7 @@ final class DITViewModel: ObservableObject {
         stopDiskActivityMonitoring()
         diskActivitySamples = []
         currentDiskActivity = nil
+        guard !drive.isNetwork else { return }
         diskActivityTask = makeDiskActivityTask(for: drive, interval: Self.benchmarkActivityInterval) { [weak self] sample in
             guard let self else { return }
             self.currentDiskActivity = sample
@@ -345,6 +356,12 @@ final class DITViewModel: ObservableObject {
         liveActivitySamples = []
         currentLiveActivity = nil
         liveActivityError = nil
+        guard !drive.isNetwork else {
+            liveActivityStartedAt = nil
+            liveActivityError = "Network drives do not provide per-disk IOKit activity counters."
+            isLiveActivityMonitoring = false
+            return
+        }
         isLiveActivityMonitoring = true
 
         liveActivityTask = makeDiskActivityTask(for: drive, interval: interval) { [weak self] sample in
@@ -364,6 +381,10 @@ final class DITViewModel: ObservableObject {
         interval: DiskActivitySampleInterval,
         onSample: @MainActor @escaping (DiskActivitySample) -> Void
     ) -> Task<Void, Never> {
+        guard !drive.isNetwork else {
+            return Task {}
+        }
+
         let provider = diskActivityProvider
         let bsdName = drive.bsdName
         return Task.detached(priority: .utility) {

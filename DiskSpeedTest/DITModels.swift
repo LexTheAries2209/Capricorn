@@ -83,6 +83,7 @@ struct DriveDevice: Identifiable, Codable, Hashable {
     var isWritable: Bool
     var isVirtual: Bool
     var isSystemDisk: Bool
+    var isNetwork: Bool = false
     var smartStatusRaw: String?
     var nativeSmartKeys: [String: Int64]
     var volumes: [Volume]
@@ -97,6 +98,76 @@ struct DriveDevice: Identifiable, Codable, Hashable {
     var primaryMountPoint: String? {
         volumes.first(where: { $0.mountPoint == "/" })?.mountPoint
             ?? volumes.first(where: { $0.mountPoint != nil })?.mountPoint
+    }
+}
+
+extension DriveDevice {
+    private enum CodingKeys: String, CodingKey {
+        case bsdName
+        case deviceNode
+        case displayName
+        case mediaName
+        case protocolName
+        case sizeBytes
+        case blockSize
+        case isInternal
+        case isRemovable
+        case isSolidState
+        case isWritable
+        case isVirtual
+        case isSystemDisk
+        case isNetwork
+        case smartStatusRaw
+        case nativeSmartKeys
+        case volumes
+        case model
+        case serialNumber
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        bsdName = try container.decode(String.self, forKey: .bsdName)
+        deviceNode = try container.decode(String.self, forKey: .deviceNode)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        mediaName = try container.decode(String.self, forKey: .mediaName)
+        protocolName = try container.decode(String.self, forKey: .protocolName)
+        sizeBytes = try container.decode(Int64.self, forKey: .sizeBytes)
+        blockSize = try container.decode(Int.self, forKey: .blockSize)
+        isInternal = try container.decode(Bool.self, forKey: .isInternal)
+        isRemovable = try container.decode(Bool.self, forKey: .isRemovable)
+        isSolidState = try container.decode(Bool.self, forKey: .isSolidState)
+        isWritable = try container.decode(Bool.self, forKey: .isWritable)
+        isVirtual = try container.decode(Bool.self, forKey: .isVirtual)
+        isSystemDisk = try container.decode(Bool.self, forKey: .isSystemDisk)
+        isNetwork = try container.decodeIfPresent(Bool.self, forKey: .isNetwork) ?? false
+        smartStatusRaw = try container.decodeIfPresent(String.self, forKey: .smartStatusRaw)
+        nativeSmartKeys = try container.decode([String: Int64].self, forKey: .nativeSmartKeys)
+        volumes = try container.decode([Volume].self, forKey: .volumes)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
+        serialNumber = try container.decodeIfPresent(String.self, forKey: .serialNumber)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(bsdName, forKey: .bsdName)
+        try container.encode(deviceNode, forKey: .deviceNode)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encode(mediaName, forKey: .mediaName)
+        try container.encode(protocolName, forKey: .protocolName)
+        try container.encode(sizeBytes, forKey: .sizeBytes)
+        try container.encode(blockSize, forKey: .blockSize)
+        try container.encode(isInternal, forKey: .isInternal)
+        try container.encode(isRemovable, forKey: .isRemovable)
+        try container.encode(isSolidState, forKey: .isSolidState)
+        try container.encode(isWritable, forKey: .isWritable)
+        try container.encode(isVirtual, forKey: .isVirtual)
+        try container.encode(isSystemDisk, forKey: .isSystemDisk)
+        try container.encode(isNetwork, forKey: .isNetwork)
+        try container.encodeIfPresent(smartStatusRaw, forKey: .smartStatusRaw)
+        try container.encode(nativeSmartKeys, forKey: .nativeSmartKeys)
+        try container.encode(volumes, forKey: .volumes)
+        try container.encodeIfPresent(model, forKey: .model)
+        try container.encodeIfPresent(serialNumber, forKey: .serialNumber)
     }
 }
 

@@ -11,6 +11,10 @@ final class NativeSmartProvider: SmartProviding {
     private let evaluator = DriveHealthEvaluator()
 
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot? {
+        if drive.isNetwork {
+            return SmartSnapshot.unavailable(for: drive, reason: "Network volumes do not expose local SMART data.")
+        }
+
         guard drive.smartStatusRaw != nil || !drive.nativeSmartKeys.isEmpty else {
             return SmartSnapshot.unavailable(for: drive, reason: "Native SMART data is not exposed for this device.")
         }
@@ -128,6 +132,10 @@ final class SmartctlSmartProvider: SmartProviding {
     }
 
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot? {
+        if drive.isNetwork {
+            return SmartSnapshot.unavailable(for: drive, reason: "Network volumes do not expose local SMART data.")
+        }
+
         guard let executable = findExecutable() else {
             return SmartSnapshot(
                 driveID: drive.id,

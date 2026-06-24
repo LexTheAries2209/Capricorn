@@ -9,6 +9,17 @@ struct DiskutilListModel {
     var volumesByPhysicalDisk: [String: [DriveDevice.Volume]]
 }
 
+struct NetworkMountEntry: Equatable {
+    var source: String
+    var mountPoint: String
+    var fileSystemType: String
+    var options: [String]
+}
+
+protocol NetworkVolumeInventoryProviding {
+    func loadNetworkDrives() async throws -> [DriveDevice]
+}
+
 enum DiskutilParserError: Error, LocalizedError {
     case invalidPlist
 
@@ -161,13 +172,196 @@ enum DiskutilPlistParser {
     }
 }
 
+enum NetworkVolumeMountParser {
+    private static let networkFileSystemTypes: Set<String> = [
+        "afpfs",
+        "davfs",
+        "fuse.sshfs",
+        "fusefs.sshfs",
+        "nfs",
+        "smbfs",
+        "sshfs",
+        "webdav"
+    ]
+
+    static func parse(_ output: String) -> [NetworkMountEntry] {
+        output
+            .split(whereSeparator: \.isNewline)
+            .compactMap { parseLine(String($0)) }
+    }
+
+    static func protocolDisplayName(for fileSystemType: String) -> String {
+        switch fileSystemType.lowercased() {
+        case "smbfs":
+            return "SMB"
+        case "afpfs":
+            return "AFP"
+        case "nfs":
+            return "NFS"
+        case "webdav", "davfs":
+            return "WebDAV"
+        case "sshfs", "fuse.sshfs", "fusefs.sshfs":
+            return "SSHFS"
+        default:
+            return fileSystemType.uppercased()
+        }
+    }
+
+    private static func parseLine(_ line: String) -> NetworkMountEntry? {
+        let line = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let optionsStart = line.lastIndex(of: "("),
+              line.hasSuffix(")") else {
+            return nil
+        }
+
+        let sourceAndMount = String(line[..<optionsStart]).trimmingCharacters(in: .whitespaces)
+        guard let separator = sourceAndMount.range(of: " on ", options: .backwards) else {
+            return nil
+        }
+
+        let source = unescapeMountPath(String(sourceAndMount[..<separator.lowerBound]))
+        let mountPoint = unescapeMountPath(String(sourceAndMount[separator.upperBound...]))
+        let rawOptions = String(line[line.index(after: optionsStart)..<line.index(before: line.endIndex)])
+        let options = rawOptions
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard let fileSystemType = options.first?.lowercased(),
+              networkFileSystemTypes.contains(fileSystemType) else {
+            return nil
+        }
+
+        return NetworkMountEntry(
+            source: source,
+            mountPoint: mountPoint,
+            fileSystemType: fileSystemType,
+            options: options
+        )
+    }
+
+    private static func unescapeMountPath(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\040", with: " ")
+            .replacingOccurrences(of: "\\011", with: "\t")
+            .replacingOccurrences(of: "\\012", with: "\n")
+            .replacingOccurrences(of: "\\134", with: "\\")
+    }
+}
+
+final class NetworkMountInventoryProvider: NetworkVolumeInventoryProviding {
+    private let runner: CommandRunning
+    private let mountPath: String
+    private let fileManager: FileManager
+
+    init(runner: CommandRunning = ShellCommandRunner(), mountPath: String = "/sbin/mount", fileManager: FileManager = .default) {
+        self.runner = runner
+        self.mountPath = mountPath
+        self.fileManager = fileManager
+    }
+
+    func loadNetworkDrives() async throws -> [DriveDevice] {
+        let result = try await runner.run(mountPath, arguments: [])
+        if result.terminationStatus != 0 {
+            throw CommandError.nonZeroExit(executable: mountPath, status: result.terminationStatus, stderr: result.stderrString)
+        }
+
+        return NetworkVolumeMountParser.parse(result.stdoutString).map(makeDrive)
+    }
+
+    private func makeDrive(from entry: NetworkMountEntry) -> DriveDevice {
+        let protocolName = NetworkVolumeMountParser.protocolDisplayName(for: entry.fileSystemType)
+        let displayName = displayName(for: entry)
+        let sizeBytes = volumeCapacity(at: entry.mountPoint)
+        let isWritable = !entry.options.contains { option in
+            ["read-only", "rdonly", "ro"].contains(option.lowercased())
+        } && fileManager.isWritableFile(atPath: entry.mountPoint)
+        let bsdName = stableNetworkIdentifier(for: entry, protocolName: protocolName)
+
+        return DriveDevice(
+            bsdName: bsdName,
+            deviceNode: entry.source,
+            displayName: displayName,
+            mediaName: displayName,
+            protocolName: protocolName,
+            sizeBytes: sizeBytes,
+            blockSize: 4096,
+            isInternal: false,
+            isRemovable: false,
+            isSolidState: false,
+            isWritable: isWritable,
+            isVirtual: false,
+            isSystemDisk: false,
+            isNetwork: true,
+            smartStatusRaw: nil,
+            nativeSmartKeys: [:],
+            volumes: [
+                DriveDevice.Volume(
+                    deviceIdentifier: bsdName,
+                    name: displayName,
+                    mountPoint: entry.mountPoint,
+                    sizeBytes: sizeBytes,
+                    isWritable: isWritable,
+                    isSystem: false
+                )
+            ],
+            model: entry.source,
+            serialNumber: nil
+        )
+    }
+
+    private func displayName(for entry: NetworkMountEntry) -> String {
+        let folderName = URL(fileURLWithPath: entry.mountPoint, isDirectory: true).lastPathComponent
+        if !folderName.isEmpty {
+            return folderName
+        }
+
+        let sourceName = entry.source.split(separator: "/").last.map(String.init)
+        return sourceName?.isEmpty == false ? sourceName! : entry.source
+    }
+
+    private func volumeCapacity(at mountPoint: String) -> Int64 {
+        let url = URL(fileURLWithPath: mountPoint, isDirectory: true)
+        guard let values = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey]),
+              let capacity = values.volumeTotalCapacity else {
+            return 0
+        }
+        return Int64(capacity)
+    }
+
+    private func stableNetworkIdentifier(for entry: NetworkMountEntry, protocolName: String) -> String {
+        let raw = "\(entry.fileSystemType)-\(entry.source)-\(entry.mountPoint)"
+        let sanitized = raw
+            .lowercased()
+            .map { $0.isLetter || $0.isNumber ? String($0) : "-" }
+            .joined()
+            .split(separator: "-")
+            .joined(separator: "-")
+        let prefix = String(sanitized.prefix(36)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return "network-\(protocolName.lowercased())-\(prefix)-\(stableHash(raw))"
+    }
+
+    private func stableHash(_ value: String) -> String {
+        var hash: UInt64 = 5381
+        for byte in value.utf8 {
+            hash = ((hash << 5) &+ hash) &+ UInt64(byte)
+        }
+        return String(hash, radix: 16)
+    }
+}
+
 final class DiskutilInventoryProvider: DiskInventoryProviding {
     private let runner: CommandRunning
     private let diskutilPath: String
+    private let networkProvider: NetworkVolumeInventoryProviding?
 
-    init(runner: CommandRunning = ShellCommandRunner(), diskutilPath: String = "/usr/sbin/diskutil") {
+    init(
+        runner: CommandRunning = ShellCommandRunner(),
+        diskutilPath: String = "/usr/sbin/diskutil",
+        networkProvider: NetworkVolumeInventoryProviding? = NetworkMountInventoryProvider()
+    ) {
         self.runner = runner
         self.diskutilPath = diskutilPath
+        self.networkProvider = networkProvider
     }
 
     func loadDrives(showVirtual: Bool) async throws -> [DriveDevice] {
@@ -188,8 +382,18 @@ final class DiskutilInventoryProvider: DiskInventoryProviding {
             }
         }
 
+        if let networkProvider {
+            do {
+                devices.append(contentsOf: try await networkProvider.loadNetworkDrives())
+            } catch {
+                // Network mounts are an optional inventory source; physical disk discovery should still succeed.
+            }
+        }
+
         return devices.sorted { lhs, rhs in
-            if lhs.isInternal != rhs.isInternal { return lhs.isInternal && !rhs.isInternal }
+            let lhsGroup = lhs.isNetwork ? 2 : (lhs.isInternal ? 0 : 1)
+            let rhsGroup = rhs.isNetwork ? 2 : (rhs.isInternal ? 0 : 1)
+            if lhsGroup != rhsGroup { return lhsGroup < rhsGroup }
             return lhs.bsdName.localizedStandardCompare(rhs.bsdName) == .orderedAscending
         }
     }

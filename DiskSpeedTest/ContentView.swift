@@ -188,10 +188,11 @@ struct ContentView: View {
 private struct DriveSidebarRow: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
+    @Environment(\.appLanguage) private var language
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: drive.isInternal ? "internaldrive.fill" : "externaldrive.fill")
+            Image(systemName: iconName)
                 .font(.title3)
                 .foregroundStyle(snapshot?.health.tint ?? .secondary)
                 .frame(width: 24)
@@ -199,7 +200,7 @@ private struct DriveSidebarRow: View {
                 Text(drive.displayName)
                     .font(.headline)
                     .lineLimit(1)
-                Text("\(drive.bsdName) · \(drive.protocolName) · \(formatByteCount(drive.sizeBytes))")
+                Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -208,6 +209,18 @@ private struct DriveSidebarRow: View {
             HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
         }
         .padding(.vertical, 4)
+    }
+
+    private var iconName: String {
+        drive.isNetwork ? "network" : (drive.isInternal ? "internaldrive.fill" : "externaldrive.fill")
+    }
+
+    private var subtitle: String {
+        if drive.isNetwork {
+            let mount = drive.primaryMountPoint ?? drive.deviceNode
+            return "\(drive.protocolName) · \(language.t("Network Drive")) · \(mount)"
+        }
+        return "\(drive.bsdName) · \(drive.protocolName) · \(formatByteCount(drive.sizeBytes))"
     }
 }
 
@@ -266,7 +279,7 @@ private struct OverviewView: View {
                         Text(drive.displayName)
                             .font(.largeTitle.bold())
                             .lineLimit(2)
-                        Text("\(drive.bsdName) · \(drive.protocolName) · \(drive.isSolidState ? language.t("SSD") : language.t("HDD/Media"))")
+                        Text("\(drive.bsdName) · \(drive.protocolName) · \(mediaKindText)")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -333,6 +346,10 @@ private struct OverviewView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+
+    private var mediaKindText: String {
+        drive.isNetwork ? language.t("Network Drive") : (drive.isSolidState ? language.t("SSD") : language.t("HDD/Media"))
+    }
 }
 
 private struct SmartAttributesView: View {
@@ -359,6 +376,7 @@ private struct SmartAttributesView: View {
     }
 
     private var showsExternalSupportHelp: Bool {
+        guard !drive.isNetwork else { return false }
         guard let snapshot else { return false }
         let hasAvailableProvider = snapshot.providerStatuses.contains { $0.state == .available }
         let hasLimitedProvider = snapshot.providerStatuses.contains { $0.state == .limited }
@@ -631,6 +649,11 @@ private struct DiskActivityView: View {
             VStack(alignment: .leading, spacing: 14) {
                 header
                 controls
+                if let error = viewModel.liveActivityError {
+                    Label(language.statusMessage(error), systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
                 workloadPanel
                 DiskActivityChartView(
                     title: language.t("Live Disk Activity"),
@@ -663,7 +686,7 @@ private struct DiskActivityView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(language.t("Live Activity"))
                 .font(.largeTitle.bold())
-            Text(language.t("Monitors total I/O reported by macOS for the selected physical disk."))
+            Text(language.t(selectedDrive.isNetwork ? "Network drives do not provide per-disk IOKit activity counters." : "Monitors total I/O reported by macOS for the selected physical disk."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -709,7 +732,7 @@ private struct DiskActivityView: View {
                 Label(language.t("Start Monitoring"), systemImage: "play.fill")
             }
             .buttonStyle(.borderedProminent)
-            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.drives.isEmpty)
+            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.drives.isEmpty || selectedDrive.isNetwork)
 
             Button {
                 viewModel.stopLiveActivityMonitoring()
@@ -1638,12 +1661,18 @@ private struct BenchmarkView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let progress = viewModel.benchmarkProgress, viewModel.isBenchmarking {
                 VStack(alignment: .leading, spacing: 8) {
-                    DiskActivityChartView(
-                        title: language.t("Live Disk Activity"),
-                        samples: viewModel.diskActivitySamples,
-                        current: viewModel.currentDiskActivity,
-                        style: .compact
-                    )
+                    if drive.isNetwork {
+                        Label(language.t("Network drives do not provide per-disk IOKit activity counters."), systemImage: "network")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        DiskActivityChartView(
+                            title: language.t("Live Disk Activity"),
+                            samples: viewModel.diskActivitySamples,
+                            current: viewModel.currentDiskActivity,
+                            style: .compact
+                        )
+                    }
                     ProgressView(value: progress.fraction)
                     Text("\(language.progressLabel(progress.currentTestLabel)): \(progressStatusText(progress))")
                         .font(.caption)
