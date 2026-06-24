@@ -139,7 +139,7 @@ enum DiskActivityChartScale {
         ]
     }
 
-    static func yTicks(maxSpeed: Double, count: Int = 5) -> [Double] {
+    static func yTicks(maxSpeed: Double, count: Int = 10) -> [Double] {
         let maximum = roundedMaximumSpeed(maxSpeed: maxSpeed)
         guard count > 1 else { return [maximum] }
         return (0..<count).map { index in

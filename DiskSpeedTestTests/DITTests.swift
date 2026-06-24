@@ -388,7 +388,11 @@ final class DITTests: XCTestCase {
 
         XCTAssertEqual(DiskActivityChartScale.durationSeconds(for: samples), 90, accuracy: 0.0001)
         XCTAssertEqual(DiskActivityChartScale.xTicks(for: samples).map(\.label), ["0s", "45s", "1m30s"])
-        XCTAssertEqual(DiskActivityChartScale.yTicks(maxSpeed: 432), [0, 125, 250, 375, 500])
+        let yTicks = DiskActivityChartScale.yTicks(maxSpeed: 432)
+        XCTAssertEqual(yTicks.count, 10)
+        XCTAssertEqual(yTicks.first ?? -1, 0, accuracy: 0.0001)
+        XCTAssertEqual(yTicks.last ?? -1, 500, accuracy: 0.0001)
+        XCTAssertEqual(yTicks[1], 500.0 / 9.0, accuracy: 0.0001)
     }
 
     func testDiskActivityHistoryRecordEncodesSamplesAndSummary() {

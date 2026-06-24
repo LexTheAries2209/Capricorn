@@ -1432,7 +1432,7 @@ private struct DiskActivityChartView: View {
                 path.addLine(to: CGPoint(x: x, y: rect.maxY))
             }
         }
-        context.stroke(path, with: .color(Color(nsColor: .separatorColor).opacity(0.25)), lineWidth: 0.5)
+        context.stroke(path, with: .color(Color(nsColor: .separatorColor).opacity(0.42)), lineWidth: 0.6)
     }
 
     private func drawSeries(
