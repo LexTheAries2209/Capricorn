@@ -564,6 +564,43 @@ final class DITTests: XCTestCase {
         XCTAssertFalse(BenchmarkStorageValidator.isFileSizeAvailable(options[2], availableCapacity: available))
     }
 
+    func testBenchmarkStorageValidatorCountsLoopReadPreparationFiles() {
+        let readA = BenchmarkTest(
+            id: "loop-read-a",
+            label: "SEQ1M Q1T1",
+            accessPattern: .sequential,
+            operation: .read,
+            blockSizeBytes: 4_096,
+            queueDepth: 1,
+            threads: 1,
+            durationSeconds: 0.001,
+            testSizeBytes: 16_384,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 0
+        )
+        var readB = readA
+        readB.id = "loop-read-b"
+        readB.testSizeBytes = 32_768
+        var write = readA
+        write.id = "loop-write"
+        write.operation = .write
+        write.testSizeBytes = 65_536
+        write.writePercentForMixed = 100
+        let profile = BenchmarkProfile(
+            id: "loop-space",
+            name: "Loop Space",
+            testFileSizeBytes: 65_536,
+            runs: 1,
+            executionMode: .loopUntilCancelled,
+            tests: [readA, readB, write]
+        )
+        let required = Int64(16_384 + 32_768 + 65_536) + BenchmarkStorageValidator.safetyMarginBytes
+
+        XCTAssertEqual(BenchmarkStorageValidator.requiredSpace(for: profile), required)
+        XCTAssertFalse(BenchmarkStorageValidator.isRequiredSpaceAvailable(for: profile, availableCapacity: required - 1))
+        XCTAssertTrue(BenchmarkStorageValidator.isRequiredSpaceAvailable(for: profile, availableCapacity: required))
+    }
+
     func testBenchmarkRunnerCleansTemporaryFile() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -687,6 +724,102 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(names.allSatisfy { $0.contains("write-run") })
     }
 
+    func testBenchmarkRunnerReusesPreparedFileForReadPasses() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+        let read = BenchmarkTest(
+            id: "unit-read",
+            label: "SEQ4K Q1T1",
+            accessPattern: .sequential,
+            operation: .read,
+            blockSizeBytes: 4_096,
+            queueDepth: 1,
+            threads: 1,
+            durationSeconds: 0.001,
+            testSizeBytes: 32_768,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 0
+        )
+        let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 32_768, runs: 3, tests: [read])
+        let lock = NSLock()
+        var createdNames: [String] = []
+        let runner = NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0, fileEventHandler: { url in
+            lock.lock()
+            createdNames.append(url.lastPathComponent)
+            lock.unlock()
+        })
+
+        let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
+
+        lock.lock()
+        let names = createdNames
+        lock.unlock()
+        XCTAssertEqual(results.first?.bytesTransferred, 32_768)
+        XCTAssertEqual(names.count, 1)
+        XCTAssertTrue(names.first?.contains("read-run0") == true)
+
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
+            $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")
+        }
+        XCTAssertTrue(leftovers.isEmpty)
+    }
+
+    func testBenchmarkRunnerReusesReadFileButKeepsWriteAndMixedFilesPerPass() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+        let read = BenchmarkTest(
+            id: "unit-read",
+            label: "SEQ4K Q1T1",
+            accessPattern: .sequential,
+            operation: .read,
+            blockSizeBytes: 4_096,
+            queueDepth: 1,
+            threads: 1,
+            durationSeconds: 0.001,
+            testSizeBytes: 8_192,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 0
+        )
+        var write = read
+        write.id = "unit-write"
+        write.operation = .write
+        write.writePercentForMixed = 100
+        var mixed = read
+        mixed.id = "unit-mixed"
+        mixed.operation = .mixed
+        mixed.writePercentForMixed = 30
+        let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 8_192, runs: 2, tests: [read, write, mixed])
+        let lock = NSLock()
+        var createdNames: [String] = []
+        let runner = NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0, fileEventHandler: { url in
+            lock.lock()
+            createdNames.append(url.lastPathComponent)
+            lock.unlock()
+        })
+
+        let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
+
+        lock.lock()
+        let names = createdNames
+        lock.unlock()
+        XCTAssertEqual(results.map(\.testID), ["unit-read", "unit-write", "unit-mixed"])
+        XCTAssertEqual(names.filter { $0.contains("-read-run") }.count, 1)
+        XCTAssertEqual(names.filter { $0.contains("-write-run") }.count, 3)
+        XCTAssertEqual(names.filter { $0.contains("-mixed-run") }.count, 3)
+    }
+
     func testAsyncQueueBenchmarkRunnerPublishesTransferAndFlushMetrics() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -736,6 +869,54 @@ final class DITTests: XCTestCase {
             $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")
         }
         XCTAssertTrue(leftovers.isEmpty)
+    }
+
+    func testAsyncQueueBenchmarkRunnerReusesPreparedFileForReadPasses() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+        let read = BenchmarkTest(
+            id: "async-read",
+            label: "SEQ4K Q2T1",
+            accessPattern: .sequential,
+            operation: .read,
+            blockSizeBytes: 4_096,
+            queueDepth: 2,
+            threads: 1,
+            durationSeconds: 0.001,
+            testSizeBytes: 65_536,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 0
+        )
+        let profile = BenchmarkProfile(
+            id: "async-unit",
+            name: "Async Unit",
+            testFileSizeBytes: 65_536,
+            runs: 2,
+            engine: .asyncQueue,
+            tests: [read]
+        )
+        let lock = NSLock()
+        var createdNames: [String] = []
+        let runner = AsyncQueueBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0, fileEventHandler: { url in
+            lock.lock()
+            createdNames.append(url.lastPathComponent)
+            lock.unlock()
+        })
+
+        let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
+
+        lock.lock()
+        let names = createdNames
+        lock.unlock()
+        XCTAssertEqual(results.first?.bytesTransferred, 65_536)
+        XCTAssertEqual(names.count, 1)
+        XCTAssertTrue(names.first?.contains("read-run0") == true)
     }
 
     func testBenchmarkRunnerIgnoresFixedDurationAndTransfersCompleteFile() async throws {
@@ -899,11 +1080,21 @@ final class DITTests: XCTestCase {
         let lock = NSLock()
         var requestedWaits: [TimeInterval] = []
         var published: [BenchmarkResult] = []
-        let runner = NativeBenchmarkRunner(operationIntervalSeconds: 5, passIntervalSeconds: 1) { seconds, _ in
-            lock.lock()
-            requestedWaits.append(seconds)
-            lock.unlock()
-        }
+        var createdNames: [String] = []
+        let runner = NativeBenchmarkRunner(
+            operationIntervalSeconds: 5,
+            passIntervalSeconds: 1,
+            operationSleeper: { seconds, _ in
+                lock.lock()
+                requestedWaits.append(seconds)
+                lock.unlock()
+            },
+            fileEventHandler: { url in
+                lock.lock()
+                createdNames.append(url.lastPathComponent)
+                lock.unlock()
+            }
+        )
 
         let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
             lock.lock()
@@ -918,6 +1109,7 @@ final class DITTests: XCTestCase {
         lock.lock()
         let waits = requestedWaits
         let publishedIDs = published.map(\.testID)
+        let names = createdNames
         lock.unlock()
 
         let expectedCycle = ["loop-read-q1", "loop-write-q1", "loop-read-q8", "loop-write-q8"]
@@ -925,6 +1117,8 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(results.map(\.testID), expectedCycle)
         XCTAssertTrue(results.allSatisfy { $0.bytesTransferred == 8_192 })
         XCTAssertTrue(waits.isEmpty)
+        XCTAssertEqual(names.filter { $0.contains("-read-run") }.count, 2)
+        XCTAssertEqual(names.filter { $0.contains("-write-run") }.count, 4)
 
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
             $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")

@@ -847,12 +847,12 @@ private struct BenchmarkView: View {
 
     private var selectedFileSizeHasSpace: Bool {
         guard targetFolderIsUsable else { return false }
-        return BenchmarkStorageValidator.isFileSizeAvailable(profile.testFileSizeBytes, availableCapacity: targetFolderAvailableCapacity)
+        return BenchmarkStorageValidator.isRequiredSpaceAvailable(for: profile, availableCapacity: targetFolderAvailableCapacity)
     }
 
     private var hasAnyAvailableFileSize: Bool {
         guard targetFolderIsUsable else { return false }
-        return BenchmarkStorageValidator.largestAvailableFileSize(from: BenchmarkProfile.fileSizeOptions, availableCapacity: targetFolderAvailableCapacity) != nil
+        return BenchmarkProfile.fileSizeOptions.contains { isFileSizeSelectable($0) }
     }
 
     private var canRunBenchmark: Bool {
@@ -1217,8 +1217,8 @@ private struct BenchmarkView: View {
         }
 
         let available = BenchmarkStorageValidator.availableCapacity(for: targetFolderURL)
-        let required = BenchmarkStorageValidator.requiredSpace(for: profile.testFileSizeBytes)
-        guard BenchmarkStorageValidator.isFileSizeAvailable(profile.testFileSizeBytes, availableCapacity: available) else {
+        let required = BenchmarkStorageValidator.requiredSpace(for: profile)
+        guard BenchmarkStorageValidator.isRequiredSpaceAvailable(for: profile, availableCapacity: available) else {
             viewModel.benchmarkError = BenchmarkError.insufficientSpace(required: required, available: available).localizedDescription
             return false
         }
@@ -1229,7 +1229,13 @@ private struct BenchmarkView: View {
 
     private func isFileSizeSelectable(_ fileSizeBytes: Int64) -> Bool {
         guard targetFolderIsUsable else { return true }
-        return BenchmarkStorageValidator.isFileSizeAvailable(fileSizeBytes, availableCapacity: targetFolderAvailableCapacity)
+        let candidateProfile = baseProfile.configured(
+            runs: selectedRunCount,
+            fileSizeBytes: fileSizeBytes,
+            dataPattern: selectedDataPattern,
+            usesTrimmedAverage: usesTrimmedAverage
+        )
+        return BenchmarkStorageValidator.isRequiredSpaceAvailable(for: candidateProfile, availableCapacity: targetFolderAvailableCapacity)
     }
 
     private func adjustSelectedFileSizeForTarget() {
@@ -1238,8 +1244,8 @@ private struct BenchmarkView: View {
         }
         guard targetFolderIsUsable else { return }
         let selectedSize = Int64(selectedFileSizeBytes)
-        guard !BenchmarkStorageValidator.isFileSizeAvailable(selectedSize, availableCapacity: targetFolderAvailableCapacity) else { return }
-        if let fallback = BenchmarkStorageValidator.largestAvailableFileSize(from: BenchmarkProfile.fileSizeOptions, availableCapacity: targetFolderAvailableCapacity) {
+        guard !isFileSizeSelectable(selectedSize) else { return }
+        if let fallback = BenchmarkProfile.fileSizeOptions.last(where: { isFileSizeSelectable($0) }) {
             selectedFileSizeBytes = Int(fallback)
         }
     }
