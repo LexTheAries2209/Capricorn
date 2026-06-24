@@ -500,6 +500,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "External Drive SMART": "外接磁盘 SMART",
         "Verify": "验证",
         "Driver Paths": "驱动路径",
+        "Use this when SMART data is unavailable or limited for an external drive.": "当外接磁盘 SMART 无信息或来源有限时，可在这里检查支持状态并验证。",
         "No SAT SMART Driver bundle was detected in standard extension locations.": "标准扩展位置未检测到 SAT SMART Driver。",
         "Open SAT SMART Driver project": "打开 SAT SMART Driver 项目",
         "History & Reports": "历史与报告",

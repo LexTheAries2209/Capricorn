@@ -226,14 +226,18 @@ private struct DriveDetailView: View {
         TabView {
             OverviewView(drive: drive, snapshot: snapshot)
                 .tabItem { Label(language.t("Overview"), systemImage: "gauge.with.dots.needle.bottom.50percent") }
-            SmartAttributesView(drive: drive, snapshot: snapshot, saveSnapshot: saveSnapshot)
+            SmartAttributesView(
+                drive: drive,
+                snapshot: snapshot,
+                externalSupport: viewModel.externalSupport,
+                verifyExternalSupport: viewModel.refreshExternalSupport,
+                saveSnapshot: saveSnapshot
+            )
                 .tabItem { Label("SMART", systemImage: "list.bullet.rectangle") }
             BenchmarkView(drive: drive, viewModel: viewModel, saveResults: saveBenchmarkResults)
                 .tabItem { Label(language.t("Benchmark"), systemImage: "speedometer") }
             DiskActivityView(initialDrive: drive, viewModel: viewModel, activityHistory: activityHistory)
                 .tabItem { Label(language.t("Live Activity"), systemImage: "waveform.path.ecg.rectangle") }
-            ExternalSupportView(status: viewModel.externalSupport, refresh: viewModel.refreshExternalSupport)
-                .tabItem { Label(language.t("External"), systemImage: "externaldrive.connected.to.line.below") }
             HistoryReportView(
                 drive: drive,
                 snapshot: snapshot,
@@ -334,6 +338,8 @@ private struct OverviewView: View {
 private struct SmartAttributesView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
+    let externalSupport: ExternalSupportStatus
+    let verifyExternalSupport: () -> Void
     let saveSnapshot: (String?) -> String
     @Environment(\.appLanguage) private var language
     @AppStorage("smartSnapshotExportFolder") private var snapshotExportFolderPath = ""
@@ -350,6 +356,15 @@ private struct SmartAttributesView: View {
     private var saveMessageIsWarning: Bool {
         guard let saveMessage else { return false }
         return saveMessage.contains("failed") || saveMessage.contains("unavailable") || saveMessage.hasPrefix("Could not")
+    }
+
+    private var showsExternalSupportHelp: Bool {
+        guard let snapshot else { return false }
+        let hasAvailableProvider = snapshot.providerStatuses.contains { $0.state == .available }
+        let hasLimitedProvider = snapshot.providerStatuses.contains { $0.state == .limited }
+        let externalDrive = !drive.isInternal || drive.isRemovable
+        let lacksUsableSmart = attributes.isEmpty || snapshot.health == .unavailable || !hasAvailableProvider
+        return lacksUsableSmart || (externalDrive && hasLimitedProvider)
     }
 
     var body: some View {
@@ -405,6 +420,11 @@ private struct SmartAttributesView: View {
                     systemImage: "questionmark.folder",
                     description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
                 )
+            }
+
+            if showsExternalSupportHelp {
+                ExternalSupportView(status: externalSupport, refresh: verifyExternalSupport)
+                    .frame(maxWidth: 760, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1744,6 +1764,9 @@ private struct ExternalSupportView: View {
                 }
             }
             InfoPanel(title: language.t("Status"), symbol: "externaldrive.connected.to.line.below") {
+                Label(language.t("Use this when SMART data is unavailable or limited for an external drive."), systemImage: "wrench.and.screwdriver")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 StatusLine(title: "smartctl", isOn: status.smartctlInstalled)
                 StatusLine(title: "SAT SMART Driver", isOn: status.satDriverInstalled)
                 Text(language.statusMessage(status.message))
@@ -1762,7 +1785,6 @@ private struct ExternalSupportView: View {
             Link(destination: URL(string: "https://github.com/kasbert/OS-X-SAT-SMART-Driver")!) {
                 Label(language.t("Open SAT SMART Driver project"), systemImage: "safari")
             }
-            Spacer()
         }
     }
 }
@@ -1778,7 +1800,7 @@ private struct HistoryReportView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @State private var showHiddenHistory = false
-    private let historyScrollThreshold = 12
+    private let historyScrollThreshold = 10
     private let historyRowHeight: CGFloat = 58
 
     private var visibleSmartHistory: [SmartHistoryRecord] {
