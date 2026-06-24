@@ -240,7 +240,7 @@ private struct DriveDetailView: View {
                 benchmarkResults: viewModel.benchmarkResults.filter { $0.driveID == drive.id },
                 smartHistory: smartHistory,
                 benchmarkHistory: benchmarkHistory,
-                activityHistory: activityHistory.filter { $0.driveID == drive.id }
+                activityHistory: activityHistory
             )
             .tabItem { Label(language.t("History"), systemImage: "clock.arrow.circlepath") }
         }
@@ -1432,7 +1432,7 @@ private struct DiskActivityChartView: View {
                 path.addLine(to: CGPoint(x: x, y: rect.maxY))
             }
         }
-        context.stroke(path, with: .color(Color(nsColor: .separatorColor).opacity(0.42)), lineWidth: 0.6)
+        context.stroke(path, with: .color(Color(nsColor: .separatorColor).opacity(0.78)), lineWidth: 0.8)
     }
 
     private func drawSeries(
@@ -1982,8 +1982,9 @@ private struct HistoryReportView: View {
     private func activityHistoryRow(_ item: DiskActivityHistoryRecord, isHidden: Bool) -> some View {
         HStack {
             VStack(alignment: .leading) {
-                Text(item.endedAt.formatted(date: .abbreviated, time: .standard))
-                Text("\(DiskActivityChartScale.formatDuration(item.durationSeconds)) · \(item.sampleCount) \(language.t("samples")) · \(item.sampleInterval.title)")
+                Text("\(item.driveName) (\(item.bsdName))")
+                    .lineLimit(1)
+                Text("\(item.endedAt.formatted(date: .abbreviated, time: .standard)) · \(DiskActivityChartScale.formatDuration(item.durationSeconds)) · \(item.sampleCount) \(language.t("samples")) · \(item.sampleInterval.title)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
