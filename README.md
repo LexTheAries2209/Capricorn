@@ -24,6 +24,18 @@ The project was formerly named DiskSpeedTest.
 - Xcode with Swift 5 support
 - Optional: smartmontools (`smartctl`) for extended SMART details, especially on devices where macOS exposes limited native SMART fields
 
+## Optional smartctl Support
+
+Capricorn does not bundle smartmontools or install `smartctl` automatically. It uses macOS native SMART data when available, then looks for an existing `smartctl` installation at `/opt/homebrew/bin/smartctl`, `/usr/local/bin/smartctl`, or `/usr/sbin/smartctl`.
+
+Install smartmontools with Homebrew:
+
+```sh
+brew install smartmontools
+```
+
+Apple Silicon Homebrew usually installs `smartctl` at `/opt/homebrew/bin/smartctl`; Intel Homebrew usually uses `/usr/local/bin/smartctl`. Restart or refresh Capricorn after installation. See the [Homebrew smartmontools formula](https://formulae.brew.sh/formula/smartmontools) for package details.
+
 ## Build
 
 Open `Capricorn.xcodeproj` in Xcode, select the `Capricorn` scheme, and build or run the app.
@@ -81,6 +93,18 @@ Capricorn 是一个面向 macOS 的 SwiftUI DIT 磁盘检查工具。它把磁�
 - macOS 14.0 或更高版本
 - 支持 Swift 5 的 Xcode
 - 可选：smartmontools（`smartctl`），用于在 macOS 原生 SMART 字段有限时读取更详细的设备信息
+
+## 可选 smartctl 支持
+
+Capricorn 不会内置 smartmontools，也不会自动安装 `smartctl`。它会优先使用 macOS 原生 SMART 数据，然后查找现有的 `smartctl`：`/opt/homebrew/bin/smartctl`、`/usr/local/bin/smartctl` 或 `/usr/sbin/smartctl`。
+
+可以通过 Homebrew 安装 smartmontools：
+
+```sh
+brew install smartmontools
+```
+
+Apple Silicon 的 Homebrew 通常会把 `smartctl` 安装到 `/opt/homebrew/bin/smartctl`；Intel Mac 的 Homebrew 通常使用 `/usr/local/bin/smartctl`。安装后请重启或刷新 Capricorn。软件包详情见 [Homebrew smartmontools formula](https://formulae.brew.sh/formula/smartmontools)。
 
 ## 构建
 

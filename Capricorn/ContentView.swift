@@ -2473,6 +2473,25 @@ private struct ExternalSupportView: View {
                 Text(language.statusMessage(status.message))
                     .foregroundStyle(.secondary)
             }
+            if !status.smartctlInstalled {
+                InfoPanel(title: language.t("Install smartmontools"), symbol: "terminal") {
+                    Text(language.t("Capricorn does not bundle smartctl. Install smartmontools to enable detailed SMART data when macOS native fields are limited."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("brew install smartmontools")
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                    Text(language.t("After installation, refresh Capricorn. Apple Silicon Homebrew usually installs smartctl at /opt/homebrew/bin/smartctl; Intel Homebrew usually uses /usr/local/bin/smartctl."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Link(destination: URL(string: "https://formulae.brew.sh/formula/smartmontools")!) {
+                        Label(language.t("Open Homebrew smartmontools formula"), systemImage: "safari")
+                    }
+                }
+            }
             InfoPanel(title: language.t("Driver Paths"), symbol: "shippingbox") {
                 if status.driverPaths.isEmpty {
                     Text(language.t("No SAT SMART Driver bundle was detected in standard extension locations."))
