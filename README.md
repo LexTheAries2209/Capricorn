@@ -1,6 +1,8 @@
-# DiskSpeedTest
+# Capricorn
 
-DiskSpeedTest is a macOS SwiftUI utility for DIT-style drive checks. It combines disk inventory, SMART health snapshots, live I/O monitoring, configurable read/write benchmarks, and local history in one desktop app.
+Capricorn is a macOS SwiftUI utility for DIT-style drive checks. It combines disk inventory, SMART health snapshots, live I/O monitoring, configurable read/write benchmarks, and local history in one desktop app.
+
+The project was formerly named DiskSpeedTest.
 
 ## Features
 
@@ -24,23 +26,23 @@ DiskSpeedTest is a macOS SwiftUI utility for DIT-style drive checks. It combines
 
 ## Build
 
-Open `DiskSpeedTest.xcodeproj` in Xcode, select the `DiskSpeedTest` scheme, and build or run the app.
+Open `Capricorn.xcodeproj` in Xcode, select the `Capricorn` scheme, and build or run the app.
 
 From Terminal:
 
 ```sh
-xcodebuild -project DiskSpeedTest.xcodeproj -scheme DiskSpeedTest -destination 'platform=macOS' build
+xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build
 ```
 
 Run tests:
 
 ```sh
-xcodebuild test -project DiskSpeedTest.xcodeproj -scheme DiskSpeedTest -destination 'platform=macOS'
+xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS'
 ```
 
 ## Safety Notes
 
-DiskSpeedTest creates temporary files in the selected benchmark or workload folder. Write, mixed, loop, and large workload tests can use significant free space and can stress storage devices. Choose the target folder carefully, avoid critical production volumes, and stop loop tests when you have enough data.
+Capricorn creates temporary files in the selected benchmark or workload folder. Write, mixed, loop, and large workload tests can use significant free space and can stress storage devices. Choose the target folder carefully, avoid critical production volumes, and stop loop tests when you have enough data.
 
 Network volumes can be benchmarked as mounted folders, but they do not expose local per-disk IOKit activity counters or SMART data.
 
@@ -54,9 +56,11 @@ See `LICENSE` for the full license text.
 
 ---
 
-# DiskSpeedTest 中文说明
+# Capricorn 中文说明
 
-DiskSpeedTest 是一个面向 macOS 的 SwiftUI DIT 磁盘检查工具。它把磁盘盘点、SMART 健康快照、实时 I/O 监控、可配置读写测速和本地历史记录集中在一个桌面应用里。
+Capricorn 是一个面向 macOS 的 SwiftUI DIT 磁盘检查工具。它把磁盘盘点、SMART 健康快照、实时 I/O 监控、可配置读写测速和本地历史记录集中在一个桌面应用里。
+
+本项目旧名称为 DiskSpeedTest。
 
 ## 功能
 
@@ -80,23 +84,23 @@ DiskSpeedTest 是一个面向 macOS 的 SwiftUI DIT 磁盘检查工具。它把�
 
 ## 构建
 
-用 Xcode 打开 `DiskSpeedTest.xcodeproj`，选择 `DiskSpeedTest` scheme，然后构建或运行。
+用 Xcode 打开 `Capricorn.xcodeproj`，选择 `Capricorn` scheme，然后构建或运行。
 
 也可以在终端执行：
 
 ```sh
-xcodebuild -project DiskSpeedTest.xcodeproj -scheme DiskSpeedTest -destination 'platform=macOS' build
+xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build
 ```
 
 运行测试：
 
 ```sh
-xcodebuild test -project DiskSpeedTest.xcodeproj -scheme DiskSpeedTest -destination 'platform=macOS'
+xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS'
 ```
 
 ## 安全提示
 
-DiskSpeedTest 会在你选择的测速或负载文件夹中创建临时文件。写入、混合、循环和大容量负载测试可能占用大量可用空间，也会对存储设备造成压力。请选择正确的目标文件夹，避免在关键生产卷上测试，并在取得足够数据后及时停止循环测试。
+Capricorn 会在你选择的测速或负载文件夹中创建临时文件。写入、混合、循环和大容量负载测试可能占用大量可用空间，也会对存储设备造成压力。请选择正确的目标文件夹，避免在关键生产卷上测试，并在取得足够数据后及时停止循环测试。
 
 网络卷可以作为已挂载文件夹进行测速，但不会提供本机单盘 IOKit 活动计数，也不会暴露本地 SMART 数据。
 

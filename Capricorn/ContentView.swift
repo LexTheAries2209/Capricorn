@@ -48,7 +48,7 @@ struct ContentView: View {
                 )
             }
         }
-        .navigationTitle("DIT")
+        .navigationTitle("Capricorn")
         .environment(\.appLanguage, language)
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
         .task {
@@ -175,7 +175,7 @@ struct ContentView: View {
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
             .joined(separator: "-")
-        return "DiskSmart-\(safeName.isEmpty ? drive.bsdName : safeName)-\(stamp).json"
+        return "Capricorn-\(safeName.isEmpty ? drive.bsdName : safeName)-\(stamp).json"
     }
 
     private func saveBenchmarkResults(drive: DriveDevice, results: [BenchmarkResult]) {
@@ -1754,7 +1754,7 @@ private struct BenchmarkView: View {
             return false
         }
 
-        let probeURL = targetFolderURL.appendingPathComponent("Disk-Speed-Test-write-check-\(UUID().uuidString)")
+        let probeURL = targetFolderURL.appendingPathComponent("Capricorn-write-check-\(UUID().uuidString)")
         do {
             try Data().write(to: probeURL, options: .atomic)
             try? FileManager.default.removeItem(at: probeURL)

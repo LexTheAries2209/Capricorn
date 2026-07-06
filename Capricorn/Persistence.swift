@@ -244,7 +244,7 @@ enum ReportExporter {
     static func textReport(drive: DriveDevice, snapshot: SmartSnapshot?, results: [BenchmarkResult], includeSerial: Bool) -> String {
         let redactedDrive = redacted(drive, includeSerial: includeSerial)
         var lines = [
-            "DiskSmart Report",
+            "Capricorn Report",
             "Generated: \(Date().formatted())",
             "Drive: \(redactedDrive.displayName) (\(redactedDrive.bsdName))",
             "Protocol: \(redactedDrive.protocolName)",

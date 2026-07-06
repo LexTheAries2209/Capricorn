@@ -141,7 +141,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
     private let fileEventHandler: WorkloadFileEventHandler?
     private let lock = NSLock()
     private var cancelled = false
-    private let workloadFilePrefix = "Disk-Speed-Test-Activity-"
+    private let workloadFilePrefix = "Capricorn-Activity-"
     private let blockSize = 1_048_576
 
     init(

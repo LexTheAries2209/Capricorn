@@ -535,7 +535,7 @@ final class NotificationCoordinator {
     func notifyIfNeeded(drive: DriveDevice, snapshot: SmartSnapshot) {
         guard snapshot.health.severity >= HealthStatus.preFail.severity else { return }
         let content = UNMutableNotificationContent()
-        content.title = "DIT Drive Health Alert"
+        content.title = "Capricorn Drive Health Alert"
         content.body = "\(drive.displayName): \(snapshot.health.title). \(snapshot.summary)"
         content.sound = .default
         let request = UNNotificationRequest(identifier: "dit-\(drive.id)-\(snapshot.health.rawValue)", content: content, trigger: nil)

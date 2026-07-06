@@ -299,7 +299,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private let fileEventHandler: BenchmarkFileEventHandler?
     private let lock = NSLock()
     private var cancelled = false
-    private let benchmarkFilePrefix = "Disk-Speed-Test-"
+    private let benchmarkFilePrefix = "Capricorn-"
     private let legacyBenchmarkFilePrefixes = [".dit-benchmark-"]
 
     init(
@@ -1391,7 +1391,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private let fileEventHandler: BenchmarkFileEventHandler?
     private let lock = NSLock()
     private var cancelled = false
-    private let benchmarkFilePrefix = "Disk-Speed-Test-"
+    private let benchmarkFilePrefix = "Capricorn-"
     private let legacyBenchmarkFilePrefixes = [".dit-benchmark-"]
 
     init(

@@ -12,24 +12,24 @@
 			containerPortal = 587A845F2FE6BDAA0045BA20 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 587A84662FE6BDAA0045BA20;
-			remoteInfo = DiskSpeedTest;
+			remoteInfo = Capricorn;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		0BC08D39966F483D907890D0 /* DiskSpeedTestTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DiskSpeedTestTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		587A84672FE6BDAA0045BA20 /* DiskSpeedTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DiskSpeedTest.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0BC08D39966F483D907890D0 /* CapricornTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CapricornTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		587A84672FE6BDAA0045BA20 /* Capricorn.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Capricorn.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		09B48EF062434AE09FD8BCEE /* DiskSpeedTestTests */ = {
+		09B48EF062434AE09FD8BCEE /* CapricornTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DiskSpeedTestTests;
+			path = CapricornTests;
 			sourceTree = "<group>";
 		};
-		587A84692FE6BDAA0045BA20 /* DiskSpeedTest */ = {
+		587A84692FE6BDAA0045BA20 /* Capricorn */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DiskSpeedTest;
+			path = Capricorn;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -55,8 +55,8 @@
 		587A845E2FE6BDAA0045BA20 = {
 			isa = PBXGroup;
 			children = (
-				587A84692FE6BDAA0045BA20 /* DiskSpeedTest */,
-				09B48EF062434AE09FD8BCEE /* DiskSpeedTestTests */,
+				587A84692FE6BDAA0045BA20 /* Capricorn */,
+				09B48EF062434AE09FD8BCEE /* CapricornTests */,
 				587A84682FE6BDAA0045BA20 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -64,8 +64,8 @@
 		587A84682FE6BDAA0045BA20 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				587A84672FE6BDAA0045BA20 /* DiskSpeedTest.app */,
-				0BC08D39966F483D907890D0 /* DiskSpeedTestTests.xctest */,
+				587A84672FE6BDAA0045BA20 /* Capricorn.app */,
+				0BC08D39966F483D907890D0 /* CapricornTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,9 +73,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		149144093BAB4359818339AF /* DiskSpeedTestTests */ = {
+		149144093BAB4359818339AF /* CapricornTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 362C3411EAA94470B7B00D90 /* Build configuration list for PBXNativeTarget "DiskSpeedTestTests" */;
+			buildConfigurationList = 362C3411EAA94470B7B00D90 /* Build configuration list for PBXNativeTarget "CapricornTests" */;
 			buildPhases = (
 				2146960C5A984B019C29B9B0 /* Sources */,
 				3D8A3B814BE543908B60BF15 /* Frameworks */,
@@ -87,18 +87,18 @@
 				0B479642CE504A3189609335 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				09B48EF062434AE09FD8BCEE /* DiskSpeedTestTests */,
+				09B48EF062434AE09FD8BCEE /* CapricornTests */,
 			);
-			name = DiskSpeedTestTests;
+			name = CapricornTests;
 			packageProductDependencies = (
 			);
-			productName = DiskSpeedTestTests;
-			productReference = 0BC08D39966F483D907890D0 /* DiskSpeedTestTests.xctest */;
+			productName = CapricornTests;
+			productReference = 0BC08D39966F483D907890D0 /* CapricornTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		587A84662FE6BDAA0045BA20 /* DiskSpeedTest */ = {
+		587A84662FE6BDAA0045BA20 /* Capricorn */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 587A84722FE6BDAB0045BA20 /* Build configuration list for PBXNativeTarget "DiskSpeedTest" */;
+			buildConfigurationList = 587A84722FE6BDAB0045BA20 /* Build configuration list for PBXNativeTarget "Capricorn" */;
 			buildPhases = (
 				587A84632FE6BDAA0045BA20 /* Sources */,
 				587A84642FE6BDAA0045BA20 /* Frameworks */,
@@ -109,13 +109,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				587A84692FE6BDAA0045BA20 /* DiskSpeedTest */,
+				587A84692FE6BDAA0045BA20 /* Capricorn */,
 			);
-			name = DiskSpeedTest;
+			name = Capricorn;
 			packageProductDependencies = (
 			);
-			productName = DiskSpeedTest;
-			productReference = 587A84672FE6BDAA0045BA20 /* DiskSpeedTest.app */;
+			productName = Capricorn;
+			productReference = 587A84672FE6BDAA0045BA20 /* Capricorn.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -137,7 +137,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 587A84622FE6BDAA0045BA20 /* Build configuration list for PBXProject "DiskSpeedTest" */;
+			buildConfigurationList = 587A84622FE6BDAA0045BA20 /* Build configuration list for PBXProject "Capricorn" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -151,8 +151,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				587A84662FE6BDAA0045BA20 /* DiskSpeedTest */,
-				149144093BAB4359818339AF /* DiskSpeedTestTests */,
+				587A84662FE6BDAA0045BA20 /* Capricorn */,
+				149144093BAB4359818339AF /* CapricornTests */,
 			);
 		};
 /* End PBXProject section */
@@ -194,7 +194,7 @@
 /* Begin PBXTargetDependency section */
 		0B479642CE504A3189609335 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 587A84662FE6BDAA0045BA20 /* DiskSpeedTest */;
+			target = 587A84662FE6BDAA0045BA20 /* Capricorn */;
 			targetProxy = 585973B1ABFE48E9B653BC73 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -340,7 +340,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = lex.DiskSpeedTest;
+				PRODUCT_BUNDLE_IDENTIFIER = lex.Capricorn;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -371,7 +371,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = lex.DiskSpeedTest;
+				PRODUCT_BUNDLE_IDENTIFIER = lex.Capricorn;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -402,10 +402,10 @@
 					"-framework",
 					XCTest,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = lex.DiskSpeedTestTests;
+				PRODUCT_BUNDLE_IDENTIFIER = lex.CapricornTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DiskSpeedTest.app/Contents/MacOS/DiskSpeedTest";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Capricorn.app/Contents/MacOS/Capricorn";
 			};
 			name = Debug;
 		};
@@ -429,17 +429,17 @@
 					"-framework",
 					XCTest,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = lex.DiskSpeedTestTests;
+				PRODUCT_BUNDLE_IDENTIFIER = lex.CapricornTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DiskSpeedTest.app/Contents/MacOS/DiskSpeedTest";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Capricorn.app/Contents/MacOS/Capricorn";
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		362C3411EAA94470B7B00D90 /* Build configuration list for PBXNativeTarget "DiskSpeedTestTests" */ = {
+		362C3411EAA94470B7B00D90 /* Build configuration list for PBXNativeTarget "CapricornTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				9D14B12B7CA345AAAFE74957 /* Debug */,
@@ -448,7 +448,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		587A84622FE6BDAA0045BA20 /* Build configuration list for PBXProject "DiskSpeedTest" */ = {
+		587A84622FE6BDAA0045BA20 /* Build configuration list for PBXProject "Capricorn" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				587A84702FE6BDAB0045BA20 /* Debug */,
@@ -457,7 +457,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		587A84722FE6BDAB0045BA20 /* Build configuration list for PBXNativeTarget "DiskSpeedTest" */ = {
+		587A84722FE6BDAB0045BA20 /* Build configuration list for PBXNativeTarget "Capricorn" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				587A84732FE6BDAB0045BA20 /* Debug */,

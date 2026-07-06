@@ -3,7 +3,7 @@ import SwiftData
 import SwiftUI
 
 @main
-struct DiskSpeedTestApp: App {
+struct CapricornApp: App {
     @StateObject private var viewModel = DITViewModel()
     @AppStorage("appLanguage") private var languageRawValue = AppLanguage.english.rawValue
 
@@ -19,7 +19,7 @@ struct DiskSpeedTestApp: App {
         .defaultSize(width: 1101, height: 732)
         .modelContainer(for: [SmartHistoryRecord.self, BenchmarkHistoryRecord.self, DiskActivityHistoryRecord.self, AppSettingsRecord.self])
 
-        MenuBarExtra("DIT", systemImage: menuBarSymbol) {
+        MenuBarExtra("Capricorn", systemImage: menuBarSymbol) {
             VStack(alignment: .leading, spacing: 8) {
                 Label(menuBarSummary, systemImage: menuBarSymbol)
                 if let drive = viewModel.selectedDrive {

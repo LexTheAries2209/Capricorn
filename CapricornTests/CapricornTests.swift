@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import XCTest
-@testable import DiskSpeedTest
+@testable import Capricorn
 
-final class DITTests: XCTestCase {
+final class CapricornTests: XCTestCase {
     func testDiskutilParserMapsAPFSVolumesToPhysicalDisk() throws {
         let list = try DiskutilPlistParser.parseList(Self.diskutilListFixture.data(using: .utf8)!)
         XCTAssertTrue(list.wholeDiskIDs.contains("disk0"))
@@ -573,7 +573,7 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(progressValues.snapshot.contains { $0.phase == .reading && $0.completedBytes == 32_768 })
 
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
-            $0.hasPrefix("Disk-Speed-Test-Activity-")
+            $0.hasPrefix("Capricorn-Activity-")
         }
         XCTAssertTrue(leftovers.isEmpty)
     }
@@ -610,7 +610,7 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(progressValues.snapshot.contains { $0.phase == .mixed && $0.totalBytes == 131_072 })
 
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
-            $0.hasPrefix("Disk-Speed-Test-Activity-")
+            $0.hasPrefix("Capricorn-Activity-")
         }
         XCTAssertTrue(leftovers.isEmpty)
     }
@@ -647,7 +647,7 @@ final class DITTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(names.snapshot.filter { $0.contains("-write-loop") }.count, 2)
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
-            $0.hasPrefix("Disk-Speed-Test-Activity-")
+            $0.hasPrefix("Capricorn-Activity-")
         }
         XCTAssertTrue(leftovers.isEmpty)
     }
@@ -900,7 +900,7 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(results.first?.bytesTransferred, 65_536)
 
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
-            $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")
+            $0.hasPrefix("Capricorn-") || $0.hasPrefix(".dit-benchmark-")
         }
         XCTAssertTrue(leftovers.isEmpty)
     }
@@ -990,7 +990,7 @@ final class DITTests: XCTestCase {
         lock.unlock()
         XCTAssertEqual(names.count, 2)
         XCTAssertEqual(Set(names).count, 2)
-        XCTAssertTrue(names.allSatisfy { $0.hasPrefix("Disk-Speed-Test-") })
+        XCTAssertTrue(names.allSatisfy { $0.hasPrefix("Capricorn-") })
         XCTAssertTrue(names.allSatisfy { $0.contains("write-run") })
     }
 
@@ -1035,7 +1035,7 @@ final class DITTests: XCTestCase {
         XCTAssertTrue(names.first?.contains("read-run0") == true)
 
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
-            $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")
+            $0.hasPrefix("Capricorn-") || $0.hasPrefix(".dit-benchmark-")
         }
         XCTAssertTrue(leftovers.isEmpty)
     }
@@ -1136,7 +1136,7 @@ final class DITTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.transferMegabytesPerSecond ?? 0, result.bestMegabytesPerSecond)
 
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
-            $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")
+            $0.hasPrefix("Capricorn-") || $0.hasPrefix(".dit-benchmark-")
         }
         XCTAssertTrue(leftovers.isEmpty)
     }
@@ -1269,7 +1269,7 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(names.filter { $0.contains("-write-run") }.count, 2)
 
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
-            $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")
+            $0.hasPrefix("Capricorn-") || $0.hasPrefix(".dit-benchmark-")
         }
         XCTAssertTrue(leftovers.isEmpty)
     }
@@ -1476,7 +1476,7 @@ final class DITTests: XCTestCase {
         XCTAssertEqual(names.filter { $0.contains("-write-run") }.count, 4)
 
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: root.path).filter {
-            $0.hasPrefix("Disk-Speed-Test-") || $0.hasPrefix(".dit-benchmark-")
+            $0.hasPrefix("Capricorn-") || $0.hasPrefix(".dit-benchmark-")
         }
         XCTAssertTrue(leftovers.isEmpty)
     }
