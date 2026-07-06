@@ -15,6 +15,9 @@ final class NativeSmartProvider: SmartProviding {
         if drive.isNetwork {
             return SmartSnapshot.unavailable(for: drive, reason: "Network volumes do not expose local SMART data.")
         }
+        if drive.isMemoryCard {
+            return SmartSnapshot.unavailable(for: drive, reason: "SD cards do not expose standard SMART health data on macOS.")
+        }
 
         guard drive.smartStatusRaw != nil || !drive.nativeSmartKeys.isEmpty else {
             return SmartSnapshot.unavailable(for: drive, reason: "Native SMART data is not exposed for this device.")
@@ -135,6 +138,9 @@ final class SmartctlSmartProvider: SmartProviding {
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot? {
         if drive.isNetwork {
             return SmartSnapshot.unavailable(for: drive, reason: "Network volumes do not expose local SMART data.")
+        }
+        if drive.isMemoryCard {
+            return SmartSnapshot.unavailable(for: drive, reason: "SD cards do not expose standard SMART health data on macOS.")
         }
 
         guard let executable = findExecutable() else {

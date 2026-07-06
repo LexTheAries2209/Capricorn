@@ -61,12 +61,28 @@ final class CapricornTests: XCTestCase {
         let encoded = try JSONEncoder().encode(Self.fixtureDrive())
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         object.removeValue(forKey: "isNetwork")
+        object.removeValue(forKey: "isMemoryCard")
         let legacyData = try JSONSerialization.data(withJSONObject: object)
 
         let decoded = try JSONDecoder().decode(DriveDevice.self, from: legacyData)
 
         XCTAssertFalse(decoded.isNetwork)
+        XCTAssertFalse(decoded.isMemoryCard)
         XCTAssertEqual(decoded.bsdName, "disk0")
+    }
+
+    func testDiskutilParserMarksSecureDigitalReaderAsMemoryCard() throws {
+        let drive = try XCTUnwrap(DiskutilPlistParser.parseDevice(
+            infoData: Self.sdxcInfoFixture.data(using: .utf8)!,
+            volumes: [],
+            showVirtual: false
+        ))
+
+        XCTAssertEqual(drive.bsdName, "disk10")
+        XCTAssertEqual(drive.protocolName, "Secure Digital")
+        XCTAssertEqual(drive.displayName, "Built In SDXC Reader")
+        XCTAssertTrue(drive.isMemoryCard)
+        XCTAssertFalse(drive.isSolidState)
     }
 
     func testNetworkDriveSmartProvidersReturnUnavailableReason() async throws {
@@ -85,6 +101,28 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(smartctlSnapshot.health, .unavailable)
         XCTAssertEqual(nativeSnapshot.summary, "Network volumes do not expose local SMART data.")
         XCTAssertEqual(smartctlSnapshot.summary, "Network volumes do not expose local SMART data.")
+    }
+
+    func testMemoryCardSmartProvidersReturnUnavailableReason() async throws {
+        var drive = Self.fixtureDrive()
+        drive.bsdName = "disk10"
+        drive.displayName = "Built In SDXC Reader"
+        drive.protocolName = "Secure Digital"
+        drive.isMemoryCard = true
+        drive.isInternal = true
+        drive.isRemovable = true
+        drive.isSolidState = false
+        drive.smartStatusRaw = "Verified"
+
+        let nativeSnapshotValue = await NativeSmartProvider().snapshot(for: drive)
+        let smartctlSnapshotValue = await SmartctlSmartProvider().snapshot(for: drive)
+        let nativeSnapshot = try XCTUnwrap(nativeSnapshotValue)
+        let smartctlSnapshot = try XCTUnwrap(smartctlSnapshotValue)
+
+        XCTAssertEqual(nativeSnapshot.health, .unavailable)
+        XCTAssertEqual(smartctlSnapshot.health, .unavailable)
+        XCTAssertEqual(nativeSnapshot.summary, "SD cards do not expose standard SMART health data on macOS.")
+        XCTAssertEqual(smartctlSnapshot.summary, "SD cards do not expose standard SMART health data on macOS.")
     }
 
     func testSmartctlNVMeParserExtractsHealthFields() {
@@ -1687,6 +1725,28 @@ final class CapricornTests: XCTestCase {
       <key>SMARTStatus</key><string>Verified</string>
       <key>SolidState</key><true/>
       <key>TotalSize</key><integer>1000555581440</integer>
+      <key>VirtualOrPhysical</key><string>Physical</string>
+      <key>WholeDisk</key><true/>
+      <key>WritableMedia</key><true/>
+    </dict></plist>
+    """
+
+    private static let sdxcInfoFixture = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0"><dict>
+      <key>BusProtocol</key><string>Secure Digital</string>
+      <key>Content</key><string>FDisk_partition_scheme</string>
+      <key>DeviceBlockSize</key><integer>512</integer>
+      <key>DeviceIdentifier</key><string>disk10</string>
+      <key>DeviceNode</key><string>/dev/disk10</string>
+      <key>IORegistryEntryName</key><string>Built In SDXC Reader</string>
+      <key>Internal</key><true/>
+      <key>MediaName</key><string>Built In SDXC Reader</string>
+      <key>Removable</key><true/>
+      <key>SMARTStatus</key><string>Verified</string>
+      <key>SolidState</key><false/>
+      <key>TotalSize</key><integer>255865241600</integer>
       <key>VirtualOrPhysical</key><string>Physical</string>
       <key>WholeDisk</key><true/>
       <key>WritableMedia</key><true/>

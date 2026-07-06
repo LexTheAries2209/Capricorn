@@ -106,6 +106,12 @@ enum DiskutilPlistParser {
         let mediaName = cleanName(info.string("MediaName"))
         let registryName = cleanName(info.string("IORegistryEntryName"))
         let displayName = mediaName ?? registryName ?? bsdName
+        let isMemoryCard = isMemoryCardDevice(
+            protocolName: protocolName,
+            mediaName: mediaName,
+            registryName: registryName,
+            content: content
+        )
         let nativeSmartKeys = parseSmartKeys(info.dictionary("SMARTDeviceSpecificKeysMayVaryNotGuaranteed"))
 
         return DriveDevice(
@@ -122,12 +128,28 @@ enum DiskutilPlistParser {
             isWritable: info.bool("WritableMedia") ?? info.bool("Writable") ?? false,
             isVirtual: isVirtual,
             isSystemDisk: volumes.contains(where: { $0.mountPoint == "/" }),
+            isMemoryCard: isMemoryCard,
             smartStatusRaw: cleanName(info.string("SMARTStatus")),
             nativeSmartKeys: nativeSmartKeys,
             volumes: deduplicatedVolumes(volumes),
             model: registryName,
             serialNumber: cleanName(info.string("DeviceSerial"))
         )
+    }
+
+    private static func isMemoryCardDevice(protocolName: String, mediaName: String?, registryName: String?, content: String) -> Bool {
+        if protocolName.caseInsensitiveCompare("Secure Digital") == .orderedSame {
+            return true
+        }
+
+        let searchable = [protocolName, mediaName, registryName, content]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+
+        return searchable.contains("sdxc")
+            || searchable.contains("sdhc")
+            || searchable.contains("sd card")
+            || searchable.contains("secure digital")
     }
 
     private static func parseSmartKeys(_ dict: [String: Any]) -> [String: Int64] {

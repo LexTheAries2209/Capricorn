@@ -213,7 +213,13 @@ private struct DriveSidebarRow: View {
     }
 
     private var iconName: String {
-        drive.isNetwork ? "network" : (drive.isInternal ? "internaldrive.fill" : "externaldrive.fill")
+        if drive.isNetwork {
+            return "network"
+        }
+        if drive.isMemoryCard {
+            return "sdcard.fill"
+        }
+        return drive.isInternal ? "internaldrive.fill" : "externaldrive.fill"
     }
 
     private var subtitle: String {
@@ -349,7 +355,13 @@ private struct OverviewView: View {
     }
 
     private var mediaKindText: String {
-        drive.isNetwork ? language.t("Network Drive") : (drive.isSolidState ? language.t("SSD") : language.t("HDD/Media"))
+        if drive.isNetwork {
+            return language.t("Network Drive")
+        }
+        if drive.isMemoryCard {
+            return language.t("SD Card")
+        }
+        return drive.isSolidState ? language.t("SSD") : language.t("HDD/Media")
     }
 }
 
@@ -377,7 +389,7 @@ private struct SmartAttributesView: View {
     }
 
     private var showsExternalSupportHelp: Bool {
-        guard !drive.isNetwork else { return false }
+        guard !drive.isNetwork, !drive.isMemoryCard else { return false }
         guard let snapshot else { return false }
         let hasAvailableProvider = snapshot.providerStatuses.contains { $0.state == .available }
         let hasLimitedProvider = snapshot.providerStatuses.contains { $0.state == .limited }
@@ -444,7 +456,7 @@ private struct SmartAttributesView: View {
 
             if showsExternalSupportHelp {
                 ExternalSupportView(status: externalSupport, refresh: verifyExternalSupport)
-                    .frame(maxWidth: 760, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

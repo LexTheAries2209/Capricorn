@@ -85,6 +85,7 @@ struct DriveDevice: Identifiable, Codable, Hashable {
     var isVirtual: Bool
     var isSystemDisk: Bool
     var isNetwork: Bool = false
+    var isMemoryCard: Bool = false
     var smartStatusRaw: String?
     var nativeSmartKeys: [String: Int64]
     var volumes: [Volume]
@@ -118,6 +119,7 @@ extension DriveDevice {
         case isVirtual
         case isSystemDisk
         case isNetwork
+        case isMemoryCard
         case smartStatusRaw
         case nativeSmartKeys
         case volumes
@@ -141,6 +143,7 @@ extension DriveDevice {
         isVirtual = try container.decode(Bool.self, forKey: .isVirtual)
         isSystemDisk = try container.decode(Bool.self, forKey: .isSystemDisk)
         isNetwork = try container.decodeIfPresent(Bool.self, forKey: .isNetwork) ?? false
+        isMemoryCard = try container.decodeIfPresent(Bool.self, forKey: .isMemoryCard) ?? false
         smartStatusRaw = try container.decodeIfPresent(String.self, forKey: .smartStatusRaw)
         nativeSmartKeys = try container.decode([String: Int64].self, forKey: .nativeSmartKeys)
         volumes = try container.decode([Volume].self, forKey: .volumes)
@@ -164,6 +167,7 @@ extension DriveDevice {
         try container.encode(isVirtual, forKey: .isVirtual)
         try container.encode(isSystemDisk, forKey: .isSystemDisk)
         try container.encode(isNetwork, forKey: .isNetwork)
+        try container.encode(isMemoryCard, forKey: .isMemoryCard)
         try container.encodeIfPresent(smartStatusRaw, forKey: .smartStatusRaw)
         try container.encode(nativeSmartKeys, forKey: .nativeSmartKeys)
         try container.encode(volumes, forKey: .volumes)
