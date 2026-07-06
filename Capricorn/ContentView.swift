@@ -1470,6 +1470,9 @@ private struct BenchmarkView: View {
                 benchmarkHeader
                 benchmarkControls
                 targetFolderControl
+                if BenchmarkActivityPanelState.showsChart(isNetworkDrive: drive.isNetwork) {
+                    benchmarkActivityPanel
+                }
                 if shouldShowProgressAndErrors {
                     progressAndErrors
                 }
@@ -1727,22 +1730,31 @@ private struct BenchmarkView: View {
         viewModel.isBenchmarking || viewModel.benchmarkError != nil || !canRunBenchmark
     }
 
+    private var benchmarkActivityPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if drive.isNetwork {
+                Label(language.t("Network drives do not provide per-disk IOKit activity counters."), systemImage: "network")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 92, alignment: .center)
+            } else {
+                DiskActivityChartView(
+                    title: language.t("Live Disk Activity"),
+                    samples: viewModel.diskActivitySamples,
+                    current: viewModel.currentDiskActivity,
+                    style: .compact
+                )
+            }
+        }
+        .padding(.leading, progressContentLeadingInset)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var progressAndErrors: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let progress = viewModel.benchmarkProgress, viewModel.isBenchmarking {
+            if let progress = viewModel.benchmarkProgress,
+               BenchmarkActivityPanelState.showsProgress(isBenchmarking: viewModel.isBenchmarking, hasProgress: true) {
                 VStack(alignment: .leading, spacing: 8) {
-                    if drive.isNetwork {
-                        Label(language.t("Network drives do not provide per-disk IOKit activity counters."), systemImage: "network")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        DiskActivityChartView(
-                            title: language.t("Live Disk Activity"),
-                            samples: viewModel.diskActivitySamples,
-                            current: viewModel.currentDiskActivity,
-                            style: .compact
-                        )
-                    }
                     ProgressView(value: progress.fraction)
                     Text("\(language.progressLabel(progress.currentTestLabel)): \(progressStatusText(progress))")
                         .font(.caption)
@@ -2078,6 +2090,21 @@ private struct DiskActivityChartView: View {
             case .expanded: .caption
             }
         }
+
+        var maxVisibleSamples: Int {
+            switch self {
+            case .compact: 180
+            case .expanded: 420
+            }
+        }
+    }
+
+    private struct ChartData {
+        var samples: [DiskActivitySample]
+        var graphMaximumSpeed: Double
+        var yTicks: [Double]
+        var xTicks: [DiskActivityChartTick]
+        var durationSeconds: TimeInterval
     }
 
     let title: String
@@ -2094,23 +2121,20 @@ private struct DiskActivityChartView: View {
         current?.writeMegabytesPerSecond ?? 0
     }
 
-    private var graphMaximumSpeed: Double {
-        max(samples.flatMap { [$0.readMegabytesPerSecond, $0.writeMegabytesPerSecond] }.max() ?? 0, 1)
-    }
-
-    private var yTicks: [Double] {
-        DiskActivityChartScale.yTicks(maxSpeed: graphMaximumSpeed)
-    }
-
-    private var xTicks: [DiskActivityChartTick] {
-        DiskActivityChartScale.xTicks(for: samples)
-    }
-
-    private var durationSeconds: TimeInterval {
-        DiskActivityChartScale.durationSeconds(for: samples)
+    private var chartData: ChartData {
+        let visibleSamples = DiskActivityChartSampler.visibleSamples(from: samples, maxCount: style.maxVisibleSamples)
+        let maximumSpeed = max(visibleSamples.flatMap { [$0.readMegabytesPerSecond, $0.writeMegabytesPerSecond] }.max() ?? 0, 1)
+        return ChartData(
+            samples: visibleSamples,
+            graphMaximumSpeed: maximumSpeed,
+            yTicks: DiskActivityChartScale.yTicks(maxSpeed: maximumSpeed),
+            xTicks: DiskActivityChartScale.xTicks(for: visibleSamples),
+            durationSeconds: DiskActivityChartScale.durationSeconds(for: visibleSamples)
+        )
     }
 
     var body: some View {
+        let preparedChartData = chartData
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
                 Text(title)
@@ -2123,7 +2147,7 @@ private struct DiskActivityChartView: View {
             }
 
             HStack(alignment: .top, spacing: 6) {
-                yAxisLabels
+                yAxisLabels(preparedChartData.yTicks)
                     .frame(width: style.yAxisWidth, height: style.chartHeight)
 
                 VStack(spacing: 4) {
@@ -2134,13 +2158,13 @@ private struct DiskActivityChartView: View {
                         context.stroke(background, with: .color(Color(nsColor: .separatorColor).opacity(0.45)), lineWidth: 1)
 
                         let plotRect = rect.insetBy(dx: 8, dy: 7)
-                        drawGrid(in: plotRect, context: context)
-                        drawSeries(\.readMegabytesPerSecond, color: .blue, in: plotRect, context: context, canvasWidth: size.width)
-                        drawSeries(\.writeMegabytesPerSecond, color: .green, in: plotRect, context: context, canvasWidth: size.width)
+                        drawGrid(in: plotRect, context: context, chartData: preparedChartData)
+                        drawSeries(\.readMegabytesPerSecond, color: .blue, in: plotRect, context: context, chartData: preparedChartData)
+                        drawSeries(\.writeMegabytesPerSecond, color: .green, in: plotRect, context: context, chartData: preparedChartData)
                     }
                     .frame(height: style.chartHeight)
 
-                    xAxisLabels
+                    xAxisLabels(preparedChartData.xTicks)
                 }
             }
             .accessibilityLabel(Text(title))
@@ -2149,7 +2173,7 @@ private struct DiskActivityChartView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var yAxisLabels: some View {
+    private func yAxisLabels(_ yTicks: [Double]) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(yTicks.reversed()), id: \.self) { tick in
                 Text(DiskActivityFormatter.speed(tick))
@@ -2162,7 +2186,7 @@ private struct DiskActivityChartView: View {
         }
     }
 
-    private var xAxisLabels: some View {
+    private func xAxisLabels(_ xTicks: [DiskActivityChartTick]) -> some View {
         HStack(spacing: 0) {
             ForEach(Array(xTicks.enumerated()), id: \.offset) { index, tick in
                 Text(tick.label)
@@ -2188,18 +2212,18 @@ private struct DiskActivityChartView: View {
         }
     }
 
-    private func drawGrid(in rect: CGRect, context: GraphicsContext) {
+    private func drawGrid(in rect: CGRect, context: GraphicsContext, chartData: ChartData) {
         var path = Path()
-        let maxSpeed = yTicks.last ?? 1
-        for tick in yTicks {
+        let maxSpeed = chartData.yTicks.last ?? 1
+        for tick in chartData.yTicks {
             let fraction = maxSpeed > 0 ? tick / maxSpeed : 0
             let y = rect.maxY - rect.height * CGFloat(fraction)
             path.move(to: CGPoint(x: rect.minX, y: y))
             path.addLine(to: CGPoint(x: rect.maxX, y: y))
         }
-        if durationSeconds > 0 {
-            for tick in xTicks {
-                let fraction = tick.value / durationSeconds
+        if chartData.durationSeconds > 0 {
+            for tick in chartData.xTicks {
+                let fraction = tick.value / chartData.durationSeconds
                 let x = rect.minX + rect.width * CGFloat(fraction)
                 path.move(to: CGPoint(x: x, y: rect.minY))
                 path.addLine(to: CGPoint(x: x, y: rect.maxY))
@@ -2213,20 +2237,19 @@ private struct DiskActivityChartView: View {
         color: Color,
         in rect: CGRect,
         context: GraphicsContext,
-        canvasWidth: CGFloat
+        chartData: ChartData
     ) {
-        guard samples.count >= 2 else {
+        guard chartData.samples.count >= 2 else {
             drawBaseline(color: color, in: rect, context: context)
             return
         }
 
-        let maxSpeed = max(yTicks.last ?? graphMaximumSpeed, 1)
-        let visibleSamples = downsampledSamples(maxCount: max(2, Int(canvasWidth)))
-        let firstTimestamp = samples.first?.timestamp ?? visibleSamples.first?.timestamp ?? Date()
-        let duration = max(durationSeconds, 0.0001)
+        let maxSpeed = max(chartData.yTicks.last ?? chartData.graphMaximumSpeed, 1)
+        let firstTimestamp = chartData.samples.first?.timestamp ?? Date()
+        let duration = max(chartData.durationSeconds, 0.0001)
         var path = Path()
 
-        for (index, sample) in visibleSamples.enumerated() {
+        for (index, sample) in chartData.samples.enumerated() {
             let value = max(0, sample[keyPath: keyPath])
             let fraction = min(1, value / maxSpeed)
             let elapsed = max(0, sample.timestamp.timeIntervalSince(firstTimestamp))
@@ -2250,14 +2273,6 @@ private struct DiskActivityChartView: View {
         path.move(to: CGPoint(x: rect.minX, y: y))
         path.addLine(to: CGPoint(x: rect.maxX, y: y))
         context.stroke(path, with: .color(color.opacity(0.35)), lineWidth: 1)
-    }
-
-    private func downsampledSamples(maxCount: Int) -> [DiskActivitySample] {
-        guard samples.count > maxCount, maxCount > 2 else { return samples }
-        let step = Double(samples.count - 1) / Double(maxCount - 1)
-        return (0..<maxCount).map { index in
-            samples[min(samples.count - 1, Int((Double(index) * step).rounded()))]
-        }
     }
 }
 

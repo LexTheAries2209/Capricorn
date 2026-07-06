@@ -541,6 +541,36 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(yTicks[1], 500.0 / 9.0, accuracy: 0.0001)
     }
 
+    func testDiskActivityChartSamplerLimitsDrawnPointsAndPreservesContext() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        var samples = (0..<100).map { index in
+            DiskActivitySample(
+                timestamp: start.addingTimeInterval(Double(index)),
+                readMegabytesPerSecond: Double(index),
+                writeMegabytesPerSecond: Double(index)
+            )
+        }
+        samples[55] = DiskActivitySample(
+            timestamp: start.addingTimeInterval(55),
+            readMegabytesPerSecond: 12_000,
+            writeMegabytesPerSecond: 50
+        )
+
+        let visible = DiskActivityChartSampler.visibleSamples(from: samples, maxCount: 12)
+
+        XCTAssertLessThanOrEqual(visible.count, 12)
+        XCTAssertEqual(visible.first, samples.first)
+        XCTAssertEqual(visible.last, samples.last)
+        XCTAssertTrue(visible.contains(samples[55]))
+    }
+
+    func testBenchmarkActivityPanelKeepsChartVisibleOutsideBenchmark() {
+        XCTAssertTrue(BenchmarkActivityPanelState.showsChart(isNetworkDrive: false))
+        XCTAssertTrue(BenchmarkActivityPanelState.showsChart(isNetworkDrive: true))
+        XCTAssertFalse(BenchmarkActivityPanelState.showsProgress(isBenchmarking: false, hasProgress: true))
+        XCTAssertTrue(BenchmarkActivityPanelState.showsProgress(isBenchmarking: true, hasProgress: true))
+    }
+
     func testDiskActivityHistoryRecordEncodesSamplesAndSummary() {
         let drive = Self.fixtureDrive()
         let start = Date(timeIntervalSince1970: 1_000)
