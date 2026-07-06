@@ -155,7 +155,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             if profile.engine == .asyncQueue, profile.baseProfileID == "test" {
                 testTerms = "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. The Test profile compares Q1 and Q8 across T1/T2/T4 using POSIX AIO; write cells show durable speed after fsync, with transfer speed and fsync time underneath."
             } else if profile.engine == .asyncQueue {
-                testTerms = "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. This custom profile uses POSIX AIO queue depth; write cells show durable speed after fsync, with transfer speed and fsync time underneath."
+                testTerms = "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. This profile uses POSIX AIO queue depth; write cells show durable speed after fsync, with transfer speed and fsync time underneath."
             } else {
                 testTerms = "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Each row runs read first, then write, before moving to the next row."
             }
@@ -175,7 +175,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             if profile.engine == .asyncQueue, profile.baseProfileID == "test" {
                 testTerms = "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。测试配置使用 POSIX AIO，对比 Q1 与 Q8 在 T1/T2/T4 下的表现；写入主数值为 fsync 后落盘速度，单元格下方显示传输速度和刷盘耗时。"
             } else if profile.engine == .asyncQueue {
-                testTerms = "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。此自定义配置使用 POSIX AIO 队列深度；写入主数值为 fsync 后落盘速度，单元格下方显示传输速度和刷盘耗时。"
+                testTerms = "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。此配置使用 POSIX AIO 队列深度；写入主数值为 fsync 后落盘速度，单元格下方显示传输速度和刷盘耗时。"
             } else {
                 testTerms = "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。每一行先读取、再写入，然后进入下一行。"
             }

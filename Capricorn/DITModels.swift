@@ -466,7 +466,8 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
                 (.sequential, 1_048_576, 1, 1),
                 (.random, 4_096, 32, 1),
                 (.random, 4_096, 1, 1)
-            ]
+            ],
+            engine: .asyncQueue
         )
     }
 
@@ -482,7 +483,8 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
                 (.sequential, 131_072, 32, 1),
                 (.random, 4_096, 32, 16),
                 (.random, 4_096, 1, 1)
-            ]
+            ],
+            engine: .asyncQueue
         )
     }
 
@@ -735,6 +737,12 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
             engine: engine,
             tests: tests
         )
+    }
+
+    func applying(engine nextEngine: BenchmarkEngine) -> BenchmarkProfile {
+        var profile = self
+        profile.engine = nextEngine
+        return profile
     }
 
     func configured(

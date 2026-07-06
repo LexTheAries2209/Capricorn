@@ -369,6 +369,27 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(presetIDs.contains("loop-extreme"))
     }
 
+    func testBenchmarkPresetDefaultEnginesAreExplicitPerProfile() {
+        XCTAssertEqual(BenchmarkProfile.default.engine, .asyncQueue)
+        XCTAssertEqual(BenchmarkProfile.peakNVMe.engine, .asyncQueue)
+        XCTAssertEqual(BenchmarkProfile.realWorld.engine, .synchronous)
+        XCTAssertEqual(BenchmarkProfile.demoLight.engine, .synchronous)
+        XCTAssertEqual(BenchmarkProfile.custom.engine, .synchronous)
+    }
+
+    func testBenchmarkProfileApplyingEngineChangesResultFingerprint() {
+        let sync = BenchmarkProfile.default
+            .applying(engine: .synchronous)
+            .configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .random)
+        let async = BenchmarkProfile.default
+            .applying(engine: .asyncQueue)
+            .configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .random)
+
+        XCTAssertEqual(sync.engine, .synchronous)
+        XCTAssertEqual(async.engine, .asyncQueue)
+        XCTAssertNotEqual(sync.id, async.id)
+    }
+
     func testBenchmarkTargetFolderMatcherDetectsFolderInsideSelectedDriveMount() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         let target = root.appendingPathComponent("Benchmarks")
@@ -811,7 +832,8 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(english.dataPattern.contains("Random"))
         XCTAssertTrue(english.runs.contains("5"))
         XCTAssertTrue(english.fileSize.contains("full file"))
-        XCTAssertTrue(english.testTerms.contains("Each row"))
+        XCTAssertTrue(english.testTerms.contains("POSIX AIO"))
+        XCTAssertTrue(english.testTerms.contains("fsync"))
         XCTAssertTrue(english.testTerms.contains("SEQ"))
         XCTAssertFalse(english.testTerms.contains("1 second"))
         XCTAssertFalse(english.testTerms.contains("5 seconds"))
@@ -823,7 +845,8 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(chinese.fileSize.contains("完整"))
         XCTAssertTrue(chinese.dataPattern.contains("随机"))
         XCTAssertTrue(chinese.testTerms.contains("SEQ"))
-        XCTAssertTrue(chinese.testTerms.contains("每一行"))
+        XCTAssertTrue(chinese.testTerms.contains("POSIX AIO"))
+        XCTAssertTrue(chinese.testTerms.contains("刷盘"))
         XCTAssertFalse(chinese.testTerms.contains("间隔"))
 
         let asyncCustomChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(

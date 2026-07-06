@@ -1254,6 +1254,10 @@ private struct BenchmarkView: View {
     @AppStorage("benchmarkDataPattern") private var selectedDataPatternRaw = BenchmarkProfile.defaultDataPattern.rawValue
     @AppStorage("benchmarkUsesTrimmedAverage") private var usesTrimmedAverage = BenchmarkProfile.defaultUsesTrimmedAverage
     @AppStorage("benchmarkCustomRowsJSON") private var customRowsJSON = ""
+    @AppStorage("benchmarkDefaultEngine") private var defaultEngineRaw = BenchmarkProfile.default.engine.rawValue
+    @AppStorage("benchmarkPeakNVMeEngine") private var peakNVMeEngineRaw = BenchmarkProfile.peakNVMe.engine.rawValue
+    @AppStorage("benchmarkRealWorldEngine") private var realWorldEngineRaw = BenchmarkProfile.realWorld.engine.rawValue
+    @AppStorage("benchmarkDemoEngine") private var demoEngineRaw = BenchmarkProfile.demoLight.engine.rawValue
     @AppStorage("benchmarkCustomEngine") private var customEngineRaw = BenchmarkEngine.synchronous.rawValue
     @AppStorage("benchmarkCustomExecutionMode") private var customExecutionModeRaw = BenchmarkExecutionMode.finite.rawValue
     @State private var selectedProfileID = BenchmarkProfile.default.id
@@ -1265,11 +1269,11 @@ private struct BenchmarkView: View {
         if preset.baseProfileID == "custom" {
             return BenchmarkProfile.custom(
                 rows: customRows,
-                engine: selectedCustomEngine,
+                engine: selectedEngine,
                 executionMode: selectedCustomExecutionMode
             )
         }
-        return preset
+        return preset.applying(engine: selectedEngine)
     }
 
     private var profile: BenchmarkProfile {
@@ -1295,15 +1299,6 @@ private struct BenchmarkView: View {
 
     private var selectedDataPattern: BenchmarkDataPattern {
         BenchmarkDataPattern(rawValue: selectedDataPatternRaw) ?? BenchmarkProfile.defaultDataPattern
-    }
-
-    private var selectedCustomEngine: BenchmarkEngine {
-        get {
-            BenchmarkEngine(rawValue: customEngineRaw) ?? .synchronous
-        }
-        nonmutating set {
-            customEngineRaw = newValue.rawValue
-        }
     }
 
     private var selectedCustomExecutionMode: BenchmarkExecutionMode {
@@ -1332,11 +1327,20 @@ private struct BenchmarkView: View {
         }
     }
 
-    private var customEngineBinding: Binding<BenchmarkEngine> {
+    private var selectedEngine: BenchmarkEngine {
+        get {
+            storedEngine(for: selectedProfileID)
+        }
+        nonmutating set {
+            storeEngine(newValue, for: selectedProfileID)
+        }
+    }
+
+    private var selectedEngineBinding: Binding<BenchmarkEngine> {
         Binding {
-            selectedCustomEngine
+            selectedEngine
         } set: { nextEngine in
-            selectedCustomEngine = nextEngine
+            selectedEngine = nextEngine
         }
     }
 
@@ -1356,6 +1360,43 @@ private struct BenchmarkView: View {
             dataPattern: selectedDataPattern,
             usesTrimmedAverage: profile.usesTrimmedAverage
         )
+    }
+
+    private func storedEngine(for profileID: String) -> BenchmarkEngine {
+        let fallback = BenchmarkProfile.presets.first(where: { $0.id == profileID })?.engine ?? BenchmarkEngine.synchronous
+        let rawValue: String
+        switch profileID {
+        case BenchmarkProfile.default.id:
+            rawValue = defaultEngineRaw
+        case BenchmarkProfile.peakNVMe.id:
+            rawValue = peakNVMeEngineRaw
+        case BenchmarkProfile.realWorld.id:
+            rawValue = realWorldEngineRaw
+        case BenchmarkProfile.demoLight.id:
+            rawValue = demoEngineRaw
+        case BenchmarkProfile.custom.id:
+            rawValue = customEngineRaw
+        default:
+            rawValue = fallback.rawValue
+        }
+        return BenchmarkEngine(rawValue: rawValue) ?? fallback
+    }
+
+    private func storeEngine(_ engine: BenchmarkEngine, for profileID: String) {
+        switch profileID {
+        case BenchmarkProfile.default.id:
+            defaultEngineRaw = engine.rawValue
+        case BenchmarkProfile.peakNVMe.id:
+            peakNVMeEngineRaw = engine.rawValue
+        case BenchmarkProfile.realWorld.id:
+            realWorldEngineRaw = engine.rawValue
+        case BenchmarkProfile.demoLight.id:
+            demoEngineRaw = engine.rawValue
+        case BenchmarkProfile.custom.id:
+            customEngineRaw = engine.rawValue
+        default:
+            break
+        }
     }
 
     private var driveResults: [BenchmarkResult] {
@@ -1517,6 +1558,22 @@ private struct BenchmarkView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
+                    Text(language.t("Engine"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 116, alignment: .leading)
+                    Picker("", selection: selectedEngineBinding) {
+                        Text(language.t("Sync")).tag(BenchmarkEngine.synchronous)
+                        Text(language.t("Async")).tag(BenchmarkEngine.asyncQueue)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 116, height: 28, alignment: .leading)
+                    .help(language.t("Async uses POSIX AIO queue depth; Sync uses worker threads with blocking file I/O."))
+                    .disabled(viewModel.isBenchmarking)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
                     Text(language.t("Test Size"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -1594,7 +1651,6 @@ private struct BenchmarkView: View {
             if selectedProfileIsCustom {
                 CustomBenchmarkRowsEditor(
                     rows: customRowsBinding,
-                    engine: customEngineBinding,
                     executionMode: customExecutionModeBinding,
                     isDisabled: viewModel.isBenchmarking
                 )
@@ -1813,7 +1869,6 @@ private struct BenchmarkView: View {
 
 private struct CustomBenchmarkRowsEditor: View {
     @Binding var rows: [BenchmarkCustomRow]
-    @Binding var engine: BenchmarkEngine
     @Binding var executionMode: BenchmarkExecutionMode
     let isDisabled: Bool
     @Environment(\.appLanguage) private var language
@@ -1847,21 +1902,6 @@ private struct CustomBenchmarkRowsEditor: View {
             }
 
             HStack(alignment: .bottom, spacing: columnSpacing) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(language.t("Engine"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .frame(width: typeColumnWidth, alignment: .leading)
-                    Picker("", selection: $engine) {
-                        Text(language.t("Sync")).tag(BenchmarkEngine.synchronous)
-                        Text(language.t("Async")).tag(BenchmarkEngine.asyncQueue)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: typeColumnWidth, alignment: .leading)
-                    .help(language.t("Async uses POSIX AIO queue depth; Sync uses worker threads with blocking file I/O."))
-                }
-
                 VStack(alignment: .leading, spacing: 4) {
                     Text(language.t("Loop"))
                         .font(.caption2)
