@@ -14,9 +14,9 @@ struct CapricornApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(viewModel: viewModel)
-                .frame(minWidth: 1101, minHeight: 732)
+                .frame(minWidth: 1433, minHeight: 732)
         }
-        .defaultSize(width: 1101, height: 732)
+        .defaultSize(width: 1433, height: 732)
         .modelContainer(for: [SmartHistoryRecord.self, BenchmarkHistoryRecord.self, DiskActivityHistoryRecord.self, AppSettingsRecord.self])
 
         MenuBarExtra("Capricorn", systemImage: menuBarSymbol) {
