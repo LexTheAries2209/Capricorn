@@ -522,6 +522,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Stop Workload": "停止负载",
         "Full Disk (95%)": "全盘 (95%)",
         "Large file workload creates temporary files and may stress or wear storage.": "大文件负载会创建临时文件，并可能给存储带来持续压力和写入磨损。",
+        "Workload engine: SEQ1M Q4T4 async, 4 MiB chunks, 0 Fill.": "负载引擎：SEQ1M Q4T4 异步，4 MiB 块，0 填充。",
         "Choose a writable folder where large temporary workload files can be created.": "选择一个可创建大临时负载文件的可写文件夹。",
         "Workload target folder must be on the selected drive": "负载目标文件夹必须位于当前选中的磁盘",
         "Not enough free space for the selected workload": "可用空间不足，无法运行所选负载",

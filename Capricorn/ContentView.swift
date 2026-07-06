@@ -878,6 +878,9 @@ private struct DiskActivityView: View {
                     Text(language.t("Large file workload creates temporary files and may stress or wear storage."))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    Text(language.t("Workload engine: SEQ1M Q4T4 async, 4 MiB chunks, 0 Fill."))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 if let progress = viewModel.liveActivityWorkloadProgress {
@@ -2095,13 +2098,6 @@ private struct DiskActivityChartView: View {
             }
         }
 
-        var maxVisibleSamples: Int {
-            switch self {
-            case .compact: 180
-            case .expanded: 420
-            case .mini: 120
-            }
-        }
     }
 
     private struct ChartData {
@@ -2127,14 +2123,13 @@ private struct DiskActivityChartView: View {
     }
 
     private var chartData: ChartData {
-        let visibleSamples = DiskActivityChartSampler.visibleSamples(from: samples, maxCount: style.maxVisibleSamples)
-        let maximumSpeed = max(visibleSamples.flatMap { [$0.readMegabytesPerSecond, $0.writeMegabytesPerSecond] }.max() ?? 0, 1)
+        let maximumSpeed = max(samples.flatMap { [$0.readMegabytesPerSecond, $0.writeMegabytesPerSecond] }.max() ?? 0, 1)
         return ChartData(
-            samples: visibleSamples,
+            samples: samples,
             graphMaximumSpeed: maximumSpeed,
             yTicks: DiskActivityChartScale.yTicks(maxSpeed: maximumSpeed),
-            xTicks: DiskActivityChartScale.xTicks(for: visibleSamples),
-            durationSeconds: DiskActivityChartScale.durationSeconds(for: visibleSamples)
+            xTicks: DiskActivityChartScale.xTicks(for: samples),
+            durationSeconds: DiskActivityChartScale.durationSeconds(for: samples)
         )
     }
 

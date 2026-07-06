@@ -181,44 +181,6 @@ enum DiskActivityChartScale {
     }
 }
 
-enum DiskActivityChartSampler {
-    static func visibleSamples(from samples: [DiskActivitySample], maxCount: Int) -> [DiskActivitySample] {
-        guard maxCount > 2, samples.count > maxCount else { return samples }
-
-        let lastIndex = samples.count - 1
-        let peak = peakIndex(in: samples)
-        let step = Double(lastIndex) / Double(maxCount - 1)
-        var selected = Set<Int>([0, lastIndex, peak])
-
-        for index in 0..<maxCount {
-            let sourceIndex = min(lastIndex, Int((Double(index) * step).rounded()))
-            selected.insert(sourceIndex)
-        }
-
-        if selected.count > maxCount {
-            let protected = Set([0, lastIndex, peak])
-            let removable = selected
-                .filter { !protected.contains($0) }
-                .sorted()
-            for index in removable.prefix(selected.count - maxCount) {
-                selected.remove(index)
-            }
-        }
-
-        return selected.sorted().map { samples[$0] }
-    }
-
-    private static func peakIndex(in samples: [DiskActivitySample]) -> Int {
-        samples.indices.max { lhs, rhs in
-            peakMagnitude(samples[lhs]) < peakMagnitude(samples[rhs])
-        } ?? 0
-    }
-
-    private static func peakMagnitude(_ sample: DiskActivitySample) -> Double {
-        max(sample.readMegabytesPerSecond, sample.writeMegabytesPerSecond)
-    }
-}
-
 enum BenchmarkActivityPanelState {
     static func showsChart(isNetworkDrive: Bool) -> Bool {
         true
@@ -273,7 +235,9 @@ final class DiskActivityMonitor: @unchecked Sendable {
             if let counters {
                 let sample = DiskActivityRateCalculator.sample(previous: previousCounters, current: counters)
                 previousCounters = counters
-                await onSample(sample)
+                Task {
+                    await onSample(sample)
+                }
             }
 
             do {

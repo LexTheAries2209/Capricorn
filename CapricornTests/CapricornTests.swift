@@ -526,7 +526,7 @@ final class CapricornTests: XCTestCase {
     func testDiskActivitySampleIntervalsAreFixed() {
         XCTAssertEqual(DiskActivitySampleInterval.allCases.map(\.seconds), [0.1, 0.2, 0.5, 1.0])
         XCTAssertEqual(DiskActivitySampleInterval.default, .half)
-        XCTAssertEqual(DITViewModel.benchmarkActivityInterval, .half)
+        XCTAssertEqual(DITViewModel.benchmarkActivityInterval, .fifth)
     }
 
     func testDiskActivityMonitorUsesSelectedIntervalAndCachedReader() async {
@@ -548,6 +548,9 @@ final class CapricornTests: XCTestCase {
         await monitor.run(bsdName: "disk0", interval: .tenth) { sample in
             samples.append(sample)
         }
+        for _ in 0..<20 where samples.snapshot.count < 2 {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
 
         XCTAssertEqual(provider.readerCallCount, 1)
         XCTAssertEqual(provider.fallbackCounterCallCount, 0)
@@ -555,6 +558,34 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(samples.snapshot.count, 2)
         XCTAssertEqual(samples.snapshot.last?.readMegabytesPerSecond ?? 0, 1.0, accuracy: 0.0001)
         XCTAssertEqual(samples.snapshot.last?.writeMegabytesPerSecond ?? 0, 2.0, accuracy: 0.0001)
+    }
+
+    func testDiskActivityMonitorIntervalIsNotDelayedBySampleDelivery() async {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let reader = FakeDiskActivityReader(counters: [
+            DiskActivityCounters(timestamp: start, readBytes: 0, writeBytes: 0)
+        ])
+        let provider = FakeDiskActivityProvider(reader: reader)
+        let events = LockedArray<String>()
+        let monitor = DiskActivityMonitor(provider: provider) { nanoseconds in
+            events.append("sleep-\(nanoseconds)")
+            throw CancellationError()
+        }
+
+        await monitor.run(bsdName: "disk0", interval: .tenth) { _ in
+            events.append("sample-start")
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            events.append("sample-end")
+        }
+        try? await Task.sleep(nanoseconds: 70_000_000)
+
+        let snapshot = events.snapshot
+        XCTAssertNotNil(snapshot.firstIndex(of: "sample-start"))
+        XCTAssertNotNil(snapshot.firstIndex(of: "sample-end"))
+        XCTAssertLessThan(
+            try XCTUnwrap(snapshot.firstIndex(of: "sleep-100000000")),
+            try XCTUnwrap(snapshot.firstIndex(of: "sample-end"))
+        )
     }
 
     func testDiskActivityChartScaleCreatesDurationAndSpeedTicks() {
@@ -572,29 +603,6 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(yTicks.first ?? -1, 0, accuracy: 0.0001)
         XCTAssertEqual(yTicks.last ?? -1, 500, accuracy: 0.0001)
         XCTAssertEqual(yTicks[1], 500.0 / 9.0, accuracy: 0.0001)
-    }
-
-    func testDiskActivityChartSamplerLimitsDrawnPointsAndPreservesContext() {
-        let start = Date(timeIntervalSince1970: 1_000)
-        var samples = (0..<100).map { index in
-            DiskActivitySample(
-                timestamp: start.addingTimeInterval(Double(index)),
-                readMegabytesPerSecond: Double(index),
-                writeMegabytesPerSecond: Double(index)
-            )
-        }
-        samples[55] = DiskActivitySample(
-            timestamp: start.addingTimeInterval(55),
-            readMegabytesPerSecond: 12_000,
-            writeMegabytesPerSecond: 50
-        )
-
-        let visible = DiskActivityChartSampler.visibleSamples(from: samples, maxCount: 12)
-
-        XCTAssertLessThanOrEqual(visible.count, 12)
-        XCTAssertEqual(visible.first, samples.first)
-        XCTAssertEqual(visible.last, samples.last)
-        XCTAssertTrue(visible.contains(samples[55]))
     }
 
     func testBenchmarkActivityPanelKeepsChartVisibleOutsideBenchmark() {
@@ -677,6 +685,15 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(DiskActivityWorkloadStorageValidator.isFileSizeAvailable(.gib32, operation: .mixed, availableCapacity: required - 1))
         XCTAssertTrue(DiskActivityWorkloadStorageValidator.isFileSizeAvailable(.gib32, operation: .mixed, availableCapacity: required))
         XCTAssertEqual(required, fileSize * 2 + DiskActivityWorkloadStorageValidator.safetyMarginBytes)
+    }
+
+    func testDiskActivityWorkloadRunnerUsesExtremeSequentialSettings() {
+        XCTAssertEqual(NativeDiskActivityWorkloadRunner.accessPatternLabel, "SEQ1M")
+        XCTAssertEqual(NativeDiskActivityWorkloadRunner.queueDepth, 4)
+        XCTAssertEqual(NativeDiskActivityWorkloadRunner.threadCount, 4)
+        XCTAssertEqual(NativeDiskActivityWorkloadRunner.requestDepth, 16)
+        XCTAssertEqual(NativeDiskActivityWorkloadRunner.transferChunkSizeBytes, 4 * 1_024 * 1_024)
+        XCTAssertTrue(NativeDiskActivityWorkloadRunner.usesZeroFill)
     }
 
     func testDiskActivityWorkloadRunnerPreparesReadFileAndCleansUp() async throws {
@@ -1113,19 +1130,14 @@ final class CapricornTests: XCTestCase {
             writePercentForMixed: 100
         )
         let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 32_768, runs: 1, tests: [write])
-        let lock = NSLock()
-        var createdNames: [String] = []
+        let createdNames = LockedArray<String>()
         let runner = NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0, fileEventHandler: { url in
-            lock.lock()
             createdNames.append(url.lastPathComponent)
-            lock.unlock()
         })
 
         _ = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
 
-        lock.lock()
-        let names = createdNames
-        lock.unlock()
+        let names = createdNames.snapshot
         XCTAssertEqual(names.count, 2)
         XCTAssertEqual(Set(names).count, 2)
         XCTAssertTrue(names.allSatisfy { $0.hasPrefix("Capricorn-") })

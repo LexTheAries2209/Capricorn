@@ -137,12 +137,36 @@ protocol DiskActivityWorkloadRunning: AnyObject {
 final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unchecked Sendable {
     typealias WorkloadFileEventHandler = (_ url: URL) -> Void
 
+    static let accessPatternLabel = "SEQ1M"
+    static let queueDepth = 4
+    static let threadCount = 4
+    static let transferChunkSizeBytes = 4 * 1_024 * 1_024
+    static let usesZeroFill = true
+    static var requestDepth: Int { queueDepth * threadCount }
+
+    private final class AIORequest {
+        let controlBlock: UnsafeMutablePointer<aiocb>
+        let buffer: UnsafeMutableRawPointer
+        let count: Int
+
+        init(controlBlock: UnsafeMutablePointer<aiocb>, buffer: UnsafeMutableRawPointer, count: Int) {
+            self.controlBlock = controlBlock
+            self.buffer = buffer
+            self.count = count
+        }
+
+        func release() {
+            controlBlock.deinitialize(count: 1)
+            controlBlock.deallocate()
+            buffer.deallocate()
+        }
+    }
+
     private let fileManager: FileManager
     private let fileEventHandler: WorkloadFileEventHandler?
     private let lock = NSLock()
     private var cancelled = false
     private let workloadFilePrefix = "Capricorn-Activity-"
-    private let blockSize = 1_048_576
 
     init(
         fileManager: FileManager = .default,
@@ -353,7 +377,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         DispatchQueue.global(qos: .userInitiated).async {
             defer { group.leave() }
             do {
-                try self.readFullFile(fd: readFile.fd, size: configuration.fileSizeBytes, reporter: reporter)
+                try self.transferFullFile(fd: readFile.fd, size: configuration.fileSizeBytes, shouldWrite: false, reporter: reporter, resetReporter: false, finishReporter: false)
             } catch {
                 record(error)
             }
@@ -363,7 +387,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         DispatchQueue.global(qos: .userInitiated).async {
             defer { group.leave() }
             do {
-                try self.writeFullFile(fd: writeFile.fd, size: configuration.fileSizeBytes, reporter: reporter)
+                try self.transferFullFile(fd: writeFile.fd, size: configuration.fileSizeBytes, shouldWrite: true, reporter: reporter, resetReporter: false, finishReporter: false)
                 self.notify(progress, self.progressValue(configuration: configuration, phase: .flushing, loopIndex: loopIndex, completedBytes: totalBytes, totalBytes: totalBytes, message: "Flushing workload writes"))
                 if fsync(writeFile.fd) != 0 {
                     throw BenchmarkError.ioFailed("Could not flush workload writes.")
@@ -377,57 +401,160 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         if let firstError {
             throw firstError
         }
+        reporter.finish()
     }
 
     private func writeFullFile(fd: Int32, size: Int64, reporter: ByteProgressReporter) throws {
-        let buffer = UnsafeMutableRawPointer.allocate(byteCount: blockSize, alignment: 4_096)
-        defer { buffer.deallocate() }
-        reporter.set(0, force: true)
-
-        var offset: Int64 = 0
-        while offset < size {
-            try checkCancelled()
-            let count = min(blockSize, Int(size - offset))
-            arc4random_buf(buffer, count)
-            _ = try transfer(fd: fd, buffer: buffer, count: count, offset: offset, shouldWrite: true)
-            offset += Int64(count)
-            reporter.add(Int64(count))
-        }
-        reporter.finish()
+        try transferFullFile(fd: fd, size: size, shouldWrite: true, reporter: reporter)
     }
 
     private func readFullFile(fd: Int32, size: Int64, reporter: ByteProgressReporter) throws {
-        let buffer = UnsafeMutableRawPointer.allocate(byteCount: blockSize, alignment: 4_096)
-        defer { buffer.deallocate() }
-        reporter.set(0, force: true)
-
-        var offset: Int64 = 0
-        while offset < size {
-            try checkCancelled()
-            let count = min(blockSize, Int(size - offset))
-            _ = try transfer(fd: fd, buffer: buffer, count: count, offset: offset, shouldWrite: false)
-            offset += Int64(count)
-            reporter.add(Int64(count))
-        }
-        reporter.finish()
+        try transferFullFile(fd: fd, size: size, shouldWrite: false, reporter: reporter)
     }
 
-    private func transfer(fd: Int32, buffer: UnsafeMutableRawPointer, count: Int, offset: Int64, shouldWrite: Bool) throws -> Int {
-        var transferred = 0
-        while transferred < count {
-            try checkCancelled()
-            let pointer = buffer.advanced(by: transferred)
-            let remaining = count - transferred
-            let position = off_t(offset + Int64(transferred))
-            let result = shouldWrite
-                ? pwrite(fd, pointer, remaining, position)
-                : pread(fd, pointer, remaining, position)
-            guard result > 0 else {
-                throw BenchmarkError.ioFailed(shouldWrite ? "Write workload failed." : "Read workload failed.")
-            }
-            transferred += result
+    private func transferFullFile(
+        fd: Int32,
+        size: Int64,
+        shouldWrite: Bool,
+        reporter: ByteProgressReporter,
+        resetReporter: Bool = true,
+        finishReporter: Bool = true
+    ) throws {
+        let requestDepth = Self.requestDepth
+        let chunkSize = max(4_096, min(Self.transferChunkSizeBytes, Int(max(0, size))))
+        var assignedBytes: Int64 = 0
+        var activeRequests: [AIORequest] = []
+        var firstError: Error?
+
+        if resetReporter {
+            reporter.set(0, force: true)
         }
-        return transferred
+
+        func reapCompletedRequests() throws {
+            var completedIndexes: [Int] = []
+            for (index, request) in activeRequests.enumerated() {
+                let error = aio_error(request.controlBlock)
+                if error == EINPROGRESS {
+                    continue
+                }
+
+                let returned = aio_return(request.controlBlock)
+                if error != 0 {
+                    firstError = BenchmarkError.ioFailed(errorMessage(for: error, shouldWrite: shouldWrite))
+                } else if returned <= 0 {
+                    firstError = BenchmarkError.ioFailed(shouldWrite ? "Write workload failed." : "Read workload failed.")
+                } else {
+                    let transferred = min(returned, request.count)
+                    reporter.add(Int64(transferred))
+                }
+                completedIndexes.append(index)
+            }
+
+            for index in completedIndexes.reversed() {
+                let request = activeRequests.remove(at: index)
+                request.release()
+            }
+
+            if let firstError {
+                throw firstError
+            }
+        }
+
+        func releaseActiveRequests() {
+            if !activeRequests.isEmpty {
+                _ = aio_cancel(fd, nil)
+            }
+            activeRequests.forEach { $0.release() }
+            activeRequests.removeAll()
+        }
+
+        defer {
+            releaseActiveRequests()
+        }
+
+        while assignedBytes < size || !activeRequests.isEmpty {
+            try checkCancelled()
+
+            while activeRequests.count < requestDepth && assignedBytes < size {
+                try checkCancelled()
+                let count = min(chunkSize, Int(size - assignedBytes))
+                let offset = assignedBytes
+                let request = makeRequest(fd: fd, count: count, offset: offset, shouldWrite: shouldWrite)
+                let submitResult = shouldWrite ? aio_write(request.controlBlock) : aio_read(request.controlBlock)
+                guard submitResult == 0 else {
+                    let submitError = errno
+                    request.release()
+
+                    if isAIOResourceLimit(submitError), !activeRequests.isEmpty {
+                        try waitForAnyCompletion(activeRequests)
+                        try reapCompletedRequests()
+                        continue
+                    }
+
+                    throw BenchmarkError.ioFailed(submitErrorMessage(
+                        for: submitError,
+                        shouldWrite: shouldWrite,
+                        activeRequests: activeRequests.count,
+                        targetDepth: requestDepth
+                    ))
+                }
+                assignedBytes += Int64(count)
+                activeRequests.append(request)
+            }
+
+            if activeRequests.isEmpty {
+                continue
+            }
+
+            try waitForAnyCompletion(activeRequests)
+            try reapCompletedRequests()
+        }
+
+        if finishReporter {
+            reporter.finish()
+        }
+    }
+
+    private func makeRequest(fd: Int32, count: Int, offset: Int64, shouldWrite: Bool) -> AIORequest {
+        let buffer = UnsafeMutableRawPointer.allocate(byteCount: count, alignment: 4_096)
+        if shouldWrite {
+            memset(buffer, 0, count)
+        }
+
+        let controlBlock = UnsafeMutablePointer<aiocb>.allocate(capacity: 1)
+        controlBlock.initialize(to: aiocb())
+        controlBlock.pointee.aio_fildes = fd
+        controlBlock.pointee.aio_offset = off_t(offset)
+        controlBlock.pointee.aio_buf = buffer
+        controlBlock.pointee.aio_nbytes = count
+        controlBlock.pointee.aio_reqprio = 0
+        return AIORequest(controlBlock: controlBlock, buffer: buffer, count: count)
+    }
+
+    private func waitForAnyCompletion(_ requests: [AIORequest]) throws {
+        let pointers: [UnsafePointer<aiocb>?] = requests.map { UnsafePointer($0.controlBlock) }
+        let result = pointers.withUnsafeBufferPointer { buffer in
+            aio_suspend(buffer.baseAddress, Int32(buffer.count), nil)
+        }
+        if result != 0, errno != EINTR {
+            throw BenchmarkError.ioFailed("Async workload wait failed.")
+        }
+    }
+
+    private func errorMessage(for error: Int32, shouldWrite: Bool) -> String {
+        let operationName = shouldWrite ? "write" : "read"
+        let reason = strerror(error).map { String(cString: $0) } ?? "unknown error"
+        return "Async workload \(operationName) failed: \(reason)."
+    }
+
+    private func submitErrorMessage(for error: Int32, shouldWrite: Bool, activeRequests: Int, targetDepth: Int) -> String {
+        let operationName = shouldWrite ? "write" : "read"
+        let reason = strerror(error).map { String(cString: $0) } ?? "unknown error"
+        return "Async workload \(operationName) failed to submit: \(reason) (errno \(error), active \(activeRequests)/Q\(targetDepth))."
+    }
+
+    private func isAIOResourceLimit(_ error: Int32) -> Bool {
+        error == EAGAIN || error == ENOMEM || error == ENOBUFS
     }
 
     private func workloadFileURL(in targetURL: URL, runID: String, role: String, loopIndex: Int) -> URL {

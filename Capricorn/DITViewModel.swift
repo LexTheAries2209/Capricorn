@@ -28,7 +28,7 @@ final class DITViewModel: ObservableObject {
     @Published var externalSupport: ExternalSupportStatus
     @Published var showVirtualDisks = false
 
-    static let benchmarkActivityInterval = DiskActivitySampleInterval.default
+    nonisolated static let benchmarkActivityInterval = DiskActivitySampleInterval.fifth
 
     private let inventoryProvider: DiskInventoryProviding
     private let smartService: SmartSnapshotService
