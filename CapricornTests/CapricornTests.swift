@@ -20,6 +20,25 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(drive.benchmarkMountPoint, "/System/Volumes/Data")
     }
 
+    func testDiskutilParserMapsMountedExternalPartitionToPhysicalDisk() throws {
+        let list = try DiskutilPlistParser.parseList(Self.diskutilExternalPartitionListFixture.data(using: .utf8)!)
+        let volumes = try XCTUnwrap(list.volumesByPhysicalDisk["disk11"])
+
+        XCTAssertEqual(volumes.map(\.deviceIdentifier), ["disk11s1"])
+        XCTAssertEqual(volumes.first?.name, "40G4T_NTFS_E")
+        XCTAssertEqual(volumes.first?.mountPoint, "/Volumes/40G4T_NTFS_E")
+
+        let drive = try XCTUnwrap(DiskutilPlistParser.parseDevice(
+            infoData: Self.disk11InfoFixture.data(using: .utf8)!,
+            volumes: volumes,
+            showVirtual: false
+        ))
+
+        XCTAssertTrue(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive("/Volumes/40G4T_NTFS_E", drive: drive))
+        XCTAssertTrue(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive("/Volumes/40G4T_NTFS_E/Load", drive: drive))
+        XCTAssertEqual(drive.benchmarkMountPoint, "/Volumes/40G4T_NTFS_E")
+    }
+
     func testNetworkMountParserDetectsMountedNetworkVolumes() {
         let output = """
         /dev/disk3s1 on / (apfs, sealed, local, read-only, journaled)
@@ -1815,6 +1834,31 @@ final class CapricornTests: XCTestCase {
     </dict></plist>
     """
 
+    private static let diskutilExternalPartitionListFixture = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0"><dict>
+      <key>WholeDisks</key><array><string>disk11</string></array>
+      <key>AllDisksAndPartitions</key><array>
+        <dict>
+          <key>Content</key><string>GUID_partition_scheme</string>
+          <key>DeviceIdentifier</key><string>disk11</string>
+          <key>Partitions</key><array>
+            <dict>
+              <key>DeviceIdentifier</key><string>disk11s1</string>
+              <key>Content</key><string>Microsoft Basic Data</string>
+              <key>VolumeName</key><string>40G4T_NTFS_E</string>
+              <key>MountPoint</key><string>/Volumes/40G4T_NTFS_E</string>
+              <key>Size</key><integer>4096000000000</integer>
+              <key>ReadOnly</key><false/>
+            </dict>
+          </array>
+          <key>Size</key><integer>4096000000000</integer>
+        </dict>
+      </array>
+    </dict></plist>
+    """
+
     private static let disk0InfoFixture = """
     <?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -1837,6 +1881,28 @@ final class CapricornTests: XCTestCase {
       <key>SMARTStatus</key><string>Verified</string>
       <key>SolidState</key><true/>
       <key>TotalSize</key><integer>1000555581440</integer>
+      <key>VirtualOrPhysical</key><string>Physical</string>
+      <key>WholeDisk</key><true/>
+      <key>WritableMedia</key><true/>
+    </dict></plist>
+    """
+
+    private static let disk11InfoFixture = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0"><dict>
+      <key>BusProtocol</key><string>PCI-Express</string>
+      <key>Content</key><string>GUID_partition_scheme</string>
+      <key>DeviceBlockSize</key><integer>512</integer>
+      <key>DeviceIdentifier</key><string>disk11</string>
+      <key>DeviceNode</key><string>/dev/disk11</string>
+      <key>IORegistryEntryName</key><string>GeIL P4S 4TB</string>
+      <key>Internal</key><false/>
+      <key>MediaName</key><string>GeIL P4S 4TB</string>
+      <key>Removable</key><false/>
+      <key>SMARTStatus</key><string>Verified</string>
+      <key>SolidState</key><true/>
+      <key>TotalSize</key><integer>4096000000000</integer>
       <key>VirtualOrPhysical</key><string>Physical</string>
       <key>WholeDisk</key><true/>
       <key>WritableMedia</key><true/>

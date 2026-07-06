@@ -76,7 +76,35 @@ enum DiskutilPlistParser {
             }
         }
 
+        for entry in entries {
+            guard let wholeDiskID = entry.string("DeviceIdentifier") else { continue }
+            let mountedPartitions = entry
+                .arrayOfDictionaries("Partitions")
+                .compactMap(parseMountedPartitionVolume)
+            if !mountedPartitions.isEmpty {
+                volumesByDisk[wholeDiskID, default: []].append(contentsOf: mountedPartitions)
+            }
+        }
+
         return DiskutilListModel(wholeDiskIDs: wholeDisks, volumesByPhysicalDisk: volumesByDisk)
+    }
+
+    private static func parseMountedPartitionVolume(_ partition: [String: Any]) -> DriveDevice.Volume? {
+        guard let id = partition.string("DeviceIdentifier"),
+              let mountPoint = normalizedMountPoint(partition.string("MountPoint")) else {
+            return nil
+        }
+
+        let isReadOnly = partition.bool("ReadOnly") ?? false
+        let isWritable = partition.bool("Writable") ?? !isReadOnly
+        return DriveDevice.Volume(
+            deviceIdentifier: id,
+            name: cleanName(partition.string("VolumeName")) ?? cleanName(partition.string("Name")) ?? id,
+            mountPoint: mountPoint,
+            sizeBytes: partition.int64("Size") ?? 0,
+            isWritable: isWritable,
+            isSystem: partition.bool("OSInternal") ?? false || mountPoint == "/"
+        )
     }
 
     static func parseDevice(infoData: Data, volumes: [DriveDevice.Volume], showVirtual: Bool) throws -> DriveDevice? {
