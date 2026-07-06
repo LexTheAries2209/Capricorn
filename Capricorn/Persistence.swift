@@ -47,8 +47,9 @@ final class BenchmarkHistoryRecord {
     var iops: Double
     var latencyMicroseconds: Double
     var hiddenAt: Date?
+    var encodedActivitySamples: Data?
 
-    init(drive: DriveDevice, result: BenchmarkResult) {
+    init(drive: DriveDevice, result: BenchmarkResult, activitySamples: [DiskActivitySample] = []) {
         self.id = UUID()
         self.driveID = drive.id
         self.driveName = drive.displayName
@@ -61,10 +62,19 @@ final class BenchmarkHistoryRecord {
         self.iops = result.iops
         self.latencyMicroseconds = result.latencyMicroseconds
         self.hiddenAt = nil
+        self.encodedActivitySamples = activitySamples.isEmpty ? nil : try? DiskActivitySampleCoders.encode(activitySamples)
     }
 
     var operation: BenchmarkOperation {
         BenchmarkOperation(rawValue: operationRaw) ?? .read
+    }
+
+    var activitySamples: [DiskActivitySample] {
+        guard let encodedActivitySamples,
+              let decoded = DiskActivitySampleCoders.decode(encodedActivitySamples) else {
+            return []
+        }
+        return decoded
     }
 }
 
@@ -107,7 +117,7 @@ final class DiskActivityHistoryRecord {
         self.averageReadMegabytesPerSecond = summary.averageReadMegabytesPerSecond
         self.averageWriteMegabytesPerSecond = summary.averageWriteMegabytesPerSecond
         self.sampleCount = summary.sampleCount
-        self.encodedSamples = try? JSONEncoder.dit.encode(samples)
+        self.encodedSamples = try? DiskActivitySampleCoders.encode(samples)
         self.hiddenAt = nil
     }
 
@@ -117,7 +127,7 @@ final class DiskActivityHistoryRecord {
 
     var samples: [DiskActivitySample] {
         guard let encodedSamples,
-              let decoded = try? JSONDecoder.dit.decode([DiskActivitySample].self, from: encodedSamples) else {
+              let decoded = DiskActivitySampleCoders.decode(encodedSamples) else {
             return []
         }
         return decoded
@@ -199,6 +209,24 @@ extension JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
+    }
+}
+
+enum DiskActivitySampleCoders {
+    static func encode(_ samples: [DiskActivitySample]) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .secondsSince1970
+        return try encoder.encode(samples)
+    }
+
+    static func decode(_ data: Data) -> [DiskActivitySample]? {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        if let decoded = try? decoder.decode([DiskActivitySample].self, from: data) {
+            return decoded
+        }
+        return try? JSONDecoder.dit.decode([DiskActivitySample].self, from: data)
     }
 }
 

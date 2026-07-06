@@ -505,6 +505,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Cancel": "取消",
         "Save Results": "保存结果",
         "Live Disk Activity": "磁盘实时活动",
+        "Saved Benchmark Activity": "已保存测速曲线",
         "Monitors total I/O reported by macOS for the selected physical disk.": "监控 macOS 报告的所选物理磁盘总 I/O。",
         "Network drives do not provide per-disk IOKit activity counters.": "网络硬盘不提供本机单盘 IOKit 活动计数。",
         "Drive": "磁盘",

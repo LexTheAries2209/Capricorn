@@ -447,6 +447,39 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(progress.fraction, 0.25, accuracy: 0.0001)
     }
 
+    func testBenchmarkProgressUpdateGateThrottlesSamePhaseByteUpdates() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let previous = BenchmarkProgress(
+            currentTestLabel: "SEQ1M Q1T1",
+            completed: 0,
+            total: 4,
+            message: "Read run 1/1",
+            phaseCompletedBytes: 0,
+            phaseTotalBytes: 1_000
+        )
+        let byteOnlyUpdate = BenchmarkProgress(
+            currentTestLabel: "SEQ1M Q1T1",
+            completed: 0,
+            total: 4,
+            message: "Read run 1/1",
+            phaseCompletedBytes: 200,
+            phaseTotalBytes: 1_000
+        )
+        let nextStage = BenchmarkProgress(
+            currentTestLabel: "SEQ1M Q1T1",
+            completed: 1,
+            total: 4,
+            message: "Write run 1/1",
+            phaseCompletedBytes: 0,
+            phaseTotalBytes: 1_000
+        )
+
+        XCTAssertTrue(BenchmarkProgressUpdateGate.shouldPublish(previous: nil, candidate: previous, now: start, lastPublishedAt: nil, minimumInterval: 0.25))
+        XCTAssertFalse(BenchmarkProgressUpdateGate.shouldPublish(previous: previous, candidate: byteOnlyUpdate, now: start.addingTimeInterval(0.1), lastPublishedAt: start, minimumInterval: 0.25))
+        XCTAssertTrue(BenchmarkProgressUpdateGate.shouldPublish(previous: previous, candidate: byteOnlyUpdate, now: start.addingTimeInterval(0.25), lastPublishedAt: start, minimumInterval: 0.25))
+        XCTAssertTrue(BenchmarkProgressUpdateGate.shouldPublish(previous: previous, candidate: nextStage, now: start.addingTimeInterval(0.1), lastPublishedAt: start, minimumInterval: 0.25))
+    }
+
     func testDiskActivityRateCalculatorComputesDecimalMegabytesPerSecond() {
         let start = Date(timeIntervalSince1970: 1_000)
         let previous = DiskActivityCounters(timestamp: start, readBytes: 1_000, writeBytes: 2_000)
@@ -595,6 +628,20 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(record.averageReadMegabytesPerSecond, 20)
         XCTAssertEqual(record.averageWriteMegabytesPerSecond, 35)
         XCTAssertEqual(record.samples, samples)
+    }
+
+    func testBenchmarkHistoryRecordStoresBenchmarkActivitySamples() {
+        let drive = Self.fixtureDrive()
+        let result = Self.fixtureBenchmarkResult(for: drive)
+        let start = Date(timeIntervalSince1970: 1_000)
+        let samples = [
+            DiskActivitySample(timestamp: start, readMegabytesPerSecond: 1_200, writeMegabytesPerSecond: 200),
+            DiskActivitySample(timestamp: start.addingTimeInterval(0.5), readMegabytesPerSecond: 300, writeMegabytesPerSecond: 1_400)
+        ]
+
+        let record = BenchmarkHistoryRecord(drive: drive, result: result, activitySamples: samples)
+
+        XCTAssertEqual(record.activitySamples, samples)
     }
 
     func testDiskActivityWorkloadFullDiskUses95PercentOfAvailableCapacity() {

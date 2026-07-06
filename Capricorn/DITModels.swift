@@ -828,6 +828,27 @@ struct BenchmarkProgress: Equatable {
     }
 }
 
+enum BenchmarkProgressUpdateGate {
+    static let defaultMinimumInterval: TimeInterval = 0.25
+
+    static func shouldPublish(
+        previous: BenchmarkProgress?,
+        candidate: BenchmarkProgress,
+        now: Date,
+        lastPublishedAt: Date?,
+        minimumInterval: TimeInterval = defaultMinimumInterval
+    ) -> Bool {
+        guard let previous, let lastPublishedAt else { return true }
+        if candidate.currentTestLabel != previous.currentTestLabel { return true }
+        if candidate.message != previous.message { return true }
+        if candidate.completed != previous.completed { return true }
+        if candidate.total != previous.total { return true }
+        if candidate.total > 0, candidate.completed >= candidate.total { return true }
+        if candidate.phaseTotalBytes > 0, candidate.phaseCompletedBytes >= candidate.phaseTotalBytes { return true }
+        return now.timeIntervalSince(lastPublishedAt) >= minimumInterval
+    }
+}
+
 func formatBytes(_ bytes: Int) -> String {
     if bytes >= 1_048_576 && bytes % 1_048_576 == 0 {
         return "\(bytes / 1_048_576) MiB"

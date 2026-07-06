@@ -38,7 +38,7 @@ struct ContentView: View {
                     benchmarkHistory: benchmarkHistory.filter { $0.driveID == drive.id },
                     activityHistory: activityHistory,
                     saveSnapshot: { exportFolderPath in saveSnapshot(drive: drive, exportFolderPath: exportFolderPath) },
-                    saveBenchmarkResults: { results in saveBenchmarkResults(drive: drive, results: results) }
+                    saveBenchmarkResults: { results, activitySamples in saveBenchmarkResults(drive: drive, results: results, activitySamples: activitySamples) }
                 )
             } else {
                 ContentUnavailableView(
@@ -178,9 +178,9 @@ struct ContentView: View {
         return "Capricorn-\(safeName.isEmpty ? drive.bsdName : safeName)-\(stamp).json"
     }
 
-    private func saveBenchmarkResults(drive: DriveDevice, results: [BenchmarkResult]) {
+    private func saveBenchmarkResults(drive: DriveDevice, results: [BenchmarkResult], activitySamples: [DiskActivitySample]) {
         for result in results {
-            modelContext.insert(BenchmarkHistoryRecord(drive: drive, result: result))
+            modelContext.insert(BenchmarkHistoryRecord(drive: drive, result: result, activitySamples: activitySamples))
         }
         try? modelContext.save()
     }
@@ -239,7 +239,7 @@ private struct DriveDetailView: View {
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
     let saveSnapshot: (String?) -> String
-    let saveBenchmarkResults: ([BenchmarkResult]) -> Void
+    let saveBenchmarkResults: ([BenchmarkResult], [DiskActivitySample]) -> Void
     @Environment(\.appLanguage) private var language
 
     var body: some View {
@@ -1245,7 +1245,7 @@ private struct ActivityMetricTile: View {
 private struct BenchmarkView: View {
     let drive: DriveDevice
     @ObservedObject var viewModel: DITViewModel
-    let saveResults: ([BenchmarkResult]) -> Void
+    let saveResults: ([BenchmarkResult], [DiskActivitySample]) -> Void
     @Environment(\.appLanguage) private var language
 
     @AppStorage("benchmarkTargetFolder") private var targetFolderPath = ""
@@ -1643,7 +1643,7 @@ private struct BenchmarkView: View {
                 .disabled(!viewModel.isBenchmarking)
 
                 Button {
-                    saveResults(profileResults)
+                    saveResults(profileResults, viewModel.diskActivitySamples)
                 } label: {
                     Label(language.t("Save Results"), systemImage: "tray.and.arrow.down")
                 }
@@ -2069,11 +2069,13 @@ private struct DiskActivityChartView: View {
     enum Style {
         case compact
         case expanded
+        case mini
 
         var chartHeight: CGFloat {
             switch self {
             case .compact: 92
             case .expanded: 220
+            case .mini: 58
             }
         }
 
@@ -2081,6 +2083,7 @@ private struct DiskActivityChartView: View {
             switch self {
             case .compact: 54
             case .expanded: 68
+            case .mini: 48
             }
         }
 
@@ -2088,6 +2091,7 @@ private struct DiskActivityChartView: View {
             switch self {
             case .compact: .caption2
             case .expanded: .caption
+            case .mini: .caption2
             }
         }
 
@@ -2095,6 +2099,7 @@ private struct DiskActivityChartView: View {
             switch self {
             case .compact: 180
             case .expanded: 420
+            case .mini: 120
             }
         }
     }
@@ -2838,22 +2843,34 @@ private struct HistoryReportView: View {
     }
 
     private func benchmarkHistoryRow(_ item: BenchmarkHistoryRecord, isHidden: Bool) -> some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text("\(item.testLabel) \(language.operationTitle(item.operation))")
-                Text(item.measuredAt.formatted(date: .abbreviated, time: .standard))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
-                .monospacedDigit()
-            historyVisibilityButton(isHidden: isHidden) {
-                if isHidden {
-                    restoreHistory(item)
-                } else {
-                    hideHistory(item)
+        let activitySamples = item.activitySamples
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("\(item.testLabel) \(language.operationTitle(item.operation))")
+                    Text(item.measuredAt.formatted(date: .abbreviated, time: .standard))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
+                Spacer()
+                Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
+                    .monospacedDigit()
+                historyVisibilityButton(isHidden: isHidden) {
+                    if isHidden {
+                        restoreHistory(item)
+                    } else {
+                        hideHistory(item)
+                    }
+                }
+            }
+
+            if !activitySamples.isEmpty {
+                DiskActivityChartView(
+                    title: language.t("Saved Benchmark Activity"),
+                    samples: activitySamples,
+                    current: activitySamples.last,
+                    style: .mini
+                )
             }
         }
     }

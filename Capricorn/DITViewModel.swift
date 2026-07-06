@@ -40,6 +40,7 @@ final class DITViewModel: ObservableObject {
     private var diskActivityTask: Task<Void, Never>?
     private var liveActivityTask: Task<Void, Never>?
     private var liveActivityWorkloadTask: Task<Void, Never>?
+    private var lastBenchmarkProgressPublishedAt: Date?
 
     init(
         inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(),
@@ -137,12 +138,12 @@ final class DITViewModel: ObservableObject {
         isBenchmarking = true
         let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs, usesTrimmedAverage: profile.usesTrimmedAverage)
         let isLooping = profile.executionMode == .loopUntilCancelled
-        benchmarkProgress = BenchmarkProgress(
+        publishBenchmarkProgress(BenchmarkProgress(
             currentTestLabel: "Starting",
             completed: 0,
             total: isLooping ? max(1, profile.tests.count) : profile.tests.count * (measuredRuns + 1),
             message: isLooping ? "Loop running" : "Preparing complete test file"
-        )
+        ), force: true)
         startDiskActivityMonitoring(for: drive)
         replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: [])
         defer {
@@ -156,7 +157,7 @@ final class DITViewModel: ObservableObject {
                 drive: drive,
                 volumePath: targetVolume,
                 progress: { [weak self] progress in
-                    self?.benchmarkProgress = progress
+                    self?.publishBenchmarkProgress(progress)
                 },
                 result: { [weak self] result in
                     self?.upsertBenchmarkResult(result)
@@ -337,8 +338,23 @@ final class DITViewModel: ObservableObject {
         benchmarkResults.append(contentsOf: results)
     }
 
+    private func publishBenchmarkProgress(_ progress: BenchmarkProgress, force: Bool = false) {
+        let now = Date()
+        guard force || BenchmarkProgressUpdateGate.shouldPublish(
+            previous: benchmarkProgress,
+            candidate: progress,
+            now: now,
+            lastPublishedAt: lastBenchmarkProgressPublishedAt
+        ) else {
+            return
+        }
+        benchmarkProgress = progress
+        lastBenchmarkProgressPublishedAt = now
+    }
+
     private func startDiskActivityMonitoring(for drive: DriveDevice) {
         stopDiskActivityMonitoring()
+        lastBenchmarkProgressPublishedAt = nil
         diskActivitySamples = []
         currentDiskActivity = nil
         guard !drive.isNetwork else { return }
