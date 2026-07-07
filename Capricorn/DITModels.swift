@@ -179,6 +179,7 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
     case unmount
     case forceUnmount
     case eject
+    case inspectOpenFiles
     case rename
     case revealInFinder
     case refresh
@@ -192,6 +193,7 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
         case .unmount: "Unmount"
         case .forceUnmount: "Force Unmount"
         case .eject: "Eject"
+        case .inspectOpenFiles: "View Open Files"
         case .rename: "Rename Volume"
         case .revealInFinder: "Reveal in Finder"
         case .refresh: "Refresh"
@@ -205,6 +207,7 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
         case .unmount: "externaldrive.badge.minus"
         case .forceUnmount: "externaldrive.badge.xmark"
         case .eject: "eject"
+        case .inspectOpenFiles: "person.crop.circle.badge.exclamationmark"
         case .rename: "pencil"
         case .revealInFinder: "folder"
         case .refresh: "arrow.clockwise"
@@ -216,9 +219,9 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
 enum DiskSidebarActionPolicy {
     static func actions(for drive: DriveDevice) -> [DiskSidebarAction] {
         if drive.isNetwork {
-            return [.mount, .unmount, .disconnect]
+            return [.mount, .unmount, .disconnect, .inspectOpenFiles]
         }
-        return [.mount, .unmount, .forceUnmount, .eject, .rename, .revealInFinder, .refresh]
+        return [.mount, .unmount, .forceUnmount, .eject, .inspectOpenFiles, .rename, .revealInFinder, .refresh]
     }
 
     static func isEnabled(_ action: DiskSidebarAction, for drive: DriveDevice) -> Bool {
@@ -235,6 +238,8 @@ enum DiskSidebarActionPolicy {
             return drive.isNetwork && drive.primaryMountPoint != nil
         case .eject:
             return !drive.isNetwork && (!drive.isInternal || drive.isRemovable || drive.isMemoryCard)
+        case .inspectOpenFiles:
+            return drive.primaryMountPoint != nil
         case .rename:
             return !drive.isNetwork && !drive.isSystemDisk && drive.actionTargetVolume != nil
         case .revealInFinder:
@@ -249,7 +254,7 @@ enum DiskSidebarActionPolicy {
         switch action {
         case .mount, .unmount, .forceUnmount, .eject:
             return true
-        case .rename, .revealInFinder, .refresh, .disconnect:
+        case .inspectOpenFiles, .rename, .revealInFinder, .refresh, .disconnect:
             return false
         }
     }
@@ -291,6 +296,35 @@ enum DiskSidebarActionPolicy {
         }
 
         return nil
+    }
+}
+
+struct DiskOpenFileProcess: Identifiable, Hashable, Sendable {
+    var id: String { "\(pid)-\(path)" }
+    var command: String
+    var pid: Int
+    var user: String
+    var path: String
+}
+
+struct DiskOpenFileInspection: Identifiable, Hashable, Sendable {
+    var id = UUID()
+    var driveID: String
+    var driveName: String
+    var mountPoint: String
+    var capturedAt: Date = Date()
+    var processes: [DiskOpenFileProcess]
+}
+
+struct DiskActionFailure: Identifiable, Hashable, Sendable {
+    var id = UUID()
+    var action: DiskSidebarAction
+    var drive: DriveDevice
+    var message: String
+    var openFiles: DiskOpenFileInspection
+
+    var canForceUnmount: Bool {
+        action != .forceUnmount && DiskSidebarActionPolicy.isEnabled(.forceUnmount, for: drive)
     }
 }
 

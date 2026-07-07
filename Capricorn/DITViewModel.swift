@@ -25,6 +25,8 @@ final class DITViewModel: ObservableObject {
     @Published var liveActivityWorkloadProgress: DiskActivityWorkloadProgress?
     @Published var liveActivityWorkloadError: String?
     @Published var isLiveActivityWorkloadRunning = false
+    @Published var diskOpenFileInspection: DiskOpenFileInspection?
+    @Published var diskActionFailure: DiskActionFailure?
     @Published var externalSupport: ExternalSupportStatus
     @Published var showVirtualDisks = false
 
@@ -36,6 +38,7 @@ final class DITViewModel: ObservableObject {
     private let diskActivityProvider: DiskActivityProviding
     private let liveActivityWorkloadRunner: DiskActivityWorkloadRunning
     private let diskActionService: DiskActionService
+    private let openFileService: DiskOpenFileService
     private let externalDetector: ExternalDriveSupportDetector
     private let notificationCoordinator: NotificationCoordinator
     private var diskActivityTask: Task<Void, Never>?
@@ -50,6 +53,7 @@ final class DITViewModel: ObservableObject {
         diskActivityProvider: DiskActivityProviding = IOKitDiskActivityProvider(),
         liveActivityWorkloadRunner: DiskActivityWorkloadRunning = NativeDiskActivityWorkloadRunner(),
         diskActionService: DiskActionService = DiskActionService(),
+        openFileService: DiskOpenFileService = DiskOpenFileService(),
         externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator()
     ) {
@@ -59,6 +63,7 @@ final class DITViewModel: ObservableObject {
         self.diskActivityProvider = diskActivityProvider
         self.liveActivityWorkloadRunner = liveActivityWorkloadRunner
         self.diskActionService = diskActionService
+        self.openFileService = openFileService
         self.externalDetector = externalDetector
         self.notificationCoordinator = notificationCoordinator
         self.externalSupport = externalDetector.detect()
@@ -180,13 +185,64 @@ final class DITViewModel: ObservableObject {
     func performDiskAction(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async {
         selectedDriveID = drive.id
         refreshMessage = "Running disk action..."
+        diskActionFailure = nil
 
         do {
             try await diskActionService.perform(action, on: drive, newName: newName)
             await refresh()
             refreshMessage = "Disk action completed."
         } catch {
-            refreshMessage = "Disk action failed: \(error.localizedDescription)"
+            await recordDiskActionFailure(action: action, drive: drive, message: error.localizedDescription)
+        }
+    }
+
+    func inspectOpenFiles(on drive: DriveDevice) async {
+        selectedDriveID = drive.id
+        refreshMessage = "Inspecting open files..."
+        do {
+            diskOpenFileInspection = try await openFileService.inspectOpenFiles(on: drive)
+            refreshMessage = "Open file inspection completed."
+        } catch {
+            refreshMessage = "Open file inspection failed: \(error.localizedDescription)"
+        }
+    }
+
+    func forceUnmountAfterFailure(_ failure: DiskActionFailure) async {
+        guard failure.canForceUnmount else { return }
+        diskActionFailure = nil
+        await performDiskAction(.forceUnmount, on: failure.drive)
+    }
+
+    private func recordDiskActionFailure(action: DiskSidebarAction, drive: DriveDevice, message: String) async {
+        refreshMessage = "Disk action failed: \(message)"
+        guard shouldPresentDiskActionFailure(for: action) else { return }
+
+        let inspection: DiskOpenFileInspection
+        do {
+            inspection = try await openFileService.inspectOpenFiles(on: drive)
+        } catch {
+            inspection = DiskOpenFileInspection(
+                driveID: drive.id,
+                driveName: drive.displayName,
+                mountPoint: drive.primaryMountPoint ?? drive.deviceNode,
+                processes: []
+            )
+        }
+
+        diskActionFailure = DiskActionFailure(
+            action: action,
+            drive: drive,
+            message: message,
+            openFiles: inspection
+        )
+    }
+
+    private func shouldPresentDiskActionFailure(for action: DiskSidebarAction) -> Bool {
+        switch action {
+        case .unmount, .forceUnmount, .eject, .disconnect:
+            return true
+        case .mount, .inspectOpenFiles, .rename, .revealInFinder, .refresh:
+            return false
         }
     }
 

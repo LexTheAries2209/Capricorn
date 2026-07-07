@@ -333,6 +333,9 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         if message.hasPrefix("Disk action failed: ") {
             return message.replacingOccurrences(of: "Disk action failed: ", with: "磁盘操作失败：")
         }
+        if message.hasPrefix("Open file inspection failed: ") {
+            return message.replacingOccurrences(of: "Open file inspection failed: ", with: "查看占用程序失败：")
+        }
         if message.hasPrefix("SMART data does not show immediate risk for "), message.hasSuffix(".") {
             let name = message
                 .replacingOccurrences(of: "SMART data does not show immediate risk for ", with: "")
@@ -465,6 +468,16 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Unmount": "卸载",
         "Force Unmount": "强制卸载",
         "Eject": "推出",
+        "View Open Files": "查看占用程序",
+        "Open Files Using Disk": "占用此磁盘的程序",
+        "These processes currently have files open on the selected disk.": "这些进程当前在所选磁盘上打开了文件。",
+        "Disk Action Failed": "磁盘操作失败",
+        "No Occupying Processes": "未发现占用程序",
+        "No process with open files was reported for this disk.": "系统未报告有进程正在打开此磁盘上的文件。",
+        "Program": "程序",
+        "User": "用户",
+        "Path": "路径",
+        "Close": "关闭",
         "Rename Volume": "重命名卷宗",
         "Reveal in Finder": "在 Finder 中显示",
         "Disconnect": "断开",
@@ -631,6 +644,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Running disk action...": "正在执行磁盘操作...",
         "Disk action completed.": "磁盘操作已完成。",
         "Disk action failed:": "磁盘操作失败：",
+        "Inspecting open files...": "正在查看占用程序...",
+        "Open file inspection completed.": "占用程序查看完成。",
         "System internal disks cannot be mounted, unmounted, or ejected from Capricorn.": "Capricorn 不允许装载、卸载或推出系统内置磁盘。",
         "No physical drives found.": "未找到物理磁盘。",
         "No physical or network drives found.": "未找到物理或网络磁盘。",

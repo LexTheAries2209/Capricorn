@@ -67,6 +67,61 @@ final class ShellCommandRunner: CommandRunning {
     }
 }
 
+enum DiskOpenFileParser {
+    static func parse(_ output: String) -> [DiskOpenFileProcess] {
+        output
+            .split(whereSeparator: \.isNewline)
+            .compactMap(parseLine)
+    }
+
+    private static func parseLine(_ line: Substring) -> DiskOpenFileProcess? {
+        let parts = line.split(maxSplits: 8, omittingEmptySubsequences: true, whereSeparator: \.isWhitespace)
+        guard parts.count >= 9,
+              let pid = Int(parts[1]),
+              String(parts[0]).uppercased() != "COMMAND" else {
+            return nil
+        }
+
+        return DiskOpenFileProcess(
+            command: String(parts[0]),
+            pid: pid,
+            user: String(parts[2]),
+            path: String(parts[8])
+        )
+    }
+}
+
+final class DiskOpenFileService {
+    private let runner: CommandRunning
+    private let lsofPath: String
+
+    init(
+        runner: CommandRunning = ShellCommandRunner(),
+        lsofPath: String = "/usr/sbin/lsof"
+    ) {
+        self.runner = runner
+        self.lsofPath = lsofPath
+    }
+
+    func inspectOpenFiles(on drive: DriveDevice) async throws -> DiskOpenFileInspection {
+        guard let mountPoint = drive.primaryMountPoint else {
+            throw DiskActionError.missingMountPoint
+        }
+
+        let result = try await runner.run(lsofPath, arguments: ["+f", "--", mountPoint])
+        if result.terminationStatus != 0, result.stdoutString.isEmpty, !result.stderrString.isEmpty {
+            throw CommandError.nonZeroExit(executable: lsofPath, status: result.terminationStatus, stderr: result.stderrString)
+        }
+
+        return DiskOpenFileInspection(
+            driveID: drive.id,
+            driveName: drive.displayName,
+            mountPoint: mountPoint,
+            processes: DiskOpenFileParser.parse(result.stdoutString)
+        )
+    }
+}
+
 enum DiskActionError: Error, LocalizedError {
     case missingMountPoint
     case missingVolume
@@ -144,7 +199,7 @@ final class DiskActionService {
         case .disconnect:
             guard drive.isNetwork else { throw DiskActionError.unsupportedAction }
             try await runDiskutil(["unmount", try mountedPath(for: drive)])
-        case .revealInFinder, .refresh:
+        case .inspectOpenFiles, .revealInFinder, .refresh:
             throw DiskActionError.unsupportedAction
         }
     }

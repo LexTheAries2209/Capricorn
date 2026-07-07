@@ -57,6 +57,29 @@ struct ContentView: View {
         .onChange(of: viewModel.showVirtualDisks) {
             Task { await viewModel.refresh() }
         }
+        .sheet(item: $viewModel.diskOpenFileInspection) { inspection in
+            DiskOpenFileInspectionSheet(
+                title: language.t("Open Files Using Disk"),
+                message: language.t("These processes currently have files open on the selected disk."),
+                inspection: inspection,
+                language: language,
+                close: {
+                    viewModel.diskOpenFileInspection = nil
+                }
+            )
+        }
+        .sheet(item: $viewModel.diskActionFailure) { failure in
+            DiskActionFailureSheet(
+                failure: failure,
+                language: language,
+                close: {
+                    viewModel.diskActionFailure = nil
+                },
+                forceUnmount: {
+                    Task { await viewModel.forceUnmountAfterFailure(failure) }
+                }
+            )
+        }
     }
 
     private var sidebar: some View {
@@ -160,6 +183,8 @@ struct ContentView: View {
         case .rename:
             guard let newName = promptForVolumeName(drive: drive) else { return }
             Task { await viewModel.performDiskAction(action, on: drive, newName: newName) }
+        case .inspectOpenFiles:
+            Task { await viewModel.inspectOpenFiles(on: drive) }
         case .revealInFinder:
             revealDriveInFinder(drive)
         case .refresh:
@@ -239,6 +264,167 @@ struct ContentView: View {
             modelContext.insert(BenchmarkHistoryRecord(drive: drive, result: result, activitySamples: activitySamples))
         }
         try? modelContext.save()
+    }
+}
+
+private struct DiskActionFailureSheet: View {
+    var failure: DiskActionFailure
+    var language: AppLanguage
+    var close: () -> Void
+    var forceUnmount: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(language.t("Disk Action Failed"))
+                        .font(.title3.weight(.semibold))
+                    Text(language.statusMessage(failure.message))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
+            DiskOpenFileList(inspection: failure.openFiles, language: language)
+
+            HStack {
+                Spacer()
+                Button(language.t("Close")) {
+                    close()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                if failure.canForceUnmount {
+                    Button(role: .destructive) {
+                        forceUnmount()
+                    } label: {
+                        Label(language.t("Force Unmount"), systemImage: "externaldrive.badge.xmark")
+                    }
+                }
+            }
+        }
+        .padding(22)
+        .frame(minWidth: 680, minHeight: 420)
+    }
+}
+
+private struct DiskOpenFileInspectionSheet: View {
+    var title: String
+    var message: String
+    var inspection: DiskOpenFileInspection
+    var language: AppLanguage
+    var close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "person.crop.circle.badge.exclamationmark")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.title3.weight(.semibold))
+                    Text(message)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            DiskOpenFileList(inspection: inspection, language: language)
+
+            HStack {
+                Spacer()
+                Button(language.t("Close")) {
+                    close()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(22)
+        .frame(minWidth: 680, minHeight: 420)
+    }
+}
+
+private struct DiskOpenFileList: View {
+    var inspection: DiskOpenFileInspection
+    var language: AppLanguage
+
+    private let columns: [GridItem] = [
+        GridItem(.fixed(140), spacing: 12, alignment: .leading),
+        GridItem(.fixed(70), spacing: 12, alignment: .leading),
+        GridItem(.fixed(100), spacing: 12, alignment: .leading),
+        GridItem(.flexible(minimum: 220), spacing: 12, alignment: .leading)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Label(inspection.driveName, systemImage: "externaldrive")
+                    .font(.headline)
+                Text(inspection.mountPoint)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
+
+            if inspection.processes.isEmpty {
+                ContentUnavailableView(
+                    language.t("No Occupying Processes"),
+                    systemImage: "checkmark.circle",
+                    description: Text(language.t("No process with open files was reported for this disk."))
+                )
+                .frame(maxWidth: .infinity, minHeight: 220)
+            } else {
+                VStack(spacing: 0) {
+                    LazyVGrid(columns: columns, spacing: 0) {
+                        header(language.t("Program"))
+                        header("PID")
+                        header(language.t("User"))
+                        header(language.t("Path"))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.quaternary)
+
+                    ScrollView {
+                        LazyVGrid(columns: columns, spacing: 0) {
+                            ForEach(inspection.processes) { process in
+                                cell(process.command, weight: .semibold)
+                                cell(String(process.pid))
+                                cell(process.user)
+                                cell(process.path, monospaced: true)
+                            }
+                        }
+                        .padding(12)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(.separator.opacity(0.8), lineWidth: 1)
+                }
+            }
+        }
+    }
+
+    private func header(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func cell(_ text: String, weight: Font.Weight = .regular, monospaced: Bool = false) -> some View {
+        Text(text)
+            .font(monospaced ? .system(.caption, design: .monospaced).weight(weight) : .caption.weight(weight))
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 5)
     }
 }
 

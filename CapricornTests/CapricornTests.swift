@@ -110,11 +110,12 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(
             DiskSidebarActionPolicy.actions(for: drive),
-            [.mount, .unmount, .disconnect]
+            [.mount, .unmount, .disconnect, .inspectOpenFiles]
         )
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.mount, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.unmount, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.disconnect, for: drive))
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.inspectOpenFiles, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.eject, for: drive))
     }
 
@@ -129,6 +130,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.unmount, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.forceUnmount, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.eject, for: drive))
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.inspectOpenFiles, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.revealInFinder, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.refresh, for: drive))
     }
@@ -200,6 +202,59 @@ final class CapricornTests: XCTestCase {
             ["unmount", "/Volumes/Media"],
             ["unmount", "/Volumes/Media"]
         ])
+    }
+
+    func testDiskOpenFileParserReadsLsofColumnOutput() {
+        let output = """
+        COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+        Finder    123  lex  cwd    DIR   1,23      512  456 /Volumes/Media
+        qlmanage 4567  lex  txt    REG   1,23     2048  789 /Volumes/Media/Clip A.mov
+        """
+
+        let processes = DiskOpenFileParser.parse(output)
+
+        XCTAssertEqual(processes, [
+            DiskOpenFileProcess(command: "Finder", pid: 123, user: "lex", path: "/Volumes/Media"),
+            DiskOpenFileProcess(command: "qlmanage", pid: 4567, user: "lex", path: "/Volumes/Media/Clip A.mov")
+        ])
+    }
+
+    func testDiskOpenFileServiceUsesFilesystemLsofQuery() async throws {
+        let runner = RecordingCommandRunner(stdout: "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\nFinder 123 lex cwd DIR 1,23 512 456 /Volumes/Media\n")
+        let service = DiskOpenFileService(runner: runner)
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/Media")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+
+        let inspection = try await service.inspectOpenFiles(on: drive)
+
+        XCTAssertEqual(inspection.mountPoint, "/Volumes/Media")
+        XCTAssertEqual(inspection.processes.map(\.command), ["Finder"])
+        XCTAssertEqual(runner.calls.map(\.executable), ["/usr/sbin/lsof"])
+        XCTAssertEqual(runner.calls.map(\.arguments), [["+f", "--", "/Volumes/Media"]])
+    }
+
+    @MainActor
+    func testViewModelCreatesDiskActionFailureWithOpenFilesWhenUnmountFails() async {
+        let diskActionService = DiskActionService(runner: StaticCommandRunner(stdout: "", stderr: "Resource busy", terminationStatus: 16))
+        let openFileService = DiskOpenFileService(runner: StaticCommandRunner(stdout: """
+        COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+        Finder 123 lex cwd DIR 1,23 512 456 /Volumes/Media
+        """))
+        let model = DITViewModel(diskActionService: diskActionService, openFileService: openFileService)
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/Media")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        model.drives = [drive]
+
+        await model.performDiskAction(.unmount, on: drive)
+
+        XCTAssertEqual(model.diskActionFailure?.action, .unmount)
+        XCTAssertEqual(model.diskActionFailure?.drive.id, drive.id)
+        XCTAssertEqual(model.diskActionFailure?.openFiles.processes, [
+            DiskOpenFileProcess(command: "Finder", pid: 123, user: "lex", path: "/Volumes/Media")
+        ])
+        XCTAssertTrue(model.diskActionFailure?.canForceUnmount == true)
     }
 
     func testDiskutilParserMarksSecureDigitalReaderAsMemoryCard() throws {
@@ -2114,6 +2169,15 @@ private final class RecordingCommandRunner: CommandRunning, @unchecked Sendable 
 
     private let lock = NSLock()
     private var recordedCalls: [Call] = []
+    private let stdout: String
+    private let stderr: String
+    private let terminationStatus: Int32
+
+    init(stdout: String = "", stderr: String = "", terminationStatus: Int32 = 0) {
+        self.stdout = stdout
+        self.stderr = stderr
+        self.terminationStatus = terminationStatus
+    }
 
     var calls: [Call] {
         lock.lock()
@@ -2125,7 +2189,11 @@ private final class RecordingCommandRunner: CommandRunning, @unchecked Sendable 
         lock.lock()
         recordedCalls.append(Call(executable: executable, arguments: arguments))
         lock.unlock()
-        return CommandResult(stdout: Data(), stderr: Data(), terminationStatus: 0)
+        return CommandResult(
+            stdout: Data(stdout.utf8),
+            stderr: Data(stderr.utf8),
+            terminationStatus: terminationStatus
+        )
     }
 }
 
