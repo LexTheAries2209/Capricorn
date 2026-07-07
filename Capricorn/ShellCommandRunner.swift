@@ -73,6 +73,7 @@ enum DiskActionError: Error, LocalizedError {
     case missingName
     case unsupportedAction
     case unsupportedNetworkMount
+    case protectedSystemDisk
 
     var errorDescription: String? {
         switch self {
@@ -86,6 +87,8 @@ enum DiskActionError: Error, LocalizedError {
             "This disk action is not supported for the selected drive."
         case .unsupportedNetworkMount:
             "This network volume cannot be opened from its mount source."
+        case .protectedSystemDisk:
+            "System internal disks cannot be mounted, unmounted, or ejected from Capricorn."
         }
     }
 }
@@ -106,6 +109,10 @@ final class DiskActionService {
     }
 
     func perform(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async throws {
+        if DiskSidebarActionPolicy.isProtectedSystemControlAction(action, for: drive) {
+            throw DiskActionError.protectedSystemDisk
+        }
+
         switch action {
         case .mount:
             if drive.isNetwork {

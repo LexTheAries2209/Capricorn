@@ -118,10 +118,27 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.eject, for: drive))
     }
 
+    func testDiskSidebarActionsProtectInternalSystemDiskFromMountUnmountAndEject() {
+        var drive = Self.fixtureDrive(mountedAt: "/")
+        drive.isInternal = true
+        drive.isSystemDisk = true
+        drive.isRemovable = false
+        drive.isMemoryCard = false
+
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.mount, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.unmount, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.forceUnmount, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.eject, for: drive))
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.revealInFinder, for: drive))
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.refresh, for: drive))
+    }
+
     func testDiskActionServiceUsesDiskutilForPhysicalSafeActions() async throws {
         let runner = RecordingCommandRunner()
         let service = DiskActionService(runner: runner)
-        let drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        drive.isInternal = false
+        drive.isSystemDisk = false
 
         try await service.perform(.mount, on: drive)
         try await service.perform(.unmount, on: drive)
@@ -136,6 +153,29 @@ final class CapricornTests: XCTestCase {
             ["eject", "disk0"],
             ["renameVolume", "/Volumes/Unit", "Renamed"]
         ])
+    }
+
+    func testDiskActionServiceRefusesProtectedInternalSystemDiskActions() async throws {
+        let runner = RecordingCommandRunner()
+        let service = DiskActionService(runner: runner)
+        var drive = Self.fixtureDrive(mountedAt: "/")
+        drive.isInternal = true
+        drive.isSystemDisk = true
+        drive.isRemovable = false
+        drive.isMemoryCard = false
+
+        for action in [DiskSidebarAction.mount, .unmount, .forceUnmount, .eject] {
+            do {
+                try await service.perform(action, on: drive)
+                XCTFail("Expected protected system disk error for \(action)")
+            } catch DiskActionError.protectedSystemDisk {
+                continue
+            } catch {
+                XCTFail("Expected protected system disk error for \(action), got \(error)")
+            }
+        }
+
+        XCTAssertTrue(runner.calls.isEmpty)
     }
 
     func testDiskActionServiceUsesMountPointForNetworkUnmountAndOpenForMount() async throws {

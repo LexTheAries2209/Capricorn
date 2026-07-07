@@ -222,6 +222,10 @@ enum DiskSidebarActionPolicy {
     }
 
     static func isEnabled(_ action: DiskSidebarAction, for drive: DriveDevice) -> Bool {
+        if isProtectedSystemControlAction(action, for: drive) {
+            return false
+        }
+
         switch action {
         case .mount:
             return drive.isNetwork ? networkMountURL(for: drive) != nil : true
@@ -238,6 +242,20 @@ enum DiskSidebarActionPolicy {
         case .refresh:
             return true
         }
+    }
+
+    static func isProtectedSystemControlAction(_ action: DiskSidebarAction, for drive: DriveDevice) -> Bool {
+        guard isProtectedInternalSystemDisk(drive) else { return false }
+        switch action {
+        case .mount, .unmount, .forceUnmount, .eject:
+            return true
+        case .rename, .revealInFinder, .refresh, .disconnect:
+            return false
+        }
+    }
+
+    static func isProtectedInternalSystemDisk(_ drive: DriveDevice) -> Bool {
+        !drive.isNetwork && drive.isInternal && drive.isSystemDisk
     }
 
     static func networkMountURL(for drive: DriveDevice) -> URL? {

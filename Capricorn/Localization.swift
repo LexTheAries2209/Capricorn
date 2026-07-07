@@ -631,6 +631,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Running disk action...": "正在执行磁盘操作...",
         "Disk action completed.": "磁盘操作已完成。",
         "Disk action failed:": "磁盘操作失败：",
+        "System internal disks cannot be mounted, unmounted, or ejected from Capricorn.": "Capricorn 不允许装载、卸载或推出系统内置磁盘。",
         "No physical drives found.": "未找到物理磁盘。",
         "No physical or network drives found.": "未找到物理或网络磁盘。",
         "Network volumes do not expose local SMART data.": "网络卷不提供本机 SMART 数据。",
