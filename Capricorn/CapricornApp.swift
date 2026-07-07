@@ -20,6 +20,18 @@ struct CapricornApp: App {
         .modelContainer(for: [SmartHistoryRecord.self, BenchmarkHistoryRecord.self, DiskActivityHistoryRecord.self, AppSettingsRecord.self])
         .commands {
             CommandGroup(after: .toolbar) {
+                Button(language.t("Next Function")) {
+                    viewModel.selectNextFeatureTab()
+                }
+                .keyboardShortcut(AppCommandShortcut.featureTabKeyEquivalent, modifiers: AppCommandShortcut.nextFeatureTab.modifiers)
+
+                Button(language.t("Previous Function")) {
+                    viewModel.selectPreviousFeatureTab()
+                }
+                .keyboardShortcut(AppCommandShortcut.featureTabKeyEquivalent, modifiers: AppCommandShortcut.previousFeatureTab.modifiers)
+
+                Divider()
+
                 Button(language.t("Refresh Disks")) {
                     Task { await viewModel.refresh() }
                 }

@@ -51,6 +51,17 @@ struct ContentView: View {
         .navigationTitle("Capricorn")
         .environment(\.appLanguage, language)
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
+        .background {
+            FeatureTabKeyMonitor(
+                onNext: {
+                    viewModel.selectNextFeatureTab()
+                },
+                onPrevious: {
+                    viewModel.selectPreviousFeatureTab()
+                }
+            )
+            .frame(width: 0, height: 0)
+        }
         .task {
             await viewModel.refreshIfNeeded()
         }
@@ -430,6 +441,91 @@ private struct DiskOpenFileList: View {
     }
 }
 
+private struct FeatureTabKeyMonitor: NSViewRepresentable {
+    var onNext: () -> Void
+    var onPrevious: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onNext: onNext, onPrevious: onPrevious)
+    }
+
+    func makeNSView(context: Context) -> FeatureTabKeyMonitorView {
+        let view = FeatureTabKeyMonitorView()
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateNSView(_ nsView: FeatureTabKeyMonitorView, context: Context) {
+        context.coordinator.onNext = onNext
+        context.coordinator.onPrevious = onPrevious
+        context.coordinator.window = nsView.window
+    }
+
+    static func dismantleNSView(_ nsView: FeatureTabKeyMonitorView, coordinator: Coordinator) {
+        coordinator.invalidate()
+    }
+
+    final class Coordinator {
+        var onNext: () -> Void
+        var onPrevious: () -> Void
+        weak var window: NSWindow?
+        private var monitor: Any?
+
+        init(onNext: @escaping () -> Void, onPrevious: @escaping () -> Void) {
+            self.onNext = onNext
+            self.onPrevious = onPrevious
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                self?.handle(event) ?? event
+            }
+        }
+
+        deinit {
+            invalidate()
+        }
+
+        func invalidate() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+            }
+            monitor = nil
+        }
+
+        private func handle(_ event: NSEvent) -> NSEvent? {
+            guard let window, event.window === window else { return event }
+            let relevantModifiers = event.modifierFlags.intersection([.shift, .control, .option, .command])
+            let hasDisqualifyingModifiers = relevantModifiers.contains(.control)
+                || relevantModifiers.contains(.option)
+                || relevantModifiers.contains(.command)
+
+            guard let action = AppFeatureTabKeyRouter.action(
+                keyCode: event.keyCode,
+                charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                hasShift: relevantModifiers.contains(.shift),
+                hasDisqualifyingModifiers: hasDisqualifyingModifiers
+            ) else {
+                return event
+            }
+
+            switch action {
+            case .next:
+                onNext()
+            case .previous:
+                onPrevious()
+            }
+            return nil
+        }
+    }
+}
+
+private final class FeatureTabKeyMonitorView: NSView {
+    weak var coordinator: FeatureTabKeyMonitor.Coordinator?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        coordinator?.window = window
+    }
+}
+
 private struct DriveSidebarRow: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
@@ -487,9 +583,10 @@ private struct DriveDetailView: View {
     @Environment(\.appLanguage) private var language
 
     var body: some View {
-        TabView {
+        TabView(selection: $viewModel.selectedFeatureTab) {
             OverviewView(drive: drive, snapshot: snapshot)
                 .tabItem { Label(language.t("Overview"), systemImage: "gauge.with.dots.needle.bottom.50percent") }
+                .tag(DriveFeatureTab.overview)
             SmartAttributesView(
                 drive: drive,
                 snapshot: snapshot,
@@ -498,10 +595,13 @@ private struct DriveDetailView: View {
                 saveSnapshot: saveSnapshot
             )
                 .tabItem { Label("SMART", systemImage: "list.bullet.rectangle") }
+                .tag(DriveFeatureTab.smart)
             BenchmarkView(drive: drive, viewModel: viewModel, saveResults: saveBenchmarkResults)
                 .tabItem { Label(language.t("Benchmark"), systemImage: "speedometer") }
+                .tag(DriveFeatureTab.benchmark)
             DiskActivityView(initialDrive: drive, viewModel: viewModel, activityHistory: activityHistory)
                 .tabItem { Label(language.t("Live Activity"), systemImage: "waveform.path.ecg.rectangle") }
+                .tag(DriveFeatureTab.liveActivity)
             HistoryReportView(
                 drive: drive,
                 snapshot: snapshot,
@@ -511,6 +611,7 @@ private struct DriveDetailView: View {
                 activityHistory: activityHistory.filter { $0.driveID == drive.id }
             )
             .tabItem { Label(language.t("History"), systemImage: "clock.arrow.circlepath") }
+            .tag(DriveFeatureTab.history)
         }
         .padding(18)
     }

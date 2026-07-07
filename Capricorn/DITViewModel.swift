@@ -29,6 +29,7 @@ final class DITViewModel: ObservableObject {
     @Published var diskActionFailure: DiskActionFailure?
     @Published var externalSupport: ExternalSupportStatus
     @Published var showVirtualDisks = false
+    @Published var selectedFeatureTab: DriveFeatureTab = .overview
 
     nonisolated static let benchmarkActivityInterval = DiskActivitySampleInterval.fifth
 
@@ -91,6 +92,14 @@ final class DITViewModel: ObservableObject {
             return "\(drives.count) drive\(drives.count == 1 ? "" : "s") monitored"
         }
         return "\(warningCount) drive\(warningCount == 1 ? "" : "s") need attention"
+    }
+
+    func selectNextFeatureTab() {
+        selectedFeatureTab = DriveFeatureTab.next(after: selectedFeatureTab)
+    }
+
+    func selectPreviousFeatureTab() {
+        selectedFeatureTab = DriveFeatureTab.previous(before: selectedFeatureTab)
     }
 
     func refreshIfNeeded() async {

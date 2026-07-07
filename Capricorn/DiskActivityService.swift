@@ -227,6 +227,7 @@ final class DiskActivityMonitor: @unchecked Sendable {
     ) async {
         let reader = provider.reader(forBSDName: bsdName)
         var previousCounters: DiskActivityCounters?
+        var sampleDeliveryTask: Task<Void, Never>?
 
         while !Task.isCancelled {
             let counters = reader?.counters() ?? provider.counters(forBSDName: bsdName)
@@ -235,7 +236,9 @@ final class DiskActivityMonitor: @unchecked Sendable {
             if let counters {
                 let sample = DiskActivityRateCalculator.sample(previous: previousCounters, current: counters)
                 previousCounters = counters
-                Task {
+                let previousDeliveryTask = sampleDeliveryTask
+                sampleDeliveryTask = Task {
+                    await previousDeliveryTask?.value
                     await onSample(sample)
                 }
             }
@@ -246,6 +249,8 @@ final class DiskActivityMonitor: @unchecked Sendable {
                 break
             }
         }
+
+        await sampleDeliveryTask?.value
     }
 }
 

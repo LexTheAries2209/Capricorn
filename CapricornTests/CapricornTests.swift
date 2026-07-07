@@ -245,6 +245,72 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(AppCommandShortcut.refreshDisks.modifiers.contains(.command))
     }
 
+    func testDriveFeatureTabsCycleThroughFiveModules() {
+        XCTAssertEqual(DriveFeatureTab.allCases, [.overview, .smart, .benchmark, .liveActivity, .history])
+        XCTAssertEqual(DriveFeatureTab.next(after: .overview), .smart)
+        XCTAssertEqual(DriveFeatureTab.next(after: .smart), .benchmark)
+        XCTAssertEqual(DriveFeatureTab.next(after: .benchmark), .liveActivity)
+        XCTAssertEqual(DriveFeatureTab.next(after: .liveActivity), .history)
+        XCTAssertEqual(DriveFeatureTab.next(after: .history), .overview)
+        XCTAssertEqual(DriveFeatureTab.previous(before: .overview), .history)
+        XCTAssertEqual(DriveFeatureTab.previous(before: .history), .liveActivity)
+    }
+
+    func testFeatureTabSwitchShortcutsUsePlainTab() {
+        XCTAssertEqual(AppCommandShortcut.nextFeatureTab.key, "tab")
+        XCTAssertEqual(AppCommandShortcut.previousFeatureTab.key, "tab")
+        XCTAssertTrue(AppCommandShortcut.nextFeatureTab.modifiers.isEmpty)
+        XCTAssertFalse(AppCommandShortcut.nextFeatureTab.modifiers.contains(.shift))
+        XCTAssertFalse(AppCommandShortcut.previousFeatureTab.modifiers.contains(.control))
+        XCTAssertTrue(AppCommandShortcut.previousFeatureTab.modifiers.contains(.shift))
+    }
+
+    func testFeatureTabKeyRouterHandlesPlainTabBeforeFocusTraversal() {
+        XCTAssertEqual(
+            AppFeatureTabKeyRouter.action(
+                charactersIgnoringModifiers: "\t",
+                hasShift: false,
+                hasDisqualifyingModifiers: false
+            ),
+            .next
+        )
+        XCTAssertEqual(
+            AppFeatureTabKeyRouter.action(
+                charactersIgnoringModifiers: "\t",
+                hasShift: true,
+                hasDisqualifyingModifiers: false
+            ),
+            .previous
+        )
+        XCTAssertNil(
+            AppFeatureTabKeyRouter.action(
+                charactersIgnoringModifiers: "\t",
+                hasShift: false,
+                hasDisqualifyingModifiers: true
+            )
+        )
+        XCTAssertNil(
+            AppFeatureTabKeyRouter.action(
+                charactersIgnoringModifiers: "r",
+                hasShift: false,
+                hasDisqualifyingModifiers: false
+            )
+        )
+    }
+
+    @MainActor
+    func testViewModelCyclesSelectedFeatureTab() {
+        let model = DITViewModel()
+
+        XCTAssertEqual(model.selectedFeatureTab, .overview)
+        model.selectNextFeatureTab()
+        XCTAssertEqual(model.selectedFeatureTab, .smart)
+        model.selectPreviousFeatureTab()
+        XCTAssertEqual(model.selectedFeatureTab, .overview)
+        model.selectPreviousFeatureTab()
+        XCTAssertEqual(model.selectedFeatureTab, .history)
+    }
+
     func testDrivePageHeaderTextMatchesOverviewSubtitle() {
         var drive = Self.fixtureDrive()
 

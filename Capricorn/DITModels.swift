@@ -340,6 +340,31 @@ enum DiskOpenFileTableLayout {
 enum AppCommandShortcut {
     static let refreshDisks = (key: "r", modifiers: EventModifiers.command)
     static let refreshDisksKeyEquivalent = KeyEquivalent("r")
+    static let nextFeatureTab = (key: "tab", modifiers: EventModifiers())
+    static let previousFeatureTab = (key: "tab", modifiers: EventModifiers.shift)
+    static let featureTabCharacter: Character = "\t"
+    static let featureTabKeyEquivalent = KeyEquivalent(featureTabCharacter)
+}
+
+enum AppFeatureTabKeyAction: Equatable {
+    case next
+    case previous
+}
+
+enum AppFeatureTabKeyRouter {
+    static let tabKeyCode: UInt16 = 48
+
+    static func action(
+        keyCode: UInt16? = nil,
+        charactersIgnoringModifiers: String?,
+        hasShift: Bool,
+        hasDisqualifyingModifiers: Bool
+    ) -> AppFeatureTabKeyAction? {
+        let isTabKey = charactersIgnoringModifiers == String(AppCommandShortcut.featureTabCharacter)
+            || keyCode == tabKeyCode
+        guard isTabKey, !hasDisqualifyingModifiers else { return nil }
+        return hasShift ? .previous : .next
+    }
 }
 
 enum DrivePageHeaderText {
@@ -355,6 +380,31 @@ enum DrivePageHeaderText {
 
     static func subtitle(for drive: DriveDevice, language: AppLanguage) -> String {
         "\(drive.bsdName) · \(drive.protocolName) · \(mediaKind(for: drive, language: language))"
+    }
+}
+
+enum DriveFeatureTab: String, CaseIterable, Identifiable {
+    case overview
+    case smart
+    case benchmark
+    case liveActivity
+    case history
+
+    var id: String { rawValue }
+
+    static func next(after tab: DriveFeatureTab) -> DriveFeatureTab {
+        tab.offset(by: 1)
+    }
+
+    static func previous(before tab: DriveFeatureTab) -> DriveFeatureTab {
+        tab.offset(by: -1)
+    }
+
+    private func offset(by distance: Int) -> DriveFeatureTab {
+        let tabs = Self.allCases
+        guard let index = tabs.firstIndex(of: self) else { return .overview }
+        let nextIndex = (index + distance + tabs.count) % tabs.count
+        return tabs[nextIndex]
     }
 }
 
