@@ -342,6 +342,22 @@ enum AppCommandShortcut {
     static let refreshDisksKeyEquivalent = KeyEquivalent("r")
 }
 
+enum DrivePageHeaderText {
+    static func mediaKind(for drive: DriveDevice, language: AppLanguage) -> String {
+        if drive.isNetwork {
+            return language.t("Network Drive")
+        }
+        if drive.isMemoryCard {
+            return language.t("SD Card")
+        }
+        return drive.isSolidState ? language.t("SSD") : language.t("HDD/Media")
+    }
+
+    static func subtitle(for drive: DriveDevice, language: AppLanguage) -> String {
+        "\(drive.bsdName) · \(drive.protocolName) · \(mediaKind(for: drive, language: language))"
+    }
+}
+
 extension DriveDevice {
     private enum CodingKeys: String, CodingKey {
         case bsdName

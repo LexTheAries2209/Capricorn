@@ -245,6 +245,21 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(AppCommandShortcut.refreshDisks.modifiers.contains(.command))
     }
 
+    func testDrivePageHeaderTextMatchesOverviewSubtitle() {
+        var drive = Self.fixtureDrive()
+
+        XCTAssertEqual(DrivePageHeaderText.subtitle(for: drive, language: .simplifiedChinese), "disk0 · NVMe · SSD")
+
+        drive.isNetwork = true
+        drive.protocolName = "SMB"
+        XCTAssertEqual(DrivePageHeaderText.subtitle(for: drive, language: .simplifiedChinese), "disk0 · SMB · 网络硬盘")
+
+        drive.isNetwork = false
+        drive.isMemoryCard = true
+        drive.protocolName = "Secure Digital"
+        XCTAssertEqual(DrivePageHeaderText.subtitle(for: drive, language: .english), "disk0 · Secure Digital · SD Card")
+    }
+
     @MainActor
     func testViewModelCreatesDiskActionFailureWithOpenFilesWhenUnmountFails() async {
         let diskActionService = DiskActionService(runner: StaticCommandRunner(stdout: "", stderr: "Resource busy", terminationStatus: 16))

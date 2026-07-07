@@ -516,6 +516,30 @@ private struct DriveDetailView: View {
     }
 }
 
+private struct DrivePageHeaderView: View {
+    let drive: DriveDevice
+    let snapshot: SmartSnapshot?
+    var showsHealthBadge = true
+    @Environment(\.appLanguage) private var language
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(drive.displayName)
+                    .font(.largeTitle.bold())
+                    .lineLimit(2)
+                Text(DrivePageHeaderText.subtitle(for: drive, language: language))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if showsHealthBadge {
+                HealthBadge(status: snapshot?.health ?? .unavailable)
+            }
+        }
+    }
+}
+
 private struct OverviewView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
@@ -525,18 +549,7 @@ private struct OverviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(drive.displayName)
-                            .font(.largeTitle.bold())
-                            .lineLimit(2)
-                        Text("\(drive.bsdName) · \(drive.protocolName) · \(mediaKindText)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    HealthBadge(status: snapshot?.health ?? .unavailable)
-                }
+                DrivePageHeaderView(drive: drive, snapshot: snapshot)
 
                 if let snapshot {
                     Text(language.statusMessage(snapshot.summary))
@@ -599,16 +612,6 @@ private struct OverviewView: View {
         }
     }
 
-    private var mediaKindText: String {
-        if drive.isNetwork {
-            return language.t("Network Drive")
-        }
-        if drive.isMemoryCard {
-            return language.t("SD Card")
-        }
-        return drive.isSolidState ? language.t("SSD") : language.t("HDD/Media")
-    }
-
     private func volumeSubtitle(_ volume: DriveDevice.Volume) -> String {
         let path = volume.mountPoint ?? volume.deviceIdentifier
         guard let format = FileSystemFormatResolver.normalized(volume.fileSystemType) else {
@@ -653,6 +656,8 @@ private struct SmartAttributesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            DrivePageHeaderView(drive: drive, snapshot: snapshot, showsHealthBadge: false)
+
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(language.t("SMART Attributes"))
@@ -2874,13 +2879,15 @@ private struct HistoryReportView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text(language.t("History & Reports"))
-                        .font(.title2.bold())
+                HStack(alignment: .top, spacing: 16) {
+                    DrivePageHeaderView(drive: drive, snapshot: snapshot, showsHealthBadge: false)
                     Spacer()
                     Toggle(language.t("Include serials"), isOn: $includeSerialsInReports)
                         .toggleStyle(.checkbox)
                 }
+
+                Text(language.t("History & Reports"))
+                    .font(.title2.bold())
 
                 HStack {
                     Button {
