@@ -442,6 +442,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "No Drives": "无磁盘",
         "Refresh to scan attached storage.": "刷新以扫描已连接的存储设备。",
         "Drives": "磁盘",
+        "Refresh Disks": "刷新磁盘",
         "Show virtual disks": "显示虚拟磁盘",
         "Refresh disks and SMART data": "刷新磁盘和 SMART 数据",
         "Language": "语言",

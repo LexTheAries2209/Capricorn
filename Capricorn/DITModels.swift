@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
+import SwiftUI
 
 enum HealthStatus: String, Codable, CaseIterable, Identifiable, Comparable {
     case good
@@ -326,6 +327,19 @@ struct DiskActionFailure: Identifiable, Hashable, Sendable {
     var canForceUnmount: Bool {
         action != .forceUnmount && DiskSidebarActionPolicy.isEnabled(.forceUnmount, for: drive)
     }
+}
+
+enum DiskOpenFileTableLayout {
+    static let columnWidths: [CGFloat] = [150, 80, 110, 900]
+    static let spacing: CGFloat = 12
+    static var contentWidth: CGFloat {
+        columnWidths.reduce(0, +) + spacing * CGFloat(max(0, columnWidths.count - 1))
+    }
+}
+
+enum AppCommandShortcut {
+    static let refreshDisks = (key: "r", modifiers: EventModifiers.command)
+    static let refreshDisksKeyEquivalent = KeyEquivalent("r")
 }
 
 extension DriveDevice {

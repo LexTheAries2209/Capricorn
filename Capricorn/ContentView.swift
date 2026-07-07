@@ -111,6 +111,7 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
+                    .keyboardShortcut(AppCommandShortcut.refreshDisksKeyEquivalent, modifiers: AppCommandShortcut.refreshDisks.modifiers)
                     .buttonStyle(.borderless)
                     .disabled(viewModel.isRefreshing)
                     .help(language.t("Refresh disks and SMART data"))
@@ -351,12 +352,11 @@ private struct DiskOpenFileList: View {
     var inspection: DiskOpenFileInspection
     var language: AppLanguage
 
-    private let columns: [GridItem] = [
-        GridItem(.fixed(140), spacing: 12, alignment: .leading),
-        GridItem(.fixed(70), spacing: 12, alignment: .leading),
-        GridItem(.fixed(100), spacing: 12, alignment: .leading),
-        GridItem(.flexible(minimum: 220), spacing: 12, alignment: .leading)
-    ]
+    private var columns: [GridItem] {
+        DiskOpenFileTableLayout.columnWidths.map {
+            GridItem(.fixed($0), spacing: DiskOpenFileTableLayout.spacing, alignment: .leading)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -378,18 +378,18 @@ private struct DiskOpenFileList: View {
                 )
                 .frame(maxWidth: .infinity, minHeight: 220)
             } else {
-                VStack(spacing: 0) {
-                    LazyVGrid(columns: columns, spacing: 0) {
-                        header(language.t("Program"))
-                        header("PID")
-                        header(language.t("User"))
-                        header(language.t("Path"))
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.quaternary)
+                ScrollView([.vertical, .horizontal]) {
+                    VStack(spacing: 0) {
+                        LazyVGrid(columns: columns, spacing: 0) {
+                            header(language.t("Program"))
+                            header("PID")
+                            header(language.t("User"))
+                            header(language.t("Path"))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(.quaternary)
 
-                    ScrollView {
                         LazyVGrid(columns: columns, spacing: 0) {
                             ForEach(inspection.processes) { process in
                                 cell(process.command, weight: .semibold)
@@ -400,7 +400,9 @@ private struct DiskOpenFileList: View {
                         }
                         .padding(12)
                     }
+                    .frame(width: DiskOpenFileTableLayout.contentWidth + 24, alignment: .leading)
                 }
+                .scrollIndicators(.visible)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)

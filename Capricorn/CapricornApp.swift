@@ -18,6 +18,15 @@ struct CapricornApp: App {
         }
         .defaultSize(width: 1433, height: 732)
         .modelContainer(for: [SmartHistoryRecord.self, BenchmarkHistoryRecord.self, DiskActivityHistoryRecord.self, AppSettingsRecord.self])
+        .commands {
+            CommandGroup(after: .toolbar) {
+                Button(language.t("Refresh Disks")) {
+                    Task { await viewModel.refresh() }
+                }
+                .keyboardShortcut(AppCommandShortcut.refreshDisksKeyEquivalent, modifiers: AppCommandShortcut.refreshDisks.modifiers)
+                .disabled(viewModel.isRefreshing)
+            }
+        }
 
         MenuBarExtra("Capricorn", systemImage: menuBarSymbol) {
             VStack(alignment: .leading, spacing: 8) {
@@ -29,7 +38,7 @@ struct CapricornApp: App {
                 Button(language.t("Refresh")) {
                     Task { await viewModel.refresh() }
                 }
-                .keyboardShortcut("r")
+                .keyboardShortcut(AppCommandShortcut.refreshDisksKeyEquivalent, modifiers: AppCommandShortcut.refreshDisks.modifiers)
             }
             .padding(8)
         }

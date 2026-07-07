@@ -234,6 +234,17 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(runner.calls.map(\.arguments), [["+f", "--", "/Volumes/Media"]])
     }
 
+    func testDiskOpenFileTableLayoutAllowsHorizontalPathScrolling() {
+        XCTAssertEqual(DiskOpenFileTableLayout.columnWidths, [150, 80, 110, 900])
+        XCTAssertEqual(DiskOpenFileTableLayout.contentWidth, 1_276)
+        XCTAssertGreaterThan(DiskOpenFileTableLayout.contentWidth, 680)
+    }
+
+    func testRefreshCommandShortcutUsesCommandR() {
+        XCTAssertEqual(AppCommandShortcut.refreshDisks.key, "r")
+        XCTAssertTrue(AppCommandShortcut.refreshDisks.modifiers.contains(.command))
+    }
+
     @MainActor
     func testViewModelCreatesDiskActionFailureWithOpenFilesWhenUnmountFails() async {
         let diskActionService = DiskActionService(runner: StaticCommandRunner(stdout: "", stderr: "Resource busy", terminationStatus: 16))
