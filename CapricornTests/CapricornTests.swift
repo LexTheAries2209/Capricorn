@@ -18,6 +18,8 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(drive.displayName, "APPLE SSD AP1024Z")
         XCTAssertEqual(drive.nativeSmartKeys["PERCENTAGE_USED"], 2)
         XCTAssertEqual(drive.benchmarkMountPoint, "/System/Volumes/Data")
+        XCTAssertEqual(drive.volumes.first?.fileSystemType, "APFS")
+        XCTAssertEqual(drive.fileSystemSummary, "APFS")
     }
 
     func testDiskutilParserMapsMountedExternalPartitionToPhysicalDisk() throws {
@@ -27,6 +29,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(volumes.map(\.deviceIdentifier), ["disk11s1"])
         XCTAssertEqual(volumes.first?.name, "40G4T_NTFS_E")
         XCTAssertEqual(volumes.first?.mountPoint, "/Volumes/40G4T_NTFS_E")
+        XCTAssertEqual(volumes.first?.fileSystemType, "NTFS")
 
         let drive = try XCTUnwrap(DiskutilPlistParser.parseDevice(
             infoData: Self.disk11InfoFixture.data(using: .utf8)!,
@@ -37,6 +40,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive("/Volumes/40G4T_NTFS_E", drive: drive))
         XCTAssertTrue(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive("/Volumes/40G4T_NTFS_E/Load", drive: drive))
         XCTAssertEqual(drive.benchmarkMountPoint, "/Volumes/40G4T_NTFS_E")
+        XCTAssertEqual(drive.fileSystemSummary, "NTFS")
     }
 
     func testNetworkMountParserDetectsMountedNetworkVolumes() {
@@ -81,6 +85,14 @@ final class CapricornTests: XCTestCase {
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         object.removeValue(forKey: "isNetwork")
         object.removeValue(forKey: "isMemoryCard")
+        if var volumes = object["volumes"] as? [[String: Any]] {
+            volumes = volumes.map { volume in
+                var volume = volume
+                volume.removeValue(forKey: "fileSystemType")
+                return volume
+            }
+            object["volumes"] = volumes
+        }
         let legacyData = try JSONSerialization.data(withJSONObject: object)
 
         let decoded = try JSONDecoder().decode(DriveDevice.self, from: legacyData)
@@ -88,6 +100,66 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(decoded.isNetwork)
         XCTAssertFalse(decoded.isMemoryCard)
         XCTAssertEqual(decoded.bsdName, "disk0")
+    }
+
+    func testDiskSidebarActionsLimitNetworkDrivesToSafeNetworkOperations() {
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/Media")
+        drive.isNetwork = true
+        drive.protocolName = "SMB"
+        drive.deviceNode = "//lex@nas.local/Media"
+
+        XCTAssertEqual(
+            DiskSidebarActionPolicy.actions(for: drive),
+            [.mount, .unmount, .disconnect]
+        )
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.mount, for: drive))
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.unmount, for: drive))
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.disconnect, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.eject, for: drive))
+    }
+
+    func testDiskActionServiceUsesDiskutilForPhysicalSafeActions() async throws {
+        let runner = RecordingCommandRunner()
+        let service = DiskActionService(runner: runner)
+        let drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+
+        try await service.perform(.mount, on: drive)
+        try await service.perform(.unmount, on: drive)
+        try await service.perform(.forceUnmount, on: drive)
+        try await service.perform(.eject, on: drive)
+        try await service.perform(.rename, on: drive, newName: "Renamed")
+
+        XCTAssertEqual(runner.calls.map(\.arguments), [
+            ["mountDisk", "disk0"],
+            ["unmountDisk", "disk0"],
+            ["unmountDisk", "force", "disk0"],
+            ["eject", "disk0"],
+            ["renameVolume", "/Volumes/Unit", "Renamed"]
+        ])
+    }
+
+    func testDiskActionServiceUsesMountPointForNetworkUnmountAndOpenForMount() async throws {
+        let runner = RecordingCommandRunner()
+        let service = DiskActionService(runner: runner)
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/Media")
+        drive.isNetwork = true
+        drive.protocolName = "SMB"
+        drive.deviceNode = "//lex@nas.local/Media"
+
+        try await service.perform(.mount, on: drive)
+        try await service.perform(.unmount, on: drive)
+        try await service.perform(.disconnect, on: drive)
+
+        XCTAssertEqual(runner.calls.map(\.executable), [
+            "/usr/bin/open",
+            "/usr/sbin/diskutil",
+            "/usr/sbin/diskutil"
+        ])
+        XCTAssertEqual(runner.calls.map(\.arguments), [
+            ["smb://lex@nas.local/Media"],
+            ["unmount", "/Volumes/Media"],
+            ["unmount", "/Volumes/Media"]
+        ])
     }
 
     func testDiskutilParserMarksSecureDigitalReaderAsMemoryCard() throws {
@@ -1847,6 +1919,7 @@ final class CapricornTests: XCTestCase {
             <dict>
               <key>DeviceIdentifier</key><string>disk11s1</string>
               <key>Content</key><string>Microsoft Basic Data</string>
+              <key>FilesystemName</key><string>NTFS</string>
               <key>VolumeName</key><string>40G4T_NTFS_E</string>
               <key>MountPoint</key><string>/Volumes/40G4T_NTFS_E</string>
               <key>Size</key><integer>4096000000000</integer>
@@ -1990,6 +2063,29 @@ private struct StaticCommandRunner: CommandRunning {
             stderr: Data(stderr.utf8),
             terminationStatus: terminationStatus
         )
+    }
+}
+
+private final class RecordingCommandRunner: CommandRunning, @unchecked Sendable {
+    struct Call: Equatable {
+        var executable: String
+        var arguments: [String]
+    }
+
+    private let lock = NSLock()
+    private var recordedCalls: [Call] = []
+
+    var calls: [Call] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedCalls
+    }
+
+    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        lock.lock()
+        recordedCalls.append(Call(executable: executable, arguments: arguments))
+        lock.unlock()
+        return CommandResult(stdout: Data(), stderr: Data(), terminationStatus: 0)
     }
 }
 

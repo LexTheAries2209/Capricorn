@@ -66,3 +66,104 @@ final class ShellCommandRunner: CommandRunning {
         }
     }
 }
+
+enum DiskActionError: Error, LocalizedError {
+    case missingMountPoint
+    case missingVolume
+    case missingName
+    case unsupportedAction
+    case unsupportedNetworkMount
+
+    var errorDescription: String? {
+        switch self {
+        case .missingMountPoint:
+            "No mounted volume is available for this action."
+        case .missingVolume:
+            "No suitable volume is available for this action."
+        case .missingName:
+            "A volume name is required."
+        case .unsupportedAction:
+            "This disk action is not supported for the selected drive."
+        case .unsupportedNetworkMount:
+            "This network volume cannot be opened from its mount source."
+        }
+    }
+}
+
+final class DiskActionService {
+    private let runner: CommandRunning
+    private let diskutilPath: String
+    private let openPath: String
+
+    init(
+        runner: CommandRunning = ShellCommandRunner(),
+        diskutilPath: String = "/usr/sbin/diskutil",
+        openPath: String = "/usr/bin/open"
+    ) {
+        self.runner = runner
+        self.diskutilPath = diskutilPath
+        self.openPath = openPath
+    }
+
+    func perform(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async throws {
+        switch action {
+        case .mount:
+            if drive.isNetwork {
+                guard let url = DiskSidebarActionPolicy.networkMountURL(for: drive) else {
+                    throw DiskActionError.unsupportedNetworkMount
+                }
+                try await run(openPath, arguments: [url.absoluteString])
+            } else {
+                try await runDiskutil(["mountDisk", drive.bsdName])
+            }
+        case .unmount:
+            if drive.isNetwork {
+                try await runDiskutil(["unmount", try mountedPath(for: drive)])
+            } else {
+                try await runDiskutil(["unmountDisk", drive.bsdName])
+            }
+        case .forceUnmount:
+            guard !drive.isNetwork else { throw DiskActionError.unsupportedAction }
+            try await runDiskutil(["unmountDisk", "force", drive.bsdName])
+        case .eject:
+            guard !drive.isNetwork else { throw DiskActionError.unsupportedAction }
+            try await runDiskutil(["eject", drive.bsdName])
+        case .rename:
+            guard !drive.isNetwork else { throw DiskActionError.unsupportedAction }
+            guard let newName = newName?.trimmingCharacters(in: .whitespacesAndNewlines), !newName.isEmpty else {
+                throw DiskActionError.missingName
+            }
+            try await runDiskutil(["renameVolume", try renameTarget(for: drive), newName])
+        case .disconnect:
+            guard drive.isNetwork else { throw DiskActionError.unsupportedAction }
+            try await runDiskutil(["unmount", try mountedPath(for: drive)])
+        case .revealInFinder, .refresh:
+            throw DiskActionError.unsupportedAction
+        }
+    }
+
+    private func runDiskutil(_ arguments: [String]) async throws {
+        try await run(diskutilPath, arguments: arguments)
+    }
+
+    private func run(_ executable: String, arguments: [String]) async throws {
+        let result = try await runner.run(executable, arguments: arguments)
+        guard result.terminationStatus == 0 else {
+            throw CommandError.nonZeroExit(executable: executable, status: result.terminationStatus, stderr: result.stderrString)
+        }
+    }
+
+    private func mountedPath(for drive: DriveDevice) throws -> String {
+        guard let mountPoint = drive.primaryMountPoint else {
+            throw DiskActionError.missingMountPoint
+        }
+        return mountPoint
+    }
+
+    private func renameTarget(for drive: DriveDevice) throws -> String {
+        guard let volume = drive.actionTargetVolume else {
+            throw DiskActionError.missingVolume
+        }
+        return volume.mountPoint ?? volume.deviceIdentifier
+    }
+}

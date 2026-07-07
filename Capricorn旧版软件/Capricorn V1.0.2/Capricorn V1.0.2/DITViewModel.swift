@@ -35,7 +35,6 @@ final class DITViewModel: ObservableObject {
     private let benchmarkRunner: BenchmarkRunning
     private let diskActivityProvider: DiskActivityProviding
     private let liveActivityWorkloadRunner: DiskActivityWorkloadRunning
-    private let diskActionService: DiskActionService
     private let externalDetector: ExternalDriveSupportDetector
     private let notificationCoordinator: NotificationCoordinator
     private var diskActivityTask: Task<Void, Never>?
@@ -49,7 +48,6 @@ final class DITViewModel: ObservableObject {
         benchmarkRunner: BenchmarkRunning = BenchmarkRunnerRouter(),
         diskActivityProvider: DiskActivityProviding = IOKitDiskActivityProvider(),
         liveActivityWorkloadRunner: DiskActivityWorkloadRunning = NativeDiskActivityWorkloadRunner(),
-        diskActionService: DiskActionService = DiskActionService(),
         externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator()
     ) {
@@ -58,7 +56,6 @@ final class DITViewModel: ObservableObject {
         self.benchmarkRunner = benchmarkRunner
         self.diskActivityProvider = diskActivityProvider
         self.liveActivityWorkloadRunner = liveActivityWorkloadRunner
-        self.diskActionService = diskActionService
         self.externalDetector = externalDetector
         self.notificationCoordinator = notificationCoordinator
         self.externalSupport = externalDetector.detect()
@@ -175,19 +172,6 @@ final class DITViewModel: ObservableObject {
     func cancelBenchmark() {
         benchmarkRunner.cancel()
         stopDiskActivityMonitoring()
-    }
-
-    func performDiskAction(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async {
-        selectedDriveID = drive.id
-        refreshMessage = "Running disk action..."
-
-        do {
-            try await diskActionService.perform(action, on: drive, newName: newName)
-            await refresh()
-            refreshMessage = "Disk action completed."
-        } catch {
-            refreshMessage = "Disk action failed: \(error.localizedDescription)"
-        }
     }
 
     func startLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {

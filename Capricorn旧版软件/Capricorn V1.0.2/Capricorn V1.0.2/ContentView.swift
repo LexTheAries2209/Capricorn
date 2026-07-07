@@ -64,9 +64,6 @@ struct ContentView: View {
             Section(language.t("Drives")) {
                 ForEach(viewModel.drives) { drive in
                     DriveSidebarRow(drive: drive, snapshot: viewModel.snapshots[drive.id])
-                        .contextMenu {
-                            driveContextMenu(for: drive)
-                        }
                         .tag(drive.id as String?)
                 }
             }
@@ -135,59 +132,6 @@ struct ContentView: View {
         }
         let warningCount = viewModel.snapshots.values.filter { $0.health.severity >= HealthStatus.warning.severity }.count
         return language.healthSummary(driveCount: viewModel.drives.count, warningCount: warningCount)
-    }
-
-    @ViewBuilder
-    private func driveContextMenu(for drive: DriveDevice) -> some View {
-        Menu {
-            ForEach(DiskSidebarActionPolicy.actions(for: drive)) { action in
-                Button {
-                    handleSidebarAction(action, for: drive)
-                } label: {
-                    Label(language.t(action.titleKey), systemImage: action.systemImage)
-                }
-                .disabled(!DiskSidebarActionPolicy.isEnabled(action, for: drive))
-            }
-        } label: {
-            Label(language.t("Disk Actions"), systemImage: "externaldrive.badge.gearshape")
-        }
-    }
-
-    private func handleSidebarAction(_ action: DiskSidebarAction, for drive: DriveDevice) {
-        viewModel.selectedDriveID = drive.id
-
-        switch action {
-        case .rename:
-            guard let newName = promptForVolumeName(drive: drive) else { return }
-            Task { await viewModel.performDiskAction(action, on: drive, newName: newName) }
-        case .revealInFinder:
-            revealDriveInFinder(drive)
-        case .refresh:
-            Task { await viewModel.refresh() }
-        default:
-            Task { await viewModel.performDiskAction(action, on: drive) }
-        }
-    }
-
-    private func promptForVolumeName(drive: DriveDevice) -> String? {
-        let alert = NSAlert()
-        alert.messageText = language.t("Rename Volume")
-        alert.informativeText = language.t("Enter a new name for the selected volume.")
-        alert.addButton(withTitle: language.t("Rename"))
-        alert.addButton(withTitle: language.t("Cancel"))
-
-        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
-        textField.stringValue = drive.actionTargetVolume?.name ?? drive.displayName
-        alert.accessoryView = textField
-
-        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-        let trimmed = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private func revealDriveInFinder(_ drive: DriveDevice) {
-        guard let mountPoint = drive.primaryMountPoint else { return }
-        NSWorkspace.shared.open(URL(fileURLWithPath: mountPoint, isDirectory: true))
     }
 
     private func saveSnapshot(drive: DriveDevice, exportFolderPath: String?) -> String {
@@ -358,7 +302,6 @@ private struct OverviewView: View {
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 12)], spacing: 12) {
                     StatTile(title: language.t("Capacity"), value: formatByteCount(drive.sizeBytes), symbol: "square.stack.3d.down.right")
-                    StatTile(title: language.t("Format"), value: drive.fileSystemSummary ?? language.t("Unavailable"), symbol: "doc.richtext")
                     StatTile(title: language.t("Temperature"), value: snapshot?.temperatureCelsius.map { String(format: "%.1f C", $0) } ?? language.t("Unavailable"), symbol: "thermometer.medium")
                     StatTile(title: language.t("Life Remaining"), value: snapshot?.lifeRemainingPercent.map { "\($0)%" } ?? language.t("Unavailable"), symbol: "battery.75percent")
                     StatTile(title: language.t("Power-On Hours"), value: snapshot?.powerOnHours.map(String.init) ?? language.t("Unavailable"), symbol: "timer")
@@ -375,7 +318,7 @@ private struct OverviewView: View {
                             HStack {
                                 VStack(alignment: .leading) {
                                     Text(volume.name)
-                                    Text(volumeSubtitle(volume))
+                                    Text(volume.mountPoint ?? volume.deviceIdentifier)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -419,14 +362,6 @@ private struct OverviewView: View {
             return language.t("SD Card")
         }
         return drive.isSolidState ? language.t("SSD") : language.t("HDD/Media")
-    }
-
-    private func volumeSubtitle(_ volume: DriveDevice.Volume) -> String {
-        let path = volume.mountPoint ?? volume.deviceIdentifier
-        guard let format = FileSystemFormatResolver.normalized(volume.fileSystemType) else {
-            return path
-        }
-        return "\(path) · \(format)"
     }
 }
 

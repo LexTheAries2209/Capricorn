@@ -67,8 +67,7 @@ enum DiskutilPlistParser {
                     mountPoint: normalizedMountPoint(volume.string("MountPoint")),
                     sizeBytes: volume.int64("Size") ?? 0,
                     isWritable: !(volume.bool("ReadOnly") ?? false),
-                    isSystem: volume.bool("OSInternal") ?? false || normalizedMountPoint(volume.string("MountPoint")) == "/",
-                    fileSystemType: parsedFileSystemType(from: volume, fallback: "APFS")
+                    isSystem: volume.bool("OSInternal") ?? false || normalizedMountPoint(volume.string("MountPoint")) == "/"
                 )
             }
 
@@ -104,8 +103,7 @@ enum DiskutilPlistParser {
             mountPoint: mountPoint,
             sizeBytes: partition.int64("Size") ?? 0,
             isWritable: isWritable,
-            isSystem: partition.bool("OSInternal") ?? false || mountPoint == "/",
-            fileSystemType: parsedFileSystemType(from: partition, fallback: nil)
+            isSystem: partition.bool("OSInternal") ?? false || mountPoint == "/"
         )
     }
 
@@ -222,25 +220,6 @@ enum DiskutilPlistParser {
             result.append(volume)
         }
         return result
-    }
-
-    private static func parsedFileSystemType(from dictionary: [String: Any], fallback: String?) -> String? {
-        let candidates = [
-            dictionary.string("FilesystemName"),
-            dictionary.string("FileSystemName"),
-            dictionary.string("FilesystemType"),
-            dictionary.string("FileSystemType"),
-            dictionary.string("VolumeKind"),
-            dictionary.string("Content"),
-            fallback
-        ]
-
-        for candidate in candidates {
-            if let normalized = FileSystemFormatResolver.normalized(candidate) {
-                return normalized
-            }
-        }
-        return nil
     }
 }
 
@@ -373,8 +352,7 @@ final class NetworkMountInventoryProvider: NetworkVolumeInventoryProviding {
                     mountPoint: entry.mountPoint,
                     sizeBytes: sizeBytes,
                     isWritable: isWritable,
-                    isSystem: false,
-                    fileSystemType: protocolName
+                    isSystem: false
                 )
             ],
             model: entry.source,
@@ -449,7 +427,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding {
         for diskID in list.wholeDiskIDs {
             let infoResult = try await runner.run(diskutilPath, arguments: ["info", "-plist", diskID])
             guard infoResult.terminationStatus == 0 else { continue }
-            let volumes = enrichFileSystemTypes(list.volumesByPhysicalDisk[diskID] ?? [])
+            let volumes = list.volumesByPhysicalDisk[diskID] ?? []
             if let device = try DiskutilPlistParser.parseDevice(infoData: infoResult.stdout, volumes: volumes, showVirtual: showVirtual) {
                 devices.append(device)
             }
@@ -468,18 +446,6 @@ final class DiskutilInventoryProvider: DiskInventoryProviding {
             let rhsGroup = rhs.isNetwork ? 2 : (rhs.isInternal ? 0 : 1)
             if lhsGroup != rhsGroup { return lhsGroup < rhsGroup }
             return lhs.bsdName.localizedStandardCompare(rhs.bsdName) == .orderedAscending
-        }
-    }
-
-    private func enrichFileSystemTypes(_ volumes: [DriveDevice.Volume]) -> [DriveDevice.Volume] {
-        volumes.map { volume in
-            guard volume.fileSystemType == nil, let mountPoint = volume.mountPoint else {
-                return volume
-            }
-
-            var enriched = volume
-            enriched.fileSystemType = FileSystemFormatResolver.fileSystemType(atMountPoint: mountPoint)
-            return enriched
         }
     }
 }

@@ -330,9 +330,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         if message.hasPrefix("Last refreshed ") {
             return message.replacingOccurrences(of: "Last refreshed ", with: "上次刷新 ")
         }
-        if message.hasPrefix("Disk action failed: ") {
-            return message.replacingOccurrences(of: "Disk action failed: ", with: "磁盘操作失败：")
-        }
         if message.hasPrefix("SMART data does not show immediate risk for "), message.hasSuffix(".") {
             let name = message
                 .replacingOccurrences(of: "SMART data does not show immediate risk for ", with: "")
@@ -453,23 +450,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Life Remaining": "剩余寿命",
         "Power-On Hours": "通电小时",
         "Media Errors": "介质错误",
-        "Format": "格式",
         "Unavailable": "不可用",
         "Volumes": "卷宗",
         "No mounted volumes are mapped to this physical disk.": "没有挂载卷映射到这个物理磁盘。",
         "Network Drive": "网络硬盘",
         "Network volume": "网络卷",
         "SD Card": "SD 卡",
-        "Disk Actions": "磁盘操作",
-        "Mount": "装载",
-        "Unmount": "卸载",
-        "Force Unmount": "强制卸载",
-        "Eject": "推出",
-        "Rename Volume": "重命名卷宗",
-        "Reveal in Finder": "在 Finder 中显示",
-        "Disconnect": "断开",
-        "Enter a new name for the selected volume.": "输入所选卷宗的新名称。",
-        "Rename": "重命名",
         "Providers": "数据来源",
         "Save SMART Snapshot": "保存 SMART 快照",
         "Choose Storage Folder": "选择存储文件夹",
@@ -628,9 +614,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "No drives": "无磁盘",
         "Scanning disks...": "正在扫描磁盘...",
         "Reading SMART data...": "正在读取 SMART 数据...",
-        "Running disk action...": "正在执行磁盘操作...",
-        "Disk action completed.": "磁盘操作已完成。",
-        "Disk action failed:": "磁盘操作失败：",
         "No physical drives found.": "未找到物理磁盘。",
         "No physical or network drives found.": "未找到物理或网络磁盘。",
         "Network volumes do not expose local SMART data.": "网络卷不提供本机 SMART 数据。",
