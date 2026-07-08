@@ -448,6 +448,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Show virtual disks": "显示虚拟磁盘",
         "Refresh disks and SMART data": "刷新磁盘和 SMART 数据",
         "Language": "语言",
+        "Open Capricorn GitHub repository": "打开 Capricorn GitHub 仓库",
+        "Capricorn GitHub repository introduction": "GitHub 仓库：github.com/LexTheAries2209/Capricorn。代码、版本说明、发布包与问题反馈均在仓库维护，欢迎通过 Issue 或 Pull Request 参与改进。",
         "Overview": "概览",
         "Benchmark": "测速",
         "Live Activity": "实时活动",

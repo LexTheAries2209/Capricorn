@@ -80,6 +80,15 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(target.path, drive: drive))
     }
 
+    func testGitHubRepositoryIntroductionIsLocalized() {
+        XCTAssertEqual(AppLanguage.english.t("Open Capricorn GitHub repository"), "Open Capricorn GitHub repository")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Open Capricorn GitHub repository"), "打开 Capricorn GitHub 仓库")
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Capricorn GitHub repository introduction"),
+            "GitHub 仓库：github.com/LexTheAries2209/Capricorn。代码、版本说明、发布包与问题反馈均在仓库维护，欢迎通过 Issue 或 Pull Request 参与改进。"
+        )
+    }
+
     func testDriveDeviceDecodesOlderRecordsWithoutNetworkFlag() throws {
         let encoded = try JSONEncoder().encode(Self.fixtureDrive())
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])

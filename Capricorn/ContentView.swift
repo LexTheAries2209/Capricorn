@@ -3,6 +3,8 @@ import AppKit
 import SwiftData
 import SwiftUI
 
+private let capricornGitHubURL = URL(string: "https://github.com/LexTheAries2209/Capricorn")!
+
 struct ContentView: View {
     @StateObject private var viewModel: DITViewModel
     @Environment(\.modelContext) private var modelContext
@@ -165,6 +167,24 @@ struct ContentView: View {
                     .controlSize(.small)
                     .frame(width: 116)
                 }
+
+                Divider()
+
+                Link(destination: capricornGitHubURL) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Label(language.t("Open Capricorn GitHub repository"), systemImage: "safari")
+                            .font(.caption.weight(.semibold))
+                        Text("GitHub: github.com/LexTheAries2209/Capricorn")
+                            .font(.caption2.monospaced())
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(language.t("Capricorn GitHub repository introduction"))
+                .accessibilityLabel(language.t("Capricorn GitHub repository introduction"))
 
                 Divider()
 
