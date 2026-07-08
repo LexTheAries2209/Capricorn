@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.0.2`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.0.3`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v1.0.2.md](docs/releases/v1.0.2.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v1.0.3.md](docs/releases/v1.0.3.md)
 
 ---
 
@@ -20,11 +20,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.0.2-macOS.zip`。
-2. 解压后把 `Capricorn V1.0.2.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.0.3-macOS.zip`。
+2. 解压后把 `Capricorn V1.0.3.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V1.0.2 的中文发布说明见 [docs/releases/v1.0.2.zh-CN.md](docs/releases/v1.0.2.zh-CN.md)。
+V1.0.3 的中文发布说明见 [docs/releases/v1.0.3.zh-CN.md](docs/releases/v1.0.3.zh-CN.md)。
 
 典型用途：
 
@@ -34,11 +34,17 @@ V1.0.2 的中文发布说明见 [docs/releases/v1.0.2.zh-CN.md](docs/releases/v1
 - 使用同步或 POSIX AIO 队列深度引擎测试 SSD 峰值和持续性能。
 - 在实时活动页观察磁盘读写曲线，并主动生成大文件读取、写入或读写混合负载。
 - 保存 SMART、测速和实时活动历史，并按需要隐藏或恢复记录。
+- 通过磁盘右键菜单执行装载、卸载、推出、重命名、Finder 定位、占用程序查看和只读检查。
 
 ### 核心功能
 
 - 识别本机物理磁盘、外接磁盘、普通挂载分区、网络卷和存储卡。
 - 对 APFS、普通外接分区和网络挂载路径做目标文件夹归属判断，避免测错卷。
+- 在磁盘概览中显示文件系统格式，并在 SMART、测速和历史页显示当前查看的磁盘名称。
+- 右键磁盘菜单支持安全的装载、卸载、强制卸载、推出、重命名、Finder 定位、刷新和网络卷断开操作。
+- 内置系统盘保护，避免从 Capricorn 对系统内置盘执行装载、卸载或推出操作。
+- 支持查看占用所选磁盘的进程，并在卸载、推出失败时显示可能占用磁盘的程序列表。
+- 支持普通检查日志和只读详细检查，展示 `diskutil` 或 macOS 原生文件系统检查器的输出。
 - SMART 页面显示健康状态、温度、寿命、通电小时、介质错误、不安全关机次数和数据来源。
 - macOS 原生 SMART 优先，可选使用用户已安装的 `smartctl` 获取更完整的 ATA/NVMe 数据。
 - 对 SD/SDXC 读卡器和网络卷显示有限支持说明，避免把无 SMART 数据误判为硬盘故障。
@@ -51,6 +57,7 @@ V1.0.2 的中文发布说明见 [docs/releases/v1.0.2.zh-CN.md](docs/releases/v1
 - 实时活动大文件负载支持读取、写入、读写混合、固定大小和全盘 95% 模式。
 - 历史页支持 SMART、测速、实时活动记录的隐藏、管理隐藏记录和恢复。
 - 报告导出支持 JSON、CSV 和纯文本，默认隐藏序列号。
+- 支持 `Command-R` 刷新磁盘列表，使用 `Tab` / `Shift-Tab` 在功能页之间切换。
 - 内置简体中文和英文界面。
 
 ### SMART 和外接设备说明
@@ -112,8 +119,8 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 例如：
 
 - `Version = 1.0`
-- `Build = 2`
-- `Display Name = Capricorn V1.0.2`
+- `Build = 3`
+- `Display Name = Capricorn V1.0.3`
 
 ### 当前限制
 
@@ -133,11 +140,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v1.0.2-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V1.0.2.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v1.0.3-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V1.0.3.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V1.0.2 are available at [docs/releases/v1.0.2.en.md](docs/releases/v1.0.2.en.md).
+English release notes for V1.0.3 are available at [docs/releases/v1.0.3.en.md](docs/releases/v1.0.3.en.md).
 
 Common use cases:
 
@@ -147,11 +154,17 @@ Common use cases:
 - Use synchronous or POSIX AIO queue-depth engines for peak and sustained SSD checks.
 - Watch live disk activity while generating large-file read, write, or mixed workloads.
 - Save SMART, benchmark, and live activity history with hide and restore controls.
+- Use the drive context menu for mount, unmount, eject, rename, Finder reveal, open-file inspection, and read-only checks.
 
 ### Features
 
 - Detects local physical disks, external drives, mounted partitions, network volumes, and memory cards.
 - Maps APFS, ordinary mounted partitions, and network paths back to the selected benchmark target.
+- Shows filesystem format in the overview and repeats the selected drive name on SMART, benchmark, and history pages.
+- Adds a drive context menu for safe mount, unmount, force unmount, eject, rename, Finder reveal, refresh, and network disconnect actions.
+- Protects internal system disks from mount, unmount, force-unmount, and eject operations initiated from Capricorn.
+- Shows processes with open files on a selected disk, including follow-up diagnostics when unmount or eject actions fail.
+- Adds ordinary disk verification logs and read-only detailed checks using `diskutil` and native macOS filesystem checkers where available.
 - Shows SMART health, temperature, life remaining, power-on hours, media errors, unsafe shutdowns, and provider status.
 - Uses native macOS SMART first, with optional user-installed `smartctl` for deeper ATA/NVMe data.
 - Displays limited-support messages for SD/SDXC readers and network volumes instead of treating missing SMART as a drive failure.
@@ -164,6 +177,7 @@ Common use cases:
 - Large-file workloads support read, write, mixed read/write, fixed sizes, and a 95% free-space mode.
 - History supports SMART, benchmark, and activity record hiding, hidden-record management, and restore.
 - Exports JSON, CSV, and plain-text reports with serial numbers redacted by default.
+- Supports `Command-R` for refreshing the drive list and `Tab` / `Shift-Tab` for switching feature pages.
 - Provides Simplified Chinese and English UI text.
 
 ### SMART And External Device Notes
@@ -225,8 +239,8 @@ The public Display Name uses a three-part version label composed from Xcode `Ver
 Example:
 
 - `Version = 1.0`
-- `Build = 2`
-- `Display Name = Capricorn V1.0.2`
+- `Build = 3`
+- `Display Name = Capricorn V1.0.3`
 
 ### Current Limitations
 
