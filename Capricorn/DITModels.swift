@@ -181,6 +181,8 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
     case forceUnmount
     case eject
     case inspectOpenFiles
+    case checkLog
+    case detailedCheck
     case rename
     case revealInFinder
     case refresh
@@ -195,6 +197,8 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
         case .forceUnmount: "Force Unmount"
         case .eject: "Eject"
         case .inspectOpenFiles: "View Open Files"
+        case .checkLog: "Check Log"
+        case .detailedCheck: "Detailed Check"
         case .rename: "Rename Volume"
         case .revealInFinder: "Reveal in Finder"
         case .refresh: "Refresh"
@@ -209,6 +213,8 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
         case .forceUnmount: "externaldrive.badge.xmark"
         case .eject: "eject"
         case .inspectOpenFiles: "person.crop.circle.badge.exclamationmark"
+        case .checkLog: "doc.text.magnifyingglass"
+        case .detailedCheck: "stethoscope"
         case .rename: "pencil"
         case .revealInFinder: "folder"
         case .refresh: "arrow.clockwise"
@@ -222,7 +228,7 @@ enum DiskSidebarActionPolicy {
         if drive.isNetwork {
             return [.mount, .unmount, .disconnect, .inspectOpenFiles]
         }
-        return [.mount, .unmount, .forceUnmount, .eject, .inspectOpenFiles, .rename, .revealInFinder, .refresh]
+        return [.checkLog, .detailedCheck, .mount, .unmount, .forceUnmount, .eject, .inspectOpenFiles, .rename, .revealInFinder, .refresh]
     }
 
     static func isEnabled(_ action: DiskSidebarAction, for drive: DriveDevice) -> Bool {
@@ -241,6 +247,8 @@ enum DiskSidebarActionPolicy {
             return !drive.isNetwork && (!drive.isInternal || drive.isRemovable || drive.isMemoryCard)
         case .inspectOpenFiles:
             return drive.primaryMountPoint != nil
+        case .checkLog, .detailedCheck:
+            return !isProtectedInternalSystemDisk(drive) && !drive.isNetwork && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
         case .rename:
             return !drive.isNetwork && !drive.isSystemDisk && drive.actionTargetVolume != nil
         case .revealInFinder:
@@ -255,13 +263,19 @@ enum DiskSidebarActionPolicy {
         switch action {
         case .mount, .unmount, .forceUnmount, .eject:
             return true
-        case .inspectOpenFiles, .rename, .revealInFinder, .refresh, .disconnect:
+        case .inspectOpenFiles, .checkLog, .detailedCheck, .rename, .revealInFinder, .refresh, .disconnect:
             return false
         }
     }
 
     static func isProtectedInternalSystemDisk(_ drive: DriveDevice) -> Bool {
-        !drive.isNetwork && drive.isInternal && drive.isSystemDisk
+        guard !drive.isNetwork, drive.isInternal else { return false }
+        if drive.isSystemDisk { return true }
+        return drive.volumes.contains { volume in
+            if volume.isSystem { return true }
+            guard let mountPoint = volume.mountPoint else { return false }
+            return mountPoint == "/" || mountPoint.hasPrefix("/System/Volumes")
+        }
     }
 
     static func networkMountURL(for drive: DriveDevice) -> URL? {
@@ -326,6 +340,86 @@ struct DiskActionFailure: Identifiable, Hashable, Sendable {
 
     var canForceUnmount: Bool {
         action != .forceUnmount && DiskSidebarActionPolicy.isEnabled(.forceUnmount, for: drive)
+    }
+}
+
+enum DiskCheckMode: String, CaseIterable, Codable, Hashable, Sendable {
+    case ordinary
+    case detailed
+
+    var titleKey: String {
+        switch self {
+        case .ordinary: "Check Log"
+        case .detailed: "Detailed Check"
+        }
+    }
+
+    var descriptionKey: String {
+        switch self {
+        case .ordinary: "Runs diskutil verification and shows the complete system log."
+        case .detailed: "Runs read-only filesystem-specific fsck checks where macOS provides a checker."
+        }
+    }
+}
+
+extension DiskCheckMode {
+    var sidebarAction: DiskSidebarAction {
+        switch self {
+        case .ordinary: .checkLog
+        case .detailed: .detailedCheck
+        }
+    }
+}
+
+struct DiskCheckEntry: Identifiable, Hashable, Sendable {
+    var id = UUID()
+    var title: String
+    var executable: String?
+    var arguments: [String]
+    var terminationStatus: Int32?
+    var stdout: String
+    var stderr: String
+    var isRunning: Bool = false
+
+    var commandLine: String {
+        ([executable].compactMap { $0 } + arguments).joined(separator: " ")
+    }
+
+    var hasIssue: Bool {
+        guard !isRunning else { return false }
+        if terminationStatus == nil { return true }
+        return terminationStatus != 0
+    }
+
+    var combinedOutput: String {
+        let parts = [stdout, stderr].filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return parts.isEmpty ? "No output." : parts.joined(separator: "\n")
+    }
+}
+
+struct DiskCheckReport: Identifiable, Hashable, Sendable {
+    var id = UUID()
+    var mode: DiskCheckMode
+    var driveID: String
+    var driveName: String
+    var capturedAt: Date = Date()
+    var entries: [DiskCheckEntry]
+
+    var hasIssues: Bool {
+        entries.contains(where: \.hasIssue)
+    }
+
+    var completedEntryCount: Int {
+        entries.filter { !$0.isRunning }.count
+    }
+
+    var totalEntryCount: Int {
+        entries.count
+    }
+
+    var progressFraction: Double {
+        guard totalEntryCount > 0 else { return 0 }
+        return Double(completedEntryCount) / Double(totalEntryCount)
     }
 }
 

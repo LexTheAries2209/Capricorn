@@ -27,6 +27,8 @@ final class DITViewModel: ObservableObject {
     @Published var isLiveActivityWorkloadRunning = false
     @Published var diskOpenFileInspection: DiskOpenFileInspection?
     @Published var diskActionFailure: DiskActionFailure?
+    @Published var diskCheckReport: DiskCheckReport?
+    @Published var isDiskChecking = false
     @Published var externalSupport: ExternalSupportStatus
     @Published var showVirtualDisks = false
     @Published var selectedFeatureTab: DriveFeatureTab = .overview
@@ -40,6 +42,7 @@ final class DITViewModel: ObservableObject {
     private let liveActivityWorkloadRunner: DiskActivityWorkloadRunning
     private let diskActionService: DiskActionService
     private let openFileService: DiskOpenFileService
+    private let diskCheckService: DiskCheckService
     private let externalDetector: ExternalDriveSupportDetector
     private let notificationCoordinator: NotificationCoordinator
     private var diskActivityTask: Task<Void, Never>?
@@ -55,6 +58,7 @@ final class DITViewModel: ObservableObject {
         liveActivityWorkloadRunner: DiskActivityWorkloadRunning = NativeDiskActivityWorkloadRunner(),
         diskActionService: DiskActionService = DiskActionService(),
         openFileService: DiskOpenFileService = DiskOpenFileService(),
+        diskCheckService: DiskCheckService = DiskCheckService(),
         externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator()
     ) {
@@ -65,6 +69,7 @@ final class DITViewModel: ObservableObject {
         self.liveActivityWorkloadRunner = liveActivityWorkloadRunner
         self.diskActionService = diskActionService
         self.openFileService = openFileService
+        self.diskCheckService = diskCheckService
         self.externalDetector = externalDetector
         self.notificationCoordinator = notificationCoordinator
         self.externalSupport = externalDetector.detect()
@@ -216,6 +221,33 @@ final class DITViewModel: ObservableObject {
         }
     }
 
+    func runDiskCheck(_ mode: DiskCheckMode, on drive: DriveDevice) async {
+        guard !isDiskChecking else { return }
+        selectedDriveID = drive.id
+        refreshMessage = "Checking disk..."
+        diskCheckReport = DiskCheckReport(
+            mode: mode,
+            driveID: drive.id,
+            driveName: drive.displayName,
+            entries: []
+        )
+        isDiskChecking = true
+        let finalReport = await diskCheckService.check(mode, drive: drive) { [weak self] report in
+            await MainActor.run {
+                self?.diskCheckReport = report
+            }
+        }
+        diskCheckReport = finalReport
+        isDiskChecking = false
+        refreshMessage = "Disk check completed."
+    }
+
+    func cancelDiskCheck() {
+        guard isDiskChecking else { return }
+        refreshMessage = "Stopping disk check..."
+        diskCheckService.cancel()
+    }
+
     func forceUnmountAfterFailure(_ failure: DiskActionFailure) async {
         guard failure.canForceUnmount else { return }
         diskActionFailure = nil
@@ -250,7 +282,7 @@ final class DITViewModel: ObservableObject {
         switch action {
         case .unmount, .forceUnmount, .eject, .disconnect:
             return true
-        case .mount, .inspectOpenFiles, .rename, .revealInFinder, .refresh:
+        case .mount, .inspectOpenFiles, .checkLog, .detailedCheck, .rename, .revealInFinder, .refresh:
             return false
         }
     }

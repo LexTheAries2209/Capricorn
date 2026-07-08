@@ -91,6 +91,28 @@ struct ContentView: View {
                 }
             )
         }
+        .sheet(isPresented: Binding(
+            get: { viewModel.diskCheckReport != nil },
+            set: { isPresented in
+                if !isPresented, !viewModel.isDiskChecking {
+                    viewModel.diskCheckReport = nil
+                }
+            }
+        )) {
+            if let report = viewModel.diskCheckReport {
+                DiskCheckReportSheet(
+                    report: report,
+                    language: language,
+                    isRunning: viewModel.isDiskChecking,
+                    cancel: {
+                        viewModel.cancelDiskCheck()
+                    },
+                    close: {
+                        viewModel.diskCheckReport = nil
+                    }
+                )
+            }
+        }
     }
 
     private var sidebar: some View {
@@ -181,7 +203,7 @@ struct ContentView: View {
                 } label: {
                     Label(language.t(action.titleKey), systemImage: action.systemImage)
                 }
-                .disabled(!DiskSidebarActionPolicy.isEnabled(action, for: drive))
+                .disabled(!DiskSidebarActionPolicy.isEnabled(action, for: drive) || (viewModel.isDiskChecking && (action == .checkLog || action == .detailedCheck)))
             }
         } label: {
             Label(language.t("Disk Actions"), systemImage: "externaldrive.badge.gearshape")
@@ -197,6 +219,10 @@ struct ContentView: View {
             Task { await viewModel.performDiskAction(action, on: drive, newName: newName) }
         case .inspectOpenFiles:
             Task { await viewModel.inspectOpenFiles(on: drive) }
+        case .checkLog:
+            Task { await viewModel.runDiskCheck(.ordinary, on: drive) }
+        case .detailedCheck:
+            Task { await viewModel.runDiskCheck(.detailed, on: drive) }
         case .revealInFinder:
             revealDriveInFinder(drive)
         case .refresh:
@@ -356,6 +382,174 @@ private struct DiskOpenFileInspectionSheet: View {
         }
         .padding(22)
         .frame(minWidth: 680, minHeight: 420)
+    }
+}
+
+private struct DiskCheckReportSheet: View {
+    var report: DiskCheckReport
+    var language: AppLanguage
+    var isRunning: Bool
+    var cancel: () -> Void
+    var close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: report.hasIssues ? "exclamationmark.magnifyingglass" : "checkmark.circle")
+                    .font(.title2)
+                    .foregroundStyle(report.hasIssues ? .orange : .green)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(language.t("Disk Check Report"))
+                        .font(.title3.weight(.semibold))
+                    Text("\(report.driveName) · \(language.t(report.mode.titleKey))")
+                        .foregroundStyle(.secondary)
+                    Text(language.t(report.mode.descriptionKey))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label(statusMessage, systemImage: statusIcon)
+                    .foregroundStyle(statusColor)
+                if isRunning {
+                    if report.totalEntryCount > 0 {
+                        ProgressView(value: report.progressFraction)
+                    } else {
+                        ProgressView()
+                    }
+                }
+                Text("\(language.t("Completed")) \(report.completedEntryCount) / \(report.totalEntryCount)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if report.entries.isEmpty {
+                        ContentUnavailableView(
+                            language.t("Preparing Disk Check"),
+                            systemImage: "hourglass",
+                            description: Text(language.t("The command list is being prepared."))
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 220)
+                    } else {
+                        ForEach(report.entries) { entry in
+                            DiskCheckEntryView(entry: entry, language: language)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.visible)
+
+            HStack {
+                Spacer()
+                if isRunning {
+                    Button(role: .destructive) {
+                        cancel()
+                    } label: {
+                        Label(language.t("Cancel Check"), systemImage: "stop.fill")
+                    }
+                    .keyboardShortcut(.cancelAction)
+                }
+                Button(language.t("Close")) {
+                    close()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(isRunning)
+            }
+        }
+        .padding(22)
+        .frame(minWidth: 760, minHeight: 560)
+    }
+
+    private var statusMessage: String {
+        if isRunning {
+            return language.t("Disk check is running. Keep this window open to monitor progress.")
+        }
+        return language.t(report.hasIssues ? "The check reported issues or unsupported targets." : "No issues were reported by the completed checks.")
+    }
+
+    private var statusIcon: String {
+        if isRunning { return "hourglass" }
+        return report.hasIssues ? "exclamationmark.triangle.fill" : "checkmark.seal.fill"
+    }
+
+    private var statusColor: Color {
+        if isRunning { return .blue }
+        return report.hasIssues ? .orange : .green
+    }
+}
+
+private struct DiskCheckEntryView: View {
+    var entry: DiskCheckEntry
+    var language: AppLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(entry.title, systemImage: entryIcon)
+                    .font(.headline)
+                    .foregroundStyle(entryColor)
+                Spacer()
+                Text(statusText)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(entryColor.opacity(0.16))
+                    .clipShape(Capsule())
+            }
+
+            if !entry.commandLine.isEmpty {
+                Text(entry.commandLine)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            ScrollView([.vertical, .horizontal]) {
+                Text(outputText)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+            .frame(minHeight: 120, maxHeight: 220)
+            .background(.quaternary)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .scrollIndicators(.visible)
+        }
+        .padding(14)
+        .background(.thinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var statusText: String {
+        if entry.isRunning {
+            return language.t("Running")
+        }
+        guard let terminationStatus = entry.terminationStatus else {
+            return language.t("Unsupported")
+        }
+        return "\(language.t("Exit Code")) \(terminationStatus)"
+    }
+
+    private var outputText: String {
+        if entry.isRunning, entry.combinedOutput == "No output." {
+            return language.t("Waiting for command output...")
+        }
+        return entry.combinedOutput
+    }
+
+    private var entryIcon: String {
+        if entry.isRunning { return "hourglass" }
+        return entry.hasIssue ? "exclamationmark.triangle" : "checkmark.circle"
+    }
+
+    private var entryColor: Color {
+        if entry.isRunning { return .blue }
+        return entry.hasIssue ? .orange : .green
     }
 }
 

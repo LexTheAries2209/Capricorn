@@ -117,6 +117,8 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.disconnect, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.inspectOpenFiles, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.eject, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
     }
 
     func testDiskSidebarActionsProtectInternalSystemDiskFromMountUnmountAndEject() {
@@ -133,6 +135,19 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.inspectOpenFiles, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.revealInFinder, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.refresh, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
+    }
+
+    func testDiskSidebarActionsIncludeReadOnlyCheckActionsForPhysicalDrives() {
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+
+        XCTAssertTrue(DiskSidebarActionPolicy.actions(for: drive).contains(.checkLog))
+        XCTAssertTrue(DiskSidebarActionPolicy.actions(for: drive).contains(.detailedCheck))
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
     }
 
     func testDiskActionServiceUsesDiskutilForPhysicalSafeActions() async throws {
@@ -202,6 +217,142 @@ final class CapricornTests: XCTestCase {
             ["unmount", "/Volumes/Media"],
             ["unmount", "/Volumes/Media"]
         ])
+    }
+
+    func testDiskCheckServiceRunsOrdinaryDiskutilVerificationAndKeepsNonZeroOutput() async throws {
+        let runner = RecordingDiskCheckRunner(stdout: "Checking file system\nProblem found\n", stderr: "Exit code warning\n", terminationStatus: 8)
+        let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.volumes[0].deviceIdentifier = "disk9s1"
+        drive.volumes[0].fileSystemType = "APFS"
+
+        let report = await service.check(.ordinary, drive: drive)
+
+        XCTAssertEqual(report.mode, .ordinary)
+        XCTAssertEqual(runner.calls.map(\.executable), ["/usr/sbin/diskutil", "/usr/sbin/diskutil"])
+        XCTAssertEqual(runner.calls.map(\.arguments), [
+            ["verifyDisk", "disk0"],
+            ["verifyVolume", "/Volumes/Unit"]
+        ])
+        XCTAssertEqual(report.entries.map(\.terminationStatus), [8, 8])
+        XCTAssertTrue(report.entries.allSatisfy(\.hasIssue))
+        XCTAssertTrue(report.entries.first?.stdout.contains("Problem found") == true)
+        XCTAssertTrue(report.entries.first?.stderr.contains("Exit code warning") == true)
+    }
+
+    func testDiskCheckServiceRunsDetailedFilesystemChecksByVolumeType() async throws {
+        let runner = RecordingDiskCheckRunner(stdout: "<plist><string>ok</string></plist>")
+        let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/APFS")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk9s1", name: "APFS", mountPoint: "/Volumes/APFS", sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "APFS"),
+            DriveDevice.Volume(deviceIdentifier: "disk9s2", name: "ExFAT", mountPoint: "/Volumes/EXFAT", sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "ExFAT"),
+            DriveDevice.Volume(deviceIdentifier: "disk9s3", name: "HFS", mountPoint: "/Volumes/HFS", sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "HFS+"),
+            DriveDevice.Volume(deviceIdentifier: "disk9s4", name: "FAT", mountPoint: "/Volumes/FAT", sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "FAT32")
+        ]
+
+        let report = await service.check(.detailed, drive: drive)
+
+        XCTAssertEqual(report.mode, .detailed)
+        XCTAssertEqual(runner.calls.map(\.executable), ["/sbin/fsck_apfs", "/sbin/fsck_exfat", "/sbin/fsck_hfs", "/sbin/fsck_msdos"])
+        XCTAssertEqual(runner.calls.map(\.arguments), [
+            ["-n", "-x", "/dev/rdisk9s1"],
+            ["-n", "-x", "/dev/rdisk9s2"],
+            ["-n", "-x", "/dev/rdisk9s3"],
+            ["-n", "/dev/rdisk9s4"]
+        ])
+        XCTAssertEqual(report.entries.count, 4)
+        XCTAssertFalse(report.entries.contains(where: \.hasIssue))
+    }
+
+    func testDiskCheckServiceReportsUnsupportedDetailedFileSystemsWithoutRunningCommand() async throws {
+        let runner = RecordingDiskCheckRunner()
+        let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/NTFS")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.volumes[0].deviceIdentifier = "disk9s1"
+        drive.volumes[0].fileSystemType = "NTFS"
+
+        let report = await service.check(.detailed, drive: drive)
+
+        XCTAssertTrue(runner.calls.isEmpty)
+        XCTAssertEqual(report.entries.count, 1)
+        XCTAssertNil(report.entries[0].terminationStatus)
+        XCTAssertTrue(report.entries[0].hasIssue)
+        XCTAssertTrue(report.entries[0].stderr.contains("No native detailed checker"))
+    }
+
+    func testDiskCheckServiceSkipsProtectedSystemDiskWithoutRunningCommands() async throws {
+        let runner = RecordingDiskCheckRunner()
+        let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
+        var drive = Self.fixtureDrive(mountedAt: "/")
+        drive.isInternal = true
+        drive.isSystemDisk = true
+
+        let report = await service.check(.ordinary, drive: drive)
+
+        XCTAssertTrue(runner.calls.isEmpty)
+        XCTAssertEqual(report.entries.count, 1)
+        XCTAssertTrue(report.entries[0].hasIssue)
+        XCTAssertTrue(report.entries[0].stderr.contains("System internal disks are protected"))
+    }
+
+    func testDiskCheckServicePublishesProgressBeforeAndAfterEachCommand() async throws {
+        let runner = RecordingDiskCheckRunner(stdout: "Verified\n")
+        let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.volumes[0].deviceIdentifier = "disk9s1"
+        drive.volumes[0].fileSystemType = "APFS"
+        let updates = LockedArray<DiskCheckReport>()
+
+        let final = await service.check(.ordinary, drive: drive) { report in
+            updates.append(report)
+        }
+
+        XCTAssertGreaterThanOrEqual(updates.snapshot.count, 4)
+        XCTAssertEqual(updates.snapshot.first?.entries.count, 1)
+        XCTAssertTrue(updates.snapshot.first?.entries.first?.isRunning == true)
+        XCTAssertEqual(final.entries.count, 2)
+        XCTAssertFalse(final.entries.contains(where: \.isRunning))
+        XCTAssertEqual(final.completedEntryCount, 2)
+        XCTAssertEqual(final.totalEntryCount, 2)
+    }
+
+    func testDiskCheckServiceStreamsOutputBeforeCommandCompletes() async throws {
+        let runner = DelayedDiskCheckRunner(
+            stdout: "Checking live volume\n",
+            stderr: "Scanning catalog\n",
+            delayNanoseconds: 30_000_000
+        )
+        let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.bsdName = ""
+        drive.volumes[0].deviceIdentifier = "disk9s1"
+        drive.volumes[0].fileSystemType = "APFS"
+        let updates = LockedArray<DiskCheckReport>()
+
+        let final = await service.check(.ordinary, drive: drive) { report in
+            updates.append(report)
+        }
+
+        let streamedWhileRunning = updates.snapshot.contains { report in
+            guard let entry = report.entries.first else { return false }
+            return entry.isRunning && entry.stdout.contains("Checking live volume")
+        }
+        XCTAssertTrue(streamedWhileRunning)
+        XCTAssertEqual(final.entries.count, 1)
+        XCTAssertFalse(final.entries[0].isRunning)
+        XCTAssertTrue(final.entries[0].stdout.contains("Checking live volume"))
+        XCTAssertTrue(final.entries[0].stderr.contains("Scanning catalog"))
     }
 
     func testDiskOpenFileParserReadsLsofColumnOutput() {
@@ -2286,6 +2437,103 @@ private final class RecordingCommandRunner: CommandRunning, @unchecked Sendable 
             stderr: Data(stderr.utf8),
             terminationStatus: terminationStatus
         )
+    }
+}
+
+private final class RecordingDiskCheckRunner: DiskCheckCommandRunning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedCalls: [RecordingCommandRunner.Call] = []
+    private let stdout: String
+    private let stderr: String
+    private let terminationStatus: Int32
+    private(set) var didCancel = false
+
+    init(stdout: String = "", stderr: String = "", terminationStatus: Int32 = 0) {
+        self.stdout = stdout
+        self.stderr = stderr
+        self.terminationStatus = terminationStatus
+    }
+
+    var calls: [RecordingCommandRunner.Call] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedCalls
+    }
+
+    func run(
+        _ executable: String,
+        arguments: [String],
+        stdout onStdout: @escaping @Sendable (String) -> Void,
+        stderr onStderr: @escaping @Sendable (String) -> Void
+    ) async throws -> CommandResult {
+        lock.lock()
+        recordedCalls.append(RecordingCommandRunner.Call(executable: executable, arguments: arguments))
+        lock.unlock()
+
+        if !stdout.isEmpty {
+            onStdout(stdout)
+        }
+        if !stderr.isEmpty {
+            onStderr(stderr)
+        }
+
+        return CommandResult(
+            stdout: Data(stdout.utf8),
+            stderr: Data(stderr.utf8),
+            terminationStatus: terminationStatus
+        )
+    }
+
+    func cancel() {
+        didCancel = true
+    }
+}
+
+private final class DelayedDiskCheckRunner: DiskCheckCommandRunning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedCalls: [RecordingCommandRunner.Call] = []
+    private let stdout: String
+    private let stderr: String
+    private let delayNanoseconds: UInt64
+    private(set) var didCancel = false
+
+    init(stdout: String, stderr: String = "", delayNanoseconds: UInt64) {
+        self.stdout = stdout
+        self.stderr = stderr
+        self.delayNanoseconds = delayNanoseconds
+    }
+
+    var calls: [RecordingCommandRunner.Call] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedCalls
+    }
+
+    func run(
+        _ executable: String,
+        arguments: [String],
+        stdout onStdout: @escaping @Sendable (String) -> Void,
+        stderr onStderr: @escaping @Sendable (String) -> Void
+    ) async throws -> CommandResult {
+        lock.lock()
+        recordedCalls.append(RecordingCommandRunner.Call(executable: executable, arguments: arguments))
+        lock.unlock()
+
+        onStdout(stdout)
+        if !stderr.isEmpty {
+            onStderr(stderr)
+        }
+        try? await Task.sleep(nanoseconds: delayNanoseconds)
+
+        return CommandResult(
+            stdout: Data(stdout.utf8),
+            stderr: Data(stderr.utf8),
+            terminationStatus: 0
+        )
+    }
+
+    func cancel() {
+        didCancel = true
     }
 }
 
