@@ -48,6 +48,8 @@ final class DITViewModel: ObservableObject {
     private var diskActivityTask: Task<Void, Never>?
     private var liveActivityTask: Task<Void, Never>?
     private var liveActivityWorkloadTask: Task<Void, Never>?
+    private var benchmarkTask: Task<Void, Never>?
+    private var activeBenchmarkRunID: UUID?
     private var lastBenchmarkProgressPublishedAt: Date?
 
     init(
@@ -145,7 +147,18 @@ final class DITViewModel: ObservableObject {
         isRefreshing = false
     }
 
+    func startBenchmark(profile: BenchmarkProfile, volumePath: String? = nil) {
+        guard benchmarkTask == nil, !isBenchmarking else { return }
+        benchmarkTask = Task { [weak self] in
+            await self?.runBenchmark(profile: profile, volumePath: volumePath)
+            await MainActor.run {
+                self?.benchmarkTask = nil
+            }
+        }
+    }
+
     func runBenchmark(profile: BenchmarkProfile, volumePath: String? = nil) async {
+        guard !isBenchmarking else { return }
         guard let drive = selectedDrive else {
             benchmarkError = "Select a drive before running a benchmark."
             return
@@ -158,6 +171,8 @@ final class DITViewModel: ObservableObject {
 
         benchmarkError = nil
         isBenchmarking = true
+        let runID = UUID()
+        activeBenchmarkRunID = runID
         let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs, usesTrimmedAverage: profile.usesTrimmedAverage)
         let isLooping = profile.executionMode == .loopUntilCancelled
         publishBenchmarkProgress(BenchmarkProgress(
@@ -166,11 +181,14 @@ final class DITViewModel: ObservableObject {
             total: isLooping ? max(1, profile.tests.count) : profile.tests.count * (measuredRuns + 1),
             message: isLooping ? "Loop running" : "Preparing complete test file"
         ), force: true)
-        startDiskActivityMonitoring(for: drive)
+        startDiskActivityMonitoring(for: drive, runID: runID)
         replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: [])
         defer {
-            stopDiskActivityMonitoring()
-            isBenchmarking = false
+            if activeBenchmarkRunID == runID {
+                stopDiskActivityMonitoring()
+                isBenchmarking = false
+                activeBenchmarkRunID = nil
+            }
         }
 
         do {
@@ -179,21 +197,31 @@ final class DITViewModel: ObservableObject {
                 drive: drive,
                 volumePath: targetVolume,
                 progress: { [weak self] progress in
-                    self?.publishBenchmarkProgress(progress)
+                    guard let self, self.activeBenchmarkRunID == runID else { return }
+                    self.publishBenchmarkProgress(progress)
                 },
                 result: { [weak self] result in
-                    self?.upsertBenchmarkResult(result)
+                    guard let self, self.activeBenchmarkRunID == runID else { return }
+                    self.upsertBenchmarkResult(result)
                 }
             )
+            guard activeBenchmarkRunID == runID else { return }
             replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: results)
         } catch {
+            guard activeBenchmarkRunID == runID else { return }
             benchmarkError = error.localizedDescription
         }
     }
 
     func cancelBenchmark() {
+        guard isBenchmarking || benchmarkTask != nil else { return }
+        activeBenchmarkRunID = nil
+        benchmarkTask?.cancel()
+        benchmarkTask = nil
         benchmarkRunner.cancel()
         stopDiskActivityMonitoring()
+        isBenchmarking = false
+        benchmarkError = BenchmarkError.cancelled.localizedDescription
     }
 
     func performDiskAction(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async {
@@ -465,7 +493,7 @@ final class DITViewModel: ObservableObject {
         lastBenchmarkProgressPublishedAt = now
     }
 
-    private func startDiskActivityMonitoring(for drive: DriveDevice) {
+    private func startDiskActivityMonitoring(for drive: DriveDevice, runID: UUID) {
         stopDiskActivityMonitoring()
         lastBenchmarkProgressPublishedAt = nil
         diskActivitySamples = []
@@ -473,6 +501,7 @@ final class DITViewModel: ObservableObject {
         guard !drive.isNetwork else { return }
         diskActivityTask = makeDiskActivityTask(for: drive, interval: Self.benchmarkActivityInterval) { [weak self] sample in
             guard let self else { return }
+            guard self.activeBenchmarkRunID == runID else { return }
             self.currentDiskActivity = sample
             self.diskActivitySamples = DiskActivitySeries.appending(sample, to: self.diskActivitySamples)
         }

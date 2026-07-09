@@ -1050,6 +1050,60 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(BenchmarkActivityPanelState.showsProgress(isBenchmarking: true, hasProgress: true))
     }
 
+    func testBenchmarkCancelStopsMonitoringAndIgnoresLateCallbacks() async {
+        let drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        let runner = LateCallbackBenchmarkRunner()
+        let start = Date(timeIntervalSince1970: 1_000)
+        var counters: [DiskActivityCounters] = []
+        for index in 0..<20 {
+            counters.append(DiskActivityCounters(
+                timestamp: start.addingTimeInterval(Double(index) * DITViewModel.benchmarkActivityInterval.seconds),
+                readBytes: UInt64(index * 1_000_000),
+                writeBytes: UInt64(index * 2_000_000)
+            ))
+        }
+        let reader = FakeDiskActivityReader(counters: counters)
+        let provider = FakeDiskActivityProvider(reader: reader)
+        let viewModel = await MainActor.run {
+            let model = DITViewModel(benchmarkRunner: runner, diskActivityProvider: provider)
+            model.drives = [drive]
+            model.selectedDriveID = drive.id
+            return model
+        }
+
+        await MainActor.run {
+            viewModel.startBenchmark(profile: BenchmarkProfile.presets[0], volumePath: "/Volumes/Unit")
+        }
+        let didStart = await runner.waitUntilStarted()
+        XCTAssertTrue(didStart)
+
+        await MainActor.run {
+            viewModel.cancelBenchmark()
+        }
+        let sampleCountAfterCancel = await MainActor.run {
+            viewModel.diskActivitySamples.count
+        }
+
+        let didFinish = await runner.waitUntilFinished()
+        XCTAssertTrue(didFinish)
+        try? await Task.sleep(nanoseconds: 350_000_000)
+
+        let finalState = await MainActor.run {
+            (
+                isBenchmarking: viewModel.isBenchmarking,
+                resultCount: viewModel.benchmarkResults.count,
+                sampleCount: viewModel.diskActivitySamples.count,
+                error: viewModel.benchmarkError,
+                cancelCount: runner.cancelCount
+            )
+        }
+        XCTAssertFalse(finalState.isBenchmarking)
+        XCTAssertEqual(finalState.resultCount, 0)
+        XCTAssertEqual(finalState.sampleCount, sampleCountAfterCancel)
+        XCTAssertEqual(finalState.error, BenchmarkError.cancelled.localizedDescription)
+        XCTAssertEqual(finalState.cancelCount, 1)
+    }
+
     func testDiskActivityHistoryRecordEncodesSamplesAndSummary() {
         let drive = Self.fixtureDrive()
         let start = Date(timeIntervalSince1970: 1_000)
@@ -2543,6 +2597,73 @@ private final class DelayedDiskCheckRunner: DiskCheckCommandRunning, @unchecked 
 
     func cancel() {
         didCancel = true
+    }
+}
+
+private final class LateCallbackBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
+    private let events = LockedArray<String>()
+    private let lock = NSLock()
+    private var storedCancelCount = 0
+
+    var cancelCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedCancelCount
+    }
+
+    func run(
+        profile: BenchmarkProfile,
+        drive: DriveDevice,
+        volumePath: String,
+        progress: @escaping (BenchmarkProgress) -> Void,
+        result: @escaping (BenchmarkResult) -> Void
+    ) async throws -> [BenchmarkResult] {
+        events.append("started")
+        try? await Task.sleep(nanoseconds: 120_000_000)
+
+        let lateResult = BenchmarkResult(
+            driveID: drive.id,
+            volumePath: volumePath,
+            profileID: profile.id,
+            profileName: profile.name,
+            testID: "late-read",
+            testLabel: "SEQ1M Q1T1",
+            operation: .read,
+            measuredAt: Date(timeIntervalSince1970: 1_000),
+            bestMegabytesPerSecond: 9_999,
+            iops: 100,
+            latencyMicroseconds: 10,
+            bytesTransferred: 1_048_576
+        )
+        progress(BenchmarkProgress(currentTestLabel: "Late", completed: 1, total: 1, message: "Late callback"))
+        result(lateResult)
+        events.append("finished")
+        return [lateResult]
+    }
+
+    func cancel() {
+        lock.lock()
+        storedCancelCount += 1
+        lock.unlock()
+        events.append("cancelled")
+    }
+
+    func waitUntilStarted() async -> Bool {
+        await waitForEvent("started")
+    }
+
+    func waitUntilFinished() async -> Bool {
+        await waitForEvent("finished")
+    }
+
+    private func waitForEvent(_ event: String) async -> Bool {
+        for _ in 0..<300 {
+            if events.snapshot.contains(event) {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        return false
     }
 }
 

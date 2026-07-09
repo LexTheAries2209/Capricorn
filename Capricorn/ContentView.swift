@@ -2070,7 +2070,7 @@ private struct BenchmarkView: View {
         }
         .confirmationDialog(language.t("Benchmark writes a complete temporary test file to the selected target folder."), isPresented: $confirmWrite) {
             Button(language.t("Run Benchmark"), role: .destructive) {
-                Task { await viewModel.runBenchmark(profile: profile, volumePath: targetFolderPath) }
+                viewModel.startBenchmark(profile: profile, volumePath: targetFolderPath)
             }
             Button(language.t("Cancel"), role: .cancel) {}
         } message: {

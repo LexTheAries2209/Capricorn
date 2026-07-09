@@ -1090,9 +1090,11 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 completedBytes: test.testSizeBytes,
                 progress: progress
             )
+            try checkCancelled()
             if fsync(fd) != 0 {
                 throw BenchmarkError.ioFailed("Could not flush benchmark writes.")
             }
+            try checkCancelled()
             durableFinished = DispatchTime.now().uptimeNanoseconds
             flushMilliseconds = Double(durableFinished - transferFinished) / 1_000_000
         }
@@ -1220,9 +1222,11 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         }
         progressReporter?.finish()
         flushStarted?()
+        try checkCancelled()
         if fsync(fd) != 0 {
             throw BenchmarkError.ioFailed("Could not flush prepared benchmark file.")
         }
+        try checkCancelled()
     }
 
     private func byteProgressReporter(
@@ -1658,9 +1662,11 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         }
         progressReporter?.finish()
         flushStarted?()
+        try checkCancelled()
         if fsync(fd) != 0 {
             throw BenchmarkError.ioFailed("Could not flush prepared benchmark file.")
         }
+        try checkCancelled()
     }
 
     private func runMeasuredTest(
@@ -2330,9 +2336,11 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 completedBytes: test.testSizeBytes,
                 progress: progress
             )
+            try checkCancelled()
             if fsync(fd) != 0 {
                 throw BenchmarkError.ioFailed("Could not flush benchmark writes.")
             }
+            try checkCancelled()
         }
 
         let finished = DispatchTime.now().uptimeNanoseconds
