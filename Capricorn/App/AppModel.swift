@@ -1,42 +1,126 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import Combine
 import Foundation
+import Observation
+import OSLog
 
 @MainActor
-final class DITViewModel: ObservableObject {
-    @Published var drives: [DriveDevice] = []
-    @Published var snapshots: [String: SmartSnapshot] = [:]
-    @Published var selectedDriveID: String?
-    @Published var isRefreshing = false
-    @Published var refreshMessage: String?
-    @Published var benchmarkProgress: BenchmarkProgress?
-    @Published var benchmarkResults: [BenchmarkResult] = []
-    @Published var benchmarkError: String?
-    @Published var isBenchmarking = false
-    @Published var diskActivitySamples: [DiskActivitySample] = []
-    @Published var currentDiskActivity: DiskActivitySample?
-    @Published var liveActivitySamples: [DiskActivitySample] = []
-    @Published var currentLiveActivity: DiskActivitySample?
-    @Published var isLiveActivityMonitoring = false
-    @Published var liveActivitySelectedDriveID: String?
-    @Published var liveActivityStartedAt: Date?
-    @Published var liveActivityEndedAt: Date?
-    @Published var liveActivityError: String?
-    @Published var liveActivityWorkloadProgress: DiskActivityWorkloadProgress?
-    @Published var liveActivityWorkloadError: String?
-    @Published var isLiveActivityWorkloadRunning = false
-    @Published var diskOpenFileInspection: DiskOpenFileInspection?
-    @Published var diskActionFailure: DiskActionFailure?
-    @Published var diskCheckReport: DiskCheckReport?
-    @Published var isDiskChecking = false
-    @Published var externalSupport: ExternalSupportStatus
-    @Published var showVirtualDisks = false
-    @Published var selectedFeatureTab: DriveFeatureTab = .overview
+@Observable
+final class AppModel {
+    var drives: [DriveDevice] = []
+    var snapshots: [String: SmartSnapshot] = [:]
+    var selectedDriveID: String?
+    var isRefreshing = false
+    var refreshMessage: String?
+    let benchmarkSession = BenchmarkSessionModel()
+    let liveActivitySession = LiveActivitySessionModel()
+    let diskOperations = DiskOperationsModel()
+    var externalSupport: ExternalSupportStatus
+    var showVirtualDisks = false
+    var selectedFeatureTab: DriveFeatureTab = .overview
+
+    var benchmarkProgress: BenchmarkProgress? {
+        get { benchmarkSession.progress }
+        set { benchmarkSession.progress = newValue }
+    }
+
+    var benchmarkResults: [BenchmarkResult] {
+        get { benchmarkSession.results }
+        set { benchmarkSession.results = newValue }
+    }
+
+    var benchmarkError: String? {
+        get { benchmarkSession.error }
+        set { benchmarkSession.error = newValue }
+    }
+
+    var isBenchmarking: Bool {
+        get { benchmarkSession.isActive }
+        set { benchmarkSession.state = newValue ? .running : .idle }
+    }
+
+    var diskActivitySamples: [DiskActivitySample] {
+        get { benchmarkSession.activitySamples }
+        set { benchmarkSession.activitySamples = newValue }
+    }
+
+    var currentDiskActivity: DiskActivitySample? {
+        get { benchmarkSession.currentActivity }
+        set { benchmarkSession.currentActivity = newValue }
+    }
+
+    var liveActivitySamples: [DiskActivitySample] {
+        get { liveActivitySession.samples }
+        set { liveActivitySession.samples = newValue }
+    }
+
+    var currentLiveActivity: DiskActivitySample? {
+        get { liveActivitySession.currentActivity }
+        set { liveActivitySession.currentActivity = newValue }
+    }
+
+    var isLiveActivityMonitoring: Bool {
+        get { liveActivitySession.isMonitoring }
+        set { liveActivitySession.isMonitoring = newValue }
+    }
+
+    var liveActivitySelectedDriveID: String? {
+        get { liveActivitySession.selectedDriveID }
+        set { liveActivitySession.selectedDriveID = newValue }
+    }
+
+    var liveActivityStartedAt: Date? {
+        get { liveActivitySession.startedAt }
+        set { liveActivitySession.startedAt = newValue }
+    }
+
+    var liveActivityEndedAt: Date? {
+        get { liveActivitySession.endedAt }
+        set { liveActivitySession.endedAt = newValue }
+    }
+
+    var liveActivityError: String? {
+        get { liveActivitySession.error }
+        set { liveActivitySession.error = newValue }
+    }
+
+    var liveActivityWorkloadProgress: DiskActivityWorkloadProgress? {
+        get { liveActivitySession.workloadProgress }
+        set { liveActivitySession.workloadProgress = newValue }
+    }
+
+    var liveActivityWorkloadError: String? {
+        get { liveActivitySession.workloadError }
+        set { liveActivitySession.workloadError = newValue }
+    }
+
+    var isLiveActivityWorkloadRunning: Bool {
+        get { liveActivitySession.isWorkloadActive }
+        set { liveActivitySession.workloadState = newValue ? .running : .idle }
+    }
+
+    var diskOpenFileInspection: DiskOpenFileInspection? {
+        get { diskOperations.openFileInspection }
+        set { diskOperations.openFileInspection = newValue }
+    }
+
+    var diskActionFailure: DiskActionFailure? {
+        get { diskOperations.actionFailure }
+        set { diskOperations.actionFailure = newValue }
+    }
+
+    var diskCheckReport: DiskCheckReport? {
+        get { diskOperations.checkReport }
+        set { diskOperations.checkReport = newValue }
+    }
+
+    var isDiskChecking: Bool {
+        get { diskOperations.isChecking }
+        set { diskOperations.isChecking = newValue }
+    }
 
     nonisolated static let benchmarkActivityInterval = DiskActivitySampleInterval.fifth
 
-    private let inventoryProvider: DiskInventoryProviding
-    private let smartService: SmartSnapshotService
+    private let refreshService: DriveRefreshing
     private let benchmarkRunner: BenchmarkRunning
     private let diskActivityProvider: DiskActivityProviding
     private let liveActivityWorkloadRunner: DiskActivityWorkloadRunning
@@ -48,13 +132,19 @@ final class DITViewModel: ObservableObject {
     private var diskActivityTask: Task<Void, Never>?
     private var liveActivityTask: Task<Void, Never>?
     private var liveActivityWorkloadTask: Task<Void, Never>?
+    private var liveActivityWorkloadEventTask: Task<Void, Never>?
+    private var activeLiveActivityWorkloadRunID: UUID?
     private var benchmarkTask: Task<Void, Never>?
     private var activeBenchmarkRunID: UUID?
+    private var refreshTask: Task<DriveRefreshSnapshot, Error>?
+    private var activeRefreshID: UUID?
+    private var hasRequestedNotificationAuthorization = false
     private var lastBenchmarkProgressPublishedAt: Date?
 
     init(
         inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(),
         smartService: SmartSnapshotService = SmartSnapshotService(),
+        refreshService: DriveRefreshing? = nil,
         benchmarkRunner: BenchmarkRunning = BenchmarkRunnerRouter(),
         diskActivityProvider: DiskActivityProviding = IOKitDiskActivityProvider(),
         liveActivityWorkloadRunner: DiskActivityWorkloadRunning = NativeDiskActivityWorkloadRunner(),
@@ -64,8 +154,11 @@ final class DITViewModel: ObservableObject {
         externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator()
     ) {
-        self.inventoryProvider = inventoryProvider
-        self.smartService = smartService
+        self.refreshService = refreshService ?? DriveRefreshService(
+            inventoryProvider: inventoryProvider,
+            smartService: smartService,
+            externalDetector: externalDetector
+        )
         self.benchmarkRunner = benchmarkRunner
         self.diskActivityProvider = diskActivityProvider
         self.liveActivityWorkloadRunner = liveActivityWorkloadRunner
@@ -110,20 +203,42 @@ final class DITViewModel: ObservableObject {
     }
 
     func refreshIfNeeded() async {
+        if !hasRequestedNotificationAuthorization {
+            hasRequestedNotificationAuthorization = true
+            notificationCoordinator.requestAuthorizationIfNeeded()
+        }
         guard drives.isEmpty else { return }
         await refresh()
     }
 
     func refresh() async {
+        refreshTask?.cancel()
+        let refreshID = UUID()
+        activeRefreshID = refreshID
+        let refreshService = refreshService
+        let showVirtualDisks = showVirtualDisks
+        let worker = Task {
+            try await refreshService.refresh(showVirtual: showVirtualDisks)
+        }
+        refreshTask = worker
         isRefreshing = true
         refreshMessage = "Scanning disks..."
         benchmarkError = nil
-        externalSupport = externalDetector.detect()
-        notificationCoordinator.requestAuthorizationIfNeeded()
+        defer {
+            if activeRefreshID == refreshID {
+                refreshTask = nil
+                activeRefreshID = nil
+                isRefreshing = false
+            }
+        }
 
         do {
-            let loadedDrives = try await inventoryProvider.loadDrives(showVirtual: showVirtualDisks)
+            let refreshSnapshot = try await worker.value
+            guard activeRefreshID == refreshID else { return }
+            let loadedDrives = refreshSnapshot.drives
             drives = loadedDrives
+            snapshots = refreshSnapshot.snapshots
+            externalSupport = refreshSnapshot.externalSupport
             if selectedDriveID == nil || !loadedDrives.contains(where: { $0.id == selectedDriveID }) {
                 selectedDriveID = loadedDrives.first?.id
             }
@@ -131,24 +246,23 @@ final class DITViewModel: ObservableObject {
                 liveActivitySelectedDriveID = selectedDriveID ?? loadedDrives.first?.id
             }
 
-            refreshMessage = "Reading SMART data..."
-            var nextSnapshots: [String: SmartSnapshot] = [:]
             for drive in loadedDrives {
-                let snapshot = await smartService.snapshot(for: drive)
-                nextSnapshots[drive.id] = snapshot
-                notificationCoordinator.notifyIfNeeded(drive: drive, snapshot: snapshot)
+                if let snapshot = refreshSnapshot.snapshots[drive.id] {
+                    notificationCoordinator.notifyIfNeeded(drive: drive, snapshot: snapshot)
+                }
             }
-            snapshots = nextSnapshots
+            guard activeRefreshID == refreshID else { return }
             refreshMessage = loadedDrives.isEmpty ? "No physical or network drives found." : "Last refreshed \(Date().formatted(date: .omitted, time: .standard))"
         } catch {
+            guard activeRefreshID == refreshID else { return }
+            let error = error as NSError
+            CapricornLog.inventory.error("Drive refresh failed: \(error.domain, privacy: .public) \(error.code)")
             refreshMessage = error.localizedDescription
         }
-
-        isRefreshing = false
     }
 
     func startBenchmark(profile: BenchmarkProfile, volumePath: String? = nil) {
-        guard benchmarkTask == nil, !isBenchmarking else { return }
+        guard benchmarkTask == nil, benchmarkSession.state == .idle else { return }
         benchmarkTask = Task { [weak self] in
             await self?.runBenchmark(profile: profile, volumePath: volumePath)
             await MainActor.run {
@@ -158,7 +272,7 @@ final class DITViewModel: ObservableObject {
     }
 
     func runBenchmark(profile: BenchmarkProfile, volumePath: String? = nil) async {
-        guard !isBenchmarking else { return }
+        guard benchmarkSession.state == .idle else { return }
         guard let drive = selectedDrive else {
             benchmarkError = "Select a drive before running a benchmark."
             return
@@ -170,7 +284,9 @@ final class DITViewModel: ObservableObject {
         }
 
         benchmarkError = nil
-        isBenchmarking = true
+        CapricornLog.benchmark.info("Benchmark session started")
+        let benchmarkInterval = CapricornLog.benchmarkSignposter.beginInterval("Benchmark session")
+        benchmarkSession.state = .running
         let runID = UUID()
         activeBenchmarkRunID = runID
         let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs, usesTrimmedAverage: profile.usesTrimmedAverage)
@@ -186,9 +302,30 @@ final class DITViewModel: ObservableObject {
         defer {
             if activeBenchmarkRunID == runID {
                 stopDiskActivityMonitoring()
-                isBenchmarking = false
+                benchmarkSession.state = .idle
                 activeBenchmarkRunID = nil
+                CapricornLog.benchmarkSignposter.endInterval("Benchmark session", benchmarkInterval)
+                CapricornLog.benchmark.info("Benchmark session cleanup completed")
             }
+        }
+
+        let (events, eventContinuation) = AsyncStream<BenchmarkEvent>.makeStream()
+        let eventTask = Task { @MainActor [weak self] in
+            for await event in events {
+                guard let self,
+                      self.activeBenchmarkRunID == runID,
+                      self.benchmarkSession.state == .running else { continue }
+                switch event {
+                case let .progress(progress):
+                    self.publishBenchmarkProgress(progress)
+                case let .result(result):
+                    self.upsertBenchmarkResult(result)
+                }
+            }
+        }
+        defer {
+            eventContinuation.finish()
+            eventTask.cancel()
         }
 
         do {
@@ -196,35 +333,38 @@ final class DITViewModel: ObservableObject {
                 profile: profile,
                 drive: drive,
                 volumePath: targetVolume,
-                progress: { [weak self] progress in
-                    guard let self, self.activeBenchmarkRunID == runID else { return }
-                    self.publishBenchmarkProgress(progress)
+                progress: { progress in
+                    eventContinuation.yield(.progress(progress))
                 },
-                result: { [weak self] result in
-                    guard let self, self.activeBenchmarkRunID == runID else { return }
-                    self.upsertBenchmarkResult(result)
+                result: { result in
+                    eventContinuation.yield(.result(result))
                 }
             )
-            guard activeBenchmarkRunID == runID else { return }
+            eventContinuation.finish()
+            await eventTask.value
+            guard activeBenchmarkRunID == runID, benchmarkSession.state == .running else { return }
             replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: results)
         } catch {
-            guard activeBenchmarkRunID == runID else { return }
+            eventContinuation.finish()
+            await eventTask.value
+            guard activeBenchmarkRunID == runID, benchmarkSession.state == .running else { return }
+            let error = error as NSError
             benchmarkError = error.localizedDescription
+            CapricornLog.benchmark.error("Benchmark session failed: \(error.domain, privacy: .public) \(error.code)")
         }
     }
 
     func cancelBenchmark() {
-        guard isBenchmarking || benchmarkTask != nil else { return }
-        activeBenchmarkRunID = nil
+        guard benchmarkSession.state == .running || benchmarkTask != nil else { return }
+        benchmarkSession.state = .stopping
+        CapricornLog.benchmark.info("Benchmark cancellation requested")
         benchmarkTask?.cancel()
-        benchmarkTask = nil
         benchmarkRunner.cancel()
-        stopDiskActivityMonitoring()
-        isBenchmarking = false
         benchmarkError = BenchmarkError.cancelled.localizedDescription
     }
 
     func performDiskAction(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async {
+        CapricornLog.diskOperations.info("Disk operation started: \(action.rawValue, privacy: .public)")
         selectedDriveID = drive.id
         refreshMessage = "Running disk action..."
         diskActionFailure = nil
@@ -233,7 +373,10 @@ final class DITViewModel: ObservableObject {
             try await diskActionService.perform(action, on: drive, newName: newName)
             await refresh()
             refreshMessage = "Disk action completed."
+            CapricornLog.diskOperations.info("Disk operation completed: \(action.rawValue, privacy: .public)")
         } catch {
+            let error = error as NSError
+            CapricornLog.diskOperations.error("Disk operation failed: \(action.rawValue, privacy: .public), \(error.domain, privacy: .public) \(error.code)")
             await recordDiskActionFailure(action: action, drive: drive, message: error.localizedDescription)
         }
     }
@@ -316,7 +459,7 @@ final class DITViewModel: ObservableObject {
     }
 
     func startLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {
-        guard !isLiveActivityWorkloadRunning else { return }
+        guard liveActivitySession.workloadState == .idle else { return }
         stopLiveActivityMonitoring()
         liveActivitySelectedDriveID = drive.id
         liveActivityStartedAt = Date()
@@ -392,7 +535,10 @@ final class DITViewModel: ObservableObject {
             totalBytes: configuration.fileSizeBytes,
             message: "Starting workload"
         )
-        isLiveActivityWorkloadRunning = true
+        liveActivitySession.workloadState = .running
+        CapricornLog.workload.info("Live workload started")
+        let runID = UUID()
+        activeLiveActivityWorkloadRunID = runID
 
         if !isLiveActivityMonitoring, !drive.isNetwork {
             startLiveActivityMonitoringForWorkload(drive: drive, interval: interval)
@@ -401,15 +547,29 @@ final class DITViewModel: ObservableObject {
         }
 
         let runner = liveActivityWorkloadRunner
+        let (events, eventContinuation) = AsyncStream<DiskActivityWorkloadEvent>.makeStream()
+        let eventTask = Task { @MainActor [weak self] in
+            for await event in events {
+                guard let self,
+                      self.activeLiveActivityWorkloadRunID == runID,
+                      self.liveActivitySession.workloadState == .running else { continue }
+                switch event {
+                case let .progress(progress):
+                    self.liveActivityWorkloadProgress = progress
+                }
+            }
+        }
+        liveActivityWorkloadEventTask = eventTask
         liveActivityWorkloadTask = Task { [weak self] in
             do {
                 try await runner.run(configuration: configuration, drive: drive) { progress in
-                    Task { @MainActor [weak self] in
-                        self?.liveActivityWorkloadProgress = progress
-                    }
+                    eventContinuation.yield(.progress(progress))
                 }
+                eventContinuation.finish()
+                await eventTask.value
                 await MainActor.run { [weak self] in
                     guard let self else { return }
+                    guard self.activeLiveActivityWorkloadRunID == runID else { return }
                     self.liveActivityWorkloadProgress = DiskActivityWorkloadProgress(
                         operation: configuration.operation,
                         phase: .complete,
@@ -420,10 +580,16 @@ final class DITViewModel: ObservableObject {
                     )
                     self.isLiveActivityWorkloadRunning = false
                     self.liveActivityWorkloadTask = nil
+                    self.liveActivityWorkloadEventTask = nil
+                    self.activeLiveActivityWorkloadRunID = nil
+                    CapricornLog.workload.info("Live workload cleanup completed")
                 }
             } catch BenchmarkError.cancelled {
+                eventContinuation.finish()
+                await eventTask.value
                 await MainActor.run { [weak self] in
                     guard let self else { return }
+                    guard self.activeLiveActivityWorkloadRunID == runID else { return }
                     self.liveActivityWorkloadProgress = DiskActivityWorkloadProgress(
                         operation: configuration.operation,
                         phase: .stopped,
@@ -434,20 +600,32 @@ final class DITViewModel: ObservableObject {
                     )
                     self.isLiveActivityWorkloadRunning = false
                     self.liveActivityWorkloadTask = nil
+                    self.liveActivityWorkloadEventTask = nil
+                    self.activeLiveActivityWorkloadRunID = nil
+                    CapricornLog.workload.info("Cancelled live workload cleanup completed")
                 }
             } catch {
+                eventContinuation.finish()
+                await eventTask.value
                 await MainActor.run { [weak self] in
                     guard let self else { return }
+                    guard self.activeLiveActivityWorkloadRunID == runID else { return }
+                    let error = error as NSError
                     self.liveActivityWorkloadError = error.localizedDescription
                     self.isLiveActivityWorkloadRunning = false
                     self.liveActivityWorkloadTask = nil
+                    self.liveActivityWorkloadEventTask = nil
+                    self.activeLiveActivityWorkloadRunID = nil
+                    CapricornLog.workload.error("Live workload failed: \(error.domain, privacy: .public) \(error.code)")
                 }
             }
         }
     }
 
     func stopLiveActivityWorkload() {
-        guard isLiveActivityWorkloadRunning else { return }
+        guard liveActivitySession.workloadState == .running else { return }
+        liveActivitySession.workloadState = .stopping
+        CapricornLog.workload.info("Live workload cancellation requested")
         liveActivityWorkloadProgress = liveActivityWorkloadProgress.map {
             DiskActivityWorkloadProgress(
                 operation: $0.operation,
@@ -572,6 +750,8 @@ final class DITViewModel: ObservableObject {
     }
 }
 
+typealias DITViewModel = AppModel
+
 private struct PreviewInventoryProvider: DiskInventoryProviding {
     static let previewDrives = [
         DriveDevice(
@@ -645,8 +825,8 @@ private final class PreviewBenchmarkRunner: BenchmarkRunning {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void,
-        result: @escaping (BenchmarkResult) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
         progress(BenchmarkProgress(currentTestLabel: "Preview", completed: 1, total: 1, message: "Preview complete"))
         let previewResult = BenchmarkResult(

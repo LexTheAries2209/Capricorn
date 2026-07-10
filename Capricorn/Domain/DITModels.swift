@@ -2,7 +2,7 @@
 import Foundation
 import SwiftUI
 
-enum HealthStatus: String, Codable, CaseIterable, Identifiable, Comparable {
+enum HealthStatus: String, Codable, CaseIterable, Identifiable, Comparable, Sendable {
     case good
     case warning
     case preFail
@@ -46,22 +46,22 @@ enum HealthStatus: String, Codable, CaseIterable, Identifiable, Comparable {
     }
 }
 
-enum ProviderState: String, Codable, CaseIterable {
+enum ProviderState: String, Codable, CaseIterable, Sendable {
     case available
     case limited
     case unavailable
     case failed
 }
 
-struct ProviderStatus: Identifiable, Codable, Hashable {
+struct ProviderStatus: Identifiable, Codable, Hashable, Sendable {
     var id: String { name }
     var name: String
     var state: ProviderState
     var message: String
 }
 
-struct DriveDevice: Identifiable, Codable, Hashable {
-    struct Volume: Identifiable, Codable, Hashable {
+struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
+    struct Volume: Identifiable, Codable, Hashable, Sendable {
         var id: String { deviceIdentifier }
         var deviceIdentifier: String
         var name: String
@@ -434,8 +434,8 @@ enum DiskOpenFileTableLayout {
 enum AppCommandShortcut {
     static let refreshDisks = (key: "r", modifiers: EventModifiers.command)
     static let refreshDisksKeyEquivalent = KeyEquivalent("r")
-    static let nextFeatureTab = (key: "tab", modifiers: EventModifiers())
-    static let previousFeatureTab = (key: "tab", modifiers: EventModifiers.shift)
+    static let nextFeatureTab = (key: "tab", modifiers: EventModifiers.control)
+    static let previousFeatureTab = (key: "tab", modifiers: EventModifiers.control.union(.shift))
     static let featureTabCharacter: Character = "\t"
     static let featureTabKeyEquivalent = KeyEquivalent(featureTabCharacter)
 }
@@ -636,7 +636,7 @@ enum BenchmarkTargetFolderMatcher {
     }
 }
 
-struct SmartAttribute: Identifiable, Codable, Hashable {
+struct SmartAttribute: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var name: String
     var rawValue: String
@@ -647,7 +647,7 @@ struct SmartAttribute: Identifiable, Codable, Hashable {
     var source: String
 }
 
-struct SmartSnapshot: Identifiable, Codable, Hashable {
+struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     var id = UUID()
     var driveID: String
     var capturedAt: Date
@@ -684,7 +684,7 @@ struct SmartSnapshot: Identifiable, Codable, Hashable {
     }
 }
 
-enum BenchmarkAccessPattern: String, Codable, CaseIterable, Identifiable {
+enum BenchmarkAccessPattern: String, Codable, CaseIterable, Identifiable, Sendable {
     case sequential
     case random
 
@@ -692,7 +692,7 @@ enum BenchmarkAccessPattern: String, Codable, CaseIterable, Identifiable {
     var title: String { self == .sequential ? "SEQ" : "RND" }
 }
 
-enum BenchmarkOperation: String, Codable, CaseIterable, Identifiable {
+enum BenchmarkOperation: String, Codable, CaseIterable, Identifiable, Sendable {
     case read
     case write
     case mixed
@@ -707,7 +707,7 @@ enum BenchmarkOperation: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum BenchmarkDataPattern: String, Codable, CaseIterable, Identifiable {
+enum BenchmarkDataPattern: String, Codable, CaseIterable, Identifiable, Sendable {
     case random
     case zeroFill
 
@@ -715,21 +715,21 @@ enum BenchmarkDataPattern: String, Codable, CaseIterable, Identifiable {
     var title: String { self == .random ? "Random" : "0 Fill" }
 }
 
-enum BenchmarkExecutionMode: String, Codable, CaseIterable, Identifiable {
+enum BenchmarkExecutionMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case finite
     case loopUntilCancelled
 
     var id: String { rawValue }
 }
 
-enum BenchmarkEngine: String, Codable, CaseIterable, Identifiable {
+enum BenchmarkEngine: String, Codable, CaseIterable, Identifiable, Sendable {
     case synchronous
     case asyncQueue
 
     var id: String { rawValue }
 }
 
-struct BenchmarkTest: Identifiable, Codable, Hashable {
+struct BenchmarkTest: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var label: String
     var accessPattern: BenchmarkAccessPattern
@@ -747,7 +747,7 @@ struct BenchmarkTest: Identifiable, Codable, Hashable {
     }
 }
 
-struct BenchmarkCustomRow: Identifiable, Codable, Hashable {
+struct BenchmarkCustomRow: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var accessPattern: BenchmarkAccessPattern
     var blockSizeBytes: Int
@@ -820,7 +820,7 @@ struct BenchmarkCustomRow: Identifiable, Codable, Hashable {
     }
 }
 
-struct BenchmarkProfile: Identifiable, Codable, Hashable {
+struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var name: String
     var testFileSizeBytes: Int64
@@ -1189,7 +1189,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable {
     }
 }
 
-struct BenchmarkResult: Identifiable, Codable, Hashable {
+struct BenchmarkResult: Identifiable, Codable, Hashable, Sendable {
     var id = UUID()
     var driveID: String
     var volumePath: String
@@ -1207,7 +1207,7 @@ struct BenchmarkResult: Identifiable, Codable, Hashable {
     var flushMilliseconds: Double? = nil
 }
 
-struct BenchmarkProgress: Equatable {
+struct BenchmarkProgress: Equatable, Sendable {
     var currentTestLabel: String
     var completed: Int
     var total: Int

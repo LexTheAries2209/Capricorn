@@ -2,12 +2,17 @@
 import Foundation
 import UserNotifications
 
-protocol SmartProviding {
+protocol SmartProviding: Sendable {
     var providerName: String { get }
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot?
 }
 
-final class NativeSmartProvider: SmartProviding {
+protocol SmartctlTargetProviding: SmartProviding {
+    func resolvedTargets(for drives: [DriveDevice]) async -> [String: String]
+    func snapshot(for drive: DriveDevice, resolvedTarget: String?) async -> SmartSnapshot?
+}
+
+final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
     let providerName = "Native macOS"
     private let evaluator = DriveHealthEvaluator()
 
@@ -123,7 +128,7 @@ final class NativeSmartProvider: SmartProviding {
     }
 }
 
-final class SmartctlSmartProvider: SmartProviding {
+final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable {
     let providerName = "smartctl"
     private let runner: CommandRunning
     private let fileManager: FileManager
@@ -136,6 +141,11 @@ final class SmartctlSmartProvider: SmartProviding {
     }
 
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot? {
+        let target = await resolvedTargets(for: [drive])[drive.id]
+        return await snapshot(for: drive, resolvedTarget: target)
+    }
+
+    func snapshot(for drive: DriveDevice, resolvedTarget: String?) async -> SmartSnapshot? {
         if drive.isNetwork {
             return SmartSnapshot.unavailable(for: drive, reason: "Network volumes do not expose local SMART data.")
         }
@@ -162,7 +172,7 @@ final class SmartctlSmartProvider: SmartProviding {
             )
         }
 
-        let target = await smartctlTarget(for: drive, executable: executable) ?? drive.deviceNode
+        let target = resolvedTarget ?? drive.deviceNode
         do {
             let result = try await runner.run(executable, arguments: ["-a", "--json", target])
             return SmartctlParser.parseSnapshot(result.stdout, drive: drive, providerName: providerName, exitStatus: result.terminationStatus)
@@ -186,6 +196,26 @@ final class SmartctlSmartProvider: SmartProviding {
         }
     }
 
+    func resolvedTargets(for drives: [DriveDevice]) async -> [String: String] {
+        guard !drives.isEmpty,
+              let executable = findExecutable(),
+              let result = try? await runner.run(executable, arguments: ["--scan-open", "--json"]),
+              let devices = SmartctlParser.parseScan(result.stdout) else {
+            return [:]
+        }
+
+        return drives.reduce(into: [:]) { targets, drive in
+            let match = devices.first { scan in
+                scan.name == drive.deviceNode
+                    || scan.name.hasSuffix("/\(drive.bsdName)")
+                    || scan.name.contains(drive.bsdName)
+            }
+            if let match {
+                targets[drive.id] = match.name
+            }
+        }
+    }
+
     func findExecutable() -> String? {
         let candidates = [
             configuredPath,
@@ -198,17 +228,6 @@ final class SmartctlSmartProvider: SmartProviding {
         return candidates.first { fileManager.isExecutableFile(atPath: $0) }
     }
 
-    private func smartctlTarget(for drive: DriveDevice, executable: String) async -> String? {
-        guard let result = try? await runner.run(executable, arguments: ["--scan-open", "--json"]),
-              let devices = SmartctlParser.parseScan(result.stdout) else {
-            return nil
-        }
-
-        let exact = devices.first { scan in
-            scan.name == drive.deviceNode || scan.name.hasSuffix("/\(drive.bsdName)") || scan.name.contains(drive.bsdName)
-        }
-        return exact?.name
-    }
 }
 
 enum SmartctlParser {
@@ -372,7 +391,7 @@ enum SmartctlParser {
     }
 }
 
-final class SmartSnapshotService {
+final class SmartSnapshotService: @unchecked Sendable {
     private let nativeProvider: SmartProviding
     private let smartctlProvider: SmartProviding
     private let evaluator = DriveHealthEvaluator()
@@ -383,8 +402,19 @@ final class SmartSnapshotService {
     }
 
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot {
+        await snapshot(for: drive, smartctlTarget: nil)
+    }
+
+    func resolvedSmartctlTargets(for drives: [DriveDevice]) async -> [String: String] {
+        guard let targetProvider = smartctlProvider as? any SmartctlTargetProviding else {
+            return [:]
+        }
+        return await targetProvider.resolvedTargets(for: drives)
+    }
+
+    func snapshot(for drive: DriveDevice, smartctlTarget: String?) async -> SmartSnapshot {
         async let native = nativeProvider.snapshot(for: drive)
-        async let smartctl = smartctlProvider.snapshot(for: drive)
+        async let smartctl = smartctlSnapshot(for: drive, resolvedTarget: smartctlTarget)
 
         let snapshots = await [native, smartctl].compactMap { $0 }
         guard !snapshots.isEmpty else {
@@ -413,6 +443,13 @@ final class SmartSnapshotService {
         merged.health = evaluator.evaluate(drive: drive, snapshot: merged)
         merged.summary = evaluator.summary(for: drive, snapshot: merged)
         return merged
+    }
+
+    private func smartctlSnapshot(for drive: DriveDevice, resolvedTarget: String?) async -> SmartSnapshot? {
+        if let targetProvider = smartctlProvider as? any SmartctlTargetProviding {
+            return await targetProvider.snapshot(for: drive, resolvedTarget: resolvedTarget)
+        }
+        return await smartctlProvider.snapshot(for: drive)
     }
 }
 
@@ -487,14 +524,14 @@ final class DriveHealthEvaluator {
     }
 }
 
-struct ExternalSupportStatus: Codable, Hashable {
+struct ExternalSupportStatus: Codable, Hashable, Sendable {
     var satDriverInstalled: Bool
     var smartctlInstalled: Bool
     var driverPaths: [String]
     var message: String
 }
 
-final class ExternalDriveSupportDetector {
+final class ExternalDriveSupportDetector: @unchecked Sendable {
     private let fileManager: FileManager
     private let smartctlProvider: SmartctlSmartProvider
     private let driverPaths: [String]

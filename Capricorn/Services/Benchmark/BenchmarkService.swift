@@ -2,13 +2,18 @@
 import Darwin
 import Foundation
 
-protocol BenchmarkRunning {
+enum BenchmarkEvent: Sendable {
+    case progress(BenchmarkProgress)
+    case result(BenchmarkResult)
+}
+
+protocol BenchmarkRunning: Sendable {
     func run(
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void,
-        result: @escaping (BenchmarkResult) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult]
     func cancel()
 }
@@ -196,8 +201,8 @@ final class BenchmarkRunnerRouter: BenchmarkRunning, @unchecked Sendable {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void,
-        result: @escaping (BenchmarkResult) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
         switch profile.engine {
         case .synchronous:
@@ -234,7 +239,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         }
     }
 
-    private final class ByteProgressReporter {
+    private final class ByteProgressReporter: @unchecked Sendable {
         private let totalBytes: Int64
         private let minimumIntervalNanoseconds: UInt64
         private let onReport: (Int64) -> Void
@@ -242,7 +247,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         private var completedBytes: Int64 = 0
         private var lastReportNanoseconds = DispatchTime.now().uptimeNanoseconds
 
-        init(totalBytes: Int64, minimumIntervalNanoseconds: UInt64 = 250_000_000, onReport: @escaping (Int64) -> Void) {
+        init(totalBytes: Int64, minimumIntervalNanoseconds: UInt64 = 250_000_000, onReport: @escaping @Sendable (Int64) -> Void) {
             self.totalBytes = max(0, totalBytes)
             self.minimumIntervalNanoseconds = minimumIntervalNanoseconds
             self.onReport = onReport
@@ -324,8 +329,8 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void,
-        result: @escaping (BenchmarkResult) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
         setCancelled(false)
 
@@ -345,8 +350,8 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void,
-        result: @escaping (BenchmarkResult) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
     ) throws -> [BenchmarkResult] {
         let volumeURL = URL(fileURLWithPath: volumePath, isDirectory: true)
         var isDirectory: ObjCBool = false
@@ -430,8 +435,8 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         drive: DriveDevice,
         volumePath: String,
         volumeURL: URL,
-        progress: @escaping (BenchmarkProgress) -> Void,
-        result: @escaping (BenchmarkResult) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
     ) throws -> [BenchmarkResult] {
         let orderedTests = profile.tests
         let totalSteps = max(1, orderedTests.count)
@@ -508,7 +513,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         totalSteps: Int,
         displayLabel: String,
         preparedReadFiles: inout [String: BenchmarkOpenFile],
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) throws -> BenchmarkResult {
         if test.operation == .read {
             let preparedFile = try preparedLoopReadFile(
@@ -624,7 +629,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         totalSteps: Int,
         displayLabel: String,
         preparedReadFiles: inout [String: BenchmarkOpenFile],
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) throws -> BenchmarkOpenFile {
         if let existing = preparedReadFiles[test.id] {
             return existing
@@ -710,7 +715,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         measuredRuns: Int,
         completedSteps: inout Int,
         totalSteps: Int,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) throws -> BenchmarkResult {
         if test.operation == .read {
             return try runMeasuredReadTest(
@@ -851,7 +856,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         measuredRuns: Int,
         completedSteps: inout Int,
         totalSteps: Int,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) throws -> BenchmarkResult {
         var measurements: [BenchmarkRunMeasurement] = []
         let testFile = benchmarkFileURL(in: volumeURL, runID: runID, test: test, runIndex: 0)
@@ -963,7 +968,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         completedSteps: Int,
         totalSteps: Int,
         message: String,
-        progress: @escaping (BenchmarkProgress) -> Void,
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         displayLabel: String? = nil
     ) throws -> BenchmarkRunMeasurement {
         let requestDepth = max(1, test.queueDepth * max(1, test.threads))
@@ -1235,7 +1240,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         completedSteps: Int,
         totalSteps: Int,
         message: String,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) -> ByteProgressReporter {
         let currentTestLabel = displayLabel ?? test.label
         return ByteProgressReporter(totalBytes: test.testSizeBytes) { [weak self] completedBytes in
@@ -1258,7 +1263,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         totalSteps: Int,
         message: String,
         completedBytes: Int64,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) {
         notify(progress, BenchmarkProgress(
             currentTestLabel: displayLabel ?? test.label,
@@ -1375,12 +1380,12 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         lock.unlock()
     }
 
-    private func notify(_ progress: @escaping (BenchmarkProgress) -> Void, _ value: BenchmarkProgress) {
-        DispatchQueue.main.async { progress(value) }
+    private func notify(_ progress: @escaping @Sendable (BenchmarkProgress) -> Void, _ value: BenchmarkProgress) {
+        progress(value)
     }
 
-    private func notify(_ result: @escaping (BenchmarkResult) -> Void, _ value: BenchmarkResult) {
-        DispatchQueue.main.sync { result(value) }
+    private func notify(_ result: @escaping @Sendable (BenchmarkResult) -> Void, _ value: BenchmarkResult) {
+        result(value)
     }
 }
 
@@ -1420,8 +1425,8 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void,
-        result: @escaping (BenchmarkResult) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
         setCancelled(false)
 
@@ -1441,8 +1446,8 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void,
-        result: @escaping (BenchmarkResult) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
     ) throws -> [BenchmarkResult] {
         let volumeURL = URL(fileURLWithPath: volumePath, isDirectory: true)
         var isDirectory: ObjCBool = false
@@ -1527,8 +1532,8 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         drive: DriveDevice,
         volumePath: String,
         volumeURL: URL,
-        progress: @escaping (BenchmarkProgress) -> Void,
-        result: @escaping (BenchmarkResult) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
     ) throws -> [BenchmarkResult] {
         let orderedTests = orderedTestsByProfileRows(profile.tests)
         let totalSteps = max(1, orderedTests.count)
@@ -1679,7 +1684,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         measuredRuns: Int,
         completedSteps: inout Int,
         totalSteps: Int,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) throws -> BenchmarkResult {
         if test.operation == .read {
             return try runMeasuredReadTest(
@@ -1816,7 +1821,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         measuredRuns: Int,
         completedSteps: inout Int,
         totalSteps: Int,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) throws -> BenchmarkResult {
         var measurements: [BenchmarkRunMeasurement] = []
         let testFile = benchmarkFileURL(in: volumeURL, runID: runID, test: test, runIndex: 0)
@@ -1932,7 +1937,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         totalSteps: Int,
         displayLabel: String,
         preparedReadFiles: inout [String: BenchmarkOpenFile],
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) throws -> BenchmarkResult {
         if test.operation == .read {
             let preparedFile = try preparedLoopReadFile(
@@ -2062,7 +2067,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         totalSteps: Int,
         displayLabel: String,
         preparedReadFiles: inout [String: BenchmarkOpenFile],
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) throws -> BenchmarkOpenFile {
         if let existing = preparedReadFiles[test.id] {
             return existing
@@ -2120,7 +2125,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         return "\(test.operation.title) run \(runIndex)/\(measuredRuns)"
     }
 
-    private final class ByteProgressReporter {
+    private final class ByteProgressReporter: @unchecked Sendable {
         private let totalBytes: Int64
         private let minimumIntervalNanoseconds: UInt64
         private let onReport: (Int64) -> Void
@@ -2128,7 +2133,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         private var completedBytes: Int64 = 0
         private var lastReportNanoseconds = DispatchTime.now().uptimeNanoseconds
 
-        init(totalBytes: Int64, minimumIntervalNanoseconds: UInt64 = 250_000_000, onReport: @escaping (Int64) -> Void) {
+        init(totalBytes: Int64, minimumIntervalNanoseconds: UInt64 = 250_000_000, onReport: @escaping @Sendable (Int64) -> Void) {
             self.totalBytes = max(0, totalBytes)
             self.minimumIntervalNanoseconds = minimumIntervalNanoseconds
             self.onReport = onReport
@@ -2181,7 +2186,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         completedSteps: Int,
         totalSteps: Int,
         message: String,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) -> ByteProgressReporter {
         let currentTestLabel = displayLabel ?? test.label
         return ByteProgressReporter(totalBytes: test.testSizeBytes) { [weak self] completedBytes in
@@ -2204,7 +2209,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         totalSteps: Int,
         message: String,
         completedBytes: Int64,
-        progress: @escaping (BenchmarkProgress) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) {
         notify(progress, BenchmarkProgress(
             currentTestLabel: displayLabel ?? test.label,
@@ -2221,20 +2226,29 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         var count: Int
     }
 
+    private struct TransferAggregate {
+        var assignedBytes: Int64 = 0
+        var nextSequentialOffset: Int64 = 0
+        var totalBytes: Int64 = 0
+        var totalOperations: Int64 = 0
+        var minLatencyMicros = Double.greatestFiniteMagnitude
+        var firstError: Error?
+    }
+
     private func perform(
         test: BenchmarkTest,
         fd: Int32,
         completedSteps: Int,
         totalSteps: Int,
         message: String,
-        progress: @escaping (BenchmarkProgress) -> Void,
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         displayLabel: String? = nil
     ) throws -> BenchmarkRunMeasurement {
         let threadCount = max(1, test.threads)
         let queueDepth = max(1, test.queueDepth)
         let blockSize = max(512, test.blockSizeBytes)
         let fileSize = max(Int64(blockSize), test.testSizeBytes)
-        let aggregateLock = NSLock()
+        let aggregate = LockedState(TransferAggregate())
         let progressReporter = byteProgressReporter(
             test: test,
             displayLabel: displayLabel,
@@ -2243,13 +2257,6 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             message: message,
             progress: progress
         )
-        var assignedBytes: Int64 = 0
-        var nextSequentialOffset: Int64 = 0
-        var totalBytes: Int64 = 0
-        var totalOperations: Int64 = 0
-        var minLatencyMicros = Double.greatestFiniteMagnitude
-        var firstError: Error?
-
         progressReporter.set(0, force: true)
         let started = DispatchTime.now().uptimeNanoseconds
         DispatchQueue.concurrentPerform(iterations: threadCount) { _ in
@@ -2262,26 +2269,29 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
             while true {
                 if isCancelled() {
-                    aggregateLock.lock()
-                    if firstError == nil {
-                        firstError = BenchmarkError.cancelled
+                    aggregate.withLock { state in
+                        if state.firstError == nil {
+                            state.firstError = BenchmarkError.cancelled
+                        }
                     }
-                    aggregateLock.unlock()
                     return
                 }
 
                 for _ in 0..<queueDepth {
-                    let request: TransferRequest?
-                    aggregateLock.lock()
-                    if firstError != nil || assignedBytes >= test.testSizeBytes {
-                        request = nil
-                    } else {
-                        let count = min(blockSize, Int(test.testSizeBytes - assignedBytes))
-                        let offset = offsetFor(test: test, fileSize: fileSize, count: count, nextSequentialOffset: &nextSequentialOffset)
-                        assignedBytes += Int64(count)
-                        request = TransferRequest(offset: offset, count: count)
+                    let request = aggregate.withLock { state -> TransferRequest? in
+                        if state.firstError != nil || state.assignedBytes >= test.testSizeBytes {
+                            return nil
+                        }
+                        let count = min(blockSize, Int(test.testSizeBytes - state.assignedBytes))
+                        let offset = offsetFor(
+                            test: test,
+                            fileSize: fileSize,
+                            count: count,
+                            nextSequentialOffset: &state.nextSequentialOffset
+                        )
+                        state.assignedBytes += Int64(count)
+                        return TransferRequest(offset: offset, count: count)
                     }
-                    aggregateLock.unlock()
 
                     guard let request else { break }
 
@@ -2299,31 +2309,32 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                         localMinLatency = min(localMinLatency, Double(opFinished - opStarted) / 1_000)
                         progressReporter.add(Int64(transferred))
                     } catch {
-                        aggregateLock.lock()
-                        if firstError == nil {
-                            firstError = error
+                        aggregate.withLock { state in
+                            if state.firstError == nil {
+                                state.firstError = error
+                            }
                         }
-                        aggregateLock.unlock()
                         return
                     }
                 }
 
-                aggregateLock.lock()
-                let shouldStop = firstError != nil || assignedBytes >= test.testSizeBytes
-                aggregateLock.unlock()
+                let shouldStop = aggregate.withLock {
+                    $0.firstError != nil || $0.assignedBytes >= test.testSizeBytes
+                }
                 if shouldStop {
                     break
                 }
             }
 
-            aggregateLock.lock()
-            totalBytes += localBytes
-            totalOperations += localOperations
-            minLatencyMicros = min(minLatencyMicros, localMinLatency)
-            aggregateLock.unlock()
+            aggregate.withLock { state in
+                state.totalBytes += localBytes
+                state.totalOperations += localOperations
+                state.minLatencyMicros = min(state.minLatencyMicros, localMinLatency)
+            }
         }
 
-        if let firstError { throw firstError }
+        let aggregateResult = aggregate.snapshot()
+        if let firstError = aggregateResult.firstError { throw firstError }
 
         progressReporter.finish()
         if test.operation == .write || test.operation == .mixed {
@@ -2346,10 +2357,10 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         let finished = DispatchTime.now().uptimeNanoseconds
         let elapsed = max(0.001, Double(finished - started) / 1_000_000_000)
         return BenchmarkRunMeasurement(
-            megabytesPerSecond: Double(totalBytes) / elapsed / 1_000_000,
-            iops: Double(totalOperations) / elapsed,
-            latencyMicroseconds: minLatencyMicros.isFinite ? minLatencyMicros : 0,
-            bytesTransferred: totalBytes
+            megabytesPerSecond: Double(aggregateResult.totalBytes) / elapsed / 1_000_000,
+            iops: Double(aggregateResult.totalOperations) / elapsed,
+            latencyMicroseconds: aggregateResult.minLatencyMicros.isFinite ? aggregateResult.minLatencyMicros : 0,
+            bytesTransferred: aggregateResult.totalBytes
         )
     }
 
@@ -2466,15 +2477,11 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         return value
     }
 
-    private func notify(_ progress: @escaping (BenchmarkProgress) -> Void, _ value: BenchmarkProgress) {
-        DispatchQueue.main.async {
-            progress(value)
-        }
+    private func notify(_ progress: @escaping @Sendable (BenchmarkProgress) -> Void, _ value: BenchmarkProgress) {
+        progress(value)
     }
 
-    private func notify(_ result: @escaping (BenchmarkResult) -> Void, _ value: BenchmarkResult) {
-        DispatchQueue.main.sync {
-            result(value)
-        }
+    private func notify(_ result: @escaping @Sendable (BenchmarkResult) -> Void, _ value: BenchmarkResult) {
+        result(value)
     }
 }

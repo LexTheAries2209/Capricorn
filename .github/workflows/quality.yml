@@ -1,0 +1,51 @@
+name: Quality
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    name: Full tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: >-
+          xcodebuild test
+          -project Capricorn.xcodeproj
+          -scheme Capricorn
+          -destination 'platform=macOS'
+          -derivedDataPath DerivedData
+          CODE_SIGNING_ALLOWED=NO
+
+  strict-concurrency:
+    name: Strict concurrency
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with strict concurrency
+        run: >-
+          xcodebuild build -quiet
+          -project Capricorn.xcodeproj
+          -scheme Capricorn
+          -destination 'platform=macOS'
+          -derivedDataPath DerivedData
+          CODE_SIGNING_ALLOWED=NO
+          SWIFT_STRICT_CONCURRENCY=complete
+          SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
+
+  swift-6:
+    name: Swift 6 compatibility
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build in Swift 6 mode
+        run: >-
+          xcodebuild build -quiet
+          -project Capricorn.xcodeproj
+          -scheme Capricorn
+          -destination 'platform=macOS'
+          -derivedDataPath DerivedData
+          CODE_SIGNING_ALLOWED=NO
+          SWIFT_VERSION=6

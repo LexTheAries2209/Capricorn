@@ -243,10 +243,10 @@ enum ReportExporter {
         snapshot: SmartSnapshot?,
         benchmarkResults: [BenchmarkResult],
         includeSerial: Bool
-    ) -> String {
+    ) throws -> String {
         let redactedDrive = redacted(drive, includeSerial: includeSerial)
         let report = Report(generatedAt: Date(), drive: redactedDrive, snapshot: snapshot, benchmarkResults: benchmarkResults)
-        guard let data = try? JSONEncoder.dit.encode(report) else { return "{}" }
+        let data = try JSONEncoder.dit.encode(report)
         return String(decoding: data, as: UTF8.self)
     }
 

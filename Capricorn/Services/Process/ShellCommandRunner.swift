@@ -15,7 +15,7 @@ struct CommandResult: Sendable {
     }
 }
 
-protocol CommandRunning {
+protocol CommandRunning: Sendable {
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult
 }
 
@@ -33,63 +33,147 @@ enum CommandError: Error, LocalizedError {
     }
 }
 
-final class ShellCommandRunner: CommandRunning {
-    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: executable)
-                process.arguments = arguments
+private struct BufferedCommandOutput {
+    var stdout = Data()
+    var stderr = Data()
+}
 
-                let stdout = Pipe()
-                let stderr = Pipe()
-                process.standardOutput = stdout
-                process.standardError = stderr
+private final class OneShotContinuation<Value: Sendable>: @unchecked Sendable {
+    private let continuation: LockedState<CheckedContinuation<Value, Error>?>
 
-                do {
-                    try process.run()
-                } catch {
-                    continuation.resume(throwing: CommandError.launchFailed(error.localizedDescription))
-                    return
-                }
+    init(_ continuation: CheckedContinuation<Value, Error>) {
+        self.continuation = LockedState(continuation)
+    }
 
-                let outputGroup = DispatchGroup()
-                let outputLock = NSLock()
-                var stdoutData = Data()
-                var stderrData = Data()
+    func resume(returning value: Value) {
+        let continuation = continuation.withLock { stored -> CheckedContinuation<Value, Error>? in
+            defer { stored = nil }
+            return stored
+        }
+        continuation?.resume(returning: value)
+    }
 
-                outputGroup.enter()
-                DispatchQueue.global(qos: .utility).async {
-                    let data = stdout.fileHandleForReading.readDataToEndOfFile()
-                    outputLock.lock()
-                    stdoutData = data
-                    outputLock.unlock()
-                    outputGroup.leave()
-                }
+    func resume(throwing error: Error) {
+        let continuation = continuation.withLock { stored -> CheckedContinuation<Value, Error>? in
+            defer { stored = nil }
+            return stored
+        }
+        continuation?.resume(throwing: error)
+    }
+}
 
-                outputGroup.enter()
-                DispatchQueue.global(qos: .utility).async {
-                    let data = stderr.fileHandleForReading.readDataToEndOfFile()
-                    outputLock.lock()
-                    stderrData = data
-                    outputLock.unlock()
-                    outputGroup.leave()
-                }
+private final class CommandProcessHandle: @unchecked Sendable {
+    private struct State {
+        weak var process: Process?
+        var isCancelled = false
+    }
 
-                process.waitUntilExit()
-                outputGroup.wait()
+    private let state = LockedState(State())
 
-                continuation.resume(returning: CommandResult(
-                    stdout: stdoutData,
-                    stderr: stderrData,
-                    terminationStatus: process.terminationStatus
-                ))
+    var isCancelled: Bool {
+        state.withLock { $0.isCancelled }
+    }
+
+    func attach(_ process: Process) {
+        let shouldCancel = state.withLock { state in
+            state.process = process
+            return state.isCancelled
+        }
+        if shouldCancel {
+            terminate(process)
+        }
+    }
+
+    func cancel() {
+        let process = state.withLock { state -> Process? in
+            state.isCancelled = true
+            return state.process
+        }
+        if let process {
+            terminate(process)
+        }
+    }
+
+    private func terminate(_ process: Process) {
+        guard process.isRunning else { return }
+        process.terminate()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25) {
+            if process.isRunning {
+                process.interrupt()
             }
         }
     }
 }
 
-protocol DiskCheckCommandRunning: AnyObject {
+final class ShellCommandRunner: CommandRunning, @unchecked Sendable {
+    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        let processHandle = CommandProcessHandle()
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                let completion = OneShotContinuation(continuation)
+                DispatchQueue.global(qos: .utility).async {
+                    if processHandle.isCancelled {
+                        completion.resume(throwing: CancellationError())
+                        return
+                    }
+
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: executable)
+                    process.arguments = arguments
+
+                    let stdout = Pipe()
+                    let stderr = Pipe()
+                    process.standardOutput = stdout
+                    process.standardError = stderr
+
+                    do {
+                        try process.run()
+                        processHandle.attach(process)
+                    } catch {
+                        completion.resume(throwing: CommandError.launchFailed(error.localizedDescription))
+                        return
+                    }
+
+                    let outputGroup = DispatchGroup()
+                    let output = LockedState(BufferedCommandOutput())
+
+                    outputGroup.enter()
+                    DispatchQueue.global(qos: .utility).async {
+                        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+                        output.withLock { $0.stdout = data }
+                        outputGroup.leave()
+                    }
+
+                    outputGroup.enter()
+                    DispatchQueue.global(qos: .utility).async {
+                        let data = stderr.fileHandleForReading.readDataToEndOfFile()
+                        output.withLock { $0.stderr = data }
+                        outputGroup.leave()
+                    }
+
+                    process.waitUntilExit()
+                    outputGroup.wait()
+
+                    if processHandle.isCancelled {
+                        completion.resume(throwing: CancellationError())
+                        return
+                    }
+                    let finalOutput = output.snapshot()
+                    completion.resume(returning: CommandResult(
+                        stdout: finalOutput.stdout,
+                        stderr: finalOutput.stderr,
+                        terminationStatus: process.terminationStatus
+                    ))
+                }
+            }
+        } onCancel: {
+            processHandle.cancel()
+        }
+    }
+}
+
+protocol DiskCheckCommandRunning: AnyObject, Sendable {
     func run(
         _ executable: String,
         arguments: [String],
@@ -99,9 +183,39 @@ protocol DiskCheckCommandRunning: AnyObject {
     func cancel()
 }
 
+private final class StreamingCommandBuffer: @unchecked Sendable {
+    private let output = LockedState(BufferedCommandOutput())
+
+    func append(
+        _ data: Data,
+        toStdout: Bool,
+        onStdout: @escaping @Sendable (String) -> Void,
+        onStderr: @escaping @Sendable (String) -> Void
+    ) {
+        guard !data.isEmpty else { return }
+        output.withLock { output in
+            if toStdout {
+                output.stdout.append(data)
+            } else {
+                output.stderr.append(data)
+            }
+        }
+
+        guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return }
+        if toStdout {
+            onStdout(text)
+        } else {
+            onStderr(text)
+        }
+    }
+
+    func snapshot() -> BufferedCommandOutput {
+        output.snapshot()
+    }
+}
+
 final class StreamingDiskCheckCommandRunner: DiskCheckCommandRunning, @unchecked Sendable {
-    private let processLock = NSLock()
-    private var currentProcess: Process?
+    private let currentHandle = LockedState<CommandProcessHandle?>(nil)
 
     func run(
         _ executable: String,
@@ -109,93 +223,75 @@ final class StreamingDiskCheckCommandRunner: DiskCheckCommandRunning, @unchecked
         stdout onStdout: @escaping @Sendable (String) -> Void,
         stderr onStderr: @escaping @Sendable (String) -> Void
     ) async throws -> CommandResult {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: executable)
-                process.arguments = arguments
+        let processHandle = CommandProcessHandle()
+        currentHandle.withLock { $0 = processHandle }
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                let completion = OneShotContinuation(continuation)
+                DispatchQueue.global(qos: .utility).async { [weak self] in
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: executable)
+                    process.arguments = arguments
 
-                let stdoutPipe = Pipe()
-                let stderrPipe = Pipe()
-                let dataLock = NSLock()
-                var stdoutData = Data()
-                var stderrData = Data()
+                    let stdoutPipe = Pipe()
+                    let stderrPipe = Pipe()
+                    let output = StreamingCommandBuffer()
 
-                func append(_ data: Data, toStdout: Bool) {
-                    guard !data.isEmpty else { return }
-                    dataLock.lock()
-                    if toStdout {
-                        stdoutData.append(data)
-                    } else {
-                        stderrData.append(data)
+                    stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+                        output.append(handle.availableData, toStdout: true, onStdout: onStdout, onStderr: onStderr)
                     }
-                    dataLock.unlock()
-
-                    guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return }
-                    if toStdout {
-                        onStdout(text)
-                    } else {
-                        onStderr(text)
+                    stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+                        output.append(handle.availableData, toStdout: false, onStdout: onStdout, onStderr: onStderr)
                     }
-                }
 
-                stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-                    append(handle.availableData, toStdout: true)
-                }
-                stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-                    append(handle.availableData, toStdout: false)
-                }
+                    process.standardOutput = stdoutPipe
+                    process.standardError = stderrPipe
+                    process.terminationHandler = { [weak self] finishedProcess in
+                        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+                        stderrPipe.fileHandleForReading.readabilityHandler = nil
+                        output.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile(), toStdout: true, onStdout: onStdout, onStderr: onStderr)
+                        output.append(stderrPipe.fileHandleForReading.readDataToEndOfFile(), toStdout: false, onStdout: onStdout, onStderr: onStderr)
 
-                process.standardOutput = stdoutPipe
-                process.standardError = stderrPipe
-                process.terminationHandler = { [weak self] finishedProcess in
-                    stdoutPipe.fileHandleForReading.readabilityHandler = nil
-                    stderrPipe.fileHandleForReading.readabilityHandler = nil
-                    append(stdoutPipe.fileHandleForReading.readDataToEndOfFile(), toStdout: true)
-                    append(stderrPipe.fileHandleForReading.readDataToEndOfFile(), toStdout: false)
-
-                    self?.processLock.lock()
-                    if self?.currentProcess === finishedProcess {
-                        self?.currentProcess = nil
+                        self?.clearCurrentHandle(processHandle)
+                        if processHandle.isCancelled {
+                            completion.resume(throwing: CancellationError())
+                        } else {
+                            let finalOutput = output.snapshot()
+                            completion.resume(returning: CommandResult(
+                                stdout: finalOutput.stdout,
+                                stderr: finalOutput.stderr,
+                                terminationStatus: finishedProcess.terminationStatus
+                            ))
+                        }
                     }
-                    self?.processLock.unlock()
 
-                    dataLock.lock()
-                    let finalStdout = stdoutData
-                    let finalStderr = stderrData
-                    dataLock.unlock()
-
-                    continuation.resume(returning: CommandResult(
-                        stdout: finalStdout,
-                        stderr: finalStderr,
-                        terminationStatus: finishedProcess.terminationStatus
-                    ))
-                }
-
-                do {
-                    self.processLock.lock()
-                    self.currentProcess = process
-                    self.processLock.unlock()
-                    try process.run()
-                } catch {
-                    stdoutPipe.fileHandleForReading.readabilityHandler = nil
-                    stderrPipe.fileHandleForReading.readabilityHandler = nil
-                    self.processLock.lock()
-                    if self.currentProcess === process {
-                        self.currentProcess = nil
+                    do {
+                        try process.run()
+                        processHandle.attach(process)
+                    } catch {
+                        stdoutPipe.fileHandleForReading.readabilityHandler = nil
+                        stderrPipe.fileHandleForReading.readabilityHandler = nil
+                        self?.clearCurrentHandle(processHandle)
+                        completion.resume(throwing: CommandError.launchFailed(error.localizedDescription))
                     }
-                    self.processLock.unlock()
-                    continuation.resume(throwing: CommandError.launchFailed(error.localizedDescription))
                 }
             }
+        } onCancel: {
+            processHandle.cancel()
         }
     }
 
     func cancel() {
-        processLock.lock()
-        let process = currentProcess
-        processLock.unlock()
-        process?.terminate()
+        currentHandle.snapshot()?.cancel()
+    }
+
+    private func clearCurrentHandle(_ handle: CommandProcessHandle) {
+        currentHandle.withLock { current in
+            if current === handle {
+                current = nil
+            }
+        }
     }
 }
 
@@ -494,9 +590,10 @@ final class DiskCheckService {
 
             let streamedOutput = LockedDiskCheckOutput()
             let completion = LockedDiskCheckCompletion()
+            let commandRunner = runner
             let commandTask = Task {
                 do {
-                    let result = try await runner.run(
+                    let result = try await commandRunner.run(
                         executable,
                         arguments: plan.arguments,
                         stdout: { streamedOutput.appendStdout($0) },

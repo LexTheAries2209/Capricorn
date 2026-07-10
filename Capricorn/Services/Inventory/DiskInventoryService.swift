@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
 
-protocol DiskInventoryProviding {
+protocol DiskInventoryProviding: Sendable {
     func loadDrives(showVirtual: Bool) async throws -> [DriveDevice]
 }
 
-struct DiskutilListModel {
+struct DiskutilListModel: Sendable {
     var wholeDiskIDs: [String]
     var volumesByPhysicalDisk: [String: [DriveDevice.Volume]]
 }
@@ -17,7 +17,7 @@ struct NetworkMountEntry: Equatable {
     var options: [String]
 }
 
-protocol NetworkVolumeInventoryProviding {
+protocol NetworkVolumeInventoryProviding: Sendable {
     func loadNetworkDrives() async throws -> [DriveDevice]
 }
 
@@ -320,7 +320,7 @@ enum NetworkVolumeMountParser {
     }
 }
 
-final class NetworkMountInventoryProvider: NetworkVolumeInventoryProviding {
+final class NetworkMountInventoryProvider: NetworkVolumeInventoryProviding, @unchecked Sendable {
     private let runner: CommandRunning
     private let mountPath: String
     private let fileManager: FileManager
@@ -422,7 +422,7 @@ final class NetworkMountInventoryProvider: NetworkVolumeInventoryProviding {
     }
 }
 
-final class DiskutilInventoryProvider: DiskInventoryProviding {
+final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendable {
     private let runner: CommandRunning
     private let diskutilPath: String
     private let networkProvider: NetworkVolumeInventoryProviding?
@@ -444,16 +444,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding {
         }
 
         let list = try DiskutilPlistParser.parseList(listResult.stdout)
-        var devices: [DriveDevice] = []
-
-        for diskID in list.wholeDiskIDs {
-            let infoResult = try await runner.run(diskutilPath, arguments: ["info", "-plist", diskID])
-            guard infoResult.terminationStatus == 0 else { continue }
-            let volumes = enrichFileSystemTypes(list.volumesByPhysicalDisk[diskID] ?? [])
-            if let device = try DiskutilPlistParser.parseDevice(infoData: infoResult.stdout, volumes: volumes, showVirtual: showVirtual) {
-                devices.append(device)
-            }
-        }
+        var devices = await loadPhysicalDevices(list: list, showVirtual: showVirtual)
 
         if let networkProvider {
             do {
@@ -471,7 +462,63 @@ final class DiskutilInventoryProvider: DiskInventoryProviding {
         }
     }
 
-    private func enrichFileSystemTypes(_ volumes: [DriveDevice.Volume]) -> [DriveDevice.Volume] {
+    private func loadPhysicalDevices(list: DiskutilListModel, showVirtual: Bool) async -> [DriveDevice] {
+        let runner = runner
+        let diskutilPath = diskutilPath
+        var iterator = Array(list.wholeDiskIDs.enumerated()).makeIterator()
+
+        return await withTaskGroup(of: (Int, DriveDevice?).self) { group in
+            for _ in 0..<min(4, list.wholeDiskIDs.count) {
+                guard let (index, diskID) = iterator.next() else { break }
+                let volumes = Self.enrichFileSystemTypes(list.volumesByPhysicalDisk[diskID] ?? [])
+                group.addTask {
+                    do {
+                        let result = try await runner.run(diskutilPath, arguments: ["info", "-plist", diskID])
+                        guard result.terminationStatus == 0 else { return (index, nil) }
+                        return (
+                            index,
+                            try DiskutilPlistParser.parseDevice(
+                                infoData: result.stdout,
+                                volumes: volumes,
+                                showVirtual: showVirtual
+                            )
+                        )
+                    } catch {
+                        return (index, nil)
+                    }
+                }
+            }
+
+            var indexedDevices: [(Int, DriveDevice)] = []
+            while let (index, device) = await group.next() {
+                if let device {
+                    indexedDevices.append((index, device))
+                }
+                if let (nextIndex, nextDiskID) = iterator.next() {
+                    let volumes = Self.enrichFileSystemTypes(list.volumesByPhysicalDisk[nextDiskID] ?? [])
+                    group.addTask {
+                        do {
+                            let result = try await runner.run(diskutilPath, arguments: ["info", "-plist", nextDiskID])
+                            guard result.terminationStatus == 0 else { return (nextIndex, nil) }
+                            return (
+                                nextIndex,
+                                try DiskutilPlistParser.parseDevice(
+                                    infoData: result.stdout,
+                                    volumes: volumes,
+                                    showVirtual: showVirtual
+                                )
+                            )
+                        } catch {
+                            return (nextIndex, nil)
+                        }
+                    }
+                }
+            }
+            return indexedDevices.sorted { $0.0 < $1.0 }.map(\.1)
+        }
+    }
+
+    private static func enrichFileSystemTypes(_ volumes: [DriveDevice.Volume]) -> [DriveDevice.Volume] {
         volumes.map { volume in
             guard volume.fileSystemType == nil, let mountPoint = volume.mountPoint else {
                 return volume

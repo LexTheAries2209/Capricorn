@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import XCTest
+import SwiftData
 @testable import Capricorn
 
 final class CapricornTests: XCTestCase {
@@ -88,6 +89,7 @@ final class CapricornTests: XCTestCase {
             "GitHub 仓库：github.com/LexTheAries2209/Capricorn。代码、版本说明、发布包与问题反馈均在仓库维护，欢迎通过 Issue 或 Pull Request 参与改进。"
         )
     }
+
 
     func testDriveDeviceDecodesOlderRecordsWithoutNetworkFlag() throws {
         let encoded = try JSONEncoder().encode(Self.fixtureDrive())
@@ -419,9 +421,9 @@ final class CapricornTests: XCTestCase {
     func testFeatureTabSwitchShortcutsUsePlainTab() {
         XCTAssertEqual(AppCommandShortcut.nextFeatureTab.key, "tab")
         XCTAssertEqual(AppCommandShortcut.previousFeatureTab.key, "tab")
-        XCTAssertTrue(AppCommandShortcut.nextFeatureTab.modifiers.isEmpty)
+        XCTAssertTrue(AppCommandShortcut.nextFeatureTab.modifiers.contains(.control))
         XCTAssertFalse(AppCommandShortcut.nextFeatureTab.modifiers.contains(.shift))
-        XCTAssertFalse(AppCommandShortcut.previousFeatureTab.modifiers.contains(.control))
+        XCTAssertTrue(AppCommandShortcut.previousFeatureTab.modifiers.contains(.control))
         XCTAssertTrue(AppCommandShortcut.previousFeatureTab.modifiers.contains(.shift))
     }
 
@@ -1297,48 +1299,12 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(leftovers.isEmpty)
     }
 
-    @MainActor
-    func testLiveActivityWorkloadAutoStartsMonitoringAndStopsWithoutClearingChart() async throws {
-        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
 
-        let drive = Self.fixtureDrive(mountedAt: root.path)
-        let reader = FakeDiskActivityReader(counters: [
-            DiskActivityCounters(timestamp: Date(timeIntervalSince1970: 1), readBytes: 0, writeBytes: 0),
-            DiskActivityCounters(timestamp: Date(timeIntervalSince1970: 2), readBytes: 1_000_000, writeBytes: 2_000_000)
-        ])
-        let workloadRunner = FakeDiskActivityWorkloadRunner()
-        let model = DITViewModel(
-            diskActivityProvider: FakeDiskActivityProvider(reader: reader),
-            liveActivityWorkloadRunner: workloadRunner
-        )
-        model.drives = [drive]
-        model.liveActivitySelectedDriveID = drive.id
 
-        model.startLiveActivityWorkload(
-            configuration: DiskActivityWorkloadConfiguration(
-                targetFolderURL: root,
-                operation: .write,
-                fileSizeOption: .gib32,
-                fileSizeBytes: 16_384,
-                loopEnabled: true
-            ),
-            drive: drive,
-            interval: .tenth
-        )
 
-        XCTAssertTrue(model.isLiveActivityWorkloadRunning)
-        XCTAssertTrue(model.isLiveActivityMonitoring)
 
-        model.stopLiveActivityWorkload()
-        try await Task.sleep(nanoseconds: 50_000_000)
 
-        XCTAssertFalse(model.isLiveActivityWorkloadRunning)
-        XCTAssertTrue(model.isLiveActivityMonitoring)
-        XCTAssertNil(model.liveActivityWorkloadError)
-        model.stopLiveActivityMonitoring()
-    }
+
 
     func testBenchmarkSelectedRunCountAddsTwoMeasuredRunsWhenTrimmedAverageEnabled() {
         XCTAssertEqual(BenchmarkMeasurementReducer.measuredRunCount(for: 1, usesTrimmedAverage: true), 3)
@@ -1588,14 +1554,14 @@ final class CapricornTests: XCTestCase {
         writeB.writePercentForMixed = 100
 
         let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 65_536, runs: 1, tests: [read, write, readB, writeB])
-        var publishedTestIDs: [String] = []
+        let publishedTestIDs = LockedArray<String>()
 
         let results = try await NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0).run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
             publishedTestIDs.append(result.testID)
         }
 
         XCTAssertEqual(results.map(\.testID), ["unit-read-a", "unit-write-a", "unit-read-b", "unit-write-b"])
-        XCTAssertEqual(publishedTestIDs, ["unit-read-a", "unit-write-a", "unit-read-b", "unit-write-b"])
+        XCTAssertEqual(publishedTestIDs.snapshot, ["unit-read-a", "unit-write-a", "unit-read-b", "unit-write-b"])
         XCTAssertTrue(results.allSatisfy { $0.bytesTransferred == 65_536 })
     }
 
@@ -1659,19 +1625,14 @@ final class CapricornTests: XCTestCase {
             writePercentForMixed: 0
         )
         let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 32_768, runs: 3, tests: [read])
-        let lock = NSLock()
-        var createdNames: [String] = []
+        let createdNames = LockedArray<String>()
         let runner = NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0, fileEventHandler: { url in
-            lock.lock()
             createdNames.append(url.lastPathComponent)
-            lock.unlock()
         })
 
         let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
 
-        lock.lock()
-        let names = createdNames
-        lock.unlock()
+        let names = createdNames.snapshot
         XCTAssertEqual(results.first?.bytesTransferred, 32_768)
         XCTAssertEqual(names.count, 1)
         XCTAssertTrue(names.first?.contains("read-run0") == true)
@@ -1713,19 +1674,14 @@ final class CapricornTests: XCTestCase {
         mixed.operation = .mixed
         mixed.writePercentForMixed = 30
         let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 8_192, runs: 2, tests: [read, write, mixed])
-        let lock = NSLock()
-        var createdNames: [String] = []
+        let createdNames = LockedArray<String>()
         let runner = NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0, fileEventHandler: { url in
-            lock.lock()
             createdNames.append(url.lastPathComponent)
-            lock.unlock()
         })
 
         let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
 
-        lock.lock()
-        let names = createdNames
-        lock.unlock()
+        let names = createdNames.snapshot
         XCTAssertEqual(results.map(\.testID), ["unit-read", "unit-write", "unit-mixed"])
         XCTAssertEqual(names.filter { $0.contains("-read-run") }.count, 1)
         XCTAssertEqual(names.filter { $0.contains("-write-run") }.count, 3)
@@ -1762,7 +1718,7 @@ final class CapricornTests: XCTestCase {
             engine: .asyncQueue,
             tests: [write]
         )
-        var published: [BenchmarkResult] = []
+        let published = LockedArray<BenchmarkResult>()
         let runner = AsyncQueueBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0)
 
         let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
@@ -1770,7 +1726,7 @@ final class CapricornTests: XCTestCase {
         }
 
         XCTAssertEqual(results.count, 1)
-        XCTAssertEqual(published.count, 1)
+        XCTAssertEqual(published.snapshot.count, 1)
         let result = try XCTUnwrap(results.first)
         XCTAssertEqual(result.bytesTransferred, 65_536)
         XCTAssertNotNil(result.transferMegabytesPerSecond)
@@ -1813,19 +1769,14 @@ final class CapricornTests: XCTestCase {
             engine: .asyncQueue,
             tests: [read]
         )
-        let lock = NSLock()
-        var createdNames: [String] = []
+        let createdNames = LockedArray<String>()
         let runner = AsyncQueueBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0, fileEventHandler: { url in
-            lock.lock()
             createdNames.append(url.lastPathComponent)
-            lock.unlock()
         })
 
         let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
 
-        lock.lock()
-        let names = createdNames
-        lock.unlock()
+        let names = createdNames.snapshot
         XCTAssertEqual(results.first?.bytesTransferred, 65_536)
         XCTAssertEqual(names.count, 1)
         XCTAssertTrue(names.first?.contains("read-run0") == true)
@@ -1867,40 +1818,31 @@ final class CapricornTests: XCTestCase {
             tests: [read, write]
         )
 
-        let lock = NSLock()
-        var requestedWaits: [TimeInterval] = []
-        var published: [BenchmarkResult] = []
-        var createdNames: [String] = []
+        let requestedWaits = LockedArray<TimeInterval>()
+        let published = LockedArray<BenchmarkResult>()
+        let createdNames = LockedArray<String>()
         let runner = AsyncQueueBenchmarkRunner(
             operationIntervalSeconds: 5,
             passIntervalSeconds: 1,
             operationSleeper: { seconds, _ in
-                lock.lock()
                 requestedWaits.append(seconds)
-                lock.unlock()
             },
             fileEventHandler: { url in
-                lock.lock()
                 createdNames.append(url.lastPathComponent)
-                lock.unlock()
             }
         )
 
         let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
-            lock.lock()
             published.append(result)
-            let shouldCancel = published.count == 4
-            lock.unlock()
+            let shouldCancel = published.snapshot.count == 4
             if shouldCancel {
                 runner.cancel()
             }
         }
 
-        lock.lock()
-        let waits = requestedWaits
-        let publishedIDs = published.map(\.testID)
-        let names = createdNames
-        lock.unlock()
+        let waits = requestedWaits.snapshot
+        let publishedIDs = published.snapshot.map(\.testID)
+        let names = createdNames.snapshot
 
         let expectedCycle = ["async-loop-read", "async-loop-write"]
         XCTAssertEqual(publishedIDs, expectedCycle + expectedCycle)
@@ -1973,20 +1915,15 @@ final class CapricornTests: XCTestCase {
         write.operation = .write
         write.writePercentForMixed = 100
         let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 8_192, runs: 1, tests: [read, write])
-        let lock = NSLock()
-        var requestedWaits: [TimeInterval] = []
+        let requestedWaits = LockedArray<TimeInterval>()
         let runner = NativeBenchmarkRunner(operationIntervalSeconds: 5, passIntervalSeconds: 0) { seconds, isCancelled in
             XCTAssertFalse(isCancelled())
-            lock.lock()
             requestedWaits.append(seconds)
-            lock.unlock()
         }
 
         _ = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
 
-        lock.lock()
-        let waits = requestedWaits
-        lock.unlock()
+        let waits = requestedWaits.snapshot
         XCTAssertEqual(waits, [5])
     }
 
@@ -2013,20 +1950,15 @@ final class CapricornTests: XCTestCase {
             writePercentForMixed: 100
         )
         let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 8_192, runs: 1, tests: [write])
-        let lock = NSLock()
-        var requestedWaits: [TimeInterval] = []
+        let requestedWaits = LockedArray<TimeInterval>()
         let runner = NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 1) { seconds, isCancelled in
             XCTAssertFalse(isCancelled())
-            lock.lock()
             requestedWaits.append(seconds)
-            lock.unlock()
         }
 
         _ = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }, result: { _ in })
 
-        lock.lock()
-        let waits = requestedWaits
-        lock.unlock()
+        let waits = requestedWaits.snapshot
         XCTAssertEqual(waits, [1])
     }
 
@@ -2074,40 +2006,31 @@ final class CapricornTests: XCTestCase {
             tests: [readQ1, writeQ1, readQ8, writeQ8]
         )
 
-        let lock = NSLock()
-        var requestedWaits: [TimeInterval] = []
-        var published: [BenchmarkResult] = []
-        var createdNames: [String] = []
+        let requestedWaits = LockedArray<TimeInterval>()
+        let published = LockedArray<BenchmarkResult>()
+        let createdNames = LockedArray<String>()
         let runner = NativeBenchmarkRunner(
             operationIntervalSeconds: 5,
             passIntervalSeconds: 1,
             operationSleeper: { seconds, _ in
-                lock.lock()
                 requestedWaits.append(seconds)
-                lock.unlock()
             },
             fileEventHandler: { url in
-                lock.lock()
                 createdNames.append(url.lastPathComponent)
-                lock.unlock()
             }
         )
 
         let results = try await runner.run(profile: profile, drive: drive, volumePath: root.path, progress: { _ in }) { result in
-            lock.lock()
             published.append(result)
-            let shouldCancel = published.count == 8
-            lock.unlock()
+            let shouldCancel = published.snapshot.count == 8
             if shouldCancel {
                 runner.cancel()
             }
         }
 
-        lock.lock()
-        let waits = requestedWaits
-        let publishedIDs = published.map(\.testID)
-        let names = createdNames
-        lock.unlock()
+        let waits = requestedWaits.snapshot
+        let publishedIDs = published.snapshot.map(\.testID)
+        let names = createdNames.snapshot
 
         let expectedCycle = ["loop-read-q1", "loop-write-q1", "loop-read-q8", "loop-write-q8"]
         XCTAssertEqual(publishedIDs, expectedCycle + expectedCycle)
@@ -2200,7 +2123,9 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(HistoryVisibility.hidden([currentDriveRecord, otherDriveRecord]).map(\.id), [currentDriveRecord.id])
     }
 
-    private static func fixtureDrive() -> DriveDevice {
+
+
+    static func fixtureDrive() -> DriveDevice {
         DriveDevice(
             bsdName: "disk0",
             deviceNode: "/dev/disk0",
@@ -2223,7 +2148,7 @@ final class CapricornTests: XCTestCase {
         )
     }
 
-    private static func fixtureDrive(mountedAt mountPoint: String) -> DriveDevice {
+    static func fixtureDrive(mountedAt mountPoint: String) -> DriveDevice {
         var drive = fixtureDrive()
         drive.volumes = [
             DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: mountPoint, sizeBytes: 1_000_000_000, isWritable: true, isSystem: false)
@@ -2231,7 +2156,7 @@ final class CapricornTests: XCTestCase {
         return drive
     }
 
-    private static func fixtureSnapshot(for drive: DriveDevice) -> SmartSnapshot {
+    static func fixtureSnapshot(for drive: DriveDevice) -> SmartSnapshot {
         SmartSnapshot(
             driveID: drive.id,
             capturedAt: Date(timeIntervalSince1970: 1_000),
@@ -2250,7 +2175,7 @@ final class CapricornTests: XCTestCase {
         )
     }
 
-    private static func fixtureBenchmarkResult(for drive: DriveDevice) -> BenchmarkResult {
+    static func fixtureBenchmarkResult(for drive: DriveDevice) -> BenchmarkResult {
         BenchmarkResult(
             driveID: drive.id,
             volumePath: "/tmp",
@@ -2265,6 +2190,37 @@ final class CapricornTests: XCTestCase {
             latencyMicroseconds: 10,
             bytesTransferred: 65_536
         )
+    }
+
+    @MainActor
+    static func createLegacyHistoryStore(at url: URL, drive: DriveDevice) throws {
+        let schema = Schema([
+            SmartHistoryRecord.self,
+            BenchmarkHistoryRecord.self,
+            DiskActivityHistoryRecord.self,
+            AppSettingsRecord.self
+        ])
+        let configuration = ModelConfiguration(
+            "LegacyCapricorn",
+            schema: schema,
+            url: url,
+            cloudKitDatabase: .none
+        )
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = container.mainContext
+        let snapshot = fixtureSnapshot(for: drive)
+        let benchmark = fixtureBenchmarkResult(for: drive)
+        let sample = DiskActivitySample(timestamp: Date(), readMegabytesPerSecond: 1, writeMegabytesPerSecond: 2)
+        context.insert(SmartHistoryRecord(drive: drive, snapshot: snapshot))
+        context.insert(BenchmarkHistoryRecord(drive: drive, result: benchmark, activitySamples: [sample]))
+        context.insert(DiskActivityHistoryRecord(
+            drive: drive,
+            samples: [sample],
+            sampleInterval: DiskActivitySampleInterval.default,
+            startedAt: sample.timestamp,
+            endedAt: sample.timestamp.addingTimeInterval(1)
+        ))
+        try context.save()
     }
 
     private static func fixtureActivityRecord(for drive: DriveDevice) -> DiskActivityHistoryRecord {
@@ -2473,8 +2429,7 @@ private final class RecordingCommandRunner: CommandRunning, @unchecked Sendable 
         var arguments: [String]
     }
 
-    private let lock = NSLock()
-    private var recordedCalls: [Call] = []
+    private let recordedCalls = LockedArray<Call>()
     private let stdout: String
     private let stderr: String
     private let terminationStatus: Int32
@@ -2486,15 +2441,11 @@ private final class RecordingCommandRunner: CommandRunning, @unchecked Sendable 
     }
 
     var calls: [Call] {
-        lock.lock()
-        defer { lock.unlock() }
-        return recordedCalls
+        recordedCalls.snapshot
     }
 
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
-        lock.lock()
         recordedCalls.append(Call(executable: executable, arguments: arguments))
-        lock.unlock()
         return CommandResult(
             stdout: Data(stdout.utf8),
             stderr: Data(stderr.utf8),
@@ -2504,8 +2455,7 @@ private final class RecordingCommandRunner: CommandRunning, @unchecked Sendable 
 }
 
 private final class RecordingDiskCheckRunner: DiskCheckCommandRunning, @unchecked Sendable {
-    private let lock = NSLock()
-    private var recordedCalls: [RecordingCommandRunner.Call] = []
+    private let recordedCalls = LockedArray<RecordingCommandRunner.Call>()
     private let stdout: String
     private let stderr: String
     private let terminationStatus: Int32
@@ -2518,9 +2468,7 @@ private final class RecordingDiskCheckRunner: DiskCheckCommandRunning, @unchecke
     }
 
     var calls: [RecordingCommandRunner.Call] {
-        lock.lock()
-        defer { lock.unlock() }
-        return recordedCalls
+        recordedCalls.snapshot
     }
 
     func run(
@@ -2529,9 +2477,7 @@ private final class RecordingDiskCheckRunner: DiskCheckCommandRunning, @unchecke
         stdout onStdout: @escaping @Sendable (String) -> Void,
         stderr onStderr: @escaping @Sendable (String) -> Void
     ) async throws -> CommandResult {
-        lock.lock()
         recordedCalls.append(RecordingCommandRunner.Call(executable: executable, arguments: arguments))
-        lock.unlock()
 
         if !stdout.isEmpty {
             onStdout(stdout)
@@ -2553,8 +2499,7 @@ private final class RecordingDiskCheckRunner: DiskCheckCommandRunning, @unchecke
 }
 
 private final class DelayedDiskCheckRunner: DiskCheckCommandRunning, @unchecked Sendable {
-    private let lock = NSLock()
-    private var recordedCalls: [RecordingCommandRunner.Call] = []
+    private let recordedCalls = LockedArray<RecordingCommandRunner.Call>()
     private let stdout: String
     private let stderr: String
     private let delayNanoseconds: UInt64
@@ -2567,9 +2512,7 @@ private final class DelayedDiskCheckRunner: DiskCheckCommandRunning, @unchecked 
     }
 
     var calls: [RecordingCommandRunner.Call] {
-        lock.lock()
-        defer { lock.unlock() }
-        return recordedCalls
+        recordedCalls.snapshot
     }
 
     func run(
@@ -2578,9 +2521,7 @@ private final class DelayedDiskCheckRunner: DiskCheckCommandRunning, @unchecked 
         stdout onStdout: @escaping @Sendable (String) -> Void,
         stderr onStderr: @escaping @Sendable (String) -> Void
     ) async throws -> CommandResult {
-        lock.lock()
         recordedCalls.append(RecordingCommandRunner.Call(executable: executable, arguments: arguments))
-        lock.unlock()
 
         onStdout(stdout)
         if !stderr.isEmpty {
@@ -2615,8 +2556,8 @@ private final class LateCallbackBenchmarkRunner: BenchmarkRunning, @unchecked Se
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
-        progress: @escaping (BenchmarkProgress) -> Void,
-        result: @escaping (BenchmarkResult) -> Void
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
         events.append("started")
         try? await Task.sleep(nanoseconds: 120_000_000)
@@ -2667,7 +2608,7 @@ private final class LateCallbackBenchmarkRunner: BenchmarkRunning, @unchecked Se
     }
 }
 
-private final class FakeDiskActivityProvider: DiskActivityProviding, @unchecked Sendable {
+final class FakeDiskActivityProvider: DiskActivityProviding, @unchecked Sendable {
     private let lock = NSLock()
     private let fakeReader: FakeDiskActivityReader
     private var readerCalls = 0
@@ -2704,7 +2645,7 @@ private final class FakeDiskActivityProvider: DiskActivityProviding, @unchecked 
     }
 }
 
-private final class FakeDiskActivityReader: DiskActivityCounterReading, @unchecked Sendable {
+final class FakeDiskActivityReader: DiskActivityCounterReading, @unchecked Sendable {
     private let lock = NSLock()
     private let values: [DiskActivityCounters]
     private var index = 0
@@ -2723,14 +2664,14 @@ private final class FakeDiskActivityReader: DiskActivityCounterReading, @uncheck
     }
 }
 
-private final class FakeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unchecked Sendable {
+final class FakeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
 
     func run(
         configuration: DiskActivityWorkloadConfiguration,
         drive: DriveDevice,
-        progress: @escaping (DiskActivityWorkloadProgress) -> Void
+        progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) async throws {
         progress(DiskActivityWorkloadProgress(
             operation: configuration.operation,

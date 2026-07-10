@@ -4,20 +4,34 @@ import SwiftUI
 
 @main
 struct CapricornApp: App {
-    @StateObject private var viewModel = DITViewModel()
-    @AppStorage("appLanguage") private var languageRawValue = AppLanguage.english.rawValue
+    @State private var viewModel: AppModel
+    @State private var preferences: AppPreferences
+    private let modelContainer: ModelContainer
+
+    init() {
+        let preferences = AppPreferences()
+        let viewModel = AppModel()
+        viewModel.showVirtualDisks = preferences.showVirtualDisks
+        _preferences = State(initialValue: preferences)
+        _viewModel = State(initialValue: viewModel)
+        do {
+            modelContainer = try ModelContainerFactory.makeApplication()
+        } catch {
+            fatalError("Unable to open Capricorn history database: \(error.localizedDescription)")
+        }
+    }
 
     private var language: AppLanguage {
-        AppLanguage(rawValue: languageRawValue) ?? .english
+        preferences.language
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView(viewModel: viewModel)
-                .frame(minWidth: 1433, minHeight: 732)
+            ContentView(viewModel: viewModel, preferences: preferences)
+                .frame(minWidth: 1050, minHeight: 680)
         }
         .defaultSize(width: 1433, height: 732)
-        .modelContainer(for: [SmartHistoryRecord.self, BenchmarkHistoryRecord.self, DiskActivityHistoryRecord.self, AppSettingsRecord.self])
+        .modelContainer(modelContainer)
         .commands {
             CommandGroup(after: .toolbar) {
                 Button(language.t("Next Function")) {
@@ -53,6 +67,10 @@ struct CapricornApp: App {
                 .keyboardShortcut(AppCommandShortcut.refreshDisksKeyEquivalent, modifiers: AppCommandShortcut.refreshDisks.modifiers)
             }
             .padding(8)
+        }
+
+        Settings {
+            CapricornSettingsView(preferences: preferences)
         }
     }
 

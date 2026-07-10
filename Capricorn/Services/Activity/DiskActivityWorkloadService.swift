@@ -125,11 +125,15 @@ enum DiskActivityWorkloadStorageValidator {
     }
 }
 
-protocol DiskActivityWorkloadRunning: AnyObject {
+enum DiskActivityWorkloadEvent: Sendable {
+    case progress(DiskActivityWorkloadProgress)
+}
+
+protocol DiskActivityWorkloadRunning: AnyObject, Sendable {
     func run(
         configuration: DiskActivityWorkloadConfiguration,
         drive: DriveDevice,
-        progress: @escaping (DiskActivityWorkloadProgress) -> Void
+        progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) async throws
     func cancel()
 }
@@ -183,7 +187,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
     func run(
         configuration: DiskActivityWorkloadConfiguration,
         drive: DriveDevice,
-        progress: @escaping (DiskActivityWorkloadProgress) -> Void
+        progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) async throws {
         setCancelled(false)
 
@@ -202,7 +206,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
     private func runBlocking(
         configuration: DiskActivityWorkloadConfiguration,
         drive: DriveDevice,
-        progress: @escaping (DiskActivityWorkloadProgress) -> Void
+        progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) throws {
         let targetURL = configuration.targetFolderURL
         let targetPath = targetURL.path
@@ -264,7 +268,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         configuration: DiskActivityWorkloadConfiguration,
         runID: String,
         loopIndex: Int,
-        progress: @escaping (DiskActivityWorkloadProgress) -> Void
+        progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) throws -> DiskActivityWorkloadOpenFile {
         let url = workloadFileURL(in: configuration.targetFolderURL, runID: runID, role: "read-source", loopIndex: loopIndex)
         let file = try openWorkloadFile(at: url)
@@ -295,7 +299,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         configuration: DiskActivityWorkloadConfiguration,
         file: DiskActivityWorkloadOpenFile,
         loopIndex: Int,
-        progress: @escaping (DiskActivityWorkloadProgress) -> Void
+        progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) throws {
         let reporter = ByteProgressReporter(totalBytes: configuration.fileSizeBytes) { completedBytes in
             self.notify(progress, self.progressValue(
@@ -314,7 +318,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         configuration: DiskActivityWorkloadConfiguration,
         runID: String,
         loopIndex: Int,
-        progress: @escaping (DiskActivityWorkloadProgress) -> Void
+        progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) throws {
         let url = workloadFileURL(in: configuration.targetFolderURL, runID: runID, role: "write", loopIndex: loopIndex)
         let file = try openWorkloadFile(at: url)
@@ -342,7 +346,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         readFile: DiskActivityWorkloadOpenFile,
         runID: String,
         loopIndex: Int,
-        progress: @escaping (DiskActivityWorkloadProgress) -> Void
+        progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) throws {
         let url = workloadFileURL(in: configuration.targetFolderURL, runID: runID, role: "mixed-write", loopIndex: loopIndex)
         let writeFile = try openWorkloadFile(at: url)
@@ -360,17 +364,18 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
             ))
         }
 
-        var firstError: Error?
-        let errorLock = NSLock()
+        let firstError = LockedState<Error?>(nil)
         let group = DispatchGroup()
 
-        func record(_ error: Error) {
-            errorLock.lock()
-            if firstError == nil {
-                firstError = error
-                setCancelled(true)
+        let record: @Sendable (Error) -> Void = { [weak self] error in
+            let isFirst = firstError.withLock { storedError -> Bool in
+                guard storedError == nil else { return false }
+                storedError = error
+                return true
             }
-            errorLock.unlock()
+            if isFirst {
+                self?.setCancelled(true)
+            }
         }
 
         group.enter()
@@ -398,7 +403,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         }
 
         group.wait()
-        if let firstError {
+        if let firstError = firstError.snapshot() {
             throw firstError
         }
         reporter.finish()
@@ -616,7 +621,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         return value
     }
 
-    private func notify(_ progress: @escaping (DiskActivityWorkloadProgress) -> Void, _ value: DiskActivityWorkloadProgress) {
+    private func notify(_ progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void, _ value: DiskActivityWorkloadProgress) {
         progress(value)
     }
 
@@ -628,7 +633,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         private var completedBytes: Int64 = 0
         private var lastReportNanoseconds = DispatchTime.now().uptimeNanoseconds
 
-        init(totalBytes: Int64, minimumIntervalNanoseconds: UInt64 = 250_000_000, onReport: @escaping (Int64) -> Void) {
+        init(totalBytes: Int64, minimumIntervalNanoseconds: UInt64 = 250_000_000, onReport: @escaping @Sendable (Int64) -> Void) {
             self.totalBytes = max(0, totalBytes)
             self.minimumIntervalNanoseconds = minimumIntervalNanoseconds
             self.onReport = onReport
@@ -676,7 +681,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
     }
 }
 
-private final class DiskActivityWorkloadOpenFile {
+private final class DiskActivityWorkloadOpenFile: @unchecked Sendable {
     let url: URL
     let fd: Int32
     private let fileManager: FileManager
