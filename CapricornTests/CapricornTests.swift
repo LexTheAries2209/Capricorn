@@ -1106,6 +1106,31 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(finalState.cancelCount, 1)
     }
 
+    func testLateCallbackBenchmarkRunnerWaitsForCancellationBeforeFinishing() async {
+        let runner = LateCallbackBenchmarkRunner()
+        let drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        let task = Task {
+            try? await runner.run(
+                profile: BenchmarkProfile.presets[0],
+                drive: drive,
+                volumePath: "/Volumes/Unit",
+                progress: { _ in },
+                result: { _ in }
+            )
+        }
+
+        let didStart = await runner.waitUntilStarted()
+        XCTAssertTrue(didStart)
+        let finishedBeforeCancellation = await runner.waitUntilFinished()
+
+        runner.cancel()
+        let finishedAfterCancellation = await runner.waitUntilFinished()
+        _ = await task.result
+
+        XCTAssertFalse(finishedBeforeCancellation)
+        XCTAssertTrue(finishedAfterCancellation)
+    }
+
     func testDiskActivityHistoryRecordEncodesSamplesAndSummary() {
         let drive = Self.fixtureDrive()
         let start = Date(timeIntervalSince1970: 1_000)
@@ -2543,6 +2568,7 @@ private final class DelayedDiskCheckRunner: DiskCheckCommandRunning, @unchecked 
 
 private final class LateCallbackBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private let events = LockedArray<String>()
+    private let cancellationGate = AsyncGate()
     private let lock = NSLock()
     private var storedCancelCount = 0
 
@@ -2560,7 +2586,7 @@ private final class LateCallbackBenchmarkRunner: BenchmarkRunning, @unchecked Se
         result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
         events.append("started")
-        try? await Task.sleep(nanoseconds: 120_000_000)
+        await cancellationGate.wait()
 
         let lateResult = BenchmarkResult(
             driveID: drive.id,
@@ -2587,6 +2613,7 @@ private final class LateCallbackBenchmarkRunner: BenchmarkRunning, @unchecked Se
         storedCancelCount += 1
         lock.unlock()
         events.append("cancelled")
+        cancellationGate.open()
     }
 
     func waitUntilStarted() async -> Bool {
@@ -2605,6 +2632,40 @@ private final class LateCallbackBenchmarkRunner: BenchmarkRunning, @unchecked Se
             try? await Task.sleep(nanoseconds: 1_000_000)
         }
         return false
+    }
+}
+
+private final class AsyncGate: @unchecked Sendable {
+    private struct State {
+        var isOpen = false
+        var waiters: [CheckedContinuation<Void, Never>] = []
+    }
+
+    private let state = LockedState(State())
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            let shouldResumeImmediately = state.withLock { state in
+                if state.isOpen {
+                    return true
+                }
+                state.waiters.append(continuation)
+                return false
+            }
+            if shouldResumeImmediately {
+                continuation.resume()
+            }
+        }
+    }
+
+    func open() {
+        let waiters = state.withLock { state -> [CheckedContinuation<Void, Never>] in
+            guard !state.isOpen else { return [] }
+            state.isOpen = true
+            defer { state.waiters.removeAll() }
+            return state.waiters
+        }
+        waiters.forEach { $0.resume() }
     }
 }
 
