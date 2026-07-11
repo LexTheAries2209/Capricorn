@@ -69,41 +69,46 @@ final class AppPreferences {
 struct CapricornSettingsView: View {
     @Bindable var preferences: AppPreferences
 
+    private var language: AppLanguage {
+        preferences.language
+    }
+
     var body: some View {
         Form {
-            Picker("Language", selection: $preferences.languageRawValue) {
+            Picker(language.t("Language"), selection: $preferences.languageRawValue) {
                 ForEach(AppLanguage.allCases) { language in
                     Text(language.shortTitle).tag(language.rawValue)
                 }
             }
 
-            Toggle("Show virtual disks", isOn: $preferences.showVirtualDisks)
-            Toggle("Include serials in reports", isOn: $preferences.includeSerialsInReports)
-            Toggle("Use Tab to switch feature pages", isOn: $preferences.usesPlainTabForFeatureSwitching)
+            Toggle(language.t("Show virtual disks"), isOn: $preferences.showVirtualDisks)
+            Toggle(language.t("Include serials in reports"), isOn: $preferences.includeSerialsInReports)
+            Toggle(language.t("Use Tab to switch feature pages"), isOn: $preferences.usesPlainTabForFeatureSwitching)
 
             LabeledContent("smartctl") {
                 HStack {
-                    TextField("Automatic detection", text: $preferences.smartctlPath)
+                    TextField(language.t("Automatic detection"), text: $preferences.smartctlPath)
                         .textFieldStyle(.roundedBorder)
-                    Button("Choose…", action: chooseSmartctl)
-                    Button("Automatic") {
+                    Button(language.t("Choose…"), action: chooseSmartctl)
+                    Button(language.t("Automatic")) {
                         preferences.restoreAutomaticSmartctlDetection()
                     }
                 }
             }
 
             if !preferences.smartctlPathIsValid {
-                Label("The selected smartctl path is not executable.", systemImage: "exclamationmark.triangle.fill")
+                Label(language.t("The selected smartctl path is not executable."), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             }
 
-            Text("Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal.")
+            Text(language.t("Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
         .padding(20)
         .frame(width: 620)
+        .environment(\.locale, Locale(identifier: language.localeIdentifier))
     }
 
     private func chooseSmartctl() {
@@ -111,8 +116,8 @@ struct CapricornSettingsView: View {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
-        panel.prompt = "Choose"
-        panel.message = "Choose the smartctl executable."
+        panel.prompt = language.t("Choose")
+        panel.message = language.t("Choose the smartctl executable.")
         if panel.runModal() == .OK, let url = panel.url {
             preferences.smartctlPath = url.path
         }

@@ -434,6 +434,8 @@ enum DiskOpenFileTableLayout {
 enum AppCommandShortcut {
     static let refreshDisks = (key: "r", modifiers: EventModifiers.command)
     static let refreshDisksKeyEquivalent = KeyEquivalent("r")
+    static let settings = (key: "p", modifiers: EventModifiers.command)
+    static let settingsKeyEquivalent = KeyEquivalent("p")
     static let nextFeatureTab = (key: "tab", modifiers: EventModifiers.control)
     static let previousFeatureTab = (key: "tab", modifiers: EventModifiers.control.union(.shift))
     static let featureTabCharacter: Character = "\t"

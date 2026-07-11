@@ -212,6 +212,25 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
+
+                Divider()
+
+                SettingsLink {
+                    HStack(spacing: 8) {
+                        Label(language.t("Settings"), systemImage: "gearshape")
+                            .font(.caption.weight(.semibold))
+                        Spacer(minLength: 8)
+                        Text("⌘P")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(language.t("Open Settings"))
+                .accessibilityLabel(language.t("Open Settings"))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)

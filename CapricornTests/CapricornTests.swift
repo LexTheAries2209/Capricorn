@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import XCTest
 import SwiftData
+import SwiftUI
 @testable import Capricorn
 
 final class CapricornTests: XCTestCase {
@@ -88,6 +89,27 @@ final class CapricornTests: XCTestCase {
             AppLanguage.simplifiedChinese.t("Capricorn GitHub repository introduction"),
             "GitHub 仓库：github.com/LexTheAries2209/Capricorn。代码、版本说明、发布包与问题反馈均在仓库维护，欢迎通过 Issue 或 Pull Request 参与改进。"
         )
+    }
+
+    func testSettingsContentIsLocalized() {
+        let expectedTranslations = [
+            "Settings": "设置",
+            "Include serials in reports": "报告中包含序列号",
+            "Use Tab to switch feature pages": "使用 Tab 切换功能页面",
+            "Automatic detection": "自动检测",
+            "Choose…": "选择…",
+            "Automatic": "自动",
+            "The selected smartctl path is not executable.": "所选 smartctl 路径不可执行。",
+            "Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal.": "Control-Tab 和 Control-Shift-Tab 始终用于切换功能页面。关闭普通 Tab 切换后，可恢复标准键盘焦点遍历。",
+            "Choose": "选择",
+            "Choose the smartctl executable.": "选择 smartctl 可执行文件。",
+            "Open Settings": "打开设置"
+        ]
+
+        for (key, expected) in expectedTranslations {
+            XCTAssertEqual(AppLanguage.simplifiedChinese.t(key), expected, key)
+            XCTAssertEqual(AppLanguage.english.t(key), key, key)
+        }
     }
 
 
@@ -405,6 +427,12 @@ final class CapricornTests: XCTestCase {
     func testRefreshCommandShortcutUsesCommandR() {
         XCTAssertEqual(AppCommandShortcut.refreshDisks.key, "r")
         XCTAssertTrue(AppCommandShortcut.refreshDisks.modifiers.contains(.command))
+    }
+
+    func testSettingsShortcutUsesCommandP() {
+        XCTAssertEqual(AppCommandShortcut.settings.key, "p")
+        XCTAssertTrue(AppCommandShortcut.settings.modifiers.contains(.command))
+        XCTAssertEqual(AppCommandShortcut.settingsKeyEquivalent, KeyEquivalent("p"))
     }
 
     func testDriveFeatureTabsCycleThroughFiveModules() {
