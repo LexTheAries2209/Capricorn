@@ -129,6 +129,16 @@ struct ContentView: View {
                 )
             }
         }
+        .sheet(isPresented: Binding(
+            get: { viewModel.diskOperations.isFirstAidPresented },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.closeFirstAid()
+                }
+            }
+        )) {
+            DiskFirstAidSheet(viewModel: viewModel, language: language)
+        }
     }
 
     private var sidebar: some View {
@@ -162,7 +172,7 @@ struct ContentView: View {
                     }
                     .keyboardShortcut(AppCommandShortcut.refreshDisksKeyEquivalent, modifiers: AppCommandShortcut.refreshDisks.modifiers)
                     .buttonStyle(.borderless)
-                    .disabled(viewModel.isRefreshing)
+                    .disabled(viewModel.isRefreshing || viewModel.isFirstAidBlocking)
                     .help(language.t("Refresh disks and SMART data"))
                 }
 
@@ -256,7 +266,7 @@ struct ContentView: View {
                 } label: {
                     Label(language.t(action.titleKey), systemImage: action.systemImage)
                 }
-                .disabled(!DiskSidebarActionPolicy.isEnabled(action, for: drive) || (viewModel.isDiskChecking && (action == .checkLog || action == .detailedCheck)))
+                .disabled(sidebarActionIsDisabled(action, for: drive))
             }
         } label: {
             Label(language.t("Disk Actions"), systemImage: "externaldrive.badge.gearshape")
@@ -276,6 +286,8 @@ struct ContentView: View {
             Task { await viewModel.runDiskCheck(.ordinary, on: drive) }
         case .detailedCheck:
             Task { await viewModel.runDiskCheck(.detailed, on: drive) }
+        case .firstAid:
+            Task { await viewModel.prepareFirstAid(on: drive) }
         case .revealInFinder:
             revealDriveInFinder(drive)
         case .refresh:
@@ -283,6 +295,18 @@ struct ContentView: View {
         default:
             Task { await viewModel.performDiskAction(action, on: drive) }
         }
+    }
+
+    private func sidebarActionIsDisabled(_ action: DiskSidebarAction, for drive: DriveDevice) -> Bool {
+        guard DiskSidebarActionPolicy.isEnabled(action, for: drive) else { return true }
+        if viewModel.isFirstAidBlocking { return true }
+        if action == .firstAid {
+            return viewModel.isRefreshing || viewModel.isDiskChecking || viewModel.isBenchmarking || viewModel.isLiveActivityWorkloadRunning
+        }
+        if action == .checkLog || action == .detailedCheck {
+            return viewModel.isDiskChecking || viewModel.isBenchmarking || viewModel.isLiveActivityWorkloadRunning
+        }
+        return false
     }
 
     private func promptForVolumeName(drive: DriveDevice) -> String? {

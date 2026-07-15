@@ -118,6 +118,75 @@ final class AppModel {
         set { diskOperations.isChecking = newValue }
     }
 
+    var firstAidState: DiskFirstAidSessionState {
+        get { diskOperations.firstAidState }
+        set { diskOperations.firstAidState = newValue }
+    }
+
+    var firstAidPlan: DiskFirstAidPlan? {
+        get { diskOperations.firstAidPlan }
+        set { diskOperations.firstAidPlan = newValue }
+    }
+
+    var firstAidReport: DiskFirstAidReport? {
+        get { diskOperations.firstAidReport }
+        set { diskOperations.firstAidReport = newValue }
+    }
+
+    var firstAidError: String? {
+        get { diskOperations.firstAidError }
+        set { diskOperations.firstAidError = newValue }
+    }
+
+    var firstAidOpenFileInspections: [DiskOpenFileInspection] {
+        get { diskOperations.firstAidOpenFileInspections }
+        set { diskOperations.firstAidOpenFileInspections = newValue }
+    }
+
+    var firstAidSelectedTargetIDs: Set<String> {
+        get { diskOperations.firstAidSelectedTargetIDs }
+        set { diskOperations.firstAidSelectedTargetIDs = newValue }
+    }
+
+    var firstAidBackupConfirmed: Bool {
+        get { diskOperations.firstAidBackupConfirmed }
+        set { diskOperations.firstAidBackupConfirmed = newValue }
+    }
+
+    var firstAidActivityConfirmed: Bool {
+        get { diskOperations.firstAidActivityConfirmed }
+        set { diskOperations.firstAidActivityConfirmed = newValue }
+    }
+
+    var firstAidHealthWarningConfirmed: Bool {
+        get { diskOperations.firstAidHealthWarningConfirmed }
+        set { diskOperations.firstAidHealthWarningConfirmed = newValue }
+    }
+
+    var firstAidCurrentTargetID: String? {
+        get { diskOperations.firstAidCurrentTargetID }
+        set { diskOperations.firstAidCurrentTargetID = newValue }
+    }
+
+    var firstAidCurrentTargetIndex: Int {
+        get { diskOperations.firstAidCurrentTargetIndex }
+        set { diskOperations.firstAidCurrentTargetIndex = newValue }
+    }
+
+    var firstAidTotalTargetCount: Int {
+        get { diskOperations.firstAidTotalTargetCount }
+        set { diskOperations.firstAidTotalTargetCount = newValue }
+    }
+
+    var firstAidLiveOutput: String {
+        get { diskOperations.firstAidLiveOutput }
+        set { diskOperations.firstAidLiveOutput = newValue }
+    }
+
+    var isFirstAidBlocking: Bool {
+        diskOperations.isFirstAidBlocking
+    }
+
     nonisolated static let benchmarkActivityInterval = DiskActivitySampleInterval.fifth
 
     private let refreshService: DriveRefreshing
@@ -127,6 +196,7 @@ final class AppModel {
     private let diskActionService: DiskActionService
     private let openFileService: DiskOpenFileService
     private let diskCheckService: DiskCheckService
+    private let diskFirstAidService: DiskFirstAidRunning
     private let externalDetector: ExternalDriveSupportDetector
     private let notificationCoordinator: NotificationCoordinator
     private var diskActivityTask: Task<Void, Never>?
@@ -138,6 +208,9 @@ final class AppModel {
     private var activeBenchmarkRunID: UUID?
     private var refreshTask: Task<DriveRefreshSnapshot, Error>?
     private var activeRefreshID: UUID?
+    private var firstAidEventTask: Task<Void, Never>?
+    private var activeFirstAidRunID: UUID?
+    private var activeFirstAidPreparationID: UUID?
     private var hasRequestedNotificationAuthorization = false
     private var lastBenchmarkProgressPublishedAt: Date?
 
@@ -151,6 +224,7 @@ final class AppModel {
         diskActionService: DiskActionService = DiskActionService(),
         openFileService: DiskOpenFileService = DiskOpenFileService(),
         diskCheckService: DiskCheckService = DiskCheckService(),
+        diskFirstAidService: DiskFirstAidRunning = DiskFirstAidService(),
         externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator()
     ) {
@@ -165,6 +239,7 @@ final class AppModel {
         self.diskActionService = diskActionService
         self.openFileService = openFileService
         self.diskCheckService = diskCheckService
+        self.diskFirstAidService = diskFirstAidService
         self.externalDetector = externalDetector
         self.notificationCoordinator = notificationCoordinator
         self.externalSupport = externalDetector.detect()
@@ -211,7 +286,8 @@ final class AppModel {
         await refresh()
     }
 
-    func refresh() async {
+    func refresh(allowDuringFirstAid: Bool = false) async {
+        guard allowDuringFirstAid || !diskOperations.isFirstAidBlocking else { return }
         refreshTask?.cancel()
         let refreshID = UUID()
         activeRefreshID = refreshID
@@ -262,7 +338,7 @@ final class AppModel {
     }
 
     func startBenchmark(profile: BenchmarkProfile, volumePath: String? = nil) {
-        guard benchmarkTask == nil, benchmarkSession.state == .idle else { return }
+        guard benchmarkTask == nil, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return }
         benchmarkTask = Task { [weak self] in
             await self?.runBenchmark(profile: profile, volumePath: volumePath)
             await MainActor.run {
@@ -272,7 +348,7 @@ final class AppModel {
     }
 
     func runBenchmark(profile: BenchmarkProfile, volumePath: String? = nil) async {
-        guard benchmarkSession.state == .idle else { return }
+        guard benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return }
         guard let drive = selectedDrive else {
             benchmarkError = "Select a drive before running a benchmark."
             return
@@ -364,6 +440,7 @@ final class AppModel {
     }
 
     func performDiskAction(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async {
+        guard !diskOperations.isFirstAidBlocking else { return }
         CapricornLog.diskOperations.info("Disk operation started: \(action.rawValue, privacy: .public)")
         selectedDriveID = drive.id
         refreshMessage = "Running disk action..."
@@ -393,7 +470,7 @@ final class AppModel {
     }
 
     func runDiskCheck(_ mode: DiskCheckMode, on drive: DriveDevice) async {
-        guard !isDiskChecking else { return }
+        guard !isDiskChecking, !diskOperations.isFirstAidBlocking else { return }
         selectedDriveID = drive.id
         refreshMessage = "Checking disk..."
         diskCheckReport = DiskCheckReport(
@@ -417,6 +494,206 @@ final class AppModel {
         guard isDiskChecking else { return }
         refreshMessage = "Stopping disk check..."
         diskCheckService.cancel()
+    }
+
+    func prepareFirstAid(on drive: DriveDevice) async {
+        guard !diskOperations.isFirstAidBlocking,
+              !isDiskChecking,
+              benchmarkSession.state == .idle,
+              !isLiveActivityWorkloadRunning else { return }
+
+        selectedDriveID = drive.id
+        let preparationID = UUID()
+        activeFirstAidPreparationID = preparationID
+        firstAidState = .preflighting
+        firstAidPlan = nil
+        firstAidReport = nil
+        firstAidError = nil
+        firstAidOpenFileInspections = []
+        firstAidSelectedTargetIDs = []
+        firstAidBackupConfirmed = false
+        firstAidActivityConfirmed = false
+        firstAidHealthWarningConfirmed = false
+        firstAidLiveOutput = ""
+        firstAidCurrentTargetID = nil
+        firstAidCurrentTargetIndex = 0
+        firstAidTotalTargetCount = 0
+        refreshMessage = "Preparing First Aid..."
+
+        do {
+            let health = snapshots[drive.id]?.health ?? .unavailable
+            let plan = try await diskFirstAidService.prepare(drive: drive, health: health)
+            guard activeFirstAidPreparationID == preparationID else { return }
+            activeFirstAidPreparationID = nil
+            firstAidPlan = plan
+            firstAidState = .awaitingConfirmation
+            refreshMessage = plan.blockedReason == nil ? "First Aid is ready for confirmation." : plan.blockedReason?.messageKey ?? "First Aid is unavailable."
+            CapricornLog.diskOperations.info("First Aid preflight completed")
+        } catch {
+            guard activeFirstAidPreparationID == preparationID else { return }
+            activeFirstAidPreparationID = nil
+            firstAidError = error.localizedDescription
+            firstAidState = .completed
+            refreshMessage = "First Aid preflight failed."
+            CapricornLog.diskOperations.error("First Aid preflight failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func beginFirstAid() async {
+        guard let plan = firstAidPlan,
+              firstAidState == .awaitingConfirmation,
+              plan.blockedReason == nil,
+              !firstAidSelectedTargetIDs.isEmpty,
+              firstAidBackupConfirmed,
+              firstAidActivityConfirmed,
+              !plan.requiresHealthWarningConfirmation || firstAidHealthWarningConfirmed else {
+            return
+        }
+
+        firstAidOpenFileInspections = []
+        for target in plan.targets where firstAidSelectedTargetIDs.contains(target.id) {
+            guard let mountPoint = target.mountPoint else { continue }
+            do {
+                let inspection = try await openFileService.inspectOpenFiles(
+                    at: mountPoint,
+                    driveID: plan.driveID,
+                    driveName: plan.driveName
+                )
+                if !inspection.processes.isEmpty {
+                    firstAidOpenFileInspections.append(inspection)
+                }
+            } catch {
+                firstAidError = error.localizedDescription
+                refreshMessage = "Could not inspect open files before First Aid."
+                return
+            }
+        }
+
+        if !firstAidOpenFileInspections.isEmpty {
+            refreshMessage = "Open files were found on the selected volume."
+            return
+        }
+
+        startFirstAidExecution()
+    }
+
+    func continueFirstAidAfterOpenFiles() {
+        guard firstAidState == .awaitingConfirmation,
+              firstAidPlan?.blockedReason == nil else { return }
+        firstAidOpenFileInspections = []
+        startFirstAidExecution()
+    }
+
+    func dismissFirstAidOpenFiles() {
+        guard firstAidState == .awaitingConfirmation else { return }
+        firstAidOpenFileInspections = []
+        firstAidError = nil
+    }
+
+    func requestFirstAidStopAfterCurrent() async {
+        guard firstAidState == .running else { return }
+        firstAidState = .stoppingAfterCurrent
+        refreshMessage = "First Aid will stop after the current volume."
+        await diskFirstAidService.requestStopAfterCurrent()
+    }
+
+    func closeFirstAid() {
+        guard !firstAidState.isRepairing, firstAidState != .refreshing else { return }
+        firstAidEventTask = nil
+        activeFirstAidRunID = nil
+        activeFirstAidPreparationID = nil
+        firstAidState = .idle
+        firstAidPlan = nil
+        firstAidReport = nil
+        firstAidError = nil
+        firstAidOpenFileInspections = []
+        firstAidSelectedTargetIDs = []
+        firstAidLiveOutput = ""
+        firstAidCurrentTargetID = nil
+        firstAidCurrentTargetIndex = 0
+        firstAidTotalTargetCount = 0
+    }
+
+    private func startFirstAidExecution() {
+        guard let plan = firstAidPlan,
+              plan.blockedReason == nil,
+              !firstAidSelectedTargetIDs.isEmpty else { return }
+
+        var runPlan = plan
+        runPlan.selectedTargetIDs = firstAidSelectedTargetIDs
+        firstAidPlan = runPlan
+        firstAidReport = DiskFirstAidReport(
+            id: runPlan.id,
+            driveID: runPlan.driveID,
+            driveName: runPlan.driveName,
+            capturedAt: Date(),
+            results: []
+        )
+        firstAidLiveOutput = ""
+        firstAidCurrentTargetID = nil
+        firstAidCurrentTargetIndex = 0
+        firstAidTotalTargetCount = runPlan.selectedTargets.count
+        firstAidState = .running
+        refreshMessage = "First Aid is running..."
+        activeFirstAidRunID = runPlan.id
+        CapricornLog.diskOperations.info("First Aid started")
+
+        let stream = diskFirstAidService.run(runPlan)
+        firstAidEventTask = Task { @MainActor [weak self] in
+            do {
+                for try await event in stream {
+                    guard let self, self.activeFirstAidRunID == runPlan.id else { continue }
+                    self.applyFirstAidEvent(event)
+                }
+            } catch {
+                guard let self, self.activeFirstAidRunID == runPlan.id else { return }
+                self.firstAidError = error.localizedDescription
+                self.firstAidState = .completed
+                self.refreshMessage = "First Aid failed."
+                self.activeFirstAidRunID = nil
+                self.firstAidEventTask = nil
+                CapricornLog.diskOperations.error("First Aid stream failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func applyFirstAidEvent(_ event: DiskFirstAidEvent) {
+        switch event {
+        case let .targetStarted(runID, target, index, total):
+            guard activeFirstAidRunID == runID else { return }
+            firstAidCurrentTargetID = target.id
+            firstAidCurrentTargetIndex = index
+            firstAidTotalTargetCount = total
+            firstAidLiveOutput = ""
+        case let .output(runID, targetID, stream, text):
+            guard activeFirstAidRunID == runID, firstAidCurrentTargetID == targetID else { return }
+            let prefix = stream == .stderr ? "[stderr] " : ""
+            firstAidLiveOutput += prefix + text
+        case let .targetFinished(runID, result, index, total):
+            guard activeFirstAidRunID == runID else { return }
+            firstAidCurrentTargetIndex = index
+            firstAidTotalTargetCount = total
+            if var report = firstAidReport {
+                report.results.removeAll { $0.id == result.id }
+                report.results.append(result)
+                firstAidReport = report
+            }
+        case let .completed(runID, report):
+            guard activeFirstAidRunID == runID else { return }
+            firstAidReport = report
+            firstAidState = .refreshing
+            refreshMessage = "Refreshing disk information after First Aid..."
+            Task { @MainActor [weak self] in
+                guard let self, self.activeFirstAidRunID == runID else { return }
+                await self.refresh(allowDuringFirstAid: true)
+                guard self.activeFirstAidRunID == runID else { return }
+                self.firstAidState = .completed
+                self.activeFirstAidRunID = nil
+                self.firstAidEventTask = nil
+                self.refreshMessage = report.hasFailures ? "First Aid completed with issues." : "First Aid completed."
+                CapricornLog.diskOperations.info("First Aid cleanup completed")
+            }
+        }
     }
 
     func forceUnmountAfterFailure(_ failure: DiskActionFailure) async {
@@ -453,13 +730,13 @@ final class AppModel {
         switch action {
         case .unmount, .forceUnmount, .eject, .disconnect:
             return true
-        case .mount, .inspectOpenFiles, .checkLog, .detailedCheck, .rename, .revealInFinder, .refresh:
+        case .mount, .inspectOpenFiles, .checkLog, .detailedCheck, .firstAid, .rename, .revealInFinder, .refresh:
             return false
         }
     }
 
     func startLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {
-        guard liveActivitySession.workloadState == .idle else { return }
+        guard liveActivitySession.workloadState == .idle, !diskOperations.isFirstAidBlocking else { return }
         stopLiveActivityMonitoring()
         liveActivitySelectedDriveID = drive.id
         liveActivityStartedAt = Date()
@@ -519,7 +796,7 @@ final class AppModel {
         drive: DriveDevice,
         interval: DiskActivitySampleInterval
     ) {
-        guard !isLiveActivityWorkloadRunning else { return }
+        guard !isLiveActivityWorkloadRunning, !diskOperations.isFirstAidBlocking else { return }
         guard BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(configuration.targetFolderURL.path, drive: drive) else {
             liveActivityWorkloadError = "Workload target folder must be on the selected drive."
             return

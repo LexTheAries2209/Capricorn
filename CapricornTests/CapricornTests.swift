@@ -112,6 +112,25 @@ final class CapricornTests: XCTestCase {
         }
     }
 
+    func testFirstAidContentIsLocalized() {
+        let expectedTranslations = [
+            "First Aid…": "急救…",
+            "Disk First Aid": "磁盘急救",
+            "Required Confirmations": "必要确认",
+            "Run First Aid": "运行磁盘急救",
+            "Direct First Aid Unavailable": "无法直接执行磁盘急救",
+            "Open Files Found": "发现占用文件的程序",
+            "Stop After Current Volume": "完成当前卷后停止",
+            "Windows CHKDSK Guide": "Windows CHKDSK 指南",
+            "First Aid completed.": "磁盘急救已完成。"
+        ]
+
+        for (key, expected) in expectedTranslations {
+            XCTAssertEqual(AppLanguage.simplifiedChinese.t(key), expected, key)
+            XCTAssertEqual(AppLanguage.english.t(key), key, key)
+        }
+    }
+
 
     func testDriveDeviceDecodesOlderRecordsWithoutNetworkFlag() throws {
         let encoded = try JSONEncoder().encode(Self.fixtureDrive())
@@ -152,6 +171,8 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.eject, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.actions(for: drive).contains(.firstAid))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.firstAid, for: drive))
     }
 
     func testDiskSidebarActionsProtectInternalSystemDiskFromMountUnmountAndEject() {
@@ -170,6 +191,8 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.refresh, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
+        XCTAssertTrue(DiskSidebarActionPolicy.actions(for: drive).contains(.firstAid))
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.firstAid, for: drive))
     }
 
     func testDiskSidebarActionsIncludeReadOnlyCheckActionsForPhysicalDrives() {

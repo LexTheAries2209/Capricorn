@@ -384,14 +384,30 @@ final class DiskOpenFileService {
             throw DiskActionError.missingMountPoint
         }
 
+        return try await inspectOpenFiles(
+            at: mountPoint,
+            driveID: drive.id,
+            driveName: drive.displayName
+        )
+    }
+
+    func inspectOpenFiles(
+        at mountPoint: String,
+        driveID: String,
+        driveName: String
+    ) async throws -> DiskOpenFileInspection {
+        guard !mountPoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw DiskActionError.missingMountPoint
+        }
+
         let result = try await runner.run(lsofPath, arguments: ["+f", "--", mountPoint])
         if result.terminationStatus != 0, result.stdoutString.isEmpty, !result.stderrString.isEmpty {
             throw CommandError.nonZeroExit(executable: lsofPath, status: result.terminationStatus, stderr: result.stderrString)
         }
 
         return DiskOpenFileInspection(
-            driveID: drive.id,
-            driveName: drive.displayName,
+            driveID: driveID,
+            driveName: driveName,
             mountPoint: mountPoint,
             processes: DiskOpenFileParser.parse(result.stdoutString)
         )
@@ -475,7 +491,7 @@ final class DiskActionService {
         case .disconnect:
             guard drive.isNetwork else { throw DiskActionError.unsupportedAction }
             try await runDiskutil(["unmount", try mountedPath(for: drive)])
-        case .inspectOpenFiles, .checkLog, .detailedCheck, .revealInFinder, .refresh:
+        case .inspectOpenFiles, .checkLog, .detailedCheck, .firstAid, .revealInFinder, .refresh:
             throw DiskActionError.unsupportedAction
         }
     }

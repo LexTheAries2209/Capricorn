@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.0.4`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.0.5`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v1.0.4.md](docs/releases/v1.0.4.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v1.0.5.md](docs/releases/v1.0.5.md)
 
 ---
 
@@ -20,11 +20,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.0.4-macOS.zip`。
-2. 解压后把 `Capricorn V1.0.4.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.0.5-macOS.zip`。
+2. 解压后把 `Capricorn V1.0.5.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V1.0.4 的中文发布说明见 [docs/releases/v1.0.4.zh-CN.md](docs/releases/v1.0.4.zh-CN.md)。
+V1.0.5 的中文发布说明见 [docs/releases/v1.0.5.zh-CN.md](docs/releases/v1.0.5.zh-CN.md)。
 
 典型用途：
 
@@ -58,7 +58,10 @@ V1.0.4 的中文发布说明见 [docs/releases/v1.0.4.zh-CN.md](docs/releases/v1
 - 历史页支持 SMART、测速、实时活动记录的隐藏、管理隐藏记录和恢复。
 - 报告导出支持 JSON、CSV 和纯文本，默认隐藏序列号。
 - 测速和实时负载使用明确的运行会话与取消状态，停止后会等待进程、文件句柄和临时文件完成清理，并拒绝旧任务的晚到回调。
+- 修复测速取消、重启和后台回调导致的界面卡顿问题，停止后会等待真实清理完成。
 - 磁盘刷新使用受控并发和单次 `smartctl` 扫描；重叠刷新时只有最新结果可以更新界面。
+- 新增磁盘“急救”流程：仅对用户确认的外接或可移除 APFS/ExFAT 卷调用 `diskutil repairVolume`，支持预检、占用文件提示、串行流式输出和完成后刷新。
+- 急救会阻断 SMART 故障、系统盘、内置盘、网络卷、虚拟盘、只读卷、锁定卷和 NTFS；NTFS 仅提供 Windows CHKDSK 指引。
 - Shell 命令取消时会终止对应子进程，并区分启动失败、非零退出和主动取消。
 - 设置页支持虚拟磁盘显示、报告序列号、普通 Tab 切页和自定义 `smartctl` 路径，并完整支持简体中文。
 - 支持 `Command-R` 刷新、`Command-P` 打开设置、`Control-Tab` / `Control-Shift-Tab` 切换功能页；普通 `Tab` 切页可在设置中关闭。
@@ -125,8 +128,8 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 例如：
 
 - `Version = 1.0`
-- `Build = 4`
-- `Display Name = Capricorn V1.0.4`
+- `Build = 5`
+- `Display Name = Capricorn V1.0.5`
 
 ### 当前限制
 
@@ -146,11 +149,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v1.0.4-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V1.0.4.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v1.0.5-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V1.0.5.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V1.0.4 are available at [docs/releases/v1.0.4.en.md](docs/releases/v1.0.4.en.md).
+English release notes for V1.0.5 are available at [docs/releases/v1.0.5.en.md](docs/releases/v1.0.5.en.md).
 
 Common use cases:
 
@@ -184,7 +187,10 @@ Common use cases:
 - History supports SMART, benchmark, and activity record hiding, hidden-record management, and restore.
 - Exports JSON, CSV, and plain-text reports with serial numbers redacted by default.
 - Benchmark and live-workload sessions use explicit run and cancellation states, wait for process/file cleanup, and reject late callbacks from superseded work.
+- Fixes benchmark cancellation/restart paths that could make the UI stall, while waiting for real cleanup before a new run starts.
 - Drive refresh uses bounded concurrency and one `smartctl` scan; only the newest overlapping refresh may update the UI.
+- Adds a guarded First Aid flow for explicitly selected external or removable APFS/ExFAT volumes using `diskutil repairVolume`, with preflight checks, open-file warnings, serial streaming output, and post-run refresh.
+- Blocks First Aid for failing SMART health, system/internal disks, network or virtual volumes, read-only/locked volumes, and NTFS; NTFS shows Windows CHKDSK guidance only.
 - Cancelling a shell command terminates its child process and distinguishes launch failures, non-zero exits, and user cancellation.
 - Settings cover virtual-drive visibility, report serial numbers, plain-Tab navigation, and a custom `smartctl` path, with complete Simplified Chinese content.
 - Supports `Command-R` to refresh, `Command-P` to open Settings, and `Control-Tab` / `Control-Shift-Tab` to switch feature pages; plain-Tab switching can be disabled.
@@ -251,8 +257,8 @@ The public Display Name uses a three-part version label composed from Xcode `Ver
 Example:
 
 - `Version = 1.0`
-- `Build = 4`
-- `Display Name = Capricorn V1.0.4`
+- `Build = 5`
+- `Display Name = Capricorn V1.0.5`
 
 ### Current Limitations
 

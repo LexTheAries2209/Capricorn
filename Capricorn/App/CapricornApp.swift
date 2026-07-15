@@ -60,7 +60,7 @@ struct CapricornApp: App {
                     Task { await viewModel.refresh() }
                 }
                 .keyboardShortcut(AppCommandShortcut.refreshDisksKeyEquivalent, modifiers: AppCommandShortcut.refreshDisks.modifiers)
-                .disabled(viewModel.isRefreshing)
+                .disabled(viewModel.isRefreshing || viewModel.isFirstAidBlocking)
             }
         }
 
@@ -75,6 +75,7 @@ struct CapricornApp: App {
                     Task { await viewModel.refresh() }
                 }
                 .keyboardShortcut(AppCommandShortcut.refreshDisksKeyEquivalent, modifiers: AppCommandShortcut.refreshDisks.modifiers)
+                .disabled(viewModel.isRefreshing || viewModel.isFirstAidBlocking)
             }
             .padding(8)
         }

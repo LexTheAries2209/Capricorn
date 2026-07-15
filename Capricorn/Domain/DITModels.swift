@@ -183,6 +183,7 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
     case inspectOpenFiles
     case checkLog
     case detailedCheck
+    case firstAid
     case rename
     case revealInFinder
     case refresh
@@ -199,6 +200,7 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
         case .inspectOpenFiles: "View Open Files"
         case .checkLog: "Check Log"
         case .detailedCheck: "Detailed Check"
+        case .firstAid: "First Aid…"
         case .rename: "Rename Volume"
         case .revealInFinder: "Reveal in Finder"
         case .refresh: "Refresh"
@@ -215,6 +217,7 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
         case .inspectOpenFiles: "person.crop.circle.badge.exclamationmark"
         case .checkLog: "doc.text.magnifyingglass"
         case .detailedCheck: "stethoscope"
+        case .firstAid: "cross.case.fill"
         case .rename: "pencil"
         case .revealInFinder: "folder"
         case .refresh: "arrow.clockwise"
@@ -228,7 +231,7 @@ enum DiskSidebarActionPolicy {
         if drive.isNetwork {
             return [.mount, .unmount, .disconnect, .inspectOpenFiles]
         }
-        return [.checkLog, .detailedCheck, .mount, .unmount, .forceUnmount, .eject, .inspectOpenFiles, .rename, .revealInFinder, .refresh]
+        return [.checkLog, .detailedCheck, .firstAid, .mount, .unmount, .forceUnmount, .eject, .inspectOpenFiles, .rename, .revealInFinder, .refresh]
     }
 
     static func isEnabled(_ action: DiskSidebarAction, for drive: DriveDevice) -> Bool {
@@ -249,6 +252,8 @@ enum DiskSidebarActionPolicy {
             return drive.primaryMountPoint != nil
         case .checkLog, .detailedCheck:
             return !isProtectedInternalSystemDisk(drive) && !drive.isNetwork && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
+        case .firstAid:
+            return !drive.isNetwork && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
         case .rename:
             return !drive.isNetwork && !drive.isSystemDisk && drive.actionTargetVolume != nil
         case .revealInFinder:
@@ -263,7 +268,7 @@ enum DiskSidebarActionPolicy {
         switch action {
         case .mount, .unmount, .forceUnmount, .eject:
             return true
-        case .inspectOpenFiles, .checkLog, .detailedCheck, .rename, .revealInFinder, .refresh, .disconnect:
+        case .inspectOpenFiles, .checkLog, .detailedCheck, .firstAid, .rename, .revealInFinder, .refresh, .disconnect:
             return false
         }
     }
@@ -421,6 +426,196 @@ struct DiskCheckReport: Identifiable, Hashable, Sendable {
         guard totalEntryCount > 0 else { return 0 }
         return Double(completedEntryCount) / Double(totalEntryCount)
     }
+}
+
+enum DiskFirstAidTargetSupport: String, Hashable, Sendable {
+    case eligible
+    case unsupportedFormat
+    case ntfsRequiresWindows
+    case systemVolume
+    case internalDisk
+    case networkVolume
+    case virtualDisk
+    case readOnly
+    case locked
+    case missingDevice
+    case preflightFailed
+
+    var isEligible: Bool {
+        self == .eligible
+    }
+
+    var messageKey: String {
+        switch self {
+        case .eligible:
+            return "Ready for First Aid"
+        case .unsupportedFormat:
+            return "This filesystem is not supported for native First Aid on macOS."
+        case .ntfsRequiresWindows:
+            return "macOS cannot natively repair NTFS. Use Windows CHKDSK or the filesystem vendor's tool."
+        case .systemVolume:
+            return "Startup and system volumes must be repaired from macOS Recovery."
+        case .internalDisk:
+            return "Direct First Aid is limited to external or removable disks."
+        case .networkVolume:
+            return "Network volumes do not expose a local repair target."
+        case .virtualDisk:
+            return "Virtual disks are not eligible for direct First Aid."
+        case .readOnly:
+            return "The volume or media is read-only and cannot be repaired."
+        case .locked:
+            return "Unlock the volume before running First Aid."
+        case .missingDevice:
+            return "The volume has no stable local device identifier."
+        case .preflightFailed:
+            return "The current disk information could not be verified. Refresh and try again."
+        }
+    }
+}
+
+enum DiskFirstAidBlockReason: String, Hashable, Sendable {
+    case networkVolume
+    case virtualDisk
+    case internalDisk
+    case systemDisk
+    case unhealthyMedia
+    case noEligibleVolumes
+
+    var messageKey: String {
+        switch self {
+        case .networkVolume:
+            return "Network volumes cannot run local First Aid."
+        case .virtualDisk:
+            return "Virtual disks are not eligible for direct First Aid."
+        case .internalDisk:
+            return "Direct First Aid is limited to external or removable disks."
+        case .systemDisk:
+            return "System disks must be repaired from macOS Recovery."
+        case .unhealthyMedia:
+            return "SMART reports a failing device. Back up data and replace the disk instead of repairing it here."
+        case .noEligibleVolumes:
+            return "No external APFS or ExFAT volume is eligible for direct First Aid."
+        }
+    }
+}
+
+struct DiskFirstAidTarget: Identifiable, Hashable, Sendable {
+    var id: String { deviceIdentifier }
+    var deviceIdentifier: String
+    var volumeUUID: String?
+    var parentWholeDisk: String?
+    var volumeName: String
+    var fileSystemType: String?
+    var mountPoint: String?
+    var sizeBytes: Int64
+    var isMounted: Bool
+    var isWritable: Bool
+    var isLocked: Bool
+    var isSystem: Bool
+    var support: DiskFirstAidTargetSupport
+
+    var isEligible: Bool {
+        support.isEligible
+    }
+}
+
+struct DiskFirstAidPlan: Identifiable, Hashable, Sendable {
+    var id = UUID()
+    var driveID: String
+    var driveName: String
+    var physicalDiskIdentifier: String
+    var health: HealthStatus
+    var targets: [DiskFirstAidTarget]
+    var blockedReason: DiskFirstAidBlockReason?
+    var requiresHealthWarningConfirmation: Bool
+    var selectedTargetIDs: Set<String> = []
+
+    var selectedTargets: [DiskFirstAidTarget] {
+        targets.filter { selectedTargetIDs.contains($0.id) && $0.isEligible }
+    }
+
+    var eligibleTargets: [DiskFirstAidTarget] {
+        targets.filter { $0.isEligible }
+    }
+}
+
+enum DiskFirstAidSessionState: String, Hashable, Sendable {
+    case idle
+    case preflighting
+    case awaitingConfirmation
+    case running
+    case stoppingAfterCurrent
+    case refreshing
+    case completed
+
+    var isActive: Bool {
+        switch self {
+        case .idle, .completed, .awaitingConfirmation:
+            return false
+        case .preflighting, .running, .stoppingAfterCurrent, .refreshing:
+            return true
+        }
+    }
+
+    var isRepairing: Bool {
+        switch self {
+        case .running, .stoppingAfterCurrent:
+            return true
+        case .idle, .preflighting, .awaitingConfirmation, .refreshing, .completed:
+            return false
+        }
+    }
+}
+
+enum DiskFirstAidOutputStream: String, Hashable, Sendable {
+    case stdout
+    case stderr
+}
+
+enum DiskFirstAidTargetOutcome: String, Hashable, Sendable {
+    case succeeded
+    case failed
+    case skipped
+}
+
+struct DiskFirstAidTargetResult: Identifiable, Hashable, Sendable {
+    var id: String
+    var target: DiskFirstAidTarget
+    var outcome: DiskFirstAidTargetOutcome
+    var terminationStatus: Int32?
+    var stdout: String
+    var stderr: String
+}
+
+struct DiskFirstAidReport: Identifiable, Hashable, Sendable {
+    var id: UUID
+    var driveID: String
+    var driveName: String
+    var capturedAt: Date
+    var results: [DiskFirstAidTargetResult]
+
+    var completedTargetCount: Int {
+        results.count
+    }
+
+    var totalTargetCount: Int {
+        results.count
+    }
+
+    var hasFailures: Bool {
+        results.contains { $0.outcome == .failed }
+    }
+
+    var succeededTargetCount: Int {
+        results.filter { $0.outcome == .succeeded }.count
+    }
+}
+
+enum DiskFirstAidEvent: Sendable {
+    case targetStarted(runID: UUID, target: DiskFirstAidTarget, index: Int, total: Int)
+    case output(runID: UUID, targetID: String, stream: DiskFirstAidOutputStream, text: String)
+    case targetFinished(runID: UUID, result: DiskFirstAidTargetResult, index: Int, total: Int)
+    case completed(runID: UUID, report: DiskFirstAidReport)
 }
 
 enum DiskOpenFileTableLayout {

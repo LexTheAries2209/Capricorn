@@ -55,4 +55,29 @@ final class DiskOperationsModel {
     var actionFailure: DiskActionFailure?
     var checkReport: DiskCheckReport?
     var isChecking = false
+    var firstAidState: DiskFirstAidSessionState = .idle
+    var firstAidPlan: DiskFirstAidPlan?
+    var firstAidReport: DiskFirstAidReport?
+    var firstAidError: String?
+    var firstAidOpenFileInspections: [DiskOpenFileInspection] = []
+    var firstAidSelectedTargetIDs: Set<String> = []
+    var firstAidBackupConfirmed = false
+    var firstAidActivityConfirmed = false
+    var firstAidHealthWarningConfirmed = false
+    var firstAidCurrentTargetID: String?
+    var firstAidCurrentTargetIndex = 0
+    var firstAidTotalTargetCount = 0
+    var firstAidLiveOutput = ""
+
+    var isFirstAidPresented: Bool {
+        firstAidPlan != nil || firstAidState != .idle
+    }
+
+    var isFirstAidRunning: Bool {
+        firstAidState.isRepairing || firstAidState == .refreshing
+    }
+
+    var isFirstAidBlocking: Bool {
+        firstAidState != .idle && firstAidState != .completed
+    }
 }
