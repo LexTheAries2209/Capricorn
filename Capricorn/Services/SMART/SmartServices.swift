@@ -41,7 +41,7 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
         appendNative("AVAILABLE_SPARE", "Available Spare", keys, to: &attributes, suffix: "%")
         appendNative("AVAILABLE_SPARE_THRESHOLD", "Available Spare Threshold", keys, to: &attributes, suffix: "%")
         appendNative("PERCENTAGE_USED", "Percentage Used", keys, to: &attributes, suffix: "%")
-        appendNative("TEMPERATURE", "Temperature", keys, to: &attributes, suffix: " K")
+        appendNativeTemperature(keys, to: &attributes)
         appendCombined("DATA_UNITS_READ", "Data Units Read", keys, to: &attributes, multiplier: 512_000)
         appendCombined("DATA_UNITS_WRITTEN", "Data Units Written", keys, to: &attributes, multiplier: 512_000)
         appendCombined("MEDIA_ERRORS", "Media Errors", keys, to: &attributes)
@@ -80,9 +80,30 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
     private func nativeTemperature(from kelvin: Int64?) -> Double? {
         guard let kelvin else { return nil }
         if kelvin > 200 {
-            return Double(kelvin - 273)
+            return Double(kelvin) - 273.15
         }
         return Double(kelvin)
+    }
+
+    private func appendNativeTemperature(_ keys: [String: Int64], to attributes: inout [SmartAttribute]) {
+        guard let value = keys["TEMPERATURE"] else { return }
+        let rawValue: String
+        if value > 200 {
+            let celsius = String(format: "%.0f", Double(value) - 273.15)
+            rawValue = "\(value) K (\(celsius) °C)"
+        } else {
+            rawValue = "\(value) °C"
+        }
+        attributes.append(SmartAttribute(
+            id: "TEMPERATURE",
+            name: "Temperature",
+            rawValue: rawValue,
+            current: nil,
+            worst: nil,
+            threshold: nil,
+            status: .good,
+            source: providerName
+        ))
     }
 
     private func appendNative(
@@ -113,8 +134,7 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
         multiplier: Int64 = 1
     ) {
         guard let value = combinedValue(prefix: prefix, keys: keys) else { return }
-        let scaled = value * multiplier
-        let raw = multiplier == 1 ? "\(value)" : "\(formatByteCount(scaled)) (\(value) units)"
+        let raw = multiplier == 1 ? "\(value)" : formatSmartDataUnits(value, unitBytes: multiplier)
         attributes.append(SmartAttribute(
             id: prefix,
             name: name,
@@ -126,6 +146,17 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
             source: providerName
         ))
     }
+}
+
+func formatSmartDataUnits(_ units: Int64, unitBytes: Int64 = 512_000) -> String {
+    let scaled = units.multipliedReportingOverflow(by: unitBytes)
+    if !scaled.overflow {
+        return "\(formatByteCount(scaled.partialValue)) (\(units) units)"
+    }
+
+    let terabytes = Double(units) * Double(unitBytes) / 1_000_000_000_000
+    let formattedTerabytes = String(format: "%.2f", terabytes)
+    return "\(formattedTerabytes) TB (\(units) units)"
 }
 
 final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable {
@@ -344,11 +375,17 @@ enum SmartctlParser {
 
         for (key, name) in interesting {
             guard let value = nvme.valueDescription(key) else { continue }
+            let rawValue: String
+            if key == "data_units_read" || key == "data_units_written", let units = nvme.int64(key) {
+                rawValue = formatSmartDataUnits(units)
+            } else {
+                rawValue = value
+            }
             let warningKeys: Set<String> = ["critical_warning", "media_errors", "num_err_log_entries"]
             attributes.append(SmartAttribute(
                 id: "nvme.\(key)",
                 name: name,
-                rawValue: value,
+                rawValue: rawValue,
                 current: nil,
                 worst: nil,
                 threshold: nil,

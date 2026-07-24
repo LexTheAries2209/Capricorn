@@ -625,6 +625,29 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(snapshot.lifeRemainingPercent, 98)
         XCTAssertEqual(snapshot.mediaErrors, 0)
         XCTAssertTrue(snapshot.attributes.contains(where: { $0.name == "Available Spare" }))
+
+        let read = snapshot.attributes.first(where: { $0.name == "Data Units Read" })
+        let written = snapshot.attributes.first(where: { $0.name == "Data Units Written" })
+        XCTAssertEqual(read?.rawValue, formatSmartDataUnits(180246471))
+        XCTAssertEqual(written?.rawValue, formatSmartDataUnits(85848679))
+        XCTAssertTrue(read?.rawValue.contains("TB") == true)
+        XCTAssertTrue(written?.rawValue.contains("TB") == true)
+    }
+
+    func testNativeSmartFormatsKelvinTemperatureAndDataUnitsAsTB() async throws {
+        var drive = Self.fixtureDrive()
+        drive.nativeSmartKeys = [
+            "TEMPERATURE": 312,
+            "DATA_UNITS_READ": 189403549,
+            "DATA_UNITS_WRITTEN": 95506302
+        ]
+
+        let snapshotValue = await NativeSmartProvider().snapshot(for: drive)
+        let snapshot = try XCTUnwrap(snapshotValue)
+        XCTAssertEqual(snapshot.temperatureCelsius ?? 0, 38.85, accuracy: 0.001)
+        XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Temperature" })?.rawValue, "312 K (39 °C)")
+        XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Data Units Read" })?.rawValue, formatSmartDataUnits(189403549))
+        XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Data Units Written" })?.rawValue, formatSmartDataUnits(95506302))
     }
 
     func testSmartctlOpenErrorBecomesUnavailable() {
