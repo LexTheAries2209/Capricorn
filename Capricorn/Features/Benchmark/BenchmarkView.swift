@@ -1245,10 +1245,9 @@ private struct CrystalTestLabelCell: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(title)
-                .font(.title3.bold())
-                .monospaced()
-                .lineLimit(2)
-                .minimumScaleFactor(0.72)
+                .font(.system(size: 17, weight: .bold, design: .monospaced))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
             Image(systemName: "play.fill")
                 .font(.caption.bold())
                 .accessibilityHidden(true)
