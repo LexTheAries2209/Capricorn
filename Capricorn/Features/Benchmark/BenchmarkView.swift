@@ -36,6 +36,8 @@ struct BenchmarkView: View {
     @AppStorage("benchmarkFileSizeBytes") private var selectedFileSizeBytes = Int(BenchmarkProfile.defaultTestSize)
     @AppStorage("benchmarkDataPattern") private var selectedDataPatternRaw = BenchmarkProfile.defaultDataPattern.rawValue
     @AppStorage("benchmarkUsesTrimmedAverage") private var usesTrimmedAverage = BenchmarkProfile.defaultUsesTrimmedAverage
+    @AppStorage("benchmarkUsesSmallBlockEfficiency") private var usesSmallBlockEfficiency = false
+    @AppStorage("benchmarkSmallBlockFileSizePercent") private var storedSmallBlockFileSizePercent = BenchmarkProfile.defaultSmallBlockFileSizePercent
     @AppStorage("benchmarkCustomRowsJSON") private var customRowsJSON = ""
     @AppStorage("benchmarkDefaultEngine") private var defaultEngineRaw = BenchmarkProfile.default.engine.rawValue
     @AppStorage("benchmarkPeakNVMeEngine") private var peakNVMeEngineRaw = BenchmarkProfile.peakNVMe.engine.rawValue
@@ -65,7 +67,9 @@ struct BenchmarkView: View {
             runs: selectedRunCount,
             fileSizeBytes: selectedBenchmarkFileSizeBytes,
             dataPattern: selectedDataPattern,
-            usesTrimmedAverage: usesTrimmedAverage
+            usesTrimmedAverage: usesTrimmedAverage,
+            usesSmallBlockEfficiency: usesSmallBlockEfficiency,
+            smallBlockFileSizePercent: selectedSmallBlockFileSizePercent
         )
     }
 
@@ -83,6 +87,21 @@ struct BenchmarkView: View {
 
     private var selectedDataPattern: BenchmarkDataPattern {
         BenchmarkDataPattern(rawValue: selectedDataPatternRaw) ?? BenchmarkProfile.defaultDataPattern
+    }
+
+    private var selectedSmallBlockFileSizePercent: Int {
+        BenchmarkProfile.smallBlockFileSizePercentOptions.contains(storedSmallBlockFileSizePercent)
+            ? storedSmallBlockFileSizePercent
+            : BenchmarkProfile.defaultSmallBlockFileSizePercent
+    }
+
+    private var smallBlockFileSizePercentBinding: Binding<Int> {
+        Binding {
+            selectedSmallBlockFileSizePercent
+        } set: { nextPercent in
+            guard BenchmarkProfile.smallBlockFileSizePercentOptions.contains(nextPercent) else { return }
+            storedSmallBlockFileSizePercent = nextPercent
+        }
     }
 
     private var selectedCustomExecutionMode: BenchmarkExecutionMode {
@@ -142,7 +161,9 @@ struct BenchmarkView: View {
             runs: profile.runs,
             fileSizeBytes: profile.testFileSizeBytes,
             dataPattern: selectedDataPattern,
-            usesTrimmedAverage: profile.usesTrimmedAverage
+            usesTrimmedAverage: profile.usesTrimmedAverage,
+            usesSmallBlockEfficiency: usesSmallBlockEfficiency,
+            smallBlockFileSizePercent: selectedSmallBlockFileSizePercent
         )
     }
 
@@ -241,7 +262,7 @@ struct BenchmarkView: View {
     }
 
     private var benchmarkConfirmationMessage: String {
-        var message = "\(language.t("Write tests can temporarily use free space and stress storage."))\n\(language.benchmarkConfirmationConfiguration(profile: profile, runs: profile.runs, fileSizeBytes: profile.testFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: profile.usesTrimmedAverage))\n\(language.t("Write target folder:"))\n\(targetFolderPath)"
+        var message = "\(language.t("Write tests can temporarily use free space and stress storage."))\n\(language.benchmarkConfirmationConfiguration(profile: profile, runs: profile.runs, fileSizeBytes: profile.testFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: profile.usesTrimmedAverage, usesSmallBlockEfficiency: usesSmallBlockEfficiency, smallBlockFileSizePercent: selectedSmallBlockFileSizePercent))\n\(language.t("Write target folder:"))\n\(targetFolderPath)"
         if targetFolderDriveMismatch {
             message += "\n\(language.t("Benchmark will measure the target folder volume, not the selected drive."))"
         }
@@ -278,6 +299,12 @@ struct BenchmarkView: View {
             adjustSelectedFileSizeForTarget()
         }
         .onChange(of: customRowsJSON) { _, _ in
+            adjustSelectedFileSizeForTarget()
+        }
+        .onChange(of: usesSmallBlockEfficiency) { _, _ in
+            adjustSelectedFileSizeForTarget()
+        }
+        .onChange(of: storedSmallBlockFileSizePercent) { _, _ in
             adjustSelectedFileSizeForTarget()
         }
         .confirmationDialog(language.t("Benchmark writes a complete temporary test file to the selected target folder."), isPresented: $confirmWrite) {
@@ -340,6 +367,8 @@ struct BenchmarkView: View {
                     }
                 }
             }
+
+            smallBlockEfficiencyControls
 
             BenchmarkConfigurationDescriptionView(description: configurationDescription)
             if selectedProfileIsCustom {
@@ -479,6 +508,27 @@ struct BenchmarkView: View {
             Label(language.t("Save Results"), systemImage: "tray.and.arrow.down")
         }
         .disabled(profileResults.isEmpty)
+    }
+
+    private var smallBlockEfficiencyControls: some View {
+        HStack(spacing: 12) {
+            Toggle(language.t("Improve Small-Block Test Efficiency"), isOn: $usesSmallBlockEfficiency)
+                .toggleStyle(.switch)
+                .disabled(viewModel.isBenchmarking)
+
+            Picker("", selection: smallBlockFileSizePercentBinding) {
+                ForEach(BenchmarkProfile.smallBlockFileSizePercentOptions, id: \.self) { percent in
+                    Text("\(percent)%").tag(percent)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 250)
+            .disabled(viewModel.isBenchmarking || !usesSmallBlockEfficiency)
+
+            Spacer(minLength: 0)
+        }
+        .help(language.t("Use the selected test-size percentage for 4 KiB, 16 KiB, and 64 KiB items."))
     }
 
     private var targetFolderControl: some View {
@@ -678,7 +728,7 @@ struct BenchmarkView: View {
     }
 
     private func singleBenchmarkConfirmationMessage(for request: SingleBenchmarkRequest) -> String {
-        var message = "\(language.t("Write tests create a temporary file and may increase storage wear."))\n\(language.t("Test Item")): \(request.displayLabel)\n\(language.benchmarkConfirmationConfiguration(profile: request.profile, runs: 1, fileSizeBytes: request.profile.testFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: false))\n\(language.t("Write target folder:"))\n\(targetFolderPath)"
+        var message = "\(language.t("Write tests create a temporary file and may increase storage wear."))\n\(language.t("Test Item")): \(request.displayLabel)\n\(language.benchmarkConfirmationConfiguration(profile: request.profile, runs: 1, fileSizeBytes: request.profile.testFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: false, usesSmallBlockEfficiency: usesSmallBlockEfficiency, smallBlockFileSizePercent: selectedSmallBlockFileSizePercent))\n\(language.t("Write target folder:"))\n\(targetFolderPath)"
         if targetFolderDriveMismatch {
             message += "\n\(language.t("Benchmark will measure the target folder volume, not the selected drive."))"
         }
@@ -729,7 +779,9 @@ struct BenchmarkView: View {
             runs: selectedRunCount,
             fileSizeBytes: fileSizeBytes,
             dataPattern: selectedDataPattern,
-            usesTrimmedAverage: usesTrimmedAverage
+            usesTrimmedAverage: usesTrimmedAverage,
+            usesSmallBlockEfficiency: usesSmallBlockEfficiency,
+            smallBlockFileSizePercent: selectedSmallBlockFileSizePercent
         )
         return BenchmarkStorageValidator.isRequiredSpaceAvailable(for: candidateProfile, availableCapacity: targetFolderAvailableCapacity)
     }

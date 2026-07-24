@@ -125,6 +125,17 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testSmallBlockEfficiencyControlsAreLocalized() {
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Improve Small-Block Test Efficiency"),
+            "提高小块文件测试效率"
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Use the selected test-size percentage for 4 KiB, 16 KiB, and 64 KiB items."),
+            "4 KiB、16 KiB 和 64 KiB 测试项目使用所选的测试文件大小比例。"
+        )
+    }
+
     func testFirstAidContentIsLocalized() {
         let expectedTranslations = [
             "First Aid…": "急救…",
@@ -757,6 +768,95 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(profile.id.contains("plain"))
     }
 
+    func testSmallBlockEfficiencyScalesOnlySupportedBlockSizes() throws {
+        let fileSize: Int64 = 2 * 1_024 * 1_024 * 1_024
+        let rows = [4_096, 16_384, 65_536, 131_072].enumerated().map { index, blockSize in
+            BenchmarkCustomRow(
+                id: "small-block-\(index)",
+                accessPattern: .random,
+                blockSizeBytes: blockSize,
+                queueDepth: 1,
+                threads: 1,
+                includeMixed: false
+            )
+        }
+        let profile = BenchmarkProfile.custom(rows: rows).configured(
+            runs: 1,
+            fileSizeBytes: fileSize,
+            dataPattern: .random,
+            usesSmallBlockEfficiency: true,
+            smallBlockFileSizePercent: 20
+        )
+        let reducedSize = fileSize * 20 / 100
+
+        XCTAssertTrue(profile.id.contains("small-20"))
+        XCTAssertTrue(profile.tests.filter { [4_096, 16_384, 65_536].contains($0.blockSizeBytes) }.allSatisfy {
+            $0.testSizeBytes == reducedSize
+        })
+        XCTAssertTrue(profile.tests.filter { $0.blockSizeBytes == 131_072 }.allSatisfy {
+            $0.testSizeBytes == fileSize
+        })
+
+        let smallBlockRow = try XCTUnwrap(profile.tests.first { $0.blockSizeBytes == 4_096 }?.rowLabel)
+        let singleProfile = try XCTUnwrap(profile.singleRunProfile(forRowLabel: smallBlockRow))
+        XCTAssertTrue(singleProfile.tests.allSatisfy { $0.testSizeBytes == reducedSize })
+    }
+
+    func testDisabledSmallBlockEfficiencyPreservesExistingConfiguration() {
+        let legacy = BenchmarkProfile.default.configured(
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random
+        )
+        let disabled = BenchmarkProfile.default.configured(
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesSmallBlockEfficiency: false,
+            smallBlockFileSizePercent: 50
+        )
+
+        XCTAssertEqual(disabled, legacy)
+        XCTAssertFalse(disabled.id.contains("small-"))
+        XCTAssertTrue(disabled.tests.allSatisfy { $0.testSizeBytes == BenchmarkProfile.defaultTestSize })
+    }
+
+    func testInvalidSmallBlockEfficiencyPercentFallsBackToTwentyPercent() {
+        let invalid = BenchmarkProfile.default.configured(
+            runs: 1,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesSmallBlockEfficiency: true,
+            smallBlockFileSizePercent: 12
+        )
+        let expected = BenchmarkProfile.default.configured(
+            runs: 1,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesSmallBlockEfficiency: true,
+            smallBlockFileSizePercent: 20
+        )
+
+        XCTAssertEqual(invalid, expected)
+    }
+
+    func testSmallBlockEfficiencyDoesNotChangeProfilesWithoutSupportedBlocks() {
+        let legacy = BenchmarkProfile.loop.configured(
+            runs: 1,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random
+        )
+        let enabled = BenchmarkProfile.loop.configured(
+            runs: 1,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesSmallBlockEfficiency: true,
+            smallBlockFileSizePercent: 20
+        )
+
+        XCTAssertEqual(enabled, legacy)
+    }
+
     func testSingleBenchmarkRowUsesCurrentSettingsWithOnePlainRun() throws {
         let fileSize: Int64 = 4 * 1_024 * 1_024 * 1_024
         let configured = BenchmarkProfile.realWorld
@@ -1044,6 +1144,9 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(BenchmarkProfile.defaultTestSize, 1_073_741_824)
         XCTAssertEqual(BenchmarkProfile.defaultDataPattern, .random)
         XCTAssertFalse(BenchmarkProfile.defaultUsesTrimmedAverage)
+        XCTAssertEqual(BenchmarkProfile.defaultSmallBlockFileSizePercent, 20)
+        XCTAssertEqual(BenchmarkProfile.smallBlockFileSizePercentOptions, [5, 10, 20, 30, 50])
+        XCTAssertEqual(BenchmarkProfile.smallBlockEfficiencyBlockSizes, [4_096, 16_384, 65_536])
         XCTAssertEqual(BenchmarkProfile.runCountOptions, Array(1...9))
         XCTAssertEqual(BenchmarkProfile.fileSizeOptions.first, BenchmarkProfile.defaultTestSize)
         XCTAssertTrue(BenchmarkProfile.fileSizeOptions.contains(BenchmarkProfile.defaultTestSize))
@@ -1597,6 +1700,15 @@ final class CapricornTests: XCTestCase {
             dataPattern: .random,
             usesTrimmedAverage: false
         )
+        let efficientChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
+            profile: .default,
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesTrimmedAverage: false,
+            usesSmallBlockEfficiency: true,
+            smallBlockFileSizePercent: 20
+        )
 
         XCTAssertTrue(english.profileUse.contains("Default"))
         XCTAssertTrue(english.dataPattern.contains("Random"))
@@ -1618,6 +1730,20 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(chinese.testTerms.contains("POSIX AIO"))
         XCTAssertTrue(chinese.testTerms.contains("刷盘"))
         XCTAssertFalse(chinese.testTerms.contains("间隔"))
+        XCTAssertTrue(efficientChinese.fileSize.contains("4 KiB、16 KiB 和 64 KiB"))
+        XCTAssertTrue(efficientChinese.fileSize.contains("20%"))
+
+        let confirmation = AppLanguage.simplifiedChinese.benchmarkConfirmationConfiguration(
+            profile: .default,
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesTrimmedAverage: false,
+            usesSmallBlockEfficiency: true,
+            smallBlockFileSizePercent: 20
+        )
+        XCTAssertTrue(confirmation.contains("提高小块文件测试效率"))
+        XCTAssertTrue(confirmation.contains("4/16/64 KiB 项目使用 20%"))
 
         let asyncCustomChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
             profile: BenchmarkProfile.custom(rows: BenchmarkCustomRow.defaultRows, engine: .asyncQueue),

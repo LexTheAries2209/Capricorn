@@ -1039,6 +1039,9 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
     static let defaultRuns = 3
     static let defaultDataPattern = BenchmarkDataPattern.random
     static let defaultUsesTrimmedAverage = false
+    static let defaultSmallBlockFileSizePercent = 20
+    static let smallBlockFileSizePercentOptions = [5, 10, 20, 30, 50]
+    static let smallBlockEfficiencyBlockSizes: Set<Int> = [4_096, 16_384, 65_536]
     static let runCountOptions = Array(1...9)
     static let fileSizeOptions: [Int64] = [
         1_024 * 1_024 * 1_024,
@@ -1353,31 +1356,44 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
         runs requestedRuns: Int,
         fileSizeBytes requestedFileSizeBytes: Int64,
         dataPattern: BenchmarkDataPattern,
-        usesTrimmedAverage: Bool = defaultUsesTrimmedAverage
+        usesTrimmedAverage: Bool = defaultUsesTrimmedAverage,
+        usesSmallBlockEfficiency: Bool = false,
+        smallBlockFileSizePercent requestedSmallBlockFileSizePercent: Int = defaultSmallBlockFileSizePercent
     ) -> BenchmarkProfile {
         let isLooping = executionMode == .loopUntilCancelled
         let safeRuns = isLooping ? 1 : min(max(requestedRuns, Self.runCountOptions.first ?? 1), Self.runCountOptions.last ?? 9)
         let safeFileSizeBytes = max(Self.fileSizeOptions.first ?? Self.defaultTestSize, requestedFileSizeBytes)
         let safeUsesTrimmedAverage = isLooping ? false : usesTrimmedAverage
+        let safeSmallBlockFileSizePercent = Self.smallBlockFileSizePercentOptions.contains(requestedSmallBlockFileSizePercent)
+            ? requestedSmallBlockFileSizePercent
+            : Self.defaultSmallBlockFileSizePercent
+        let appliesSmallBlockEfficiency = usesSmallBlockEfficiency
+            && tests.contains { Self.smallBlockEfficiencyBlockSizes.contains($0.blockSizeBytes) }
         let fingerprint: String
         let rowFingerprint = id
             .components(separatedBy: "@")
             .dropFirst()
             .first { $0.hasPrefix("rows-") }
         let engineFingerprint = engine == .synchronous ? nil : "engine-\(engine.rawValue)"
+        let smallBlockFingerprint = appliesSmallBlockEfficiency ? "small-\(safeSmallBlockFileSizePercent)" : nil
         if isLooping {
             let loopFingerprint = "loop-s\(safeFileSizeBytes)-\(dataPattern.rawValue)"
-            fingerprint = [rowFingerprint, loopFingerprint, engineFingerprint].compactMap { $0 }.joined(separator: "-")
+            fingerprint = [rowFingerprint, loopFingerprint, engineFingerprint, smallBlockFingerprint].compactMap { $0 }.joined(separator: "-")
         } else {
             let averageMode = safeUsesTrimmedAverage ? "trim" : "plain"
             let runFingerprint = "r\(safeRuns)-s\(safeFileSizeBytes)-\(dataPattern.rawValue)-\(averageMode)"
-            fingerprint = [rowFingerprint, runFingerprint, engineFingerprint].compactMap { $0 }.joined(separator: "-")
+            fingerprint = [rowFingerprint, runFingerprint, engineFingerprint, smallBlockFingerprint].compactMap { $0 }.joined(separator: "-")
         }
         let configuredTests = tests.map { test in
             var configuredTest = test
             let baseTestID = test.id.components(separatedBy: "@").first ?? test.id
             configuredTest.id = "\(baseTestID)@\(fingerprint)"
-            configuredTest.testSizeBytes = safeFileSizeBytes
+            configuredTest.testSizeBytes = Self.effectiveTestSize(
+                fileSizeBytes: safeFileSizeBytes,
+                blockSizeBytes: test.blockSizeBytes,
+                usesSmallBlockEfficiency: appliesSmallBlockEfficiency,
+                smallBlockFileSizePercent: safeSmallBlockFileSizePercent
+            )
             configuredTest.dataPattern = dataPattern
             return configuredTest
         }
@@ -1391,6 +1407,21 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
             engine: engine,
             tests: configuredTests
         )
+    }
+
+    static func effectiveTestSize(
+        fileSizeBytes: Int64,
+        blockSizeBytes: Int,
+        usesSmallBlockEfficiency: Bool,
+        smallBlockFileSizePercent: Int
+    ) -> Int64 {
+        guard usesSmallBlockEfficiency, smallBlockEfficiencyBlockSizes.contains(blockSizeBytes) else {
+            return fileSizeBytes
+        }
+        let safePercent = smallBlockFileSizePercentOptions.contains(smallBlockFileSizePercent)
+            ? smallBlockFileSizePercent
+            : defaultSmallBlockFileSizePercent
+        return max(Int64(blockSizeBytes), fileSizeBytes * Int64(safePercent) / 100)
     }
 
     func singleRunProfile(forRowLabel rowLabel: String) -> BenchmarkProfile? {

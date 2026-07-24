@@ -337,6 +337,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Off": "关闭",
         "On": "开启",
         "Run two extra measured passes, discard fastest and slowest, then average the rest.": "额外执行 2 轮正式测量，去掉最快和最慢后再平均。",
+        "Improve Small-Block Test Efficiency": "提高小块文件测试效率",
+        "Use the selected test-size percentage for 4 KiB, 16 KiB, and 64 KiB items.": "4 KiB、16 KiB 和 64 KiB 测试项目使用所选的测试文件大小比例。",
         "No writable volume": "没有可写卷",
         "Run": "运行",
         "Run Single Test": "运行单项测试",

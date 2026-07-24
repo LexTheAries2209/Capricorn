@@ -61,15 +61,36 @@ extension AppLanguage {
         runs: Int,
         fileSizeBytes: Int64,
         dataPattern: BenchmarkDataPattern,
-        usesTrimmedAverage: Bool
+        usesTrimmedAverage: Bool,
+        usesSmallBlockEfficiency: Bool = false,
+        smallBlockFileSizePercent: Int = BenchmarkProfile.defaultSmallBlockFileSizePercent
     ) -> BenchmarkConfigurationDescription {
+        let smallBlockPercent = BenchmarkProfile.smallBlockFileSizePercentOptions.contains(smallBlockFileSizePercent)
+            ? smallBlockFileSizePercent
+            : BenchmarkProfile.defaultSmallBlockFileSizePercent
+        let fileSizeDescription: String
+        switch self {
+        case .english:
+            if usesSmallBlockEfficiency {
+                fileSizeDescription = "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) base temporary file. 4 KiB, 16 KiB, and 64 KiB items transfer \(smallBlockPercent)% of that size; other items transfer the full file size."
+            } else {
+                fileSizeDescription = "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) complete temporary file. Reads and writes transfer the full file size; elapsed time comes from the actual transfer."
+            }
+        case .simplifiedChinese:
+            if usesSmallBlockEfficiency {
+                fileSizeDescription = "测试文件大小：以 \(formatBenchmarkFileSize(fileSizeBytes)) 临时文件为基准；4 KiB、16 KiB 和 64 KiB 项目实际传输其 \(smallBlockPercent)%，其他项目仍传输完整文件大小。"
+            } else {
+                fileSizeDescription = "测试文件大小：使用完整的 \(formatBenchmarkFileSize(fileSizeBytes)) 临时文件。读取和写入都会传输完整文件大小，耗时由真实传输决定。"
+            }
+        }
+
         if profile.executionMode == .loopUntilCancelled {
             switch self {
             case .english:
                 return BenchmarkConfigurationDescription(
                     profileUse: englishProfileUseDescription(profile),
                     runs: "Loop mode: runs continuously until you stop it manually. The matrix shows the latest completed pass for each read/write item.",
-                    fileSize: "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) complete temporary file. Reads and writes transfer the full file size; elapsed time comes from the actual transfer.",
+                    fileSize: fileSizeDescription,
                     dataPattern: "Data pattern: \(benchmarkDataPatternTitle(dataPattern)). Random is closer to incompressible real data; 0 Fill can expose compression, dedupe, or controller peak behavior.",
                     testTerms: englishLoopTestTermsDescription(profile)
                 )
@@ -77,7 +98,7 @@ extension AppLanguage {
                 return BenchmarkConfigurationDescription(
                     profileUse: chineseProfileUseDescription(profile),
                     runs: "循环模式：会持续运行直到手动停止；矩阵显示每个读/写项目最新完成的一轮结果。",
-                    fileSize: "测试文件大小：使用完整的 \(formatBenchmarkFileSize(fileSizeBytes)) 临时文件。读取和写入都会传输完整文件大小，耗时由真实传输决定。",
+                    fileSize: fileSizeDescription,
                     dataPattern: "数据模式：\(benchmarkDataPatternTitle(dataPattern))。随机数据更接近不可压缩真实负载；0 填充适合观察压缩、去重或控制器峰值，结果可能偏高。",
                     testTerms: chineseLoopTestTermsDescription(profile)
                 )
@@ -101,7 +122,7 @@ extension AppLanguage {
             return BenchmarkConfigurationDescription(
                 profileUse: englishProfileUseDescription(profile),
                 runs: runsDescription,
-                fileSize: "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) complete temporary file. Reads and writes transfer the full file size; elapsed time comes from the actual transfer.",
+                fileSize: fileSizeDescription,
                 dataPattern: "Data pattern: \(benchmarkDataPatternTitle(dataPattern)). Random is closer to incompressible real data; 0 Fill can expose compression, dedupe, or controller peak behavior.",
                 testTerms: testTerms
             )
@@ -121,7 +142,7 @@ extension AppLanguage {
             return BenchmarkConfigurationDescription(
                 profileUse: chineseProfileUseDescription(profile),
                 runs: runsDescription,
-                fileSize: "测试文件大小：使用完整的 \(formatBenchmarkFileSize(fileSizeBytes)) 临时文件。读取和写入都会传输完整文件大小，耗时由真实传输决定。",
+                fileSize: fileSizeDescription,
                 dataPattern: "数据模式：\(benchmarkDataPatternTitle(dataPattern))。随机数据更接近不可压缩真实负载；0 填充适合观察压缩、去重或控制器峰值，结果可能偏高。",
                 testTerms: testTerms
             )
@@ -133,24 +154,31 @@ extension AppLanguage {
         runs: Int,
         fileSizeBytes: Int64,
         dataPattern: BenchmarkDataPattern,
-        usesTrimmedAverage: Bool
+        usesTrimmedAverage: Bool,
+        usesSmallBlockEfficiency: Bool = false,
+        smallBlockFileSizePercent: Int = BenchmarkProfile.defaultSmallBlockFileSizePercent
     ) -> String {
+        let safePercent = BenchmarkProfile.smallBlockFileSizePercentOptions.contains(smallBlockFileSizePercent)
+            ? smallBlockFileSizePercent
+            : BenchmarkProfile.defaultSmallBlockFileSizePercent
+        let englishSmallBlockState = usesSmallBlockEfficiency ? "\(safePercent)% for 4/16/64 KiB items" : "Off"
+        let chineseSmallBlockState = usesSmallBlockEfficiency ? "4/16/64 KiB 项目使用 \(safePercent)%" : "关闭"
         if profile.executionMode == .loopUntilCancelled {
             switch self {
             case .english:
-                return "Benchmark settings\nProfile-\(profileName(profile)); engine-\(benchmarkEngineTitle(profile.engine)); runs-loop until stopped; test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-not used"
+                return "Benchmark settings\nProfile-\(profileName(profile)); engine-\(benchmarkEngineTitle(profile.engine)); runs-loop until stopped; test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-not used; small-block efficiency-\(englishSmallBlockState)"
             case .simplifiedChinese:
-                return "测试配置\n配置-\(profileName(profile))；引擎-\(benchmarkEngineTitle(profile.engine))；测试次数-循环直到手动停止；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-不使用"
+                return "测试配置\n配置-\(profileName(profile))；引擎-\(benchmarkEngineTitle(profile.engine))；测试次数-循环直到手动停止；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-不使用；提高小块文件测试效率-\(chineseSmallBlockState)"
             }
         }
 
         switch self {
         case .english:
             let trimState = usesTrimmedAverage ? "On" : "Off"
-            return "Benchmark settings\nProfile-\(profileName(profile)); engine-\(benchmarkEngineTitle(profile.engine)); runs-\(runs); test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-\(trimState)"
+            return "Benchmark settings\nProfile-\(profileName(profile)); engine-\(benchmarkEngineTitle(profile.engine)); runs-\(runs); test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-\(trimState); small-block efficiency-\(englishSmallBlockState)"
         case .simplifiedChinese:
             let trimState = usesTrimmedAverage ? "开启" : "关闭"
-            return "测试配置\n配置-\(profileName(profile))；引擎-\(benchmarkEngineTitle(profile.engine))；测试次数-\(runs)；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-\(trimState)"
+            return "测试配置\n配置-\(profileName(profile))；引擎-\(benchmarkEngineTitle(profile.engine))；测试次数-\(runs)；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-\(trimState)；提高小块文件测试效率-\(chineseSmallBlockState)"
         }
     }
 
