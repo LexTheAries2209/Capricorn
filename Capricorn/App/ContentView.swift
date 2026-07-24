@@ -600,6 +600,7 @@ private struct DiskCheckEntryView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
             }
+            .defaultScrollAnchor(.topLeading)
             .frame(minHeight: 120, maxHeight: 220)
             .background(.quaternary)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -692,6 +693,7 @@ private struct DiskOpenFileList: View {
                     }
                     .frame(width: DiskOpenFileTableLayout.contentWidth + 24, alignment: .leading)
                 }
+                .defaultScrollAnchor(.topLeading)
                 .scrollIndicators(.visible)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
