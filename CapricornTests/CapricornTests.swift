@@ -116,6 +116,15 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Continue Monitoring"), "继续监控")
     }
 
+    func testSingleBenchmarkActionsAreLocalized() {
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Run Single Test"), "运行单项测试")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Benchmark in Progress"), "测速正在进行")
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Please stop the current benchmark before running a single test."),
+            "请先停止当前测试，再运行单项测试。"
+        )
+    }
+
     func testFirstAidContentIsLocalized() {
         let expectedTranslations = [
             "First Aid…": "急救…",
@@ -748,6 +757,108 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(profile.id.contains("plain"))
     }
 
+    func testSingleBenchmarkRowUsesCurrentSettingsWithOnePlainRun() throws {
+        let fileSize: Int64 = 4 * 1_024 * 1_024 * 1_024
+        let configured = BenchmarkProfile.realWorld
+            .applying(engine: .asyncQueue)
+            .configured(runs: 7, fileSizeBytes: fileSize, dataPattern: .zeroFill, usesTrimmedAverage: true)
+        let selectedRow = try XCTUnwrap(configured.tests.first?.rowLabel)
+        let single = try XCTUnwrap(configured.singleRunProfile(forRowLabel: selectedRow))
+
+        XCTAssertEqual(single.id, configured.id)
+        XCTAssertEqual(single.engine, configured.engine)
+        XCTAssertEqual(single.testFileSizeBytes, fileSize)
+        XCTAssertEqual(single.runs, 1)
+        XCTAssertFalse(single.usesTrimmedAverage)
+        XCTAssertEqual(single.executionMode, .finite)
+        XCTAssertFalse(single.tests.isEmpty)
+        XCTAssertTrue(single.tests.allSatisfy { $0.rowLabel == selectedRow })
+        XCTAssertTrue(single.tests.allSatisfy { $0.testSizeBytes == fileSize })
+        XCTAssertTrue(single.tests.allSatisfy { $0.dataPattern == .zeroFill })
+    }
+
+    func testSingleBenchmarkRowTurnsLoopModeIntoOneFiniteRun() throws {
+        let configured = BenchmarkProfile.loop.configured(
+            runs: 9,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesTrimmedAverage: true
+        )
+        let selectedRow = try XCTUnwrap(configured.tests.first?.rowLabel)
+        let single = try XCTUnwrap(configured.singleRunProfile(forRowLabel: selectedRow))
+
+        XCTAssertEqual(single.runs, 1)
+        XCTAssertFalse(single.usesTrimmedAverage)
+        XCTAssertEqual(single.executionMode, .finite)
+    }
+
+    func testSingleBenchmarkMergesSelectedRowWithoutClearingOtherResults() async throws {
+        let drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        let configured = BenchmarkProfile.default.configured(
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random
+        )
+        let selectedRow = try XCTUnwrap(configured.tests.first?.rowLabel)
+        let single = try XCTUnwrap(configured.singleRunProfile(forRowLabel: selectedRow))
+        let originalResults = configured.tests.enumerated().map { index, test in
+            BenchmarkResult(
+                driveID: drive.id,
+                volumePath: "/Volumes/Unit",
+                profileID: configured.id,
+                profileName: configured.name,
+                testID: test.id,
+                testLabel: test.label,
+                operation: test.operation,
+                measuredAt: Date(timeIntervalSince1970: Double(index)),
+                bestMegabytesPerSecond: Double(index + 1),
+                iops: 1,
+                latencyMicroseconds: 1,
+                bytesTransferred: test.testSizeBytes
+            )
+        }
+        let runner = ImmediateBenchmarkRunner()
+        let provider = FakeDiskActivityProvider(reader: FakeDiskActivityReader(counters: []))
+        let model = await MainActor.run {
+            let model = DITViewModel(benchmarkRunner: runner, diskActivityProvider: provider)
+            model.drives = [drive]
+            model.selectedDriveID = drive.id
+            model.benchmarkResults = originalResults
+            return model
+        }
+
+        let started = await MainActor.run {
+            model.startBenchmark(
+                profile: single,
+                volumePath: "/Volumes/Unit",
+                resultUpdatePolicy: .mergeTests
+            )
+        }
+        XCTAssertTrue(started)
+        let finished = await AsyncTestWaiter.wait {
+            let isBenchmarking = await MainActor.run { model.isBenchmarking }
+            return runner.runCount == 1 && !isBenchmarking
+        }
+        XCTAssertTrue(finished)
+
+        let finalResults = await MainActor.run { model.benchmarkResults }
+        XCTAssertEqual(finalResults.count, originalResults.count)
+        for original in originalResults {
+            let updated = try XCTUnwrap(finalResults.first { $0.testID == original.testID })
+            if BenchmarkTest.rowLabel(for: original.testLabel) == selectedRow {
+                XCTAssertGreaterThanOrEqual(updated.bestMegabytesPerSecond, 1_000)
+            } else {
+                XCTAssertEqual(updated, original)
+            }
+        }
+
+        let receivedProfile = try XCTUnwrap(runner.receivedProfiles.first)
+        XCTAssertEqual(receivedProfile.id, configured.id)
+        XCTAssertEqual(receivedProfile.runs, 1)
+        XCTAssertFalse(receivedProfile.usesTrimmedAverage)
+        XCTAssertTrue(receivedProfile.tests.allSatisfy { $0.rowLabel == selectedRow })
+    }
+
     func testBenchmarkProfileConfigurationSeparatesResultIDs() {
         let random = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .random)
         let zeroFill = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .zeroFill)
@@ -1152,10 +1263,14 @@ final class CapricornTests: XCTestCase {
         }
 
         await MainActor.run {
-            viewModel.startBenchmark(profile: BenchmarkProfile.presets[0], volumePath: "/Volumes/Unit")
+            XCTAssertTrue(viewModel.startBenchmark(profile: BenchmarkProfile.presets[0], volumePath: "/Volumes/Unit"))
         }
         let didStart = await runner.waitUntilStarted()
         XCTAssertTrue(didStart)
+
+        await MainActor.run {
+            XCTAssertFalse(viewModel.startBenchmark(profile: BenchmarkProfile.presets[0], volumePath: "/Volumes/Unit"))
+        }
 
         await MainActor.run {
             viewModel.cancelBenchmark()
@@ -2711,6 +2826,54 @@ private final class LateCallbackBenchmarkRunner: BenchmarkRunning, @unchecked Se
         }
         return false
     }
+}
+
+private final class ImmediateBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
+    private let profiles = LockedState<[BenchmarkProfile]>([])
+
+    var receivedProfiles: [BenchmarkProfile] {
+        profiles.snapshot()
+    }
+
+    var runCount: Int {
+        receivedProfiles.count
+    }
+
+    func run(
+        profile: BenchmarkProfile,
+        drive: DriveDevice,
+        volumePath: String,
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
+    ) async throws -> [BenchmarkResult] {
+        profiles.withLock { $0.append(profile) }
+        let results = profile.tests.enumerated().map { index, test in
+            BenchmarkResult(
+                driveID: drive.id,
+                volumePath: volumePath,
+                profileID: profile.id,
+                profileName: profile.name,
+                testID: test.id,
+                testLabel: test.label,
+                operation: test.operation,
+                measuredAt: Date(timeIntervalSince1970: Double(10_000 + index)),
+                bestMegabytesPerSecond: Double(1_000 + index),
+                iops: 100,
+                latencyMicroseconds: 10,
+                bytesTransferred: test.testSizeBytes
+            )
+        }
+        results.forEach(result)
+        progress(BenchmarkProgress(
+            currentTestLabel: "Complete",
+            completed: results.count,
+            total: results.count,
+            message: "Benchmark complete"
+        ))
+        return results
+    }
+
+    func cancel() {}
 }
 
 private final class AsyncGate: @unchecked Sendable {

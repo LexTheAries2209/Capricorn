@@ -3,6 +3,11 @@ import Foundation
 import Observation
 import OSLog
 
+enum BenchmarkResultUpdatePolicy: Sendable, Equatable {
+    case replaceProfile
+    case mergeTests
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -339,17 +344,31 @@ final class AppModel {
         }
     }
 
-    func startBenchmark(profile: BenchmarkProfile, volumePath: String? = nil) {
-        guard benchmarkTask == nil, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return }
+    @discardableResult
+    func startBenchmark(
+        profile: BenchmarkProfile,
+        volumePath: String? = nil,
+        resultUpdatePolicy: BenchmarkResultUpdatePolicy = .replaceProfile
+    ) -> Bool {
+        guard benchmarkTask == nil, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return false }
         benchmarkTask = Task { [weak self] in
-            await self?.runBenchmark(profile: profile, volumePath: volumePath)
+            await self?.runBenchmark(
+                profile: profile,
+                volumePath: volumePath,
+                resultUpdatePolicy: resultUpdatePolicy
+            )
             await MainActor.run {
                 self?.benchmarkTask = nil
             }
         }
+        return true
     }
 
-    func runBenchmark(profile: BenchmarkProfile, volumePath: String? = nil) async {
+    func runBenchmark(
+        profile: BenchmarkProfile,
+        volumePath: String? = nil,
+        resultUpdatePolicy: BenchmarkResultUpdatePolicy = .replaceProfile
+    ) async {
         guard benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return }
         guard let drive = selectedDrive else {
             benchmarkError = "Select a drive before running a benchmark."
@@ -376,7 +395,9 @@ final class AppModel {
             message: isLooping ? "Loop running" : "Preparing complete test file"
         ), force: true)
         startDiskActivityMonitoring(for: drive, runID: runID)
-        replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: [])
+        if resultUpdatePolicy == .replaceProfile {
+            replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: [])
+        }
         defer {
             if activeBenchmarkRunID == runID {
                 stopDiskActivityMonitoring()
@@ -421,7 +442,12 @@ final class AppModel {
             eventContinuation.finish()
             await eventTask.value
             guard activeBenchmarkRunID == runID, benchmarkSession.state == .running else { return }
-            replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: results)
+            switch resultUpdatePolicy {
+            case .replaceProfile:
+                replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: results)
+            case .mergeTests:
+                results.forEach(upsertBenchmarkResult)
+            }
         } catch {
             eventContinuation.finish()
             await eventTask.value

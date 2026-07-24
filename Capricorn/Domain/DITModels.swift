@@ -942,6 +942,14 @@ struct BenchmarkTest: Identifiable, Codable, Hashable, Sendable {
     var operationsDescription: String {
         "\(accessPattern.title) \(formatBytes(blockSizeBytes)) Q\(queueDepth)T\(threads)"
     }
+
+    var rowLabel: String {
+        Self.rowLabel(for: label)
+    }
+
+    static func rowLabel(for label: String) -> String {
+        label.hasSuffix(" Mix") ? String(label.dropLast(4)) : label
+    }
 }
 
 struct BenchmarkCustomRow: Identifiable, Codable, Hashable, Sendable {
@@ -1383,6 +1391,19 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
             engine: engine,
             tests: configuredTests
         )
+    }
+
+    func singleRunProfile(forRowLabel rowLabel: String) -> BenchmarkProfile? {
+        let normalizedRowLabel = BenchmarkTest.rowLabel(for: rowLabel)
+        let rowTests = tests.filter { $0.rowLabel == normalizedRowLabel }
+        guard !rowTests.isEmpty else { return nil }
+
+        var profile = self
+        profile.runs = 1
+        profile.usesTrimmedAverage = false
+        profile.executionMode = .finite
+        profile.tests = rowTests
+        return profile
     }
 }
 

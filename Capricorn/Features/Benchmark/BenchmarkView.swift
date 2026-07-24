@@ -3,6 +3,28 @@ import AppKit
 import SwiftData
 import SwiftUI
 
+private struct SingleBenchmarkRequest: Identifiable {
+    let rowLabel: String
+    let displayLabel: String
+    let profile: BenchmarkProfile
+
+    var id: String { rowLabel }
+}
+
+private enum BenchmarkAlert: Identifiable {
+    case benchmarkInProgress
+    case confirmSingleTest(SingleBenchmarkRequest)
+
+    var id: String {
+        switch self {
+        case .benchmarkInProgress:
+            "benchmark-in-progress"
+        case let .confirmSingleTest(request):
+            "confirm-single-\(request.id)"
+        }
+    }
+}
+
 struct BenchmarkView: View {
     let drive: DriveDevice
     var viewModel: AppModel
@@ -23,6 +45,7 @@ struct BenchmarkView: View {
     @AppStorage("benchmarkCustomExecutionMode") private var customExecutionModeRaw = BenchmarkExecutionMode.finite.rawValue
     @State private var selectedProfileID = BenchmarkProfile.default.id
     @State private var confirmWrite = false
+    @State private var benchmarkAlert: BenchmarkAlert?
     private let progressContentLeadingInset: CGFloat = 6
 
     private var baseProfile: BenchmarkProfile {
@@ -237,7 +260,11 @@ struct BenchmarkView: View {
                 if shouldShowProgressAndErrors {
                     progressAndErrors
                 }
-                BenchmarkResultMatrixView(profile: profile, results: profileResults)
+                BenchmarkResultMatrixView(
+                    profile: profile,
+                    results: profileResults,
+                    onRunRow: requestSingleBenchmark
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -260,6 +287,9 @@ struct BenchmarkView: View {
             Button(language.t("Cancel"), role: .cancel) {}
         } message: {
             Text(benchmarkConfirmationMessage)
+        }
+        .alert(item: $benchmarkAlert) { alert in
+            benchmarkSystemAlert(alert)
         }
     }
 
@@ -602,7 +632,60 @@ struct BenchmarkView: View {
         confirmWrite = true
     }
 
-    private func validateTargetFolderForRun() -> Bool {
+    private func requestSingleBenchmark(rowLabel: String) {
+        guard !viewModel.isBenchmarking else {
+            benchmarkAlert = .benchmarkInProgress
+            return
+        }
+        guard let singleProfile = profile.singleRunProfile(forRowLabel: rowLabel) else { return }
+        guard validateTargetFolderForRun(profile: singleProfile) else { return }
+
+        benchmarkAlert = .confirmSingleTest(SingleBenchmarkRequest(
+            rowLabel: rowLabel,
+            displayLabel: BenchmarkResultMatrixView.displayLabel(rowLabel),
+            profile: singleProfile
+        ))
+    }
+
+    private func benchmarkSystemAlert(_ alert: BenchmarkAlert) -> Alert {
+        switch alert {
+        case .benchmarkInProgress:
+            return Alert(
+                title: Text(language.t("Benchmark in Progress")),
+                message: Text(language.t("Please stop the current benchmark before running a single test.")),
+                dismissButton: .default(Text(language.t("OK")))
+            )
+        case let .confirmSingleTest(request):
+            return Alert(
+                title: Text(language.t("Run Single Test")),
+                message: Text(singleBenchmarkConfirmationMessage(for: request)),
+                primaryButton: .destructive(Text(language.t("Run Single Test"))) {
+                    let started = viewModel.startBenchmark(
+                        profile: request.profile,
+                        volumePath: targetFolderPath,
+                        resultUpdatePolicy: .mergeTests
+                    )
+                    if !started {
+                        Task { @MainActor in
+                            await Task.yield()
+                            benchmarkAlert = .benchmarkInProgress
+                        }
+                    }
+                },
+                secondaryButton: .cancel(Text(language.t("Cancel")))
+            )
+        }
+    }
+
+    private func singleBenchmarkConfirmationMessage(for request: SingleBenchmarkRequest) -> String {
+        var message = "\(language.t("Write tests create a temporary file and may increase storage wear."))\n\(language.t("Test Item")): \(request.displayLabel)\n\(language.benchmarkConfirmationConfiguration(profile: request.profile, runs: 1, fileSizeBytes: request.profile.testFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: false))\n\(language.t("Write target folder:"))\n\(targetFolderPath)"
+        if targetFolderDriveMismatch {
+            message += "\n\(language.t("Benchmark will measure the target folder volume, not the selected drive."))"
+        }
+        return message
+    }
+
+    private func validateTargetFolderForRun(profile runProfile: BenchmarkProfile? = nil) -> Bool {
         guard let targetFolderURL else {
             viewModel.benchmarkError = "Choose a writable target folder before starting."
             return false
@@ -629,8 +712,9 @@ struct BenchmarkView: View {
         }
 
         let available = BenchmarkStorageValidator.availableCapacity(for: targetFolderURL)
-        let required = BenchmarkStorageValidator.requiredSpace(for: profile)
-        guard BenchmarkStorageValidator.isRequiredSpaceAvailable(for: profile, availableCapacity: available) else {
+        let validatedProfile = runProfile ?? profile
+        let required = BenchmarkStorageValidator.requiredSpace(for: validatedProfile)
+        guard BenchmarkStorageValidator.isRequiredSpaceAvailable(for: validatedProfile, availableCapacity: available) else {
             viewModel.benchmarkError = BenchmarkError.insufficientSpace(required: required, available: available).localizedDescription
             return false
         }
@@ -1060,6 +1144,7 @@ struct DiskActivityChartView: View {
 private struct BenchmarkResultMatrixView: View {
     let profile: BenchmarkProfile
     let results: [BenchmarkResult]
+    let onRunRow: (String) -> Void
     @Environment(\.appLanguage) private var language
 
     private var hasMixedColumn: Bool {
@@ -1069,7 +1154,7 @@ private struct BenchmarkResultMatrixView: View {
     private var rowLabels: [String] {
         var labels: [String] = []
         for test in profile.tests {
-            let label = Self.normalizedLabel(test.label)
+            let label = test.rowLabel
             if !labels.contains(label) {
                 labels.append(label)
             }
@@ -1095,7 +1180,14 @@ private struct BenchmarkResultMatrixView: View {
 
             ForEach(rowLabels, id: \.self) { label in
                 HStack(spacing: 8) {
-                    CrystalTestLabelCell(title: Self.displayLabel(label))
+                    Button {
+                        onRunRow(label)
+                    } label: {
+                        CrystalTestLabelCell(title: Self.displayLabel(label))
+                    }
+                        .buttonStyle(.plain)
+                        .help(language.t("Run this test once"))
+                        .accessibilityLabel("\(language.t("Run Single Test")): \(Self.displayLabel(label))")
                         .frame(width: 146)
                     CrystalSpeedCell(result: result(for: label, operation: .read), maximumSpeed: maximumSpeed)
                     CrystalSpeedCell(result: result(for: label, operation: .write), maximumSpeed: maximumSpeed)
@@ -1124,15 +1216,11 @@ private struct BenchmarkResultMatrixView: View {
 
     private func result(for label: String, operation: BenchmarkOperation) -> BenchmarkResult? {
         results
-            .filter { Self.normalizedLabel($0.testLabel) == label && $0.operation == operation }
+            .filter { BenchmarkTest.rowLabel(for: $0.testLabel) == label && $0.operation == operation }
             .max { $0.measuredAt < $1.measuredAt }
     }
 
-    private static func normalizedLabel(_ label: String) -> String {
-        label.hasSuffix(" Mix") ? String(label.dropLast(4)) : label
-    }
-
-    private static func displayLabel(_ label: String) -> String {
+    static func displayLabel(_ label: String) -> String {
         label
             .replacingOccurrences(of: "MiB", with: "M")
             .replacingOccurrences(of: "KiB", with: "K")
@@ -1152,20 +1240,26 @@ private struct CrystalHeaderCell: View {
 
 private struct CrystalTestLabelCell: View {
     let title: String
+    @State private var isHovering = false
 
     var body: some View {
-        Text(title)
-            .font(.title3.bold())
-            .monospaced()
-            .lineLimit(2)
-            .minimumScaleFactor(0.72)
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.title3.bold())
+                .monospaced()
+                .lineLimit(2)
+                .minimumScaleFactor(0.72)
+            Image(systemName: "play.fill")
+                .font(.caption.bold())
+                .accessibilityHidden(true)
+        }
             .frame(maxWidth: .infinity, minHeight: 76)
             .padding(.horizontal, 8)
             .background(
                 LinearGradient(
                     colors: [
-                        Color.green.opacity(0.92),
-                        Color.green.opacity(0.58)
+                        Color.green.opacity(isHovering ? 1 : 0.92),
+                        Color.green.opacity(isHovering ? 0.72 : 0.58)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -1173,6 +1267,12 @@ private struct CrystalTestLabelCell: View {
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .foregroundStyle(.black.opacity(0.82))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(.white.opacity(isHovering ? 0.45 : 0), lineWidth: 1)
+            }
+            .onHover { isHovering = $0 }
+            .animation(.easeOut(duration: 0.12), value: isHovering)
     }
 }
 
