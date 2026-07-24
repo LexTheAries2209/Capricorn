@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.0.5`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.1.1`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v1.0.5.md](docs/releases/v1.0.5.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v1.1.1.md](docs/releases/v1.1.1.md)
 
 ---
 
@@ -20,11 +20,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.0.5-macOS.zip`。
-2. 解压后把 `Capricorn V1.0.5.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.1.1-macOS.zip`。
+2. 解压后把 `Capricorn V1.1.1.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V1.0.5 的中文发布说明见 [docs/releases/v1.0.5.zh-CN.md](docs/releases/v1.0.5.zh-CN.md)。
+V1.1.1 的中文发布说明见 [docs/releases/v1.1.1.zh-CN.md](docs/releases/v1.1.1.zh-CN.md)。
 
 典型用途：
 
@@ -46,14 +46,19 @@ V1.0.5 的中文发布说明见 [docs/releases/v1.0.5.zh-CN.md](docs/releases/v1
 - 支持查看占用所选磁盘的进程，并在卸载、推出失败时显示可能占用磁盘的程序列表。
 - 支持普通检查日志和只读详细检查，展示 `diskutil` 或 macOS 原生文件系统检查器的输出。
 - SMART 页面显示健康状态、温度、寿命、通电小时、介质错误、不安全关机次数和数据来源。
+- SMART 温度会按数据源区分单位：原生 Kelvin 数值同时显示换算后的摄氏度，已是摄氏度的数值保持摄氏度显示。
+- NVMe 累计读取量和写入量会把 macOS 原生与 `smartctl` 的 Data Units 转换为 TB，并保留原始 units 计数。
 - macOS 原生 SMART 优先，可选使用用户已安装的 `smartctl` 获取更完整的 ATA/NVMe 数据。
 - 对 SD/SDXC 读卡器和网络卷显示有限支持说明，避免把无 SMART 数据误判为硬盘故障。
 - 支持默认、峰值/NVMe、真实场景、演示和自定义测速配置。
 - 自定义测速最多 4 个测试项目组，可选择 SEQ/RND、块大小、Q、T 和混合测试。
 - 每个测速配置可以选择同步或异步引擎；自定义配置可选择循环。
 - 测速文件大小从 1 GiB 起，支持 Random 和 0 Fill 数据模式。
+- 点击测速结果矩阵左侧的绿色项目按钮，可以沿用当前引擎、文件大小和数据模式只测试该项目一次；单项测试固定关闭加量测试并保留写入确认。
+- “提高小块文件测试效率”可按 5%、10%、20%、30% 或 50% 缩减 4 KiB、16 KiB 和 64 KiB 项目的实际测试文件量，默认关闭，首次开启默认为 20%。
 - 测速页显示实时磁盘活动曲线，保存测速结果时会保存本次曲线样本。
 - 实时活动页支持 0.1s、0.2s、0.5s、1s 采样间隔、图表保留和保存到历史。
+- 停止实时活动监控后可以“继续监控”并从现有图表续接；“开始监控”仍会清空图表并创建新的监控段。
 - 实时活动大文件负载支持读取、写入、读写混合、固定大小和全盘 95% 模式。
 - 历史页支持 SMART、测速、实时活动记录的隐藏、管理隐藏记录和恢复。
 - 报告导出支持 JSON、CSV 和纯文本，默认隐藏序列号。
@@ -127,9 +132,9 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 
 例如：
 
-- `Version = 1.0`
-- `Build = 5`
-- `Display Name = Capricorn V1.0.5`
+- `Version = 1.1`
+- `Build = 1`
+- `Display Name = Capricorn V1.1.1`
 
 ### 当前限制
 
@@ -149,11 +154,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v1.0.5-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V1.0.5.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v1.1.1-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V1.1.1.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V1.0.5 are available at [docs/releases/v1.0.5.en.md](docs/releases/v1.0.5.en.md).
+English release notes for V1.1.1 are available at [docs/releases/v1.1.1.en.md](docs/releases/v1.1.1.en.md).
 
 Common use cases:
 
@@ -175,14 +180,19 @@ Common use cases:
 - Shows processes with open files on a selected disk, including follow-up diagnostics when unmount or eject actions fail.
 - Adds ordinary disk verification logs and read-only detailed checks using `diskutil` and native macOS filesystem checkers where available.
 - Shows SMART health, temperature, life remaining, power-on hours, media errors, unsafe shutdowns, and provider status.
+- Formats native Kelvin temperatures with a Celsius conversion while keeping already-Celsius values in Celsius.
+- Converts native macOS and `smartctl` NVMe Data Units Read/Written values to TB while retaining the raw unit count.
 - Uses native macOS SMART first, with optional user-installed `smartctl` for deeper ATA/NVMe data.
 - Displays limited-support messages for SD/SDXC readers and network volumes instead of treating missing SMART as a drive failure.
 - Includes Default, Peak/NVMe, RealWorld, Demo, and Custom benchmark profiles.
 - Custom benchmarks support up to 4 test groups with SEQ/RND, block size, Q, T, and mixed-test choices.
 - Each profile can use a synchronous or asynchronous engine; Custom can also run in loop mode.
 - Benchmark file sizes start at 1 GiB and support Random or 0 Fill data patterns.
+- Each green result-row button can run that benchmark item once using the current engine, file size, and data pattern; single-item runs force incremental testing off and keep the write confirmation.
+- An optional small-block efficiency control scales the actual test data for 4 KiB, 16 KiB, and 64 KiB items to 5%, 10%, 20%, 30%, or 50%; it is off by default and starts at 20% when first enabled.
 - Benchmark results can include the live activity samples captured during the run.
 - Live Activity supports 0.1s, 0.2s, 0.5s, and 1s sampling, retained charts, and history saving.
+- After stopping Live Activity, Continue Monitoring appends new samples to the existing chart; Start Monitoring keeps the original clear-and-start-new behavior.
 - Large-file workloads support read, write, mixed read/write, fixed sizes, and a 95% free-space mode.
 - History supports SMART, benchmark, and activity record hiding, hidden-record management, and restore.
 - Exports JSON, CSV, and plain-text reports with serial numbers redacted by default.
@@ -256,9 +266,9 @@ The public Display Name uses a three-part version label composed from Xcode `Ver
 
 Example:
 
-- `Version = 1.0`
-- `Build = 5`
-- `Display Name = Capricorn V1.0.5`
+- `Version = 1.1`
+- `Build = 1`
+- `Display Name = Capricorn V1.1.1`
 
 ### Current Limitations
 
