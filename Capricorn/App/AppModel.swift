@@ -201,6 +201,8 @@ final class AppModel {
     private let notificationCoordinator: NotificationCoordinator
     private var diskActivityTask: Task<Void, Never>?
     private var liveActivityTask: Task<Void, Never>?
+    private var activeLiveActivityMonitoringRunID: UUID?
+    private var liveActivityBaselineRunID: UUID?
     private var liveActivityWorkloadTask: Task<Void, Never>?
     private var liveActivityWorkloadEventTask: Task<Void, Never>?
     private var activeLiveActivityWorkloadRunID: UUID?
@@ -739,6 +741,7 @@ final class AppModel {
         guard liveActivitySession.workloadState == .idle, !diskOperations.isFirstAidBlocking else { return }
         stopLiveActivityMonitoring()
         liveActivitySelectedDriveID = drive.id
+        liveActivitySession.continuationDriveID = nil
         liveActivityStartedAt = Date()
         liveActivityEndedAt = nil
         liveActivitySamples = []
@@ -752,20 +755,36 @@ final class AppModel {
             return
         }
 
-        isLiveActivityMonitoring = true
+        beginLiveActivityMonitoring(drive: drive, interval: interval, skipsInitialSample: false)
+    }
 
-        liveActivityTask = makeDiskActivityTask(for: drive, interval: interval) { [weak self] sample in
-            guard let self else { return }
-            self.currentLiveActivity = sample
-            self.liveActivitySamples = DiskActivitySeries.appending(sample, to: self.liveActivitySamples)
-        }
+    func canContinueLiveActivityMonitoring(for drive: DriveDevice) -> Bool {
+        !isLiveActivityMonitoring
+            && !isLiveActivityWorkloadRunning
+            && !diskOperations.isFirstAidBlocking
+            && !drive.isNetwork
+            && !liveActivitySamples.isEmpty
+            && liveActivitySession.continuationDriveID == drive.id
+    }
+
+    func continueLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {
+        guard canContinueLiveActivityMonitoring(for: drive) else { return }
+        liveActivitySelectedDriveID = drive.id
+        liveActivityEndedAt = nil
+        currentLiveActivity = liveActivitySamples.last
+        liveActivityError = nil
+        beginLiveActivityMonitoring(drive: drive, interval: interval, skipsInitialSample: true)
     }
 
     func stopLiveActivityMonitoring() {
+        let wasMonitoring = isLiveActivityMonitoring
         liveActivityTask?.cancel()
         liveActivityTask = nil
-        if isLiveActivityMonitoring {
+        activeLiveActivityMonitoringRunID = nil
+        liveActivityBaselineRunID = nil
+        if wasMonitoring {
             liveActivityEndedAt = Date()
+            liveActivitySession.continuationDriveID = liveActivitySamples.isEmpty ? nil : liveActivitySelectedDriveID
         }
         isLiveActivityMonitoring = false
     }
@@ -776,6 +795,7 @@ final class AppModel {
         currentLiveActivity = nil
         liveActivityStartedAt = nil
         liveActivityEndedAt = nil
+        liveActivitySession.continuationDriveID = nil
         liveActivityError = nil
         liveActivityWorkloadError = nil
         liveActivityWorkloadProgress = nil
@@ -786,6 +806,7 @@ final class AppModel {
         liveActivitySelectedDriveID = record.driveID
         liveActivityStartedAt = record.startedAt
         liveActivityEndedAt = record.endedAt
+        liveActivitySession.continuationDriveID = nil
         liveActivitySamples = record.samples
         currentLiveActivity = record.samples.last
         liveActivityError = nil
@@ -965,6 +986,7 @@ final class AppModel {
     private func startLiveActivityMonitoringForWorkload(drive: DriveDevice, interval: DiskActivitySampleInterval) {
         stopLiveActivityMonitoring()
         liveActivitySelectedDriveID = drive.id
+        liveActivitySession.continuationDriveID = nil
         liveActivityStartedAt = Date()
         liveActivityEndedAt = nil
         liveActivitySamples = []
@@ -976,10 +998,27 @@ final class AppModel {
             isLiveActivityMonitoring = false
             return
         }
+        beginLiveActivityMonitoring(drive: drive, interval: interval, skipsInitialSample: false)
+    }
+
+    private func beginLiveActivityMonitoring(
+        drive: DriveDevice,
+        interval: DiskActivitySampleInterval,
+        skipsInitialSample: Bool
+    ) {
+        let runID = UUID()
+        activeLiveActivityMonitoringRunID = runID
+        liveActivityBaselineRunID = skipsInitialSample ? runID : nil
         isLiveActivityMonitoring = true
 
         liveActivityTask = makeDiskActivityTask(for: drive, interval: interval) { [weak self] sample in
-            guard let self else { return }
+            guard let self,
+                  self.activeLiveActivityMonitoringRunID == runID,
+                  self.isLiveActivityMonitoring else { return }
+            if self.liveActivityBaselineRunID == runID {
+                self.liveActivityBaselineRunID = nil
+                return
+            }
             self.currentLiveActivity = sample
             self.liveActivitySamples = DiskActivitySeries.appending(sample, to: self.liveActivitySamples)
         }

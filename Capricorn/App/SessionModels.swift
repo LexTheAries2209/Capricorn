@@ -36,6 +36,7 @@ final class LiveActivitySessionModel {
     var currentActivity: DiskActivitySample?
     var isMonitoring = false
     var selectedDriveID: String?
+    var continuationDriveID: String?
     var startedAt: Date?
     var endedAt: Date?
     var error: String?

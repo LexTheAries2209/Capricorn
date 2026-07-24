@@ -112,6 +112,10 @@ final class CapricornTests: XCTestCase {
         }
     }
 
+    func testContinueMonitoringIsLocalized() {
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Continue Monitoring"), "继续监控")
+    }
+
     func testFirstAidContentIsLocalized() {
         let expectedTranslations = [
             "First Aid…": "急救…",

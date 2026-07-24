@@ -148,68 +148,82 @@ struct DiskActivityView: View {
     }
 
     private var controls: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(language.t("Drive"))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Picker("", selection: selectedDriveBinding) {
-                    ForEach(viewModel.drives) { drive in
-                        Text("\(drive.displayName) (\(drive.bsdName))").tag(drive.id)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .bottom, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.t("Drive"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: selectedDriveBinding) {
+                        ForEach(viewModel.drives) { drive in
+                            Text("\(drive.displayName) (\(drive.bsdName))").tag(drive.id)
+                        }
                     }
+                    .labelsHidden()
+                    .frame(width: 280, alignment: .leading)
+                    .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning)
                 }
-                .labelsHidden()
-                .frame(width: 280, alignment: .leading)
-                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning)
-            }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(language.t("Sample Interval"))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Picker("", selection: $selectedIntervalSeconds) {
-                    ForEach(DiskActivitySampleInterval.allCases) { interval in
-                        Text(interval.title).tag(interval.seconds)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.t("Sample Interval"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: $selectedIntervalSeconds) {
+                        ForEach(DiskActivitySampleInterval.allCases) { interval in
+                            Text(interval.title).tag(interval.seconds)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 220, alignment: .leading)
+                    .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning)
                 }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 220, alignment: .leading)
-                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning)
+
+                Spacer(minLength: 0)
             }
 
-            Spacer(minLength: 10)
+            HStack(spacing: 8) {
+                Button {
+                    saveMessage = nil
+                    viewModel.startLiveActivityMonitoring(drive: selectedDrive, interval: selectedInterval)
+                } label: {
+                    Label(language.t("Start Monitoring"), systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.drives.isEmpty || selectedDrive.isNetwork)
 
-            Button {
-                saveMessage = nil
-                viewModel.startLiveActivityMonitoring(drive: selectedDrive, interval: selectedInterval)
-            } label: {
-                Label(language.t("Start Monitoring"), systemImage: "play.fill")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.drives.isEmpty || selectedDrive.isNetwork)
+                Button {
+                    saveMessage = nil
+                    viewModel.continueLiveActivityMonitoring(drive: selectedDrive, interval: selectedInterval)
+                } label: {
+                    Label(language.t("Continue Monitoring"), systemImage: "play.circle")
+                }
+                .disabled(!viewModel.canContinueLiveActivityMonitoring(for: selectedDrive))
 
-            Button {
-                viewModel.stopLiveActivityMonitoring()
-            } label: {
-                Label(language.t("Stop Monitoring"), systemImage: "stop.fill")
-            }
-            .disabled(!viewModel.isLiveActivityMonitoring)
+                Button {
+                    viewModel.stopLiveActivityMonitoring()
+                } label: {
+                    Label(language.t("Stop Monitoring"), systemImage: "stop.fill")
+                }
+                .disabled(!viewModel.isLiveActivityMonitoring)
 
-            Button {
-                saveActivityHistory()
-            } label: {
-                Label(language.t("Save to History"), systemImage: "tray.and.arrow.down")
-            }
-            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.liveActivitySamples.isEmpty)
+                Spacer(minLength: 10)
 
-            Button {
-                saveMessage = nil
-                viewModel.clearLiveActivity()
-            } label: {
-                Label(language.t("Clear Chart"), systemImage: "xmark.circle")
+                Button {
+                    saveActivityHistory()
+                } label: {
+                    Label(language.t("Save to History"), systemImage: "tray.and.arrow.down")
+                }
+                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.liveActivitySamples.isEmpty)
+
+                Button {
+                    saveMessage = nil
+                    viewModel.clearLiveActivity()
+                } label: {
+                    Label(language.t("Clear Chart"), systemImage: "xmark.circle")
+                }
+                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.liveActivitySamples.isEmpty)
             }
-            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.liveActivitySamples.isEmpty)
         }
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))

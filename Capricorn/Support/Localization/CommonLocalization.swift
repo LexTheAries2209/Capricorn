@@ -348,6 +348,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Drive": "磁盘",
         "Sample Interval": "采样间隔",
         "Start Monitoring": "开始监控",
+        "Continue Monitoring": "继续监控",
         "Stop Monitoring": "停止监控",
         "Save to History": "保存到历史",
         "Clear Chart": "清空图表",

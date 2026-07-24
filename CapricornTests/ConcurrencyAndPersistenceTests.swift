@@ -29,6 +29,91 @@ extension CapricornTests {
     }
 
     @MainActor
+    func testLiveActivityContinueAppendsToStoppedChartForSameDrive() async {
+        let drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        let start = Date(timeIntervalSince1970: 1_000)
+        let counters = (0..<12).map { index in
+            DiskActivityCounters(
+                timestamp: start.addingTimeInterval(Double(index) * 0.1),
+                readBytes: UInt64(index * 100_000),
+                writeBytes: UInt64(index * 200_000)
+            )
+        }
+        let model = DITViewModel(
+            diskActivityProvider: FakeDiskActivityProvider(reader: FakeDiskActivityReader(counters: counters))
+        )
+        model.drives = [drive]
+        model.liveActivitySelectedDriveID = drive.id
+
+        model.startLiveActivityMonitoring(drive: drive, interval: .tenth)
+        let initialSamplesArrived = await AsyncTestWaiter.wait {
+            model.liveActivitySamples.count >= 2
+        }
+        XCTAssertTrue(initialSamplesArrived)
+        model.stopLiveActivityMonitoring()
+
+        let stoppedSamples = model.liveActivitySamples
+        let originalStartedAt = model.liveActivityStartedAt
+        XCTAssertFalse(model.isLiveActivityMonitoring)
+        XCTAssertNotNil(model.liveActivityEndedAt)
+        XCTAssertTrue(model.canContinueLiveActivityMonitoring(for: drive))
+
+        var otherDrive = drive
+        otherDrive.bsdName = "disk9"
+        otherDrive.deviceNode = "/dev/disk9"
+        XCTAssertFalse(model.canContinueLiveActivityMonitoring(for: otherDrive))
+
+        model.continueLiveActivityMonitoring(drive: drive, interval: .tenth)
+        XCTAssertTrue(model.isLiveActivityMonitoring)
+        XCTAssertEqual(model.liveActivityStartedAt, originalStartedAt)
+        XCTAssertNil(model.liveActivityEndedAt)
+
+        let continuedSampleArrived = await AsyncTestWaiter.wait {
+            model.liveActivitySamples.count > stoppedSamples.count
+        }
+        XCTAssertTrue(continuedSampleArrived)
+        XCTAssertEqual(Array(model.liveActivitySamples.prefix(stoppedSamples.count)), stoppedSamples)
+        model.stopLiveActivityMonitoring()
+        XCTAssertTrue(model.canContinueLiveActivityMonitoring(for: drive))
+
+        let historyRecord = DiskActivityHistoryRecord(
+            drive: drive,
+            samples: stoppedSamples,
+            sampleInterval: .tenth,
+            startedAt: originalStartedAt ?? start,
+            endedAt: model.liveActivityEndedAt ?? start
+        )
+        model.loadLiveActivityRecord(historyRecord)
+        XCTAssertFalse(model.canContinueLiveActivityMonitoring(for: drive))
+    }
+
+    @MainActor
+    func testLiveActivityStartStillClearsExistingChart() {
+        let drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        let oldStart = Date(timeIntervalSince1970: 500)
+        let model = DITViewModel(
+            diskActivityProvider: FakeDiskActivityProvider(reader: FakeDiskActivityReader(counters: []))
+        )
+        model.drives = [drive]
+        model.liveActivitySelectedDriveID = drive.id
+        model.liveActivityStartedAt = oldStart
+        model.liveActivityEndedAt = oldStart.addingTimeInterval(10)
+        model.liveActivitySamples = [
+            DiskActivitySample(timestamp: oldStart, readMegabytesPerSecond: 10, writeMegabytesPerSecond: 20)
+        ]
+
+        model.startLiveActivityMonitoring(drive: drive, interval: .tenth)
+
+        XCTAssertTrue(model.isLiveActivityMonitoring)
+        XCTAssertTrue(model.liveActivitySamples.isEmpty)
+        XCTAssertNil(model.currentLiveActivity)
+        XCTAssertNotEqual(model.liveActivityStartedAt, oldStart)
+        XCTAssertNil(model.liveActivityEndedAt)
+        XCTAssertFalse(model.canContinueLiveActivityMonitoring(for: drive))
+        model.stopLiveActivityMonitoring()
+    }
+
+    @MainActor
     func testLiveActivityWorkloadAutoStartsMonitoringAndStopsWithoutClearingChart() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
