@@ -37,6 +37,13 @@ struct SmartAttributesView: View {
         return externalDrive || lacksUsableSmart || hasLimitedProvider
     }
 
+    private var externalSmartIsVerified: Bool {
+        ExternalSmartDisclosurePolicy.isVerified(
+            providerStatuses: snapshot?.providerStatuses ?? [],
+            diagnostics: snapshot?.smartctlDiagnostics
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             DrivePageHeaderView(drive: drive, snapshot: snapshot, showsHealthBadge: false)
@@ -101,8 +108,10 @@ struct SmartAttributesView: View {
                 ExternalSupportView(
                     status: externalSupport,
                     diagnostics: snapshot?.smartctlDiagnostics,
+                    isVerified: externalSmartIsVerified,
                     refresh: verifyExternalSupport
                 )
+                    .id(drive.id)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -182,6 +191,20 @@ struct SmartAttributesView: View {
 
     private var normalizedValueHelp: String {
         "Current, worst, and threshold are ATA normalized health values. NVMe and native macOS SMART usually do not provide them."
+    }
+}
+
+enum ExternalSmartDisclosurePolicy {
+    static func isVerified(
+        providerStatuses: [ProviderStatus],
+        diagnostics: SmartctlDiagnostics?
+    ) -> Bool {
+        let smartctlIsAvailable = providerStatuses.contains { status in
+            status.name.caseInsensitiveCompare("smartctl") == .orderedSame
+                && status.state == .available
+        }
+        let hasOpenError = diagnostics?.openError?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        return smartctlIsAvailable && !hasOpenError
     }
 }
 

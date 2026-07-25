@@ -118,6 +118,18 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Continue Monitoring"), "继续监控")
     }
 
+    func testExternalSmartDisclosureDefaultsToCollapsedOnlyAfterSmartctlVerification() {
+        let verified = [ProviderStatus(name: "smartctl", state: .available, message: "Available")]
+        let nativeOnly = [ProviderStatus(name: "Native macOS", state: .available, message: "Available")]
+
+        XCTAssertTrue(ExternalSmartDisclosurePolicy.isVerified(providerStatuses: verified, diagnostics: nil))
+        XCTAssertFalse(ExternalSmartDisclosurePolicy.isVerified(providerStatuses: nativeOnly, diagnostics: nil))
+        XCTAssertFalse(ExternalSmartDisclosurePolicy.isVerified(
+            providerStatuses: verified,
+            diagnostics: SmartctlDiagnostics(openError: "Device open failed")
+        ))
+    }
+
     func testSingleBenchmarkActionsAreLocalized() {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Run Single Test"), "运行单项测试")
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Benchmark in Progress"), "测速正在进行")
