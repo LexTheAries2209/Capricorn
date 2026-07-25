@@ -770,13 +770,88 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(SmartctlParser.commandFailureMessage(result), "The device could not be opened by smartctl.")
     }
 
+    func testSmartctlCommandFailureExplainsMacOSNativeNVMeTransportLimit() {
+        let result = CommandResult(
+            stdout: Data(),
+            stderr: Data("NVMe Self-test cmd failed: NVMe admin command 0x14 is not supported".utf8),
+            terminationStatus: 1
+        )
+
+        XCTAssertEqual(
+            SmartctlParser.commandFailureMessage(result),
+            SmartSelfTestService.macOSNativeNVMeUnavailableMessage
+        )
+    }
+
+    func testSmartSelfTestServiceRejectsMacOSNativeNVMeAfterReadingCapability() async {
+        let path = "IOService:/AppleARMPE/IONVMeController/IONVMeBlockStorageDevice@1"
+        let scan = """
+        {"devices":[{"name":"\(path)","type":"nvme","protocol":"NVMe"}]}
+        """
+        let adminRunner = SequencedCommandRunner(results: [
+            CommandResult(stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8), stderr: Data(), terminationStatus: 0)
+        ])
+        let provider = SmartctlSmartProvider(
+            runner: StaticCommandRunner(stdout: scan),
+            configuredPath: "/usr/bin/true",
+            ioServiceTargetResolver: StaticSmartctlTargetResolver(
+                descriptor: SmartctlTargetDescriptor(path: path, type: "nvme")
+            )
+        )
+        let service = SmartSelfTestService(
+            smartctlProvider: provider,
+            administratorRunner: adminRunner
+        )
+
+        do {
+            _ = try await service.start(kind: .short, drive: Self.fixtureDrive())
+            XCTFail("Expected the macOS native NVMe transport to reject Device Self-test command 0x14")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, SmartSelfTestService.macOSNativeNVMeUnavailableMessage)
+        }
+
+        XCTAssertEqual(adminRunner.calls.count, 1)
+        XCTAssertTrue(adminRunner.calls[0].arguments.contains("-c"))
+        XCTAssertFalse(adminRunner.calls[0].arguments.contains("-t"))
+    }
+
+    func testMacOSNativeNVMeSnapshotKeepsReadOnlySmartctlAccess() async throws {
+        let path = "IOService:/AppleARMPE/IONVMeController/IONVMeBlockStorageDevice@1"
+        let scan = """
+        {"devices":[{"name":"\(path)","type":"nvme","protocol":"NVMe"}]}
+        """
+        let runner = SequencedCommandRunner(results: [
+            CommandResult(stdout: Data(scan.utf8), stderr: Data(), terminationStatus: 0),
+            CommandResult(stdout: Data(Self.smartctlNVMeFixture.utf8), stderr: Data(), terminationStatus: 0)
+        ])
+        let provider = SmartctlSmartProvider(
+            runner: runner,
+            configuredPath: "/usr/bin/true",
+            ioServiceTargetResolver: StaticSmartctlTargetResolver(
+                descriptor: SmartctlTargetDescriptor(path: path, type: "nvme")
+            )
+        )
+
+        let snapshotValue = await provider.snapshot(for: Self.fixtureDrive())
+        let snapshot = try XCTUnwrap(snapshotValue)
+
+        XCTAssertEqual(snapshot.health, .good)
+        XCTAssertEqual(runner.calls.count, 2)
+        XCTAssertEqual(runner.calls[0].arguments, ["--scan-open", "--json"])
+        XCTAssertTrue(runner.calls[1].arguments.contains("-a"))
+        XCTAssertTrue(runner.calls[1].arguments.contains("--json"))
+        XCTAssertTrue(runner.calls[1].arguments.contains("nvme"))
+        XCTAssertTrue(runner.calls[1].arguments.contains(path))
+        XCTAssertFalse(runner.calls[1].arguments.contains("-t"))
+    }
+
     func testSmartSelfTestServiceUsesShortTestCommandAndEstimatedDuration() async throws {
         let adminRunner = SequencedCommandRunner(results: [
-            CommandResult(stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8), stderr: Data(), terminationStatus: 0),
+            CommandResult(stdout: Data(Self.smartctlATACapabilityFixture.utf8), stderr: Data(), terminationStatus: 0),
             CommandResult(stdout: Data("Please wait 2 minutes for test to complete.".utf8), stderr: Data(), terminationStatus: 0)
         ])
         let provider = SmartctlSmartProvider(
-            runner: StaticCommandRunner(stdout: ""),
+            runner: StaticCommandRunner(stdout: #"{"devices":[{"name":"/dev/disk0","type":"sat","protocol":"ATA"}]}"#),
             configuredPath: "/usr/bin/true"
         )
         let service = SmartSelfTestService(
@@ -2940,6 +3015,18 @@ final class CapricornTests: XCTestCase {
       "smartctl": {"exit_status": 0},
       "device": {"type": "nvme", "protocol": "NVMe"},
       "nvme_optional_admin_commands": {"value": 16, "self_test": true}
+    }
+    """
+
+    private static let smartctlATACapabilityFixture = """
+    {
+      "smartctl": {"exit_status": 0},
+      "device": {"type": "sat", "protocol": "ATA"},
+      "ata_smart_data": {
+        "self_test": {
+          "polling_minutes": {"short": 2, "extended": 30}
+        }
+      }
     }
     """
 

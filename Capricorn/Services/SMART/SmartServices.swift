@@ -399,6 +399,8 @@ enum SmartSelfTestServiceError: Error, LocalizedError, Sendable {
 }
 
 final class SmartSelfTestService: @unchecked Sendable {
+    static let macOSNativeNVMeUnavailableMessage = "This NVMe drive reports self-test support, but smartctl on macOS cannot send Device Self-test command 0x14. Identify (0x06) and Get Log Page (0x02) remain available."
+
     private let smartctlProvider: SmartctlSmartProvider
     private let administratorRunner: CommandRunning
 
@@ -441,6 +443,9 @@ final class SmartSelfTestService: @unchecked Sendable {
     func abort(drive: DriveDevice) async throws {
         let executable = try executable(for: drive)
         let target = await targetDescriptor(for: drive)
+        if Self.usesMacOSNativeNVMeTransport(target: target, drive: drive) {
+            throw SmartSelfTestServiceError.unsupported(Self.macOSNativeNVMeUnavailableMessage)
+        }
         let arguments = smartctlProvider.commandArguments(["-X"], target: target, fallback: drive.deviceNode)
         let result = try await administratorRunner.run(executable, arguments: arguments)
         guard result.terminationStatus == 0 else {
@@ -463,6 +468,9 @@ final class SmartSelfTestService: @unchecked Sendable {
         guard capability.shortSupported || capability.longSupported else {
             throw SmartSelfTestServiceError.unsupported(capability.message)
         }
+        if Self.usesMacOSNativeNVMeTransport(target: target, drive: drive) {
+            throw SmartSelfTestServiceError.unsupported(Self.macOSNativeNVMeUnavailableMessage)
+        }
         return capability
     }
 
@@ -481,6 +489,20 @@ final class SmartSelfTestService: @unchecked Sendable {
             throw SmartSelfTestServiceError.unsupported("smartctl was not found. Install smartmontools first.")
         }
         return executable
+    }
+
+    private static func usesMacOSNativeNVMeTransport(
+        target: SmartctlTargetDescriptor?,
+        drive: DriveDevice
+    ) -> Bool {
+#if os(macOS)
+        if target?.type?.caseInsensitiveCompare("nvme") == .orderedSame {
+            return true
+        }
+        return target == nil && drive.protocolName.localizedCaseInsensitiveContains("nvme")
+#else
+        return false
+#endif
     }
 
     private static func combinedMessage(_ result: CommandResult) -> String {
@@ -560,6 +582,9 @@ enum SmartctlParser {
         }
         let output = combinedOutput(result).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !output.isEmpty else { return "SMART self-test command failed." }
+        if output.localizedCaseInsensitiveContains("NVMe admin command 0x14 is not supported") {
+            return SmartSelfTestService.macOSNativeNVMeUnavailableMessage
+        }
         if output.localizedCaseInsensitiveContains("IOCreatePlugInInterfaceForService failed") {
             return "The device could not be opened by smartctl."
         }
