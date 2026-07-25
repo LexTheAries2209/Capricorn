@@ -186,9 +186,11 @@ struct SmartSelfTestPanel: View {
     let snapshot: SmartSnapshot?
     let viewModel: AppModel
     @Environment(\.appLanguage) private var language
+    @AppStorage(AppPreferences.Key.allowSystemDiskSelfTests) private var allowSystemDiskSelfTests = false
     @State private var showsRawOutput = false
 
     private var report: SmartSelfTestReport? { snapshot?.selfTestReport }
+    private var capabilityState: SmartSelfTestCapabilityState { viewModel.smartSelfTestCapability(for: drive) }
     private var isActiveForDrive: Bool { viewModel.smartSelfTestDriveID == drive.id && viewModel.isSmartSelfTestActive }
     private var effectiveState: SmartSelfTestState? {
         if isActiveForDrive {
@@ -200,7 +202,7 @@ struct SmartSelfTestPanel: View {
         return report?.state
     }
     private var controlsUnavailable: Bool {
-        drive.isNetwork || drive.isMemoryCard || !(snapshot?.providerStatuses.contains { $0.name == "smartctl" && ($0.state == .available || $0.state == .limited) } ?? false)
+        drive.isNetwork || drive.isMemoryCard || (drive.isSystemDisk && !allowSystemDiskSelfTests)
     }
 
     var body: some View {
@@ -225,19 +227,39 @@ struct SmartSelfTestPanel: View {
                         .buttonStyle(.bordered)
                         .disabled(viewModel.smartSelfTestSession == .stopping)
                     } else {
-                        HStack(spacing: 8) {
-                            Button {
-                                viewModel.startSmartSelfTest(kind: .short, drive: drive)
-                            } label: {
-                                Label(language.t("Quick Self-Test"), systemImage: "hare")
+                        switch capabilityState {
+                        case let .supported(capability):
+                            HStack(spacing: 8) {
+                                Button {
+                                    viewModel.startSmartSelfTest(kind: .short, drive: drive)
+                                } label: {
+                                    Label(language.t("Quick Self-Test"), systemImage: "hare")
+                                }
+                                .disabled(controlsUnavailable || viewModel.isSmartSelfTestActive || !capability.shortSupported)
+                                Button {
+                                    viewModel.startSmartSelfTest(kind: .long, drive: drive)
+                                } label: {
+                                    Label(language.t("Full Self-Test"), systemImage: "tortoise")
+                                }
+                                .disabled(controlsUnavailable || viewModel.isSmartSelfTestActive || !capability.longSupported)
                             }
-                            .disabled(controlsUnavailable || viewModel.isSmartSelfTestActive)
-                            Button {
-                                viewModel.startSmartSelfTest(kind: .long, drive: drive)
-                            } label: {
-                                Label(language.t("Full Self-Test"), systemImage: "tortoise")
+                        case .checking:
+                            ProgressView()
+                                .controlSize(.small)
+                                .help(language.t("Checking Self-Test Support"))
+                        case .unknown, .unavailable(_):
+                            if drive.isSystemDisk && !allowSystemDiskSelfTests {
+                                SettingsLink {
+                                    Label(language.t("Settings"), systemImage: "gearshape")
+                                }
+                            } else {
+                                Button {
+                                    viewModel.checkSmartSelfTestCapability(for: drive)
+                                } label: {
+                                    Label(language.t("Check Self-Test Support"), systemImage: "checkmark.shield")
+                                }
+                                .disabled(controlsUnavailable || viewModel.isSmartSelfTestActive)
                             }
-                            .disabled(controlsUnavailable || viewModel.isSmartSelfTestActive)
                         }
                     }
                 }
@@ -305,14 +327,32 @@ struct SmartSelfTestPanel: View {
     }
 
     private var stateDescription: String {
+        if drive.isSystemDisk && !allowSystemDiskSelfTests {
+            return language.t("Enable system-disk self-tests in Settings only after confirming that a current backup is available.")
+        }
         if controlsUnavailable {
             return language.t("Self-tests require smartctl support for this drive.")
+        }
+        switch capabilityState {
+        case .unknown:
+            return language.t("Self-test support must be checked before a test can start.")
+        case .checking:
+            return language.t("Checking Self-Test Support")
+        case let .unavailable(message):
+            return language.statusMessage(message)
+        case let .supported(capability):
+            if !capability.shortSupported {
+                return language.t("Quick self-test is not supported by this drive.")
+            }
+            if !capability.longSupported {
+                return language.t("Full self-test is not supported by this drive.")
+            }
         }
         let remaining = report?.currentRemainingPercent ?? sessionRemainingPercent
         if let remaining, effectiveState == .running {
             return "\(language.t("Remaining")): \(remaining)%"
         }
-        return language.t("Device-provided self-test history and controls.")
+        return language.t("Self-test capability confirmed.")
     }
 
     private var stateSymbol: String {

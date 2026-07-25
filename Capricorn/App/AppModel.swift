@@ -25,6 +25,7 @@ final class AppModel {
     var smartSelfTestSession: SmartSelfTestSessionState = .idle
     var smartSelfTestDriveID: String?
     var smartSelfTestMessage: String?
+    var smartSelfTestCapabilities: [String: SmartSelfTestCapabilityState] = [:]
 
     var benchmarkProgress: BenchmarkProgress? {
         get { benchmarkSession.progress }
@@ -200,6 +201,7 @@ final class AppModel {
     private let refreshService: DriveRefreshing
     private let smartSnapshotService: SmartSnapshotService
     private let smartSelfTestService: SmartSelfTestService
+    private let allowsSystemDiskSelfTests: @Sendable () -> Bool
     private let benchmarkRunner: BenchmarkRunning
     private let diskActivityProvider: DiskActivityProviding
     private let liveActivityWorkloadRunner: DiskActivityWorkloadRunning
@@ -226,6 +228,7 @@ final class AppModel {
     private var hasRequestedNotificationAuthorization = false
     private var lastBenchmarkProgressPublishedAt: Date?
     private var smartSelfTestTask: Task<Void, Never>?
+    private var smartSelfTestCapabilityTask: Task<Void, Never>?
     private var smartSelfTestRunID: UUID?
 
     init(
@@ -241,10 +244,14 @@ final class AppModel {
         diskFirstAidService: DiskFirstAidRunning = DiskFirstAidService(),
         externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator(),
-        smartSelfTestService: SmartSelfTestService = SmartSelfTestService()
+        smartSelfTestService: SmartSelfTestService = SmartSelfTestService(),
+        allowsSystemDiskSelfTests: @escaping @Sendable () -> Bool = {
+            UserDefaults.standard.bool(forKey: AppPreferences.Key.allowSystemDiskSelfTests)
+        }
     ) {
         self.smartSnapshotService = smartService
         self.smartSelfTestService = smartSelfTestService
+        self.allowsSystemDiskSelfTests = allowsSystemDiskSelfTests
         self.refreshService = refreshService ?? DriveRefreshService(
             inventoryProvider: inventoryProvider,
             smartService: smartService,
@@ -331,6 +338,9 @@ final class AppModel {
             let loadedDrives = refreshSnapshot.drives
             drives = loadedDrives
             snapshots = refreshSnapshot.snapshots
+            if !isSmartSelfTestActive {
+                smartSelfTestCapabilities = [:]
+            }
             externalSupport = refreshSnapshot.externalSupport
             if selectedDriveID == nil || !loadedDrives.contains(where: { $0.id == selectedDriveID }) {
                 selectedDriveID = loadedDrives.first?.id
@@ -982,9 +992,60 @@ final class AppModel {
         smartSelfTestSession.isActive
     }
 
+    func smartSelfTestCapability(for drive: DriveDevice) -> SmartSelfTestCapabilityState {
+        smartSelfTestCapabilities[drive.id] ?? .unknown
+    }
+
+    func checkSmartSelfTestCapability(for drive: DriveDevice) {
+        guard !isSmartSelfTestActive else { return }
+        guard !drive.isSystemDisk || allowsSystemDiskSelfTests() else {
+            let message = "System-disk self-tests are disabled in Settings."
+            smartSelfTestCapabilities[drive.id] = .unavailable(message)
+            smartSelfTestMessage = message
+            return
+        }
+
+        smartSelfTestCapabilityTask?.cancel()
+        smartSelfTestCapabilities[drive.id] = .checking
+        smartSelfTestMessage = nil
+        let service = smartSelfTestService
+        smartSelfTestCapabilityTask = Task { [weak self] in
+            do {
+                let capability = try await service.capability(for: drive)
+                await MainActor.run { [weak self] in
+                    self?.smartSelfTestCapabilities[drive.id] = .supported(capability)
+                    self?.smartSelfTestCapabilityTask = nil
+                }
+            } catch is CancellationError {
+                await MainActor.run { [weak self] in
+                    self?.smartSelfTestCapabilities[drive.id] = .unknown
+                    self?.smartSelfTestCapabilityTask = nil
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.smartSelfTestCapabilities[drive.id] = .unavailable(error.localizedDescription)
+                    self?.smartSelfTestMessage = error.localizedDescription
+                    self?.smartSelfTestCapabilityTask = nil
+                }
+            }
+        }
+    }
+
     func startSmartSelfTest(kind: SmartSelfTestKind, drive: DriveDevice) {
         guard !isSmartSelfTestActive else { return }
         guard kind == .short || kind == .long else { return }
+        guard !drive.isSystemDisk || allowsSystemDiskSelfTests() else {
+            let message = "System-disk self-tests are disabled in Settings."
+            smartSelfTestSession = .failed(message)
+            smartSelfTestMessage = message
+            return
+        }
+        guard case let .supported(capability) = smartSelfTestCapability(for: drive), capability.supports(kind) else {
+            let message = "Self-test support must be checked before a test can start."
+            smartSelfTestSession = .failed(message)
+            smartSelfTestMessage = message
+            return
+        }
         smartSelfTestTask?.cancel()
         smartSelfTestDriveID = drive.id
         let runID = UUID()
@@ -1045,6 +1106,7 @@ final class AppModel {
                     guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
                     self.smartSelfTestSession = .failed(error.localizedDescription)
                     self.smartSelfTestMessage = error.localizedDescription
+                    self.smartSelfTestCapabilities[drive.id] = .unavailable(error.localizedDescription)
                     self.smartSelfTestTask = nil
                 }
             }

@@ -705,8 +705,76 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(target[Self.fixtureDrive().id]?.type, "sat")
     }
 
+    func testSmartctlTargetDescriptorsMapBSDNameToNVMeIOServicePath() async {
+        let path = "IOService:/AppleARMPE/IONVMeController/IONVMeBlockStorageDevice@1"
+        let scan = """
+        {"devices":[{"name":"\(path)","type":"nvme","protocol":"NVMe"}]}
+        """
+        let provider = SmartctlSmartProvider(
+            runner: StaticCommandRunner(stdout: scan),
+            configuredPath: "/usr/bin/true",
+            ioServiceTargetResolver: StaticSmartctlTargetResolver(
+                descriptor: SmartctlTargetDescriptor(path: path, type: "nvme")
+            )
+        )
+
+        let target = await provider.resolvedTargetDescriptors(for: [Self.fixtureDrive()])
+
+        XCTAssertEqual(target[Self.fixtureDrive().id]?.path, path)
+        XCTAssertEqual(target[Self.fixtureDrive().id]?.type, "nvme")
+    }
+
+    func testSmartctlNVMeCapabilityParserRequiresSelfTestFlag() throws {
+        let supported = CommandResult(
+            stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8),
+            stderr: Data(),
+            terminationStatus: 0
+        )
+        let capability = try XCTUnwrap(SmartctlParser.parseSelfTestCapability(supported))
+
+        XCTAssertTrue(capability.shortSupported)
+        XCTAssertTrue(capability.longSupported)
+    }
+
+    func testSmartctlMessagesOpenFailureIsNotTreatedAsLimitedData() {
+        let fixture = """
+        {
+          "smartctl": {
+            "exit_status": 2,
+            "messages": [{"string": "Smartctl open device failed: IOCreatePlugInInterfaceForService failed", "severity": "error"}]
+          }
+        }
+        """
+        let snapshot = SmartctlParser.parseSnapshot(
+            Data(fixture.utf8),
+            drive: Self.fixtureDrive(),
+            providerName: "smartctl",
+            exitStatus: 2
+        )
+
+        XCTAssertEqual(snapshot.providerStatuses.first?.state, .failed)
+        XCTAssertEqual(snapshot.providerStatuses.first?.message, "The device could not be opened by smartctl.")
+    }
+
+    func testSmartctlCommandFailureExtractsMessageFromAppleScriptErrorJSON() {
+        let stderr = """
+        0:112: execution error: {
+          "smartctl": {
+            "exit_status": 2,
+            "messages": [{"string": "Smartctl open device failed: IOCreatePlugInInterfaceForService failed", "severity": "error"}]
+          }
+        } (1)
+        """
+        let result = CommandResult(stdout: Data(), stderr: Data(stderr.utf8), terminationStatus: 1)
+
+        XCTAssertEqual(SmartctlParser.commandFailureMessage(result), "The device could not be opened by smartctl.")
+    }
+
     func testSmartSelfTestServiceUsesShortTestCommandAndEstimatedDuration() async throws {
-        let adminRunner = RecordingCommandRunner(stdout: "Please wait 2 minutes for test to complete.")
+        let adminRunner = SequencedCommandRunner(results: [
+            CommandResult(stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8), stderr: Data(), terminationStatus: 0),
+            CommandResult(stdout: Data("Please wait 2 minutes for test to complete.".utf8), stderr: Data(), terminationStatus: 0)
+        ])
         let provider = SmartctlSmartProvider(
             runner: StaticCommandRunner(stdout: ""),
             configuredPath: "/usr/bin/true"
@@ -719,9 +787,39 @@ final class CapricornTests: XCTestCase {
         let result = try await service.start(kind: SmartSelfTestKind.short, drive: Self.fixtureDrive())
 
         XCTAssertEqual(result.estimatedDurationSeconds, 120)
-        XCTAssertEqual(adminRunner.calls.count, 1)
-        XCTAssertTrue(adminRunner.calls[0].arguments.contains("-t"))
-        XCTAssertTrue(adminRunner.calls[0].arguments.contains("short"))
+        XCTAssertEqual(adminRunner.calls.count, 2)
+        XCTAssertTrue(adminRunner.calls[0].arguments.contains("-c"))
+        XCTAssertTrue(adminRunner.calls[1].arguments.contains("-t"))
+        XCTAssertTrue(adminRunner.calls[1].arguments.contains("short"))
+    }
+
+    @MainActor
+    func testSystemDiskSelfTestIsBlockedWhenPreferenceIsDisabled() {
+        let adminRunner = SequencedCommandRunner(results: [])
+        let provider = SmartctlSmartProvider(
+            runner: StaticCommandRunner(stdout: ""),
+            configuredPath: "/usr/bin/true"
+        )
+        let service = SmartSelfTestService(
+            smartctlProvider: provider,
+            administratorRunner: adminRunner
+        )
+        let model = AppModel(
+            smartSelfTestService: service,
+            allowsSystemDiskSelfTests: { false }
+        )
+        var drive = Self.fixtureDrive()
+        drive.isSystemDisk = true
+        model.smartSelfTestCapabilities[drive.id] = .supported(SmartSelfTestCapability(
+            shortSupported: true,
+            longSupported: true,
+            message: "Self-test capability confirmed."
+        ))
+
+        model.startSmartSelfTest(kind: .short, drive: drive)
+
+        XCTAssertEqual(model.smartSelfTestSession, .failed("System-disk self-tests are disabled in Settings."))
+        XCTAssertTrue(adminRunner.calls.isEmpty)
     }
 
     func testNativeSmartFormatsKelvinTemperatureAndDataUnitsAsTB() async throws {
@@ -744,7 +842,7 @@ final class CapricornTests: XCTestCase {
         let snapshot = SmartctlParser.parseSnapshot(Self.smartctlOpenErrorFixture.data(using: .utf8)!, drive: Self.fixtureDrive(), providerName: "smartctl", exitStatus: 2)
 
         XCTAssertEqual(snapshot.health, .unavailable)
-        XCTAssertEqual(snapshot.providerStatuses.first?.state, .limited)
+        XCTAssertEqual(snapshot.providerStatuses.first?.state, .failed)
         XCTAssertTrue(snapshot.summary.contains("IOCreatePlugInInterfaceForService failed"))
     }
 
@@ -2837,6 +2935,14 @@ final class CapricornTests: XCTestCase {
     }
     """
 
+    private static let smartctlNVMeCapabilityFixture = """
+    {
+      "smartctl": {"exit_status": 0},
+      "device": {"type": "nvme", "protocol": "NVMe"},
+      "nvme_optional_admin_commands": {"value": 16, "self_test": true}
+    }
+    """
+
     private static let smartctlOpenErrorFixture = """
     {
       "smartctl": {"exit_status": 2},
@@ -2874,6 +2980,45 @@ private struct StaticCommandRunner: CommandRunning {
             stderr: Data(stderr.utf8),
             terminationStatus: terminationStatus
         )
+    }
+}
+
+private struct StaticSmartctlTargetResolver: SmartctlIOServiceTargetResolving {
+    var descriptor: SmartctlTargetDescriptor?
+
+    func targetDescriptor(for drive: DriveDevice) -> SmartctlTargetDescriptor? {
+        descriptor
+    }
+}
+
+private final class SequencedCommandRunner: CommandRunning, @unchecked Sendable {
+    struct Call: Equatable {
+        var executable: String
+        var arguments: [String]
+    }
+
+    private let lock = NSLock()
+    private var recordedCalls: [Call] = []
+    private var results: [CommandResult]
+
+    init(results: [CommandResult]) {
+        self.results = results
+    }
+
+    var calls: [Call] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedCalls
+    }
+
+    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        lock.lock()
+        recordedCalls.append(Call(executable: executable, arguments: arguments))
+        let result = results.isEmpty
+            ? CommandResult(stdout: Data(), stderr: Data(), terminationStatus: 0)
+            : results.removeFirst()
+        lock.unlock()
+        return result
     }
 }
 

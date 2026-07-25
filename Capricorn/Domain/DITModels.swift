@@ -888,6 +888,27 @@ enum SmartSelfTestSessionState: Equatable, Sendable {
     }
 }
 
+struct SmartSelfTestCapability: Equatable, Sendable {
+    var shortSupported: Bool
+    var longSupported: Bool
+    var message: String
+
+    func supports(_ kind: SmartSelfTestKind) -> Bool {
+        switch kind {
+        case .short: shortSupported
+        case .long: longSupported
+        case .vendor, .unknown: false
+        }
+    }
+}
+
+enum SmartSelfTestCapabilityState: Equatable, Sendable {
+    case unknown
+    case checking
+    case supported(SmartSelfTestCapability)
+    case unavailable(String)
+}
+
 struct SmartSelfTestEntry: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var kind: SmartSelfTestKind

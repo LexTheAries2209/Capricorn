@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
+import IOKit
+import IOKit.storage
 import UserNotifications
 
 protocol SmartProviding: Sendable {
@@ -15,6 +17,75 @@ protocol SmartctlTargetProviding: SmartProviding {
 struct SmartctlTargetDescriptor: Hashable, Sendable {
     var path: String
     var type: String?
+}
+
+protocol SmartctlIOServiceTargetResolving: Sendable {
+    func targetDescriptor(for drive: DriveDevice) -> SmartctlTargetDescriptor?
+}
+
+struct IOKitSmartctlTargetResolver: SmartctlIOServiceTargetResolving {
+    func targetDescriptor(for drive: DriveDevice) -> SmartctlTargetDescriptor? {
+        guard let media = copyWholeMedia(bsdName: drive.bsdName) else { return nil }
+        defer { IOObjectRelease(media) }
+        guard let nvme = copyNVMeAncestor(from: media) else { return nil }
+        defer { IOObjectRelease(nvme) }
+
+        var path = [CChar](repeating: 0, count: 4_096)
+        guard IORegistryEntryGetPath(nvme, kIOServicePlane, &path) == KERN_SUCCESS else { return nil }
+        let value = String(cString: path)
+        guard !value.isEmpty else { return nil }
+        return SmartctlTargetDescriptor(
+            path: value.hasPrefix("IOService:") ? value : "IOService:\(value)",
+            type: "nvme"
+        )
+    }
+
+    private func copyWholeMedia(bsdName: String) -> io_registry_entry_t? {
+        guard let matching = IOServiceMatching(kIOMediaClass) else { return nil }
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(iterator) }
+
+        while true {
+            let media = IOIteratorNext(iterator)
+            guard media != 0 else { return nil }
+            let name = copyStringProperty(media, key: kIOBSDNameKey)
+            let whole = copyBoolProperty(media, key: kIOMediaWholeKey)
+            if name == bsdName, whole == true {
+                return media
+            }
+            IOObjectRelease(media)
+        }
+    }
+
+    private func copyNVMeAncestor(from entry: io_registry_entry_t) -> io_registry_entry_t? {
+        var current = entry
+        var ownsCurrent = false
+
+        while true {
+            var parent: io_registry_entry_t = 0
+            guard IORegistryEntryGetParentEntry(current, kIOServicePlane, &parent) == KERN_SUCCESS else {
+                if ownsCurrent { IOObjectRelease(current) }
+                return nil
+            }
+            if ownsCurrent { IOObjectRelease(current) }
+            if IOObjectConformsTo(parent, "IONVMeBlockStorageDevice") != 0 {
+                return parent
+            }
+            current = parent
+            ownsCurrent = true
+        }
+    }
+
+    private func copyStringProperty(_ entry: io_registry_entry_t, key: String) -> String? {
+        IORegistryEntryCreateCFProperty(entry, key as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue() as? String
+    }
+
+    private func copyBoolProperty(_ entry: io_registry_entry_t, key: String) -> Bool? {
+        IORegistryEntryCreateCFProperty(entry, key as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue() as? Bool
+    }
 }
 
 final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
@@ -169,11 +240,18 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     private let runner: CommandRunning
     private let fileManager: FileManager
     private let configuredPath: String?
+    private let ioServiceTargetResolver: any SmartctlIOServiceTargetResolving
 
-    init(runner: CommandRunning = ShellCommandRunner(), fileManager: FileManager = .default, configuredPath: String? = nil) {
+    init(
+        runner: CommandRunning = ShellCommandRunner(),
+        fileManager: FileManager = .default,
+        configuredPath: String? = nil,
+        ioServiceTargetResolver: any SmartctlIOServiceTargetResolving = IOKitSmartctlTargetResolver()
+    ) {
         self.runner = runner
         self.fileManager = fileManager
         self.configuredPath = configuredPath
+        self.ioServiceTargetResolver = ioServiceTargetResolver
     }
 
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot? {
@@ -246,23 +324,7 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     }
 
     func resolvedTargets(for drives: [DriveDevice]) async -> [String: String] {
-        guard !drives.isEmpty,
-              let executable = findExecutable(),
-              let result = try? await runner.run(executable, arguments: ["--scan-open", "--json"]),
-              let devices = SmartctlParser.parseScan(result.stdout) else {
-            return [:]
-        }
-
-        return drives.reduce(into: [:]) { targets, drive in
-            let match = devices.first { scan in
-                scan.name == drive.deviceNode
-                    || scan.name.hasSuffix("/\(drive.bsdName)")
-                    || scan.name.contains(drive.bsdName)
-            }
-            if let match {
-                targets[drive.id] = match.name
-            }
-        }
+        await resolvedTargetDescriptors(for: drives).mapValues(\.path)
     }
 
     func resolvedTargetDescriptors(for drives: [DriveDevice]) async -> [String: SmartctlTargetDescriptor] {
@@ -274,12 +336,22 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         }
 
         return drives.reduce(into: [:]) { targets, drive in
-            guard let match = devices.first(where: {
+            let directMatch = devices.first(where: {
                 $0.name == drive.deviceNode
                     || $0.name.hasSuffix("/\(drive.bsdName)")
                     || $0.name.contains(drive.bsdName)
-            }) else { return }
-            targets[drive.id] = SmartctlTargetDescriptor(path: match.name, type: match.type)
+            })
+            if let directMatch {
+                targets[drive.id] = SmartctlTargetDescriptor(path: directMatch.name, type: directMatch.type)
+                return
+            }
+
+            guard let resolved = ioServiceTargetResolver.targetDescriptor(for: drive) else { return }
+            let scanned = devices.first(where: { $0.name == resolved.path })
+            targets[drive.id] = SmartctlTargetDescriptor(
+                path: scanned?.name ?? resolved.path,
+                type: scanned?.type ?? resolved.type
+            )
         }
     }
 
@@ -342,6 +414,13 @@ final class SmartSelfTestService: @unchecked Sendable {
         guard kind == .short || kind == .long else {
             throw SmartSelfTestServiceError.unsupported("Only short and extended self-tests can be started.")
         }
+        let capability = try await capability(for: drive)
+        guard capability.supports(kind) else {
+            let message = kind == .short
+                ? "Quick self-test is not supported by this drive."
+                : "Full self-test is not supported by this drive."
+            throw SmartSelfTestServiceError.unsupported(message)
+        }
         let executable = try executable(for: drive)
         let target = await targetDescriptor(for: drive)
         let arguments = smartctlProvider.commandArguments(
@@ -351,7 +430,7 @@ final class SmartSelfTestService: @unchecked Sendable {
         )
         let result = try await administratorRunner.run(executable, arguments: arguments)
         guard result.terminationStatus == 0 else {
-            throw SmartSelfTestServiceError.commandFailed(Self.combinedMessage(result))
+            throw SmartSelfTestServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
         }
         return SmartSelfTestStartResult(
             message: Self.combinedMessage(result),
@@ -365,8 +444,26 @@ final class SmartSelfTestService: @unchecked Sendable {
         let arguments = smartctlProvider.commandArguments(["-X"], target: target, fallback: drive.deviceNode)
         let result = try await administratorRunner.run(executable, arguments: arguments)
         guard result.terminationStatus == 0 else {
-            throw SmartSelfTestServiceError.commandFailed(Self.combinedMessage(result))
+            throw SmartSelfTestServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
         }
+    }
+
+    func capability(for drive: DriveDevice) async throws -> SmartSelfTestCapability {
+        let executable = try executable(for: drive)
+        let target = await targetDescriptor(for: drive)
+        let arguments = smartctlProvider.commandArguments(
+            ["-c", "--json"],
+            target: target,
+            fallback: drive.deviceNode
+        )
+        let result = try await administratorRunner.run(executable, arguments: arguments)
+        guard let capability = SmartctlParser.parseSelfTestCapability(result) else {
+            throw SmartSelfTestServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
+        }
+        guard capability.shortSupported || capability.longSupported else {
+            throw SmartSelfTestServiceError.unsupported(capability.message)
+        }
+        return capability
     }
 
     func targetDescriptor(for drive: DriveDevice) async -> SmartctlTargetDescriptor? {
@@ -414,6 +511,61 @@ enum SmartctlParser {
         var openError: String?
     }
 
+    static func parseSelfTestCapability(_ result: CommandResult) -> SmartSelfTestCapability? {
+        guard let root = commandJSONRoot(result) else { return nil }
+        let exitStatus = root.dictionary("smartctl").int("exit_status") ?? Int(result.terminationStatus)
+        guard exitStatus & 0x03 == 0 else { return nil }
+
+        let ataSelfTest = root.dictionary("ata_smart_data").dictionary("self_test")
+        let polling = ataSelfTest.dictionary("polling_minutes")
+        let ataShort = positive(polling.int("short"))
+            ?? ataSelfTest.bool("short_supported")
+            ?? ataSelfTest.bool("supports_short")
+        let ataLong = positive(polling.int("extended"))
+            ?? positive(polling.int("long"))
+            ?? ataSelfTest.bool("extended_supported")
+            ?? ataSelfTest.bool("long_supported")
+            ?? ataSelfTest.bool("supports_extended")
+
+        let nvmeSelfTest = root.dictionary("nvme_optional_admin_commands").bool("self_test")
+        let output = combinedOutput(result).lowercased()
+        if output.contains("self-tests not supported") || output.contains("self-test not supported") {
+            return SmartSelfTestCapability(
+                shortSupported: false,
+                longSupported: false,
+                message: "SMART self-test capability could not be confirmed."
+            )
+        }
+
+        let shortSupported = nvmeSelfTest ?? ataShort ?? false
+        let longSupported = nvmeSelfTest ?? ataLong ?? false
+        return SmartSelfTestCapability(
+            shortSupported: shortSupported,
+            longSupported: longSupported,
+            message: shortSupported || longSupported
+                ? "Self-test capability confirmed."
+                : "SMART self-test capability could not be confirmed."
+        )
+    }
+
+    static func commandFailureMessage(_ result: CommandResult) -> String {
+        if let root = commandJSONRoot(result) {
+            if let openError = root.string("open_error") {
+                return friendlyOpenError(openError)
+            }
+            let messages = smartctlMessages(root)
+            if let message = messages.first(where: { !$0.isEmpty }) {
+                return friendlyOpenError(message)
+            }
+        }
+        let output = combinedOutput(result).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !output.isEmpty else { return "SMART self-test command failed." }
+        if output.localizedCaseInsensitiveContains("IOCreatePlugInInterfaceForService failed") {
+            return "The device could not be opened by smartctl."
+        }
+        return output.count > 500 ? String(output.prefix(500)) + "…" : output
+    }
+
     static func parseScan(_ data: Data) -> [ScanDevice]? {
         guard
             let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -442,13 +594,16 @@ enum SmartctlParser {
             return SmartSnapshot.unavailable(for: drive, reason: "smartctl returned invalid JSON.")
         }
 
-        if let openError = root.string("open_error") {
+        let embeddedExitStatus = root.dictionary("smartctl").int("exit_status") ?? Int(exitStatus)
+        let fatalMessage = root.string("open_error")
+            ?? (embeddedExitStatus & 0x03 != 0 ? smartctlMessages(root).first : nil)
+        if let openError = fatalMessage {
             return SmartSnapshot(
                 driveID: drive.id,
                 capturedAt: Date(),
                 health: .unavailable,
                 summary: openError,
-                providerStatuses: [ProviderStatus(name: providerName, state: .limited, message: openError)],
+                providerStatuses: [ProviderStatus(name: providerName, state: .failed, message: friendlyOpenError(openError))],
                 attributes: [],
                 temperatureCelsius: nil,
                 lifeRemainingPercent: nil,
@@ -479,14 +634,14 @@ enum SmartctlParser {
         let selfTestReport = parseSelfTestReport(root, rawOutput: rawOutput)
         let selfTest = selfTestReport.map(Self.selfTestSummary)
 
-        let providerState: ProviderState = exitStatus == 0 ? .available : .limited
+        let providerState: ProviderState = embeddedExitStatus & 0x03 == 0 ? .available : .failed
         var snapshot = SmartSnapshot(
             driveID: drive.id,
             capturedAt: Date(),
             health: .unavailable,
             summary: "smartctl data parsed.",
             providerStatuses: [
-                ProviderStatus(name: providerName, state: providerState, message: exitStatus == 0 ? "Detailed SMART data available." : "smartctl returned partial data.")
+                ProviderStatus(name: providerName, state: providerState, message: providerState == .available ? "Detailed SMART data available." : "smartctl returned partial data.")
             ],
             attributes: attributes,
             temperatureCelsius: temperature,
@@ -573,8 +728,21 @@ enum SmartctlParser {
         }
 
         if let support = root.dictionary("ata_smart_data")["self_test"] as? [String: Any] {
-            shortSupported = support.bool("short_supported") ?? shortSupported
-            longSupported = support.bool("extended_supported") ?? support.bool("long_supported") ?? longSupported
+            let polling = support.dictionary("polling_minutes")
+            shortSupported = positive(polling.int("short"))
+                ?? support.bool("short_supported")
+                ?? support.bool("supports_short")
+                ?? shortSupported
+            longSupported = positive(polling.int("extended"))
+                ?? positive(polling.int("long"))
+                ?? support.bool("extended_supported")
+                ?? support.bool("long_supported")
+                ?? support.bool("supports_extended")
+                ?? longSupported
+        }
+        if let supported = root.dictionary("nvme_optional_admin_commands").bool("self_test") {
+            shortSupported = supported
+            longSupported = supported
         }
 
         let hasSelfTestPayload = !ataLog.isEmpty || !nvmeLog.isEmpty || !generic.isEmpty
@@ -671,6 +839,39 @@ enum SmartctlParser {
         guard !combined.isEmpty else { return nil }
         let cap = 256 * 1024
         return combined.count > cap ? String(combined.prefix(cap)) + "\n[output truncated]" : combined
+    }
+
+    private static func commandJSONRoot(_ result: CommandResult) -> [String: Any]? {
+        if let root = try? JSONSerialization.jsonObject(with: result.stdout) as? [String: Any] {
+            return root
+        }
+        let output = combinedOutput(result)
+        guard let start = output.firstIndex(of: "{"), let end = output.lastIndex(of: "}"), start <= end else {
+            return nil
+        }
+        return try? JSONSerialization.jsonObject(with: Data(output[start...end].utf8)) as? [String: Any]
+    }
+
+    private static func combinedOutput(_ result: CommandResult) -> String {
+        [result.stdoutString, result.stderrString]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
+    }
+
+    private static func smartctlMessages(_ root: [String: Any]) -> [String] {
+        root.dictionary("smartctl")
+            .arrayOfDictionaries("messages")
+            .compactMap { $0.string("string") ?? $0.string("message") }
+    }
+
+    private static func friendlyOpenError(_ message: String) -> String {
+        message.localizedCaseInsensitiveContains("IOCreatePlugInInterfaceForService failed")
+            ? "The device could not be opened by smartctl."
+            : message
+    }
+
+    private static func positive(_ value: Int?) -> Bool? {
+        value.map { $0 > 0 }
     }
 
     private static func parseSmartStatus(_ root: [String: Any]) -> String? {

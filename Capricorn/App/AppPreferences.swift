@@ -13,6 +13,7 @@ final class AppPreferences {
         static let smartctlPath = "smartctlPath"
         static let includeSerialsInReports = "includeSerialsInReports"
         static let usesPlainTabForFeatureSwitching = "usesPlainTabForFeatureSwitching"
+        static let allowSystemDiskSelfTests = "allowSystemDiskSelfTests"
     }
 
     private let defaults: UserDefaults
@@ -44,6 +45,10 @@ final class AppPreferences {
         didSet { defaults.set(usesPlainTabForFeatureSwitching, forKey: Key.usesPlainTabForFeatureSwitching) }
     }
 
+    var allowSystemDiskSelfTests: Bool {
+        didSet { defaults.set(allowSystemDiskSelfTests, forKey: Key.allowSystemDiskSelfTests) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
@@ -51,6 +56,7 @@ final class AppPreferences {
         smartctlPath = defaults.string(forKey: Key.smartctlPath) ?? ""
         includeSerialsInReports = defaults.bool(forKey: Key.includeSerialsInReports)
         usesPlainTabForFeatureSwitching = defaults.object(forKey: Key.usesPlainTabForFeatureSwitching) as? Bool ?? true
+        allowSystemDiskSelfTests = defaults.bool(forKey: Key.allowSystemDiskSelfTests)
     }
 
     var language: AppLanguage {
@@ -84,6 +90,13 @@ struct CapricornSettingsView: View {
             Toggle(language.t("Show virtual disks"), isOn: $preferences.showVirtualDisks)
             Toggle(language.t("Include serials in reports"), isOn: $preferences.includeSerialsInReports)
             Toggle(language.t("Use Tab to switch feature pages"), isOn: $preferences.usesPlainTabForFeatureSwitching)
+
+            Section(language.t("SMART Self-Tests")) {
+                Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)
+                Text(language.t("System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             LabeledContent("smartctl") {
                 HStack {
