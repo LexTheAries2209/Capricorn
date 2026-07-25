@@ -844,6 +844,78 @@ struct SmartAttribute: Identifiable, Codable, Hashable, Sendable {
     var source: String
 }
 
+enum SmartSelfTestKind: String, Codable, Hashable, Sendable {
+    case short
+    case long
+    case vendor
+    case unknown
+
+    var displayName: String {
+        switch self {
+        case .short: "Short"
+        case .long: "Extended"
+        case .vendor: "Vendor"
+        case .unknown: "Unknown"
+        }
+    }
+}
+
+enum SmartSelfTestState: String, Codable, Hashable, Sendable {
+    case noLog
+    case running
+    case passed
+    case failed
+    case aborted
+    case unknown
+
+    var isTerminal: Bool {
+        self != .running
+    }
+}
+
+enum SmartSelfTestSessionState: Equatable, Sendable {
+    case idle
+    case starting(SmartSelfTestKind)
+    case running(SmartSelfTestKind, remainingPercent: Int?)
+    case stopping
+    case failed(String)
+
+    var isActive: Bool {
+        switch self {
+        case .idle, .failed: false
+        case .starting, .running, .stopping: true
+        }
+    }
+}
+
+struct SmartSelfTestEntry: Identifiable, Codable, Hashable, Sendable {
+    var id: String
+    var kind: SmartSelfTestKind
+    var state: SmartSelfTestState
+    var status: String
+    var remainingPercent: Int?
+    var lifetimeHours: Int?
+    var failingLBA: UInt64?
+    var rawStatus: String?
+}
+
+struct SmartSelfTestReport: Codable, Hashable, Sendable {
+    var state: SmartSelfTestState
+    var currentKind: SmartSelfTestKind?
+    var currentRemainingPercent: Int?
+    var entries: [SmartSelfTestEntry]
+    var shortSupported: Bool?
+    var longSupported: Bool?
+    var rawOutput: String?
+    var capturedAt: Date
+
+    var latestEntry: SmartSelfTestEntry? {
+        entries.max { lhs, rhs in
+            (lhs.lifetimeHours ?? -1) < (rhs.lifetimeHours ?? -1)
+        } ?? entries.first
+    }
+}
+
 struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     var id = UUID()
     var driveID: String
@@ -860,6 +932,7 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     var unsafeShutdowns: Int64?
     var smartStatusRaw: String?
     var selfTestStatus: String?
+    var selfTestReport: SmartSelfTestReport? = nil
 
     static func unavailable(for drive: DriveDevice, reason: String) -> SmartSnapshot {
         SmartSnapshot(
@@ -876,7 +949,8 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
             mediaErrors: nil,
             unsafeShutdowns: nil,
             smartStatusRaw: drive.smartStatusRaw,
-            selfTestStatus: nil
+            selfTestStatus: nil,
+            selfTestReport: nil
         )
     }
 }

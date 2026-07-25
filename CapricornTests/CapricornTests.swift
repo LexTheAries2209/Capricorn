@@ -658,6 +658,72 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(written?.rawValue.contains("TB") == true)
     }
 
+    func testSmartctlATAParserExtractsStructuredSelfTestLogAndRawOutput() {
+        let drive = Self.fixtureDrive()
+        let snapshot = SmartctlParser.parseSnapshot(
+            Self.smartctlATASelfTestFixture.data(using: .utf8)!,
+            drive: drive,
+            providerName: "smartctl",
+            exitStatus: 0,
+            stderr: Data("smartctl diagnostic note".utf8)
+        )
+
+        XCTAssertEqual(snapshot.selfTestReport?.state, .passed)
+        XCTAssertEqual(snapshot.selfTestReport?.entries.count, 2)
+        XCTAssertEqual(snapshot.selfTestReport?.entries.first?.kind, .short)
+        XCTAssertEqual(snapshot.selfTestReport?.entries.first?.lifetimeHours, 123)
+        XCTAssertEqual(snapshot.selfTestReport?.entries.first?.failingLBA, 0)
+        XCTAssertTrue(snapshot.selfTestReport?.rawOutput?.contains("smartctl diagnostic note") == true)
+        XCTAssertTrue(snapshot.selfTestStatus?.contains("Short") == true)
+    }
+
+    func testSmartctlNVMeSelfTestParserHandlesNoCurrentTestAndCompletedResult() {
+        let drive = Self.fixtureDrive()
+        let snapshot = SmartctlParser.parseSnapshot(
+            Self.smartctlNVMeSelfTestFixture.data(using: .utf8)!,
+            drive: drive,
+            providerName: "smartctl",
+            exitStatus: 0
+        )
+
+        XCTAssertEqual(snapshot.selfTestReport?.state, .passed)
+        XCTAssertEqual(snapshot.selfTestReport?.entries.first?.kind, .long)
+        XCTAssertEqual(snapshot.selfTestReport?.entries.first?.lifetimeHours, 456)
+    }
+
+    func testSmartctlTargetDescriptorsPreserveSATDeviceType() async {
+        let scan = """
+        {"devices":[{"name":"/dev/disk0","type":"sat","protocol":"ATA"}]}
+        """
+        let provider = SmartctlSmartProvider(
+            runner: StaticCommandRunner(stdout: scan),
+            configuredPath: "/usr/bin/true"
+        )
+        let target = await provider.resolvedTargetDescriptors(for: [Self.fixtureDrive()])
+
+        XCTAssertEqual(target[Self.fixtureDrive().id]?.path, "/dev/disk0")
+        XCTAssertEqual(target[Self.fixtureDrive().id]?.type, "sat")
+    }
+
+    func testSmartSelfTestServiceUsesShortTestCommandAndEstimatedDuration() async throws {
+        let adminRunner = RecordingCommandRunner(stdout: "Please wait 2 minutes for test to complete.")
+        let provider = SmartctlSmartProvider(
+            runner: StaticCommandRunner(stdout: ""),
+            configuredPath: "/usr/bin/true"
+        )
+        let service = SmartSelfTestService(
+            smartctlProvider: provider,
+            administratorRunner: adminRunner
+        )
+
+        let result = try await service.start(kind: SmartSelfTestKind.short, drive: Self.fixtureDrive())
+
+        XCTAssertEqual(result.estimatedDurationSeconds, 120)
+        XCTAssertEqual(adminRunner.calls.count, 1)
+        XCTAssertTrue(adminRunner.calls[0].arguments.contains("-t"))
+        XCTAssertTrue(adminRunner.calls[0].arguments.contains("short"))
+    }
+
     func testNativeSmartFormatsKelvinTemperatureAndDataUnitsAsTB() async throws {
         var drive = Self.fixtureDrive()
         drive.nativeSmartKeys = [
@@ -2723,6 +2789,50 @@ final class CapricornTests: XCTestCase {
         "unsafe_shutdowns": 35,
         "data_units_read": 180246471,
         "data_units_written": 85848679
+      }
+    }
+    """
+
+    private static let smartctlATASelfTestFixture = """
+    {
+      "smartctl": {"exit_status": 0},
+      "smart_status": {"passed": true},
+      "ata_smart_self_test_log": {
+        "standard": {
+          "revision": 1,
+          "table": [
+            {
+              "type": {"value": 1, "string": "Short offline", "short": "Short"},
+              "status": {"value": 0, "string": "Completed without error", "passed": true},
+              "lifetime_hours": 123,
+              "lba": 0
+            },
+            {
+              "type": {"value": 2, "string": "Extended offline", "short": "Extended"},
+              "status": {"value": 5, "string": "Completed: read failure", "passed": false},
+              "lifetime_hours": 122,
+              "lba": 987654
+            }
+          ]
+        }
+      }
+    }
+    """
+
+    private static let smartctlNVMeSelfTestFixture = """
+    {
+      "smartctl": {"exit_status": 0},
+      "smart_status": {"passed": true},
+      "nvme_self_test_log": {
+        "current_self_test_operation": "No self-test in progress",
+        "self_test_results": [
+          {
+            "test_type": "Extended",
+            "status": "Completed without error",
+            "passed": true,
+            "lifetime_hours": 456
+          }
+        ]
       }
     }
     """

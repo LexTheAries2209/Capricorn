@@ -35,7 +35,7 @@ actor DriveRefreshService: DriveRefreshing {
         defer { CapricornLog.inventorySignposter.endInterval("Drive refresh", interval) }
         CapricornLog.inventory.info("Drive refresh started")
         let drives = try await inventoryProvider.loadDrives(showVirtual: showVirtual)
-        let targets = await smartService.resolvedSmartctlTargets(for: drives)
+        let targets = await smartService.resolvedSmartctlTargetDescriptors(for: drives)
         let snapshots = await loadSnapshots(for: drives, smartctlTargets: targets)
         let snapshot = DriveRefreshSnapshot(
             drives: drives,
@@ -48,7 +48,7 @@ actor DriveRefreshService: DriveRefreshing {
 
     private func loadSnapshots(
         for drives: [DriveDevice],
-        smartctlTargets: [String: String]
+        smartctlTargets: [String: SmartctlTargetDescriptor]
     ) async -> [String: SmartSnapshot] {
         guard !drives.isEmpty else { return [:] }
         let smartService = smartService
@@ -59,7 +59,7 @@ actor DriveRefreshService: DriveRefreshing {
             for _ in 0..<min(maximumConcurrentSnapshots, drives.count) {
                 guard let drive = iterator.next() else { break }
                 group.addTask {
-                    (drive.id, await smartService.snapshot(for: drive, smartctlTarget: smartctlTargets[drive.id]))
+                    (drive.id, await smartService.snapshot(for: drive, smartctlTargetDescriptor: smartctlTargets[drive.id]))
                 }
             }
 
@@ -68,7 +68,7 @@ actor DriveRefreshService: DriveRefreshing {
                 snapshots[driveID] = snapshot
                 if let drive = iterator.next() {
                     group.addTask {
-                        (drive.id, await smartService.snapshot(for: drive, smartctlTarget: smartctlTargets[drive.id]))
+                        (drive.id, await smartService.snapshot(for: drive, smartctlTargetDescriptor: smartctlTargets[drive.id]))
                     }
                 }
             }

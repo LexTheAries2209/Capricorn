@@ -6,6 +6,7 @@ import SwiftUI
 struct SmartAttributesView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
+    let viewModel: AppModel
     let externalSupport: ExternalSupportStatus
     let verifyExternalSupport: () -> Void
     let saveSnapshot: (String?) -> String
@@ -94,6 +95,8 @@ struct SmartAttributesView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
 
+            SmartSelfTestPanel(drive: drive, snapshot: snapshot, viewModel: viewModel)
+
             if showsExternalSupportHelp {
                 ExternalSupportView(status: externalSupport, refresh: verifyExternalSupport)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -175,6 +178,180 @@ struct SmartAttributesView: View {
 
     private var normalizedValueHelp: String {
         "Current, worst, and threshold are ATA normalized health values. NVMe and native macOS SMART usually do not provide them."
+    }
+}
+
+struct SmartSelfTestPanel: View {
+    let drive: DriveDevice
+    let snapshot: SmartSnapshot?
+    let viewModel: AppModel
+    @Environment(\.appLanguage) private var language
+    @State private var showsRawOutput = false
+
+    private var report: SmartSelfTestReport? { snapshot?.selfTestReport }
+    private var isActiveForDrive: Bool { viewModel.smartSelfTestDriveID == drive.id && viewModel.isSmartSelfTestActive }
+    private var effectiveState: SmartSelfTestState? {
+        if isActiveForDrive {
+            switch viewModel.smartSelfTestSession {
+            case .starting, .running, .stopping: return .running
+            case .idle, .failed: break
+            }
+        }
+        return report?.state
+    }
+    private var controlsUnavailable: Bool {
+        drive.isNetwork || drive.isMemoryCard || !(snapshot?.providerStatuses.contains { $0.name == "smartctl" && ($0.state == .available || $0.state == .limited) } ?? false)
+    }
+
+    var body: some View {
+        InfoPanel(title: language.t("Self-Tests"), symbol: "stethoscope") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(stateTitle, systemImage: stateSymbol)
+                            .font(.headline)
+                            .foregroundStyle(stateTint)
+                        Text(stateDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if isActiveForDrive {
+                        Button {
+                            viewModel.abortSmartSelfTest()
+                        } label: {
+                            Label(language.t("Abort Self-Test"), systemImage: "stop.circle")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(viewModel.smartSelfTestSession == .stopping)
+                    } else {
+                        HStack(spacing: 8) {
+                            Button {
+                                viewModel.startSmartSelfTest(kind: .short, drive: drive)
+                            } label: {
+                                Label(language.t("Quick Self-Test"), systemImage: "hare")
+                            }
+                            .disabled(controlsUnavailable || viewModel.isSmartSelfTestActive)
+                            Button {
+                                viewModel.startSmartSelfTest(kind: .long, drive: drive)
+                            } label: {
+                                Label(language.t("Full Self-Test"), systemImage: "tortoise")
+                            }
+                            .disabled(controlsUnavailable || viewModel.isSmartSelfTestActive)
+                        }
+                    }
+                }
+
+                if let message = viewModel.smartSelfTestMessage, isActiveForDrive || viewModel.smartSelfTestSession != .idle {
+                    Text(language.statusMessage(message))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                if let entries = report?.entries, !entries.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(language.t("Recent Self-Test Records"))
+                            .font(.subheadline.bold())
+                        ForEach(entries) { entry in
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: entry.state == .passed ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                                    .foregroundStyle(entry.state == .passed ? .green : .orange)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(kindTitle(entry.kind)) · \(language.statusMessage(entry.status))")
+                                        .font(.subheadline)
+                                    Text(entryDetails(entry))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                }
+
+                if let rawOutput = report?.rawOutput, !rawOutput.isEmpty {
+                    DisclosureGroup(isExpanded: $showsRawOutput) {
+                        ScrollView([.horizontal, .vertical]) {
+                            Text(rawOutput)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                        }
+                        .frame(maxHeight: 220)
+                        .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                    } label: {
+                        Label(language.t("Raw Self-Test Output"), systemImage: "doc.text.magnifyingglass")
+                    }
+                }
+            }
+        }
+    }
+
+    private var stateTitle: String {
+        if let state = effectiveState {
+            switch state {
+            case .noLog: return language.t("No Self-Test Record")
+            case .running: return language.t("Self-Test In Progress")
+            case .passed: return language.t("Self-Test Passed")
+            case .failed: return language.t("Self-Test Failed")
+            case .aborted: return language.t("Self-Test Aborted")
+            case .unknown: return language.t("Self-Test Status Unknown")
+            }
+        }
+        return language.t("No Self-Test Record")
+    }
+
+    private var stateDescription: String {
+        if controlsUnavailable {
+            return language.t("Self-tests require smartctl support for this drive.")
+        }
+        let remaining = report?.currentRemainingPercent ?? sessionRemainingPercent
+        if let remaining, effectiveState == .running {
+            return "\(language.t("Remaining")): \(remaining)%"
+        }
+        return language.t("Device-provided self-test history and controls.")
+    }
+
+    private var stateSymbol: String {
+        switch effectiveState {
+        case .passed: "checkmark.circle.fill"
+        case .failed, .aborted: "exclamationmark.triangle.fill"
+        case .running: "hourglass"
+        default: "questionmark.circle"
+        }
+    }
+
+    private var stateTint: Color {
+        switch effectiveState {
+        case .passed: .green
+        case .failed, .aborted: .orange
+        default: .secondary
+        }
+    }
+
+    private func kindTitle(_ kind: SmartSelfTestKind) -> String {
+        switch kind {
+        case .short: language.t("Quick")
+        case .long: language.t("Full")
+        case .vendor: language.t("Vendor")
+        case .unknown: language.t("Unknown")
+        }
+    }
+
+    private var sessionRemainingPercent: Int? {
+        guard case let .running(_, remainingPercent) = viewModel.smartSelfTestSession else { return nil }
+        return remainingPercent
+    }
+
+    private func entryDetails(_ entry: SmartSelfTestEntry) -> String {
+        var parts: [String] = []
+        if let hours = entry.lifetimeHours { parts.append("\(language.t("Power-On Hours")): \(hours)") }
+        if let lba = entry.failingLBA { parts.append("LBA: \(lba)") }
+        if let remaining = entry.remainingPercent { parts.append("\(language.t("Remaining")): \(remaining)%") }
+        return parts.isEmpty ? language.t("No additional details") : parts.joined(separator: " · ")
     }
 }
 private struct SmartAttributeNameCell: View {

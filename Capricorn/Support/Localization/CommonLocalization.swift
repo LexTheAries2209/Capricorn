@@ -63,6 +63,18 @@ enum AppLanguage: String, CaseIterable, Identifiable {
                 .dropLast()
             return "SMART 数据未显示 \(name) 存在即时风险。"
         }
+        if message.localizedCaseInsensitiveContains("completed without error") {
+            return "完成：无错误"
+        }
+        if message.localizedCaseInsensitiveContains("read failure") {
+            return "完成：读取失败"
+        }
+        if message.localizedCaseInsensitiveContains("in progress") {
+            return "进行中"
+        }
+        if message.localizedCaseInsensitiveContains("aborted") || message.localizedCaseInsensitiveContains("interrupted") {
+            return "已中止"
+        }
         if message.hasPrefix("Preparing ") {
             let operation = String(message.dropFirst("Preparing ".count))
             return "正在准备\(statusMessage(operation))"
@@ -226,7 +238,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Windows CHKDSK Guide": "Windows CHKDSK 指南",
         "Select": "选择",
         "for First Aid": "进行磁盘急救",
-        "Unknown": "未知",
         "Ready for First Aid": "可执行磁盘急救",
         "This filesystem is not supported for native First Aid on macOS.": "macOS 不支持对该文件系统执行原生磁盘急救。",
         "macOS cannot natively repair NTFS. Use Windows CHKDSK or the filesystem vendor's tool.": "macOS 无法原生修复 NTFS。请使用 Windows CHKDSK 或文件系统厂商提供的工具。",
@@ -419,6 +430,36 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Current Status": "当前状态",
         "Self-test log available": "有自检日志，点击展开",
         "No self-test log is available from current providers.": "当前数据来源没有提供自检日志。",
+        "No Self-Test Record": "没有自检记录",
+        "Self-Test In Progress": "自检进行中",
+        "Self-Test Passed": "自检通过",
+        "Self-Test Failed": "自检错误",
+        "Self-Test Aborted": "自检已中止",
+        "Self-Test Status Unknown": "自检状态未知",
+        "Last Self-Test Passed": "上一次自检通过",
+        "Last Self-Test Failed": "上一次自检错误",
+        "Last Self-Test Aborted": "上一次自检已中止",
+        "Last Self-Test Status Unknown": "上一次自检状态未知",
+        "Open SMART to view full self-test details and run tests.": "请前往 SMART 查看完整自检信息并执行测试。",
+        "Quick Self-Test": "快速自检",
+        "Full Self-Test": "完整自检",
+        "Abort Self-Test": "中止自检",
+        "Recent Self-Test Records": "最近自检记录",
+        "Raw Self-Test Output": "原始自检输出",
+        "Self-tests require smartctl support for this drive.": "此磁盘需要 smartctl 支持才能执行自检。",
+        "Device-provided self-test history and controls.": "以下信息和操作来自磁盘提供的自检能力。",
+        "Remaining": "剩余",
+        "No additional details": "没有更多详情",
+        "Quick": "快速",
+        "Full": "完整",
+        "Vendor": "厂商",
+        "Unknown": "未知",
+        "Self-test polling timed out.": "自检状态轮询超时。",
+        "Only short and extended self-tests can be started.": "只能启动快速或完整自检。",
+        "Network drives do not support hardware SMART self-tests.": "网络磁盘不支持硬件 SMART 自检。",
+        "Memory cards do not support hardware SMART self-tests.": "存储卡不支持硬件 SMART 自检。",
+        "smartctl was not found. Install smartmontools first.": "未找到 smartctl，请先安装 smartmontools。",
+        "SMART self-test command failed.": "SMART 自检命令执行失败。",
         "Provider Note": "数据来源说明",
         "Short and long self-test execution requires smartctl support for this drive. This version displays available logs and avoids starting destructive or vendor-specific tests automatically.": "短/长自检需要此磁盘支持 smartctl。当前版本只显示可用日志，避免自动启动破坏性或厂商专用测试。",
         "External Drive SMART": "外接磁盘 SMART",
@@ -480,6 +521,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "smartctl data parsed.": "已解析 smartctl 数据。",
         "Detailed SMART data available.": "可用详细 SMART 数据。",
         "smartctl returned partial data.": "smartctl 返回了部分数据。",
+        "Self-test polling timed out.": "自检状态轮询超时。",
+        "Only short and extended self-tests can be started.": "只能启动快速或完整自检。",
+        "Network drives do not support hardware SMART self-tests.": "网络磁盘不支持硬件 SMART 自检。",
+        "Memory cards do not support hardware SMART self-tests.": "存储卡不支持硬件 SMART 自检。",
+        "smartctl was not found. Install smartmontools first.": "未找到 smartctl，请先安装 smartmontools。",
+        "SMART self-test command failed.": "SMART 自检命令执行失败。",
         "No SMART provider returned data.": "没有 SMART 数据来源返回数据。",
         "No SMART snapshot is available to save.": "没有可保存的 SMART 快照。",
         "SMART snapshot saved to history.": "SMART 快照已保存到历史。",

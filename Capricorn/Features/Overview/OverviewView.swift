@@ -7,7 +7,6 @@ struct OverviewView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
     @Environment(\.appLanguage) private var language
-    @State private var showsSelfTestLog = false
 
     var body: some View {
         ScrollView {
@@ -69,7 +68,7 @@ struct OverviewView: View {
                     }
                 }
 
-                SelfTestSummaryView(snapshot: snapshot, isExpanded: $showsSelfTestLog)
+                SelfTestOverviewSummary(snapshot: snapshot)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -81,5 +80,71 @@ struct OverviewView: View {
             return path
         }
         return "\(path) · \(format)"
+    }
+}
+
+private struct SelfTestOverviewSummary: View {
+    let snapshot: SmartSnapshot?
+    @Environment(\.appLanguage) private var language
+
+    private var report: SmartSelfTestReport? { snapshot?.selfTestReport }
+
+    var body: some View {
+        InfoPanel(title: language.t("Self-Tests"), symbol: "stethoscope") {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: statusSymbol)
+                    .foregroundStyle(statusTint)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(statusTitle)
+                        .font(.headline)
+                    Text(language.t("Open SMART to view full self-test details and run tests."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let latest = report?.latestEntry {
+                        Text("\(kindTitle(latest.kind)) · \(language.statusMessage(latest.status))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private var statusTitle: String {
+        switch report?.state {
+        case .running: language.t("Self-Test In Progress")
+        case .passed: language.t("Last Self-Test Passed")
+        case .failed: language.t("Last Self-Test Failed")
+        case .aborted: language.t("Last Self-Test Aborted")
+        case .unknown: language.t("Last Self-Test Status Unknown")
+        default: language.t("No Self-Test Record")
+        }
+    }
+
+    private var statusSymbol: String {
+        switch report?.state {
+        case .passed: "checkmark.circle.fill"
+        case .failed, .aborted: "exclamationmark.triangle.fill"
+        case .running: "hourglass"
+        default: "questionmark.circle"
+        }
+    }
+
+    private var statusTint: Color {
+        switch report?.state {
+        case .passed: .green
+        case .failed, .aborted: .orange
+        default: .secondary
+        }
+    }
+
+    private func kindTitle(_ kind: SmartSelfTestKind) -> String {
+        switch kind {
+        case .short: language.t("Quick")
+        case .long: language.t("Full")
+        case .vendor: language.t("Vendor")
+        case .unknown: language.t("Unknown")
+        }
     }
 }

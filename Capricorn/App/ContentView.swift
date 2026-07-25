@@ -787,6 +787,7 @@ private struct DriveDetailView: View {
             SmartAttributesView(
                 drive: drive,
                 snapshot: snapshot,
+                viewModel: viewModel,
                 externalSupport: viewModel.externalSupport,
                 verifyExternalSupport: viewModel.refreshExternalSupport,
                 saveSnapshot: saveSnapshot

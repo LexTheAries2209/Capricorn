@@ -12,6 +12,11 @@ protocol SmartctlTargetProviding: SmartProviding {
     func snapshot(for drive: DriveDevice, resolvedTarget: String?) async -> SmartSnapshot?
 }
 
+struct SmartctlTargetDescriptor: Hashable, Sendable {
+    var path: String
+    var type: String?
+}
+
 final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
     let providerName = "Native macOS"
     private let evaluator = DriveHealthEvaluator()
@@ -172,11 +177,18 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     }
 
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot? {
-        let target = await resolvedTargets(for: [drive])[drive.id]
-        return await snapshot(for: drive, resolvedTarget: target)
+        let target = await resolvedTargetDescriptors(for: [drive])[drive.id]
+        return await snapshot(for: drive, resolvedTargetDescriptor: target)
     }
 
     func snapshot(for drive: DriveDevice, resolvedTarget: String?) async -> SmartSnapshot? {
+        await snapshot(
+            for: drive,
+            resolvedTargetDescriptor: resolvedTarget.map { SmartctlTargetDescriptor(path: $0, type: nil) }
+        )
+    }
+
+    func snapshot(for drive: DriveDevice, resolvedTargetDescriptor: SmartctlTargetDescriptor?) async -> SmartSnapshot? {
         if drive.isNetwork {
             return SmartSnapshot.unavailable(for: drive, reason: "Network volumes do not expose local SMART data.")
         }
@@ -203,10 +215,16 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             )
         }
 
-        let target = resolvedTarget ?? drive.deviceNode
+        let target = resolvedTargetDescriptor?.path ?? drive.deviceNode
         do {
-            let result = try await runner.run(executable, arguments: ["-a", "--json", target])
-            return SmartctlParser.parseSnapshot(result.stdout, drive: drive, providerName: providerName, exitStatus: result.terminationStatus)
+            let result = try await runner.run(executable, arguments: commandArguments(["-a", "--json"], target: resolvedTargetDescriptor, fallback: target))
+            return SmartctlParser.parseSnapshot(
+                result.stdout,
+                drive: drive,
+                providerName: providerName,
+                exitStatus: result.terminationStatus,
+                stderr: result.stderr
+            )
         } catch {
             return SmartSnapshot(
                 driveID: drive.id,
@@ -247,6 +265,37 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         }
     }
 
+    func resolvedTargetDescriptors(for drives: [DriveDevice]) async -> [String: SmartctlTargetDescriptor] {
+        guard !drives.isEmpty,
+              let executable = findExecutable(),
+              let result = try? await runner.run(executable, arguments: ["--scan-open", "--json"]),
+              let devices = SmartctlParser.parseScan(result.stdout) else {
+            return [:]
+        }
+
+        return drives.reduce(into: [:]) { targets, drive in
+            guard let match = devices.first(where: {
+                $0.name == drive.deviceNode
+                    || $0.name.hasSuffix("/\(drive.bsdName)")
+                    || $0.name.contains(drive.bsdName)
+            }) else { return }
+            targets[drive.id] = SmartctlTargetDescriptor(path: match.name, type: match.type)
+        }
+    }
+
+    func commandArguments(
+        _ base: [String],
+        target: SmartctlTargetDescriptor?,
+        fallback: String
+    ) -> [String] {
+        var arguments = base
+        if let type = target?.type, !type.isEmpty, type.lowercased() != "auto" {
+            arguments += ["-d", type]
+        }
+        arguments.append(target?.path ?? fallback)
+        return arguments
+    }
+
     func findExecutable() -> String? {
         let candidates = [
             configuredPath,
@@ -259,6 +308,102 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         return candidates.first { fileManager.isExecutableFile(atPath: $0) }
     }
 
+}
+
+struct SmartSelfTestStartResult: Sendable {
+    var message: String
+    var estimatedDurationSeconds: Int?
+}
+
+enum SmartSelfTestServiceError: Error, LocalizedError, Sendable {
+    case unsupported(String)
+    case commandFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .unsupported(message), let .commandFailed(message): message
+        }
+    }
+}
+
+final class SmartSelfTestService: @unchecked Sendable {
+    private let smartctlProvider: SmartctlSmartProvider
+    private let administratorRunner: CommandRunning
+
+    init(
+        smartctlProvider: SmartctlSmartProvider = SmartctlSmartProvider(),
+        administratorRunner: CommandRunning = AdministratorCommandRunner()
+    ) {
+        self.smartctlProvider = smartctlProvider
+        self.administratorRunner = administratorRunner
+    }
+
+    func start(kind: SmartSelfTestKind, drive: DriveDevice) async throws -> SmartSelfTestStartResult {
+        guard kind == .short || kind == .long else {
+            throw SmartSelfTestServiceError.unsupported("Only short and extended self-tests can be started.")
+        }
+        let executable = try executable(for: drive)
+        let target = await targetDescriptor(for: drive)
+        let arguments = smartctlProvider.commandArguments(
+            ["-t", kind == .short ? "short" : "long", "--json"],
+            target: target,
+            fallback: drive.deviceNode
+        )
+        let result = try await administratorRunner.run(executable, arguments: arguments)
+        guard result.terminationStatus == 0 else {
+            throw SmartSelfTestServiceError.commandFailed(Self.combinedMessage(result))
+        }
+        return SmartSelfTestStartResult(
+            message: Self.combinedMessage(result),
+            estimatedDurationSeconds: Self.estimatedDuration(in: Self.combinedMessage(result))
+        )
+    }
+
+    func abort(drive: DriveDevice) async throws {
+        let executable = try executable(for: drive)
+        let target = await targetDescriptor(for: drive)
+        let arguments = smartctlProvider.commandArguments(["-X"], target: target, fallback: drive.deviceNode)
+        let result = try await administratorRunner.run(executable, arguments: arguments)
+        guard result.terminationStatus == 0 else {
+            throw SmartSelfTestServiceError.commandFailed(Self.combinedMessage(result))
+        }
+    }
+
+    func targetDescriptor(for drive: DriveDevice) async -> SmartctlTargetDescriptor? {
+        await smartctlProvider.resolvedTargetDescriptors(for: [drive])[drive.id]
+    }
+
+    private func executable(for drive: DriveDevice) throws -> String {
+        if drive.isNetwork {
+            throw SmartSelfTestServiceError.unsupported("Network drives do not support hardware SMART self-tests.")
+        }
+        if drive.isMemoryCard {
+            throw SmartSelfTestServiceError.unsupported("Memory cards do not support hardware SMART self-tests.")
+        }
+        guard let executable = smartctlProvider.findExecutable() else {
+            throw SmartSelfTestServiceError.unsupported("smartctl was not found. Install smartmontools first.")
+        }
+        return executable
+    }
+
+    private static func combinedMessage(_ result: CommandResult) -> String {
+        let message = [result.stdoutString, result.stderrString]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
+        return message.isEmpty ? "SMART self-test command failed." : message
+    }
+
+    private static func estimatedDuration(in message: String) -> Int? {
+        let pattern = #"(?i)(?:wait|completion|within|in)\D{0,30}(\d+)\s*(?:minutes?|mins?|seconds?|secs?)"#
+        guard let expression = try? NSRegularExpression(pattern: pattern),
+              let match = expression.firstMatch(in: message, range: NSRange(message.startIndex..., in: message)),
+              let valueRange = Range(match.range(at: 1), in: message),
+              let value = Int(message[valueRange]) else {
+            return nil
+        }
+        let lowercased = message.lowercased()
+        return lowercased.contains("second") || lowercased.contains("sec") ? value : value * 60
+    }
 }
 
 enum SmartctlParser {
@@ -286,7 +431,13 @@ enum SmartctlParser {
         }
     }
 
-    static func parseSnapshot(_ data: Data, drive: DriveDevice, providerName: String, exitStatus: Int32) -> SmartSnapshot {
+    static func parseSnapshot(
+        _ data: Data,
+        drive: DriveDevice,
+        providerName: String,
+        exitStatus: Int32,
+        stderr: Data = Data()
+    ) -> SmartSnapshot {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return SmartSnapshot.unavailable(for: drive, reason: "smartctl returned invalid JSON.")
         }
@@ -324,8 +475,9 @@ enum SmartctlParser {
         appendNVMeAttributes(nvme, providerName: providerName, to: &attributes)
         appendATAAttributes(root, providerName: providerName, to: &attributes)
 
-        let selfTest = root.dictionary("ata_smart_self_test_log").string("standard")
-            ?? root.dictionary("self_test").string("status")
+        let rawOutput = cappedRawOutput(stdout: data, stderr: stderr)
+        let selfTestReport = parseSelfTestReport(root, rawOutput: rawOutput)
+        let selfTest = selfTestReport.map(Self.selfTestSummary)
 
         let providerState: ProviderState = exitStatus == 0 ? .available : .limited
         var snapshot = SmartSnapshot(
@@ -344,12 +496,181 @@ enum SmartctlParser {
             mediaErrors: mediaErrors,
             unsafeShutdowns: unsafeShutdowns,
             smartStatusRaw: smartStatusRaw,
-            selfTestStatus: selfTest
+            selfTestStatus: selfTest,
+            selfTestReport: selfTestReport
         )
         let evaluator = DriveHealthEvaluator()
         snapshot.health = evaluator.evaluate(drive: drive, snapshot: snapshot)
         snapshot.summary = evaluator.summary(for: drive, snapshot: snapshot)
         return snapshot
+    }
+
+    private static func parseSelfTestReport(_ root: [String: Any], rawOutput: String?) -> SmartSelfTestReport? {
+        var entries: [SmartSelfTestEntry] = []
+        var currentKind: SmartSelfTestKind?
+        var currentRemaining: Int?
+        var currentState: SmartSelfTestState = .noLog
+        var shortSupported: Bool?
+        var longSupported: Bool?
+
+        let ataLog = root.dictionary("ata_smart_self_test_log")
+        let standard = ataLog["standard"]
+        if let table = standard as? [[String: Any]] {
+            entries = table.enumerated().compactMap { index, item in
+                parseSelfTestEntry(item, index: index)
+            }
+        } else if let standardDictionary = standard as? [String: Any] {
+            if let table = standardDictionary["table"] as? [[String: Any]] {
+                entries = table.enumerated().compactMap { index, item in
+                    parseSelfTestEntry(item, index: index)
+                }
+            }
+            if let standardStatus = selfTestStatusValue(standardDictionary) {
+                currentState = classifySelfTestState(status: standardStatus, passed: standardDictionary.bool("passed"), remaining: standardDictionary.int("remaining_percent"))
+                currentRemaining = standardDictionary.int("remaining_percent")
+            }
+        } else if let standardString = standard as? String {
+            currentState = classifySelfTestState(status: standardString, passed: nil, remaining: nil)
+        }
+
+        let ataCurrent = ataLog.dictionary("current")
+        if !ataCurrent.isEmpty {
+            currentKind = parseSelfTestKind(ataCurrent.valueDescription("type"))
+            currentRemaining = ataCurrent.int("remaining_percent")
+            currentState = classifySelfTestState(
+                status: selfTestStatusValue(ataCurrent) ?? "",
+                passed: ataCurrent.bool("passed"),
+                remaining: currentRemaining
+            )
+        }
+
+        let nvmeLog = root.dictionary("nvme_self_test_log")
+        if !nvmeLog.isEmpty {
+            currentRemaining = nvmeLog.int("current_self_test_completion_percent") ?? currentRemaining
+            let operation = nvmeLog.valueDescription("current_self_test_operation")
+            let resultItems = nvmeLog.arrayOfDictionaries("self_test_results")
+            if resultItems.isEmpty, let result = nvmeLog["self_test_result"] as? [String: Any] {
+                entries = [parseSelfTestEntry(result, index: 0)].compactMap { $0 }
+            } else if !resultItems.isEmpty {
+                entries = resultItems.enumerated().compactMap { index, item in
+                    parseSelfTestEntry(item, index: index)
+                }
+            }
+            currentKind = operation.flatMap(parseSelfTestKind)
+            currentState = classifySelfTestState(
+                status: operation ?? nvmeLog.valueDescription("status") ?? "",
+                passed: nvmeLog.bool("passed"),
+                remaining: currentRemaining
+            )
+        }
+
+        let generic = root.dictionary("self_test")
+        if !generic.isEmpty && entries.isEmpty {
+            let status = selfTestStatusValue(generic) ?? ""
+            currentState = classifySelfTestState(status: status, passed: generic.bool("passed"), remaining: generic.int("remaining_percent"))
+            currentRemaining = generic.int("remaining_percent")
+            currentKind = parseSelfTestKind(generic.valueDescription("type"))
+        }
+
+        if let support = root.dictionary("ata_smart_data")["self_test"] as? [String: Any] {
+            shortSupported = support.bool("short_supported") ?? shortSupported
+            longSupported = support.bool("extended_supported") ?? support.bool("long_supported") ?? longSupported
+        }
+
+        let hasSelfTestPayload = !ataLog.isEmpty || !nvmeLog.isEmpty || !generic.isEmpty
+        if !hasSelfTestPayload {
+            return nil
+        }
+
+        if entries.isEmpty && currentState == .noLog {
+            currentState = .unknown
+        } else if let latest = entries.first, currentState == .noLog {
+            currentState = latest.state
+        }
+
+        return SmartSelfTestReport(
+            state: currentState,
+            currentKind: currentKind,
+            currentRemainingPercent: currentRemaining,
+            entries: entries,
+            shortSupported: shortSupported,
+            longSupported: longSupported,
+            rawOutput: rawOutput,
+            capturedAt: Date()
+        )
+    }
+
+    private static func parseSelfTestEntry(_ item: [String: Any], index: Int) -> SmartSelfTestEntry? {
+        let typeValue = item.valueDescription("type") ?? item.valueDescription("test_type") ?? item.valueDescription("name")
+        let statusValue = selfTestStatusValue(item) ?? item.valueDescription("result") ?? "Unknown"
+        let remaining = item.int("remaining_percent")
+        let passed = item.bool("passed") ?? item.dictionary("status").bool("passed")
+        let state = classifySelfTestState(status: statusValue, passed: passed, remaining: remaining)
+        let kind = parseSelfTestKind(typeValue)
+        let lifetime = item.int("lifetime_hours") ?? item.int("power_on_hours")
+        let lba = item.int64("lba")
+        guard typeValue != nil || item["status"] != nil || item["result"] != nil else { return nil }
+        return SmartSelfTestEntry(
+            id: "\(index)-\(lifetime ?? -1)-\(lba ?? 0)",
+            kind: kind,
+            state: state,
+            status: statusValue,
+            remainingPercent: remaining,
+            lifetimeHours: lifetime,
+            failingLBA: lba.map(UInt64.init),
+            rawStatus: item.valueDescription("status")
+        )
+    }
+
+    private static func selfTestStatusValue(_ item: [String: Any]) -> String? {
+        if let status = item["status"] as? [String: Any] {
+            return status.valueDescription("string") ?? status.valueDescription("name") ?? status.valueDescription("status")
+        }
+        return item.valueDescription("status")
+    }
+
+    private static func parseSelfTestKind(_ value: String?) -> SmartSelfTestKind {
+        let lowercased = (value ?? "").lowercased()
+        if lowercased.contains("short") { return .short }
+        if lowercased.contains("long") || lowercased.contains("extended") { return .long }
+        if lowercased.isEmpty { return .unknown }
+        return .vendor
+    }
+
+    private static func classifySelfTestState(status: String, passed: Bool?, remaining: Int?) -> SmartSelfTestState {
+        if remaining != nil && remaining != 100 { return .running }
+        if passed == true { return .passed }
+        let lowercased = status.lowercased()
+        if lowercased.contains("no self-test") || lowercased.contains("no test") { return .noLog }
+        if lowercased.contains("in progress") || lowercased.contains("running") { return .running }
+        if lowercased.contains("abort") || lowercased.contains("interrupt") { return .aborted }
+        if lowercased.contains("error") || lowercased.contains("fail") { return .failed }
+        if lowercased.contains("completed without error") || lowercased.contains("passed") || lowercased.contains("success") { return .passed }
+        if status.isEmpty { return .noLog }
+        return .unknown
+    }
+
+    private static func selfTestSummary(_ report: SmartSelfTestReport) -> String {
+        if let latest = report.latestEntry {
+            return "\(latest.kind.displayName): \(latest.status)"
+        }
+        switch report.state {
+        case .running: return "Self-test in progress"
+        case .noLog: return "No self-tests have been logged"
+        case .passed: return "Self-test passed"
+        case .failed: return "Self-test failed"
+        case .aborted: return "Self-test aborted"
+        case .unknown: return "Self-test status unknown"
+        }
+    }
+
+    private static func cappedRawOutput(stdout: Data, stderr: Data) -> String? {
+        let stdoutText = String(data: stdout, encoding: .utf8) ?? ""
+        let stderrText = String(data: stderr, encoding: .utf8) ?? ""
+        let combined = [stdoutText, stderrText].filter { !$0.isEmpty }.joined(separator: "\n")
+        guard !combined.isEmpty else { return nil }
+        let cap = 256 * 1024
+        return combined.count > cap ? String(combined.prefix(cap)) + "\n[output truncated]" : combined
     }
 
     private static func parseSmartStatus(_ root: [String: Any]) -> String? {
@@ -449,9 +770,28 @@ final class SmartSnapshotService: @unchecked Sendable {
         return await targetProvider.resolvedTargets(for: drives)
     }
 
+    func resolvedSmartctlTargetDescriptors(for drives: [DriveDevice]) async -> [String: SmartctlTargetDescriptor] {
+        if let targetProvider = smartctlProvider as? SmartctlSmartProvider {
+            return await targetProvider.resolvedTargetDescriptors(for: drives)
+        }
+        guard let targetProvider = smartctlProvider as? any SmartctlTargetProviding else {
+            return [:]
+        }
+        return await targetProvider.resolvedTargets(for: drives).mapValues {
+            SmartctlTargetDescriptor(path: $0, type: nil)
+        }
+    }
+
     func snapshot(for drive: DriveDevice, smartctlTarget: String?) async -> SmartSnapshot {
+        await snapshot(
+            for: drive,
+            smartctlTargetDescriptor: smartctlTarget.map { SmartctlTargetDescriptor(path: $0, type: nil) }
+        )
+    }
+
+    func snapshot(for drive: DriveDevice, smartctlTargetDescriptor: SmartctlTargetDescriptor?) async -> SmartSnapshot {
         async let native = nativeProvider.snapshot(for: drive)
-        async let smartctl = smartctlSnapshot(for: drive, resolvedTarget: smartctlTarget)
+        async let smartctl = smartctlSnapshot(for: drive, resolvedTargetDescriptor: smartctlTargetDescriptor)
 
         let snapshots = await [native, smartctl].compactMap { $0 }
         guard !snapshots.isEmpty else {
@@ -482,9 +822,12 @@ final class SmartSnapshotService: @unchecked Sendable {
         return merged
     }
 
-    private func smartctlSnapshot(for drive: DriveDevice, resolvedTarget: String?) async -> SmartSnapshot? {
+    private func smartctlSnapshot(for drive: DriveDevice, resolvedTargetDescriptor: SmartctlTargetDescriptor?) async -> SmartSnapshot? {
+        if let targetProvider = smartctlProvider as? SmartctlSmartProvider {
+            return await targetProvider.snapshot(for: drive, resolvedTargetDescriptor: resolvedTargetDescriptor)
+        }
         if let targetProvider = smartctlProvider as? any SmartctlTargetProviding {
-            return await targetProvider.snapshot(for: drive, resolvedTarget: resolvedTarget)
+            return await targetProvider.snapshot(for: drive, resolvedTarget: resolvedTargetDescriptor?.path)
         }
         return await smartctlProvider.snapshot(for: drive)
     }

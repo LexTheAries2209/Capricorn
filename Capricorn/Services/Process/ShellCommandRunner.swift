@@ -173,6 +173,30 @@ final class ShellCommandRunner: CommandRunning, @unchecked Sendable {
     }
 }
 
+final class AdministratorCommandRunner: CommandRunning, @unchecked Sendable {
+    private let runner: CommandRunning
+
+    init(runner: CommandRunning = ShellCommandRunner()) {
+        self.runner = runner
+    }
+
+    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        let command = ([executable] + arguments).map(Self.shellQuote).joined(separator: " ")
+        let script = "do shell script \(Self.appleScriptQuote(command)) with administrator privileges"
+        return try await runner.run("/usr/bin/osascript", arguments: ["-e", script])
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private static func appleScriptQuote(_ value: String) -> String {
+        "\"" + value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"") + "\""
+    }
+}
+
 protocol DiskCheckCommandRunning: AnyObject, Sendable {
     func run(
         _ executable: String,

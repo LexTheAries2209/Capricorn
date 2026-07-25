@@ -22,6 +22,9 @@ final class AppModel {
     var externalSupport: ExternalSupportStatus
     var showVirtualDisks = false
     var selectedFeatureTab: DriveFeatureTab = .overview
+    var smartSelfTestSession: SmartSelfTestSessionState = .idle
+    var smartSelfTestDriveID: String?
+    var smartSelfTestMessage: String?
 
     var benchmarkProgress: BenchmarkProgress? {
         get { benchmarkSession.progress }
@@ -195,6 +198,8 @@ final class AppModel {
     nonisolated static let benchmarkActivityInterval = DiskActivitySampleInterval.fifth
 
     private let refreshService: DriveRefreshing
+    private let smartSnapshotService: SmartSnapshotService
+    private let smartSelfTestService: SmartSelfTestService
     private let benchmarkRunner: BenchmarkRunning
     private let diskActivityProvider: DiskActivityProviding
     private let liveActivityWorkloadRunner: DiskActivityWorkloadRunning
@@ -220,6 +225,8 @@ final class AppModel {
     private var activeFirstAidPreparationID: UUID?
     private var hasRequestedNotificationAuthorization = false
     private var lastBenchmarkProgressPublishedAt: Date?
+    private var smartSelfTestTask: Task<Void, Never>?
+    private var smartSelfTestRunID: UUID?
 
     init(
         inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(),
@@ -233,8 +240,11 @@ final class AppModel {
         diskCheckService: DiskCheckService = DiskCheckService(),
         diskFirstAidService: DiskFirstAidRunning = DiskFirstAidService(),
         externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
-        notificationCoordinator: NotificationCoordinator = NotificationCoordinator()
+        notificationCoordinator: NotificationCoordinator = NotificationCoordinator(),
+        smartSelfTestService: SmartSelfTestService = SmartSelfTestService()
     ) {
+        self.smartSnapshotService = smartService
+        self.smartSelfTestService = smartSelfTestService
         self.refreshService = refreshService ?? DriveRefreshService(
             inventoryProvider: inventoryProvider,
             smartService: smartService,
@@ -966,6 +976,119 @@ final class AppModel {
 
     func refreshExternalSupport() {
         externalSupport = externalDetector.detect()
+    }
+
+    var isSmartSelfTestActive: Bool {
+        smartSelfTestSession.isActive
+    }
+
+    func startSmartSelfTest(kind: SmartSelfTestKind, drive: DriveDevice) {
+        guard !isSmartSelfTestActive else { return }
+        guard kind == .short || kind == .long else { return }
+        smartSelfTestTask?.cancel()
+        smartSelfTestDriveID = drive.id
+        let runID = UUID()
+        smartSelfTestRunID = runID
+        smartSelfTestMessage = nil
+        smartSelfTestSession = .starting(kind)
+        let service = smartSelfTestService
+        let snapshotService = smartSnapshotService
+        let baselineReport = snapshots[drive.id]?.selfTestReport
+        smartSelfTestTask = Task { [weak self] in
+            do {
+                let start = try await service.start(kind: kind, drive: drive)
+                await MainActor.run {
+                    guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
+                    self.smartSelfTestSession = .running(kind, remainingPercent: nil)
+                    self.smartSelfTestMessage = start.message.isEmpty ? nil : start.message
+                }
+
+                let target = await service.targetDescriptor(for: drive)
+                let timeout = Date().addingTimeInterval(TimeInterval(max(start.estimatedDurationSeconds ?? 7_200, 7_200)))
+                while !Task.isCancelled && Date() < timeout {
+                    try await Task.sleep(nanoseconds: 5_000_000_000)
+                    let snapshot = await snapshotService.snapshot(for: drive, smartctlTargetDescriptor: target)
+                    await MainActor.run {
+                        guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
+                        self.snapshots[drive.id] = snapshot
+                        let report = snapshot.selfTestReport
+                        if let report, report.state == .running {
+                            self.smartSelfTestSession = .running(kind, remainingPercent: report.currentRemainingPercent)
+                        } else if let report, report.state.isTerminal,
+                                  self.selfTestReportChanged(report, from: baselineReport) {
+                            self.smartSelfTestSession = .idle
+                            self.smartSelfTestMessage = nil
+                        }
+                    }
+                    let finished = await MainActor.run { [weak self] in
+                        guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return true }
+                        return !self.smartSelfTestSession.isActive
+                    }
+                    if finished { break }
+                }
+
+                await MainActor.run {
+                    guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
+                    if self.smartSelfTestSession.isActive {
+                        self.smartSelfTestSession = .failed("Self-test polling timed out.")
+                    }
+                    self.smartSelfTestTask = nil
+                }
+            } catch is CancellationError {
+                await MainActor.run { [weak self] in
+                    guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
+                    self.smartSelfTestSession = .idle
+                    self.smartSelfTestTask = nil
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
+                    self.smartSelfTestSession = .failed(error.localizedDescription)
+                    self.smartSelfTestMessage = error.localizedDescription
+                    self.smartSelfTestTask = nil
+                }
+            }
+        }
+    }
+
+    func abortSmartSelfTest() {
+        guard isSmartSelfTestActive, let driveID = smartSelfTestDriveID,
+              let drive = drives.first(where: { $0.id == driveID }) else { return }
+        smartSelfTestSession = .stopping
+        let service = smartSelfTestService
+        smartSelfTestTask?.cancel()
+        let runID = UUID()
+        smartSelfTestRunID = runID
+        let snapshotService = smartSnapshotService
+        smartSelfTestTask = Task { [weak self] in
+            do {
+                try await service.abort(drive: drive)
+                let target = await service.targetDescriptor(for: drive)
+                let snapshot = await snapshotService.snapshot(for: drive, smartctlTargetDescriptor: target)
+                await MainActor.run { [weak self] in
+                    guard let self, self.smartSelfTestRunID == runID else { return }
+                    self.snapshots[drive.id] = snapshot
+                    self.smartSelfTestSession = .idle
+                    self.smartSelfTestMessage = nil
+                    self.smartSelfTestTask = nil
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self, self.smartSelfTestRunID == runID else { return }
+                    self.smartSelfTestSession = .failed(error.localizedDescription)
+                    self.smartSelfTestMessage = error.localizedDescription
+                    self.smartSelfTestTask = nil
+                }
+            }
+        }
+    }
+
+    private func selfTestReportChanged(_ report: SmartSelfTestReport, from baseline: SmartSelfTestReport?) -> Bool {
+        guard let baseline else { return true }
+        return report.state != baseline.state
+            || report.currentKind != baseline.currentKind
+            || report.currentRemainingPercent != baseline.currentRemainingPercent
+            || report.entries != baseline.entries
     }
 
     private func upsertBenchmarkResult(_ result: BenchmarkResult) {

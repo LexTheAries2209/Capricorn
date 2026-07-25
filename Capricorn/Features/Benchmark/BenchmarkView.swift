@@ -1407,45 +1407,6 @@ private struct CrystalSpeedCell: View {
     }
 }
 
-struct SelfTestSummaryView: View {
-    let snapshot: SmartSnapshot?
-    @Binding var isExpanded: Bool
-    @Environment(\.appLanguage) private var language
-
-    private var selfTestStatus: String? {
-        snapshot?.selfTestStatus?.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var hasSelfTestLog: Bool {
-        guard let selfTestStatus else { return false }
-        return !selfTestStatus.isEmpty
-    }
-
-    var body: some View {
-        InfoPanel(title: language.t("Self-Tests"), symbol: "stethoscope") {
-            if hasSelfTestLog, let selfTestStatus {
-                DisclosureGroup(isExpanded: $isExpanded) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(language.statusMessage(selfTestStatus))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                        Label(language.t("Short and long self-test execution requires smartctl support for this drive. This version displays available logs and avoids starting destructive or vendor-specific tests automatically."), systemImage: "terminal")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.top, 6)
-                } label: {
-                    Label(language.t("Self-test log available"), systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                }
-            } else {
-                Label(language.t("No self-test log is available from current providers."), systemImage: "xmark.circle")
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
 struct ExternalSupportView: View {
     let status: ExternalSupportStatus
     let refresh: () -> Void
