@@ -96,6 +96,8 @@ final class CapricornTests: XCTestCase {
             "Settings": "设置",
             "Include serials in reports": "报告中包含序列号",
             "Use Tab to switch feature pages": "使用 Tab 切换功能页面",
+            "SMART Refresh": "SMART 刷新",
+            "Do not wake sleeping disks for SMART refresh": "SMART 刷新时不唤醒休眠磁盘",
             "Automatic detection": "自动检测",
             "Choose…": "选择…",
             "Automatic": "自动",
@@ -693,7 +695,7 @@ final class CapricornTests: XCTestCase {
 
     func testSmartctlTargetDescriptorsPreserveSATDeviceType() async {
         let scan = """
-        {"devices":[{"name":"/dev/disk0","type":"sat","protocol":"ATA"}]}
+        {"devices":[{"name":"/dev/disk0","type":"sat","protocol":"ATA","open_error":"permission denied"}]}
         """
         let provider = SmartctlSmartProvider(
             runner: StaticCommandRunner(stdout: scan),
@@ -703,6 +705,8 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(target[Self.fixtureDrive().id]?.path, "/dev/disk0")
         XCTAssertEqual(target[Self.fixtureDrive().id]?.type, "sat")
+        XCTAssertEqual(target[Self.fixtureDrive().id]?.protocolName, "ATA")
+        XCTAssertEqual(target[Self.fixtureDrive().id]?.openError, "permission denied")
     }
 
     func testSmartctlTargetDescriptorsMapBSDNameToNVMeIOServicePath() async {
@@ -837,7 +841,7 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(snapshot.health, .good)
         XCTAssertEqual(runner.calls.count, 2)
-        XCTAssertEqual(runner.calls[0].arguments, ["--scan-open", "--json"])
+        XCTAssertEqual(runner.calls[0].arguments, ["--scan", "--json"])
         XCTAssertTrue(runner.calls[1].arguments.contains("-a"))
         XCTAssertTrue(runner.calls[1].arguments.contains("--json"))
         XCTAssertTrue(runner.calls[1].arguments.contains("nvme"))
@@ -911,6 +915,133 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Temperature" })?.rawValue, "312 K (39 °C)")
         XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Data Units Read" })?.rawValue, formatSmartDataUnits(189403549))
         XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Data Units Written" })?.rawValue, formatSmartDataUnits(95506302))
+    }
+
+    func testSmartctl75UnifiedHealthFieldsPopulateCanonicalMetrics() throws {
+        let fixture = """
+        {
+          "smartctl": {
+            "version": [7, 5],
+            "exit_status": 0,
+            "drive_database_version": {"string": "7.5/5706"}
+          },
+          "device": {"name": "/dev/disk8", "type": "sat", "protocol": "ATA"},
+          "smart_status": {"passed": true},
+          "endurance_used": {"current_percent": 7},
+          "spare_available": {"current_percent": 94, "threshold_percent": 10}
+        }
+        """
+
+        let snapshot = SmartctlParser.parseSnapshot(
+            Data(fixture.utf8),
+            drive: Self.fixtureDrive(),
+            providerName: "smartctl",
+            exitStatus: 0
+        )
+
+        XCTAssertEqual(snapshot.enduranceUsedPercent, 7)
+        XCTAssertEqual(snapshot.lifeRemainingPercent, 93)
+        XCTAssertEqual(snapshot.spareAvailablePercent, 94)
+        XCTAssertEqual(snapshot.spareAvailableThresholdPercent, 10)
+        XCTAssertEqual(snapshot.attributes.first(where: { $0.id == "smartctl.endurance_used" })?.rawValue, "7%")
+        XCTAssertEqual(snapshot.attributes.first(where: { $0.id == "smartctl.spare_available" })?.rawValue, "94%")
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.version, "7.5")
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.driveDatabaseVersion, "7.5/5706")
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.targetPath, "/dev/disk8")
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.deviceType, "sat")
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.protocolName, "ATA")
+    }
+
+    func testSmartctlStandbyResultRetainsPreviousSnapshotData() {
+        let fixture = """
+        {
+          "smartctl": {"version": [7, 5], "exit_status": 0},
+          "device": {"name": "/dev/disk8", "type": "sat", "protocol": "ATA"},
+          "power_mode": {"ata_value": 0, "name": "STANDBY"}
+        }
+        """
+        let drive = Self.fixtureDrive()
+        let skipped = SmartctlParser.parseSnapshot(
+            Data(fixture.utf8),
+            drive: drive,
+            providerName: "smartctl",
+            exitStatus: 0
+        )
+        let previous = Self.fixtureSnapshot(for: drive)
+        let retained = skipped.retainingSMARTData(from: previous)
+
+        XCTAssertTrue(skipped.smartReadSkippedToAvoidWake)
+        XCTAssertEqual(skipped.providerStatuses.first?.state, .limited)
+        XCTAssertEqual(skipped.smartctlDiagnostics?.powerMode, "STANDBY")
+        XCTAssertEqual(retained.capturedAt, previous.capturedAt)
+        XCTAssertEqual(retained.temperatureCelsius, previous.temperatureCelsius)
+        XCTAssertEqual(retained.lifeRemainingPercent, previous.lifeRemainingPercent)
+        XCTAssertEqual(retained.smartctlDiagnostics?.powerMode, "STANDBY")
+    }
+
+    func testSmartctlReadArgumentsAvoidWakeForATAOnly() {
+        var ataDrive = Self.fixtureDrive()
+        ataDrive.protocolName = "ATA"
+        ataDrive.isSolidState = false
+        let enabled = SmartctlSmartProvider(
+            configuredPath: "/usr/bin/true",
+            avoidsWakingSleepingDisks: { true }
+        )
+        let disabled = SmartctlSmartProvider(
+            configuredPath: "/usr/bin/true",
+            avoidsWakingSleepingDisks: { false }
+        )
+
+        let ataArguments = enabled.smartReadArguments(
+            for: ataDrive,
+            target: SmartctlTargetDescriptor(path: "/dev/disk8", type: "sat", protocolName: "ATA"),
+            fallback: "/dev/disk8"
+        )
+        let nvmeArguments = enabled.smartReadArguments(
+            for: Self.fixtureDrive(),
+            target: SmartctlTargetDescriptor(path: "/dev/disk0", type: "nvme", protocolName: "NVMe"),
+            fallback: "/dev/disk0"
+        )
+        let disabledArguments = disabled.smartReadArguments(
+            for: ataDrive,
+            target: SmartctlTargetDescriptor(path: "/dev/disk8", type: "sat", protocolName: "ATA"),
+            fallback: "/dev/disk8"
+        )
+
+        XCTAssertEqual(Array(ataArguments.prefix(4)), ["-n", "standby,0", "-a", "--json"])
+        XCTAssertFalse(nvmeArguments.contains("-n"))
+        XCTAssertFalse(disabledArguments.contains("-n"))
+    }
+
+    func testSmartctlSleepProtectionSkipsUnresolvedRotationalDiskWithoutOpeningIt() async throws {
+        var drive = Self.fixtureDrive()
+        drive.protocolName = "SATA"
+        drive.isSolidState = false
+        let runner = SequencedCommandRunner(results: [])
+        let provider = SmartctlSmartProvider(
+            runner: runner,
+            configuredPath: "/usr/bin/true",
+            avoidsWakingSleepingDisks: { true }
+        )
+
+        let snapshotValue = await provider.snapshot(for: drive, resolvedTargetDescriptor: nil)
+        let snapshot = try XCTUnwrap(snapshotValue)
+
+        XCTAssertTrue(snapshot.smartReadSkippedToAvoidWake)
+        XCTAssertEqual(snapshot.providerStatuses.first?.state, .limited)
+        XCTAssertTrue(snapshot.summary.contains("safe device type"))
+        XCTAssertTrue(runner.calls.isEmpty)
+    }
+
+    func testLegacySmartSnapshotJSONDecodesWithoutSmartctl75Fields() throws {
+        let previous = Self.fixtureSnapshot(for: Self.fixtureDrive())
+        let data = try JSONEncoder.dit.encode(previous)
+        let decoded = try JSONDecoder.dit.decode(SmartSnapshot.self, from: data)
+
+        XCTAssertNil(decoded.enduranceUsedPercent)
+        XCTAssertNil(decoded.spareAvailablePercent)
+        XCTAssertNil(decoded.spareAvailableThresholdPercent)
+        XCTAssertNil(decoded.smartctlDiagnostics)
     }
 
     func testSmartctlOpenErrorBecomesUnavailable() {

@@ -14,6 +14,7 @@ final class AppPreferences {
         static let includeSerialsInReports = "includeSerialsInReports"
         static let usesPlainTabForFeatureSwitching = "usesPlainTabForFeatureSwitching"
         static let allowSystemDiskSelfTests = "allowSystemDiskSelfTests"
+        static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
     }
 
     private let defaults: UserDefaults
@@ -49,6 +50,10 @@ final class AppPreferences {
         didSet { defaults.set(allowSystemDiskSelfTests, forKey: Key.allowSystemDiskSelfTests) }
     }
 
+    var avoidWakingSleepingDisks: Bool {
+        didSet { defaults.set(avoidWakingSleepingDisks, forKey: Key.avoidWakingSleepingDisks) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
@@ -57,6 +62,7 @@ final class AppPreferences {
         includeSerialsInReports = defaults.bool(forKey: Key.includeSerialsInReports)
         usesPlainTabForFeatureSwitching = defaults.object(forKey: Key.usesPlainTabForFeatureSwitching) as? Bool ?? true
         allowSystemDiskSelfTests = defaults.bool(forKey: Key.allowSystemDiskSelfTests)
+        avoidWakingSleepingDisks = defaults.object(forKey: Key.avoidWakingSleepingDisks) as? Bool ?? true
     }
 
     var language: AppLanguage {
@@ -94,6 +100,13 @@ struct CapricornSettingsView: View {
             Section(language.t("SMART Self-Tests")) {
                 Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)
                 Text(language.t("System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(language.t("SMART Refresh")) {
+                Toggle(language.t("Do not wake sleeping disks for SMART refresh"), isOn: $preferences.avoidWakingSleepingDisks)
+                Text(language.t("When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up. Active disks continue to refresh normally."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

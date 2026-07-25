@@ -17,6 +17,8 @@ protocol SmartctlTargetProviding: SmartProviding {
 struct SmartctlTargetDescriptor: Hashable, Sendable {
     var path: String
     var type: String?
+    var protocolName: String? = nil
+    var openError: String? = nil
 }
 
 protocol SmartctlIOServiceTargetResolving: Sendable {
@@ -108,6 +110,8 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
         let keys = drive.nativeSmartKeys
         let temperatureC = nativeTemperature(from: keys["TEMPERATURE"])
         let percentageUsed = intValue(keys["PERCENTAGE_USED"])
+        let spareAvailable = intValue(keys["AVAILABLE_SPARE"])
+        let spareThreshold = intValue(keys["AVAILABLE_SPARE_THRESHOLD"])
         let lifeRemaining = percentageUsed.map { max(0, min(100, 100 - $0)) }
         let mediaErrors = combinedValue(prefix: "MEDIA_ERRORS", keys: keys)
         let unsafeShutdowns = combinedValue(prefix: "UNSAFE_SHUTDOWNS", keys: keys)
@@ -146,7 +150,10 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
             mediaErrors: mediaErrors,
             unsafeShutdowns: unsafeShutdowns,
             smartStatusRaw: drive.smartStatusRaw,
-            selfTestStatus: nil
+            selfTestStatus: nil,
+            enduranceUsedPercent: percentageUsed,
+            spareAvailablePercent: spareAvailable,
+            spareAvailableThresholdPercent: spareThreshold
         )
         snapshot.health = evaluator.evaluate(drive: drive, snapshot: snapshot)
         snapshot.summary = evaluator.summary(for: drive, snapshot: snapshot)
@@ -241,17 +248,22 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     private let fileManager: FileManager
     private let configuredPath: String?
     private let ioServiceTargetResolver: any SmartctlIOServiceTargetResolving
+    private let avoidsWakingSleepingDisks: @Sendable () -> Bool
 
     init(
         runner: CommandRunning = ShellCommandRunner(),
         fileManager: FileManager = .default,
         configuredPath: String? = nil,
-        ioServiceTargetResolver: any SmartctlIOServiceTargetResolving = IOKitSmartctlTargetResolver()
+        ioServiceTargetResolver: any SmartctlIOServiceTargetResolving = IOKitSmartctlTargetResolver(),
+        avoidsWakingSleepingDisks: @escaping @Sendable () -> Bool = {
+            UserDefaults.standard.object(forKey: AppPreferences.Key.avoidWakingSleepingDisks) as? Bool ?? true
+        }
     ) {
         self.runner = runner
         self.fileManager = fileManager
         self.configuredPath = configuredPath
         self.ioServiceTargetResolver = ioServiceTargetResolver
+        self.avoidsWakingSleepingDisks = avoidsWakingSleepingDisks
     }
 
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot? {
@@ -294,17 +306,42 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         }
 
         let target = resolvedTargetDescriptor?.path ?? drive.deviceNode
+        if avoidsWakingSleepingDisks(),
+           !drive.isSolidState,
+           resolvedTargetDescriptor?.type?.isEmpty != false {
+            var snapshot = SmartSnapshot.unavailable(
+                for: drive,
+                reason: "SMART refresh was skipped because smartctl could not determine a safe device type without opening the disk."
+            )
+            snapshot.providerStatuses = [
+                ProviderStatus(
+                    name: providerName,
+                    state: .limited,
+                    message: "Disable sleep protection to allow smartctl device-type autodetection for this disk."
+                )
+            ]
+            snapshot.smartctlDiagnostics = SmartctlDiagnostics(
+                targetPath: target,
+                protocolName: resolvedTargetDescriptor?.protocolName ?? drive.protocolName,
+                readSkippedToAvoidWake: true
+            )
+            return snapshot
+        }
         do {
-            let result = try await runner.run(executable, arguments: commandArguments(["-a", "--json"], target: resolvedTargetDescriptor, fallback: target))
+            let result = try await runner.run(
+                executable,
+                arguments: smartReadArguments(for: drive, target: resolvedTargetDescriptor, fallback: target)
+            )
             return SmartctlParser.parseSnapshot(
                 result.stdout,
                 drive: drive,
                 providerName: providerName,
                 exitStatus: result.terminationStatus,
-                stderr: result.stderr
+                stderr: result.stderr,
+                targetDescriptor: resolvedTargetDescriptor
             )
         } catch {
-            return SmartSnapshot(
+            var snapshot = SmartSnapshot(
                 driveID: drive.id,
                 capturedAt: Date(),
                 health: .unavailable,
@@ -320,6 +357,14 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
                 smartStatusRaw: nil,
                 selfTestStatus: nil
             )
+            snapshot.smartctlDiagnostics = SmartctlDiagnostics(
+                targetPath: target,
+                deviceType: resolvedTargetDescriptor?.type,
+                protocolName: resolvedTargetDescriptor?.protocolName ?? drive.protocolName,
+                readSkippedToAvoidWake: false,
+                openError: error.localizedDescription
+            )
+            return snapshot
         }
     }
 
@@ -330,7 +375,10 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     func resolvedTargetDescriptors(for drives: [DriveDevice]) async -> [String: SmartctlTargetDescriptor] {
         guard !drives.isEmpty,
               let executable = findExecutable(),
-              let result = try? await runner.run(executable, arguments: ["--scan-open", "--json"]),
+              let result = try? await runner.run(
+                  executable,
+                  arguments: [avoidsWakingSleepingDisks() ? "--scan" : "--scan-open", "--json"]
+              ),
               let devices = SmartctlParser.parseScan(result.stdout) else {
             return [:]
         }
@@ -342,7 +390,12 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
                     || $0.name.contains(drive.bsdName)
             })
             if let directMatch {
-                targets[drive.id] = SmartctlTargetDescriptor(path: directMatch.name, type: directMatch.type)
+                targets[drive.id] = SmartctlTargetDescriptor(
+                    path: directMatch.name,
+                    type: directMatch.type,
+                    protocolName: directMatch.protocolName,
+                    openError: directMatch.openError
+                )
                 return
             }
 
@@ -350,9 +403,32 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             let scanned = devices.first(where: { $0.name == resolved.path })
             targets[drive.id] = SmartctlTargetDescriptor(
                 path: scanned?.name ?? resolved.path,
-                type: scanned?.type ?? resolved.type
+                type: scanned?.type ?? resolved.type,
+                protocolName: scanned?.protocolName ?? resolved.protocolName ?? drive.protocolName,
+                openError: scanned?.openError ?? resolved.openError
             )
         }
+    }
+
+    func smartReadArguments(
+        for drive: DriveDevice,
+        target: SmartctlTargetDescriptor?,
+        fallback: String
+    ) -> [String] {
+        var arguments = ["-a", "--json"]
+        if avoidsWakingSleepingDisks(), Self.supportsPowerModeCheck(target: target, drive: drive) {
+            arguments.insert(contentsOf: ["-n", "standby,0"], at: 0)
+        }
+        return commandArguments(arguments, target: target, fallback: fallback)
+    }
+
+    private static func supportsPowerModeCheck(target: SmartctlTargetDescriptor?, drive: DriveDevice) -> Bool {
+        let type = target?.type?.lowercased() ?? ""
+        guard !type.isEmpty else { return false }
+        if type == "nvme" || (type.hasPrefix("snt") && !type.hasSuffix("/sat")) {
+            return false
+        }
+        return !drive.protocolName.localizedCaseInsensitiveContains("nvme") || type.hasSuffix("/sat")
     }
 
     func commandArguments(
@@ -613,17 +689,38 @@ enum SmartctlParser {
         drive: DriveDevice,
         providerName: String,
         exitStatus: Int32,
-        stderr: Data = Data()
+        stderr: Data = Data(),
+        targetDescriptor: SmartctlTargetDescriptor? = nil
     ) -> SmartSnapshot {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return SmartSnapshot.unavailable(for: drive, reason: "smartctl returned invalid JSON.")
+            var snapshot = SmartSnapshot.unavailable(for: drive, reason: "smartctl returned invalid JSON.")
+            snapshot.smartctlDiagnostics = diagnostics(root: nil, target: targetDescriptor, readSkipped: false)
+            return snapshot
         }
 
         let embeddedExitStatus = root.dictionary("smartctl").int("exit_status") ?? Int(exitStatus)
+        let powerMode = root.dictionary("power_mode").string("name")
+        let readSkipped = smartReadWasSkipped(root: root, powerMode: powerMode)
+        let smartctlDiagnostics = diagnostics(root: root, target: targetDescriptor, readSkipped: readSkipped)
+        if readSkipped {
+            var snapshot = SmartSnapshot.unavailable(
+                for: drive,
+                reason: "SMART refresh was skipped because the drive is in standby or sleep mode."
+            )
+            snapshot.providerStatuses = [
+                ProviderStatus(
+                    name: providerName,
+                    state: .limited,
+                    message: "The previous SMART data was retained to avoid waking the sleeping drive."
+                )
+            ]
+            snapshot.smartctlDiagnostics = smartctlDiagnostics
+            return snapshot
+        }
         let fatalMessage = root.string("open_error")
             ?? (embeddedExitStatus & 0x03 != 0 ? smartctlMessages(root).first : nil)
         if let openError = fatalMessage {
-            return SmartSnapshot(
+            var snapshot = SmartSnapshot(
                 driveID: drive.id,
                 capturedAt: Date(),
                 health: .unavailable,
@@ -639,6 +736,8 @@ enum SmartctlParser {
                 smartStatusRaw: nil,
                 selfTestStatus: nil
             )
+            snapshot.smartctlDiagnostics = smartctlDiagnostics
+            return snapshot
         }
 
         var attributes: [SmartAttribute] = []
@@ -650,10 +749,23 @@ enum SmartctlParser {
         let nvme = root.dictionary("nvme_smart_health_information_log")
         let mediaErrors = nvme.int64("media_errors")
         let unsafeShutdowns = nvme.int64("unsafe_shutdowns")
-        let lifeRemaining = nvme.int("percentage_used").map { max(0, min(100, 100 - $0)) }
+        let enduranceUsed = root.dictionary("endurance_used").int("current_percent")
+            ?? nvme.int("percentage_used")
+        let spareAvailable = root.dictionary("spare_available").int("current_percent")
+            ?? nvme.int("available_spare")
+        let spareThreshold = root.dictionary("spare_available").int("threshold_percent")
+            ?? nvme.int("available_spare_threshold")
+        let lifeRemaining = enduranceUsed.map { max(0, min(100, 100 - $0)) }
 
         appendNVMeAttributes(nvme, providerName: providerName, to: &attributes)
         appendATAAttributes(root, providerName: providerName, to: &attributes)
+        appendUnifiedHealthAttributes(
+            enduranceUsed: enduranceUsed,
+            spareAvailable: spareAvailable,
+            spareThreshold: spareThreshold,
+            providerName: providerName,
+            to: &attributes
+        )
 
         let rawOutput = cappedRawOutput(stdout: data, stderr: stderr)
         let selfTestReport = parseSelfTestReport(root, rawOutput: rawOutput)
@@ -677,12 +789,53 @@ enum SmartctlParser {
             unsafeShutdowns: unsafeShutdowns,
             smartStatusRaw: smartStatusRaw,
             selfTestStatus: selfTest,
-            selfTestReport: selfTestReport
+            selfTestReport: selfTestReport,
+            enduranceUsedPercent: enduranceUsed,
+            spareAvailablePercent: spareAvailable,
+            spareAvailableThresholdPercent: spareThreshold,
+            smartctlDiagnostics: smartctlDiagnostics
         )
         let evaluator = DriveHealthEvaluator()
         snapshot.health = evaluator.evaluate(drive: drive, snapshot: snapshot)
         snapshot.summary = evaluator.summary(for: drive, snapshot: snapshot)
         return snapshot
+    }
+
+    private static func diagnostics(
+        root: [String: Any]?,
+        target: SmartctlTargetDescriptor?,
+        readSkipped: Bool
+    ) -> SmartctlDiagnostics {
+        let smartctl = root?.dictionary("smartctl") ?? [:]
+        let device = root?.dictionary("device") ?? [:]
+        let versionValues = (smartctl["version"] as? [Any])?.compactMap { value -> String? in
+            if let number = value as? NSNumber { return number.stringValue }
+            if let string = value as? String { return string }
+            return nil
+        }
+        let version = versionValues.flatMap { $0.isEmpty ? nil : $0.joined(separator: ".") }
+        let databaseVersion = smartctl.dictionary("drive_database_version").string("string")
+        let openError = root?.string("open_error") ?? target?.openError
+        return SmartctlDiagnostics(
+            version: version,
+            driveDatabaseVersion: databaseVersion,
+            targetPath: device.string("name") ?? target?.path,
+            deviceType: device.string("type") ?? target?.type,
+            protocolName: device.string("protocol") ?? target?.protocolName,
+            powerMode: root?.dictionary("power_mode").string("name"),
+            readSkippedToAvoidWake: readSkipped,
+            openError: openError
+        )
+    }
+
+    private static func smartReadWasSkipped(root: [String: Any], powerMode: String?) -> Bool {
+        guard let powerMode = powerMode?.uppercased(),
+              powerMode == "SLEEP" || powerMode.hasPrefix("STANDBY") else {
+            return false
+        }
+        return root["smart_status"] == nil
+            && root["ata_smart_attributes"] == nil
+            && root["nvme_smart_health_information_log"] == nil
     }
 
     private static func parseSelfTestReport(_ root: [String: Any], rawOutput: String?) -> SmartSelfTestReport? {
@@ -942,6 +1095,65 @@ enum SmartctlParser {
         }
     }
 
+    private static func appendUnifiedHealthAttributes(
+        enduranceUsed: Int?,
+        spareAvailable: Int?,
+        spareThreshold: Int?,
+        providerName: String,
+        to attributes: inout [SmartAttribute]
+    ) {
+        if let enduranceUsed,
+           !attributes.contains(where: { $0.name == "Percentage Used" }) {
+            let remaining = max(0, min(100, 100 - enduranceUsed))
+            attributes.append(SmartAttribute(
+                id: "smartctl.endurance_used",
+                name: "Percentage Used",
+                rawValue: "\(enduranceUsed)%",
+                current: nil,
+                worst: nil,
+                threshold: nil,
+                status: remaining <= 10 ? .preFail : (remaining <= 20 ? .warning : .good),
+                source: providerName
+            ))
+        }
+
+        if let spareAvailable,
+           !attributes.contains(where: { $0.name == "Available Spare" }) {
+            let status: HealthStatus
+            if let spareThreshold, spareAvailable < spareThreshold {
+                status = .preFail
+            } else if let spareThreshold, spareAvailable == spareThreshold {
+                status = .warning
+            } else {
+                status = .good
+            }
+            attributes.append(SmartAttribute(
+                id: "smartctl.spare_available",
+                name: "Available Spare",
+                rawValue: "\(spareAvailable)%",
+                current: nil,
+                worst: nil,
+                threshold: nil,
+                status: status,
+                source: providerName
+            ))
+        }
+
+        if let spareThreshold,
+           !attributes.contains(where: { $0.name == "Available Spare Threshold" }) {
+            attributes.append(SmartAttribute(
+                id: "smartctl.spare_available_threshold",
+                name: "Available Spare Threshold",
+                rawValue: "\(spareThreshold)%",
+                current: nil,
+                worst: nil,
+                threshold: nil,
+                status: .good,
+                source: providerName
+            ))
+        }
+    }
+
     private static func appendATAAttributes(_ root: [String: Any], providerName: String, to attributes: inout [SmartAttribute]) {
         let table = root.dictionary("ata_smart_attributes").arrayOfDictionaries("table")
         for item in table {
@@ -1041,6 +1253,11 @@ final class SmartSnapshotService: @unchecked Sendable {
             merged.unsafeShutdowns = snapshot.unsafeShutdowns ?? merged.unsafeShutdowns
             merged.smartStatusRaw = snapshot.smartStatusRaw ?? merged.smartStatusRaw
             merged.selfTestStatus = snapshot.selfTestStatus ?? merged.selfTestStatus
+            merged.selfTestReport = snapshot.selfTestReport ?? merged.selfTestReport
+            merged.enduranceUsedPercent = snapshot.enduranceUsedPercent ?? merged.enduranceUsedPercent
+            merged.spareAvailablePercent = snapshot.spareAvailablePercent ?? merged.spareAvailablePercent
+            merged.spareAvailableThresholdPercent = snapshot.spareAvailableThresholdPercent ?? merged.spareAvailableThresholdPercent
+            merged.smartctlDiagnostics = snapshot.smartctlDiagnostics ?? merged.smartctlDiagnostics
         }
 
         merged.health = evaluator.evaluate(drive: drive, snapshot: merged)
@@ -1101,8 +1318,9 @@ final class DriveHealthEvaluator {
             }
         }
 
-        let availableSpare = snapshot.attributeInt(named: "Available Spare")
-        let availableSpareThreshold = snapshot.attributeInt(named: "Available Spare Threshold")
+        let availableSpare = snapshot.spareAvailablePercent ?? snapshot.attributeInt(named: "Available Spare")
+        let availableSpareThreshold = snapshot.spareAvailableThresholdPercent
+            ?? snapshot.attributeInt(named: "Available Spare Threshold")
         if let spare = availableSpare, let threshold = availableSpareThreshold {
             if spare < threshold {
                 health = max(health, .preFail)

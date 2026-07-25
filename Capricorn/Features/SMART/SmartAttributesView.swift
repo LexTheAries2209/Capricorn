@@ -34,7 +34,7 @@ struct SmartAttributesView: View {
         let hasLimitedProvider = snapshot.providerStatuses.contains { $0.state == .limited }
         let externalDrive = !drive.isInternal || drive.isRemovable
         let lacksUsableSmart = attributes.isEmpty || snapshot.health == .unavailable || !hasAvailableProvider
-        return lacksUsableSmart || (externalDrive && hasLimitedProvider)
+        return externalDrive || lacksUsableSmart || hasLimitedProvider
     }
 
     var body: some View {
@@ -98,7 +98,11 @@ struct SmartAttributesView: View {
             SmartSelfTestPanel(drive: drive, snapshot: snapshot, viewModel: viewModel)
 
             if showsExternalSupportHelp {
-                ExternalSupportView(status: externalSupport, refresh: verifyExternalSupport)
+                ExternalSupportView(
+                    status: externalSupport,
+                    diagnostics: snapshot?.smartctlDiagnostics,
+                    refresh: verifyExternalSupport
+                )
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }

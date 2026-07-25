@@ -336,8 +336,12 @@ final class AppModel {
             let refreshSnapshot = try await worker.value
             guard activeRefreshID == refreshID else { return }
             let loadedDrives = refreshSnapshot.drives
+            let previousSnapshots = snapshots
             drives = loadedDrives
-            snapshots = refreshSnapshot.snapshots
+            snapshots = refreshSnapshot.snapshots.mapValues { refreshed in
+                guard let previous = previousSnapshots[refreshed.driveID] else { return refreshed }
+                return refreshed.retainingSMARTData(from: previous)
+            }
             if !isSmartSelfTestActive {
                 smartSelfTestCapabilities = [:]
             }
@@ -986,6 +990,9 @@ final class AppModel {
 
     func refreshExternalSupport() {
         externalSupport = externalDetector.detect()
+        Task { [weak self] in
+            await self?.refresh()
+        }
     }
 
     var isSmartSelfTestActive: Bool {

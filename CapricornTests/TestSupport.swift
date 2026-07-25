@@ -149,7 +149,7 @@ final class CountingSmartctlCommandRunner: CommandRunning, @unchecked Sendable {
     }
 
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
-        if arguments == ["--scan-open", "--json"] {
+        if arguments == ["--scan", "--json"] || arguments == ["--scan-open", "--json"] {
             scans.withLock { $0 += 1 }
             let json = """
             {"devices":[

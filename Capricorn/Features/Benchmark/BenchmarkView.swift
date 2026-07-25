@@ -1409,6 +1409,7 @@ private struct CrystalSpeedCell: View {
 
 struct ExternalSupportView: View {
     let status: ExternalSupportStatus
+    var diagnostics: SmartctlDiagnostics? = nil
     let refresh: () -> Void
     @Environment(\.appLanguage) private var language
 
@@ -1432,6 +1433,36 @@ struct ExternalSupportView: View {
                 StatusLine(title: "SAT SMART Driver", isOn: status.satDriverInstalled)
                 Text(language.statusMessage(status.message))
                     .foregroundStyle(.secondary)
+            }
+            InfoPanel(title: language.t("smartctl Diagnostics"), symbol: "waveform.path.ecg.rectangle") {
+                if let diagnostics {
+                    diagnosticRow(language.t("smartctl Version"), diagnostics.version)
+                    diagnosticRow(language.t("Drive Database"), diagnostics.driveDatabaseVersion)
+                    diagnosticRow(language.t("Target Path"), diagnostics.targetPath, monospaced: true)
+                    diagnosticRow(language.t("Device Type"), diagnostics.deviceType)
+                    diagnosticRow(language.t("Protocol"), diagnostics.protocolName)
+                    diagnosticRow(language.t("Power Mode"), diagnostics.powerMode)
+
+                    if diagnostics.readSkippedToAvoidWake == true {
+                        Label(
+                            language.t("SMART reading was skipped and the previous data was retained to avoid waking this disk."),
+                            systemImage: "moon.zzz"
+                        )
+                        .foregroundStyle(.secondary)
+                    }
+
+                    if let openError = diagnostics.openError, !openError.isEmpty {
+                        Label(language.statusMessage(openError), systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .textSelection(.enabled)
+                    } else {
+                        Label(language.t("No smartctl open error was reported."), systemImage: "checkmark.circle")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text(language.t("No smartctl target diagnostics are available for this disk."))
+                        .foregroundStyle(.secondary)
+                }
             }
             if !status.smartctlInstalled {
                 InfoPanel(title: language.t("Install smartmontools"), symbol: "terminal") {
@@ -1465,6 +1496,17 @@ struct ExternalSupportView: View {
             Link(destination: URL(string: "https://github.com/kasbert/OS-X-SAT-SMART-Driver")!) {
                 Label(language.t("Open SAT SMART Driver project"), systemImage: "safari")
             }
+        }
+    }
+
+    private func diagnosticRow(_ title: String, _ value: String?, monospaced: Bool = false) -> some View {
+        LabeledContent(title) {
+            Text(value ?? language.t("Unavailable"))
+                .font(monospaced ? .system(.body, design: .monospaced) : .body)
+                .foregroundStyle(value == nil ? .secondary : .primary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
         }
     }
 }

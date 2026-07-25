@@ -937,6 +937,17 @@ struct SmartSelfTestReport: Codable, Hashable, Sendable {
     }
 }
 
+struct SmartctlDiagnostics: Codable, Hashable, Sendable {
+    var version: String?
+    var driveDatabaseVersion: String?
+    var targetPath: String?
+    var deviceType: String?
+    var protocolName: String?
+    var powerMode: String?
+    var readSkippedToAvoidWake: Bool?
+    var openError: String?
+}
+
 struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     var id = UUID()
     var driveID: String
@@ -954,6 +965,10 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     var smartStatusRaw: String?
     var selfTestStatus: String?
     var selfTestReport: SmartSelfTestReport? = nil
+    var enduranceUsedPercent: Int? = nil
+    var spareAvailablePercent: Int? = nil
+    var spareAvailableThresholdPercent: Int? = nil
+    var smartctlDiagnostics: SmartctlDiagnostics? = nil
 
     static func unavailable(for drive: DriveDevice, reason: String) -> SmartSnapshot {
         SmartSnapshot(
@@ -973,6 +988,19 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
             selfTestStatus: nil,
             selfTestReport: nil
         )
+    }
+
+    var smartReadSkippedToAvoidWake: Bool {
+        smartctlDiagnostics?.readSkippedToAvoidWake == true
+    }
+
+    func retainingSMARTData(from previous: SmartSnapshot) -> SmartSnapshot {
+        guard smartReadSkippedToAvoidWake else { return self }
+        var retained = previous
+        retained.summary = summary
+        retained.providerStatuses = providerStatuses
+        retained.smartctlDiagnostics = smartctlDiagnostics
+        return retained
     }
 }
 
