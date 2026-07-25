@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.1.1`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.2.5`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v1.1.1.md](docs/releases/v1.1.1.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v1.2.5.md](docs/releases/v1.2.5.md)
 
 ---
 
@@ -20,11 +20,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.1.1-macOS.zip`。
-2. 解压后把 `Capricorn V1.1.1.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.2.5-macOS.zip`。
+2. 解压后把 `Capricorn V1.2.5.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V1.1.1 的中文发布说明见 [docs/releases/v1.1.1.zh-CN.md](docs/releases/v1.1.1.zh-CN.md)。
+V1.2.5 的中文发布说明见 [docs/releases/v1.2.5.zh-CN.md](docs/releases/v1.2.5.zh-CN.md)。
 
 典型用途：
 
@@ -46,6 +46,10 @@ V1.1.1 的中文发布说明见 [docs/releases/v1.1.1.zh-CN.md](docs/releases/v1
 - 支持查看占用所选磁盘的进程，并在卸载、推出失败时显示可能占用磁盘的程序列表。
 - 支持普通检查日志和只读详细检查，展示 `diskutil` 或 macOS 原生文件系统检查器的输出。
 - SMART 页面显示健康状态、温度、寿命、通电小时、介质错误、不安全关机次数和数据来源。
+- SMART 页面支持 ATA、NVMe 和 SAT 设备的快速/完整自检、自动轮询、中止操作、最近记录和原始 smartctl 输出回退；概览仅显示最近一次设备自检摘要。
+- 自检操作会根据设备能力和传输层禁用不支持的目标；系统盘自检可在设置中单独允许，macOS NVMe 不支持的 admin command 不会被强行执行。
+- smartctl 7.5 数据兼容性得到加强，保留诊断信息；默认避免为 SMART 刷新唤醒休眠磁盘，并在无法安全识别设备类型时保留上一份数据。
+- 外接磁盘 SMART 支持状态和诊断默认折叠（已验证时），可展开查看 smartctl、SAT 驱动、设备路径和打开错误。
 - SMART 温度会按数据源区分单位：原生 Kelvin 数值同时显示换算后的摄氏度，已是摄氏度的数值保持摄氏度显示。
 - NVMe 累计读取量和写入量会把 macOS 原生与 `smartctl` 的 Data Units 转换为 TB，并保留原始 units 计数。
 - macOS 原生 SMART 优先，可选使用用户已安装的 `smartctl` 获取更完整的 ATA/NVMe 数据。
@@ -132,9 +136,9 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 
 例如：
 
-- `Version = 1.1`
-- `Build = 1`
-- `Display Name = Capricorn V1.1.1`
+- `Version = 1.2`
+- `Build = 5`
+- `Display Name = Capricorn V1.2.5`
 
 ### 当前限制
 
@@ -154,11 +158,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v1.1.1-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V1.1.1.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v1.2.5-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V1.2.5.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V1.1.1 are available at [docs/releases/v1.1.1.en.md](docs/releases/v1.1.1.en.md).
+English release notes for V1.2.5 are available at [docs/releases/v1.2.5.en.md](docs/releases/v1.2.5.en.md).
 
 Common use cases:
 
@@ -180,6 +184,10 @@ Common use cases:
 - Shows processes with open files on a selected disk, including follow-up diagnostics when unmount or eject actions fail.
 - Adds ordinary disk verification logs and read-only detailed checks using `diskutil` and native macOS filesystem checkers where available.
 - Shows SMART health, temperature, life remaining, power-on hours, media errors, unsafe shutdowns, and provider status.
+- Adds quick/full SMART self-tests for supported ATA, NVMe, and SAT devices, automatic polling, abort, recent records, and raw smartctl fallback; Overview keeps only the latest device-reported summary.
+- Disables unsupported self-test operations based on device capability and transport; system-disk self-tests can be allowed separately in Settings, and unsupported macOS NVMe admin commands are never forced.
+- Improves smartctl 7.5 compatibility and diagnostics, avoids waking sleeping disks by default for SMART refresh, and retains the previous snapshot when safe device identification is unavailable.
+- External-drive SMART support and diagnostics are collapsed by default after verification, with an expandable view for smartctl, SAT driver, target path, and open errors.
 - Formats native Kelvin temperatures with a Celsius conversion while keeping already-Celsius values in Celsius.
 - Converts native macOS and `smartctl` NVMe Data Units Read/Written values to TB while retaining the raw unit count.
 - Uses native macOS SMART first, with optional user-installed `smartctl` for deeper ATA/NVMe data.
@@ -266,9 +274,9 @@ The public Display Name uses a three-part version label composed from Xcode `Ver
 
 Example:
 
-- `Version = 1.1`
-- `Build = 1`
-- `Display Name = Capricorn V1.1.1`
+- `Version = 1.2`
+- `Build = 5`
+- `Display Name = Capricorn V1.2.5`
 
 ### Current Limitations
 
