@@ -21,7 +21,60 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(drive.nativeSmartKeys["PERCENTAGE_USED"], 2)
         XCTAssertEqual(drive.benchmarkMountPoint, "/System/Volumes/Data")
         XCTAssertEqual(drive.volumes.first?.fileSystemType, "APFS")
+        XCTAssertEqual(drive.volumes.first?.capacityGroupIdentifier, "apfs:disk3")
         XCTAssertEqual(drive.fileSystemSummary, "APFS")
+    }
+
+    func testDriveCapacityUsageDeduplicatesSharedAPFSSpaceAndAggregatesPartitions() throws {
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(
+                deviceIdentifier: "disk3s1",
+                name: "System",
+                mountPoint: "/",
+                sizeBytes: 1_000,
+                isWritable: false,
+                isSystem: true,
+                fileSystemType: "APFS",
+                capacityGroupIdentifier: "apfs:disk3",
+                totalCapacityBytes: 1_000,
+                availableCapacityBytes: 400
+            ),
+            DriveDevice.Volume(
+                deviceIdentifier: "disk3s5",
+                name: "Data",
+                mountPoint: "/System/Volumes/Data",
+                sizeBytes: 1_000,
+                isWritable: true,
+                isSystem: true,
+                fileSystemType: "APFS",
+                capacityGroupIdentifier: "apfs:disk3",
+                totalCapacityBytes: 1_000,
+                availableCapacityBytes: 400
+            ),
+            DriveDevice.Volume(
+                deviceIdentifier: "disk0s4",
+                name: "Media",
+                mountPoint: "/Volumes/Media",
+                sizeBytes: 500,
+                isWritable: true,
+                isSystem: false,
+                fileSystemType: "ExFAT",
+                capacityGroupIdentifier: "volume:disk0s4",
+                totalCapacityBytes: 500,
+                availableCapacityBytes: 100
+            )
+        ]
+
+        let usage = try XCTUnwrap(drive.capacityUsage)
+        XCTAssertEqual(usage.totalBytes, 1_500)
+        XCTAssertEqual(usage.usedBytes, 1_000)
+        XCTAssertEqual(usage.availableBytes, 500)
+        XCTAssertEqual(usage.usedFraction, 2.0 / 3.0, accuracy: 0.0001)
+    }
+
+    func testDriveCapacityUsageIsUnavailableWithoutMountedCapacityData() {
+        XCTAssertNil(Self.fixtureDrive(mountedAt: "/Volumes/Unit").capacityUsage)
     }
 
     func testDiskutilParserMapsMountedExternalPartitionToPhysicalDisk() throws {
@@ -79,6 +132,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(drive.displayName, root.lastPathComponent)
         XCTAssertEqual(drive.benchmarkMountPoint, root.path)
         XCTAssertTrue(drive.isWritable)
+        XCTAssertNotNil(drive.capacityUsage)
         XCTAssertTrue(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(target.path, drive: drive))
     }
 
@@ -105,7 +159,11 @@ final class CapricornTests: XCTestCase {
             "Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal.": "Control-Tab 和 Control-Shift-Tab 始终用于切换功能页面。关闭普通 Tab 切换后，可恢复标准键盘焦点遍历。",
             "Choose": "选择",
             "Choose the smartctl executable.": "选择 smartctl 可执行文件。",
-            "Open Settings": "打开设置"
+            "Open Settings": "打开设置",
+            "Used Capacity": "已用容量",
+            "Available Capacity": "可用容量",
+            "Used": "已用",
+            "Available": "可用"
         ]
 
         for (key, expected) in expectedTranslations {
@@ -171,7 +229,7 @@ final class CapricornTests: XCTestCase {
 
 
     func testDriveDeviceDecodesOlderRecordsWithoutNetworkFlag() throws {
-        let encoded = try JSONEncoder().encode(Self.fixtureDrive())
+        let encoded = try JSONEncoder().encode(Self.fixtureDrive(mountedAt: "/Volumes/Unit"))
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         object.removeValue(forKey: "isNetwork")
         object.removeValue(forKey: "isMemoryCard")
@@ -179,6 +237,9 @@ final class CapricornTests: XCTestCase {
             volumes = volumes.map { volume in
                 var volume = volume
                 volume.removeValue(forKey: "fileSystemType")
+                volume.removeValue(forKey: "capacityGroupIdentifier")
+                volume.removeValue(forKey: "totalCapacityBytes")
+                volume.removeValue(forKey: "availableCapacityBytes")
                 return volume
             }
             object["volumes"] = volumes
@@ -190,6 +251,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(decoded.isNetwork)
         XCTAssertFalse(decoded.isMemoryCard)
         XCTAssertEqual(decoded.bsdName, "disk0")
+        XCTAssertNil(decoded.capacityUsage)
     }
 
     func testDiskSidebarActionsLimitNetworkDrivesToSafeNetworkOperations() {

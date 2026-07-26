@@ -70,6 +70,9 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
         var isWritable: Bool
         var isSystem: Bool
         var fileSystemType: String? = nil
+        var capacityGroupIdentifier: String? = nil
+        var totalCapacityBytes: Int64? = nil
+        var availableCapacityBytes: Int64? = nil
     }
 
     var id: String { bsdName }
@@ -93,6 +96,10 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     var volumes: [Volume]
     var model: String?
     var serialNumber: String?
+
+    var capacityUsage: DriveCapacityUsage? {
+        DriveCapacityUsage.resolve(volumes: volumes)
+    }
 
     var benchmarkMountPoint: String? {
         volumes.first(where: { $0.isWritable && !$0.isSystem && $0.mountPoint != nil })?.mountPoint
@@ -130,6 +137,53 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
             return formats[0]
         }
         return formats.joined(separator: " + ")
+    }
+}
+
+struct DriveCapacityUsage: Equatable, Sendable {
+    var totalBytes: Int64
+    var usedBytes: Int64
+    var availableBytes: Int64
+
+    var usedFraction: Double {
+        guard totalBytes > 0 else { return 0 }
+        return Double(usedBytes) / Double(totalBytes)
+    }
+
+    static func resolve(volumes: [DriveDevice.Volume]) -> DriveCapacityUsage? {
+        var capacitiesByGroup: [String: (total: Int64, available: Int64)] = [:]
+
+        for volume in volumes {
+            guard let total = volume.totalCapacityBytes,
+                  let available = volume.availableCapacityBytes,
+                  total > 0,
+                  available >= 0 else {
+                continue
+            }
+
+            let group = volume.capacityGroupIdentifier ?? volume.deviceIdentifier
+            let clampedAvailable = min(available, total)
+            if let current = capacitiesByGroup[group] {
+                capacitiesByGroup[group] = (
+                    total: max(current.total, total),
+                    available: max(current.available, clampedAvailable)
+                )
+            } else {
+                capacitiesByGroup[group] = (total: total, available: clampedAvailable)
+            }
+        }
+
+        guard !capacitiesByGroup.isEmpty else { return nil }
+        let total = capacitiesByGroup.values.reduce(Int64(0)) { $0 + $1.total }
+        let available = min(
+            capacitiesByGroup.values.reduce(Int64(0)) { $0 + $1.available },
+            total
+        )
+        return DriveCapacityUsage(
+            totalBytes: total,
+            usedBytes: total - available,
+            availableBytes: available
+        )
     }
 }
 

@@ -17,6 +17,32 @@ struct NetworkMountEntry: Equatable {
     var options: [String]
 }
 
+struct MountedVolumeCapacity: Equatable, Sendable {
+    var totalBytes: Int64
+    var availableBytes: Int64
+}
+
+enum MountedVolumeCapacityReader {
+    static func read(at mountPoint: String) -> MountedVolumeCapacity? {
+        let url = URL(fileURLWithPath: mountPoint, isDirectory: true)
+        let keys: Set<URLResourceKey> = [
+            .volumeTotalCapacityKey,
+            .volumeAvailableCapacityKey,
+            .volumeAvailableCapacityForImportantUsageKey
+        ]
+        guard let values = try? url.resourceValues(forKeys: keys),
+              let totalValue = values.volumeTotalCapacity else {
+            return nil
+        }
+
+        let total = Int64(totalValue)
+        let available = values.volumeAvailableCapacityForImportantUsage
+            ?? values.volumeAvailableCapacity.map(Int64.init)
+        guard total > 0, let available, available >= 0 else { return nil }
+        return MountedVolumeCapacity(totalBytes: total, availableBytes: min(available, total))
+    }
+}
+
 protocol NetworkVolumeInventoryProviding: Sendable {
     func loadNetworkDrives() async throws -> [DriveDevice]
 }
@@ -53,6 +79,7 @@ enum DiskutilPlistParser {
             let stores = entry.arrayOfDictionaries("APFSPhysicalStores")
             let volumes = entry.arrayOfDictionaries("APFSVolumes")
             guard !stores.isEmpty, !volumes.isEmpty else { continue }
+            let capacityGroupIdentifier = entry.string("DeviceIdentifier").map { "apfs:\($0)" }
 
             let physicalDisks = stores.compactMap { store -> String? in
                 guard let storeID = store.string("DeviceIdentifier") else { return nil }
@@ -68,7 +95,8 @@ enum DiskutilPlistParser {
                     sizeBytes: volume.int64("Size") ?? 0,
                     isWritable: !(volume.bool("ReadOnly") ?? false),
                     isSystem: volume.bool("OSInternal") ?? false || normalizedMountPoint(volume.string("MountPoint")) == "/",
-                    fileSystemType: parsedFileSystemType(from: volume, fallback: "APFS")
+                    fileSystemType: parsedFileSystemType(from: volume, fallback: "APFS"),
+                    capacityGroupIdentifier: capacityGroupIdentifier
                 )
             }
 
@@ -105,7 +133,8 @@ enum DiskutilPlistParser {
             sizeBytes: partition.int64("Size") ?? 0,
             isWritable: isWritable,
             isSystem: partition.bool("OSInternal") ?? false || mountPoint == "/",
-            fileSystemType: parsedFileSystemType(from: partition, fallback: nil)
+            fileSystemType: parsedFileSystemType(from: partition, fallback: nil),
+            capacityGroupIdentifier: "volume:\(id)"
         )
     }
 
@@ -343,7 +372,8 @@ final class NetworkMountInventoryProvider: NetworkVolumeInventoryProviding, @unc
     private func makeDrive(from entry: NetworkMountEntry) -> DriveDevice {
         let protocolName = NetworkVolumeMountParser.protocolDisplayName(for: entry.fileSystemType)
         let displayName = displayName(for: entry)
-        let sizeBytes = volumeCapacity(at: entry.mountPoint)
+        let capacity = MountedVolumeCapacityReader.read(at: entry.mountPoint)
+        let sizeBytes = capacity?.totalBytes ?? 0
         let isWritable = !entry.options.contains { option in
             ["read-only", "rdonly", "ro"].contains(option.lowercased())
         } && fileManager.isWritableFile(atPath: entry.mountPoint)
@@ -374,7 +404,10 @@ final class NetworkMountInventoryProvider: NetworkVolumeInventoryProviding, @unc
                     sizeBytes: sizeBytes,
                     isWritable: isWritable,
                     isSystem: false,
-                    fileSystemType: protocolName
+                    fileSystemType: protocolName,
+                    capacityGroupIdentifier: "network:\(bsdName)",
+                    totalCapacityBytes: capacity?.totalBytes,
+                    availableCapacityBytes: capacity?.availableBytes
                 )
             ],
             model: entry.source,
@@ -390,15 +423,6 @@ final class NetworkMountInventoryProvider: NetworkVolumeInventoryProviding, @unc
 
         let sourceName = entry.source.split(separator: "/").last.map(String.init)
         return sourceName?.isEmpty == false ? sourceName! : entry.source
-    }
-
-    private func volumeCapacity(at mountPoint: String) -> Int64 {
-        let url = URL(fileURLWithPath: mountPoint, isDirectory: true)
-        guard let values = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey]),
-              let capacity = values.volumeTotalCapacity else {
-            return 0
-        }
-        return Int64(capacity)
     }
 
     private func stableNetworkIdentifier(for entry: NetworkMountEntry, protocolName: String) -> String {
@@ -470,7 +494,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
         return await withTaskGroup(of: (Int, DriveDevice?).self) { group in
             for _ in 0..<min(4, list.wholeDiskIDs.count) {
                 guard let (index, diskID) = iterator.next() else { break }
-                let volumes = Self.enrichFileSystemTypes(list.volumesByPhysicalDisk[diskID] ?? [])
+                let volumes = Self.enrichMountedVolumeMetadata(list.volumesByPhysicalDisk[diskID] ?? [])
                 group.addTask {
                     do {
                         let result = try await runner.run(diskutilPath, arguments: ["info", "-plist", diskID])
@@ -495,7 +519,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
                     indexedDevices.append((index, device))
                 }
                 if let (nextIndex, nextDiskID) = iterator.next() {
-                    let volumes = Self.enrichFileSystemTypes(list.volumesByPhysicalDisk[nextDiskID] ?? [])
+                    let volumes = Self.enrichMountedVolumeMetadata(list.volumesByPhysicalDisk[nextDiskID] ?? [])
                     group.addTask {
                         do {
                             let result = try await runner.run(diskutilPath, arguments: ["info", "-plist", nextDiskID])
@@ -518,14 +542,17 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
         }
     }
 
-    private static func enrichFileSystemTypes(_ volumes: [DriveDevice.Volume]) -> [DriveDevice.Volume] {
+    private static func enrichMountedVolumeMetadata(_ volumes: [DriveDevice.Volume]) -> [DriveDevice.Volume] {
         volumes.map { volume in
-            guard volume.fileSystemType == nil, let mountPoint = volume.mountPoint else {
-                return volume
-            }
-
             var enriched = volume
-            enriched.fileSystemType = FileSystemFormatResolver.fileSystemType(atMountPoint: mountPoint)
+            guard let mountPoint = volume.mountPoint else { return enriched }
+            if enriched.fileSystemType == nil {
+                enriched.fileSystemType = FileSystemFormatResolver.fileSystemType(atMountPoint: mountPoint)
+            }
+            if let capacity = MountedVolumeCapacityReader.read(at: mountPoint) {
+                enriched.totalCapacityBytes = capacity.totalBytes
+                enriched.availableCapacityBytes = capacity.availableBytes
+            }
             return enriched
         }
     }

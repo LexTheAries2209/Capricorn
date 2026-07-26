@@ -1316,7 +1316,18 @@ private struct PreviewInventoryProvider: DiskInventoryProviding {
                 "POWER_ON_HOURS_0": 1295
             ],
             volumes: [
-                DriveDevice.Volume(deviceIdentifier: "disk3s5", name: "Data", mountPoint: "/System/Volumes/Data", sizeBytes: 994_662_584_320, isWritable: true, isSystem: false)
+                DriveDevice.Volume(
+                    deviceIdentifier: "disk3s5",
+                    name: "Data",
+                    mountPoint: "/System/Volumes/Data",
+                    sizeBytes: 994_662_584_320,
+                    isWritable: true,
+                    isSystem: false,
+                    fileSystemType: "APFS",
+                    capacityGroupIdentifier: "apfs:disk3",
+                    totalCapacityBytes: 994_662_584_320,
+                    availableCapacityBytes: 412_000_000_000
+                )
             ],
             model: "APPLE SSD AP1024Z Media",
             serialNumber: "REDACTED"

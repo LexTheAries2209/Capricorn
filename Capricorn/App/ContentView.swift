@@ -737,10 +737,17 @@ private struct DriveSidebarRow: View {
                 Text(drive.displayName)
                     .font(.headline)
                     .lineLimit(1)
-                Text(subtitle)
+                Text(deviceSummary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .help(identifierSummary)
+                if let capacitySummary {
+                    Text(capacitySummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
             HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
@@ -758,7 +765,27 @@ private struct DriveSidebarRow: View {
         return drive.isInternal ? "internaldrive.fill" : "externaldrive.fill"
     }
 
-    private var subtitle: String {
+    private var deviceSummary: String {
+        var components: [String] = []
+        if let fileSystem = drive.fileSystemSummary {
+            components.append(fileSystem)
+        }
+        if !drive.protocolName.isEmpty,
+           !components.contains(where: { $0.caseInsensitiveCompare(drive.protocolName) == .orderedSame }) {
+            components.append(drive.protocolName)
+        }
+        if drive.sizeBytes > 0 {
+            components.append(formatByteCount(drive.sizeBytes))
+        }
+        return components.isEmpty ? drive.bsdName : components.joined(separator: " · ")
+    }
+
+    private var capacitySummary: String? {
+        guard let capacityUsage = drive.capacityUsage else { return nil }
+        return "\(language.t("Used")) \(formatByteCount(capacityUsage.usedBytes)) · \(language.t("Available")) \(formatByteCount(capacityUsage.availableBytes))"
+    }
+
+    private var identifierSummary: String {
         if drive.isNetwork {
             let mount = drive.primaryMountPoint ?? drive.deviceNode
             return "\(drive.protocolName) · \(language.t("Network Drive")) · \(mount)"

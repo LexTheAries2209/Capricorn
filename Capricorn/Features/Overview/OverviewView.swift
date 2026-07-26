@@ -21,6 +21,10 @@ struct OverviewView: View {
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 12)], spacing: 12) {
                     StatTile(title: language.t("Capacity"), value: formatByteCount(drive.sizeBytes), symbol: "square.stack.3d.down.right")
+                    if let capacityUsage = drive.capacityUsage {
+                        StatTile(title: language.t("Used Capacity"), value: formatByteCount(capacityUsage.usedBytes), symbol: "chart.pie.fill")
+                        StatTile(title: language.t("Available Capacity"), value: formatByteCount(capacityUsage.availableBytes), symbol: "internaldrive")
+                    }
                     StatTile(title: language.t("Format"), value: drive.fileSystemSummary ?? language.t("Unavailable"), symbol: "doc.richtext")
                     StatTile(title: language.t("Temperature"), value: snapshot?.temperatureCelsius.map { String(format: "%.1f C", $0) } ?? language.t("Unavailable"), symbol: "thermometer.medium")
                     StatTile(title: language.t("Life Remaining"), value: snapshot?.lifeRemainingPercent.map { "\($0)%" } ?? language.t("Unavailable"), symbol: "battery.75percent")
