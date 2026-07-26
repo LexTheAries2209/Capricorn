@@ -325,10 +325,11 @@ struct BenchmarkView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(language.t("Benchmark"))
                     .font(.largeTitle.bold())
-                Text(drive.displayName)
+                Text(drive.catalogDisplayName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .help(drive.catalogDisplayHelp(language: language))
             }
             Spacer()
             Text(language.benchmarkFooter(

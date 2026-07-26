@@ -156,7 +156,9 @@ struct DiskActivityView: View {
                         .foregroundStyle(.secondary)
                     Picker("", selection: selectedDriveBinding) {
                         ForEach(viewModel.drives) { drive in
-                            Text("\(drive.displayName) (\(drive.bsdName))").tag(drive.id)
+                            Text("\(drive.catalogDisplayName) (\(drive.bsdName))")
+                                .help(drive.catalogDisplayHelp(language: language))
+                                .tag(drive.id)
                         }
                     }
                     .labelsHidden()

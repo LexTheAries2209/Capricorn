@@ -202,6 +202,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Live Activity": "实时活动",
         "Self-Tests": "自检",
         "External": "外接",
+        "Original model": "原始型号",
         "History": "历史",
         "Capacity": "容量",
         "Used Capacity": "已用容量",

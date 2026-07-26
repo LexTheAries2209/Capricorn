@@ -68,8 +68,10 @@ struct CapricornApp: App {
             VStack(alignment: .leading, spacing: 8) {
                 Label(menuBarSummary, systemImage: menuBarSymbol)
                 if let drive = viewModel.selectedDrive {
-                    Text(drive.displayName)
+                    Text(drive.catalogDisplayName)
                         .font(.caption)
+                        .lineLimit(2)
+                        .help(drive.catalogDisplayHelp(language: language))
                 }
                 Button(language.t("Refresh")) {
                     Task { await viewModel.refresh() }

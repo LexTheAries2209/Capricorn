@@ -25,6 +25,90 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(drive.fileSystemSummary, "APFS")
     }
 
+    func testBundledExternalDriveModelCatalogMatchesEveryDocumentedExample() throws {
+        let catalog = ExternalDriveModelCatalog.bundled
+
+        XCTAssertGreaterThanOrEqual(catalog.records.count, 40)
+        XCTAssertTrue(catalog.records.contains(where: { $0.mediaKind == "HDD" }))
+        XCTAssertTrue(catalog.records.contains(where: { $0.mediaKind == "SSD" }))
+
+        for record in catalog.records {
+            XCTAssertTrue(record.sourceURL.hasPrefix("https://"), record.id)
+            XCTAssertFalse(record.examples.isEmpty, record.id)
+            for example in record.examples {
+                let drive = Self.externalCatalogDrive(model: example.reportedModel)
+                let match = try XCTUnwrap(catalog.match(for: drive), record.id)
+                XCTAssertEqual(match.recordID, record.id, example.reportedModel)
+                XCTAssertEqual(match.canonicalModel, example.canonicalModel, example.reportedModel)
+                XCTAssertEqual(
+                    match.marketingName,
+                    record.marketingName(capacityToken: example.capacityToken),
+                    example.reportedModel
+                )
+            }
+        }
+    }
+
+    func testExternalDriveModelCatalogFormatsKnownHDDModels() throws {
+        let catalog = ExternalDriveModelCatalog.bundled
+        let seagate = try XCTUnwrap(catalog.match(for: Self.externalCatalogDrive(model: "ST8000NM000A-2KE101")))
+        let westernDigital = try XCTUnwrap(catalog.match(for: Self.externalCatalogDrive(model: "WUH722016CLE604")))
+
+        XCTAssertEqual(seagate.displayName, "ST8000NM000A · Seagate Exos 7E8 8TB")
+        XCTAssertEqual(seagate.reportedModel, "ST8000NM000A-2KE101")
+        XCTAssertEqual(westernDigital.displayName, "WUH722016CLE604 · Western Digital Ultrastar DC HC555 16TB")
+    }
+
+    func testExternalDriveCatalogHelpRetainsLocalizedRawModel() {
+        let drive = Self.externalCatalogDrive(model: "ST8000NM000A-2KE101")
+
+        XCTAssertEqual(
+            drive.catalogDisplayHelp(language: .english),
+            "ST8000NM000A · Seagate Exos 7E8 8TB\nOriginal model: ST8000NM000A-2KE101"
+        )
+        XCTAssertEqual(
+            drive.catalogDisplayHelp(language: .simplifiedChinese),
+            "ST8000NM000A · Seagate Exos 7E8 8TB\n原始型号: ST8000NM000A-2KE101"
+        )
+    }
+
+    func testExternalDriveModelCatalogUsesHardwareModelWhenBridgeNameIsGeneric() throws {
+        var drive = Self.externalCatalogDrive(model: "USB 3.0 Device")
+        drive.model = "ST8000NM000A-2KE101 Media"
+
+        let match = try XCTUnwrap(ExternalDriveModelCatalog.bundled.match(for: drive))
+
+        XCTAssertEqual(match.canonicalModel, "ST8000NM000A")
+        XCTAssertEqual(match.reportedModel, "ST8000NM000A-2KE101 Media")
+    }
+
+    func testExternalDriveModelCatalogLeavesUnknownInternalAndNVMeDrivesUntouched() {
+        let catalog = ExternalDriveModelCatalog.bundled
+        let unknown = Self.externalCatalogDrive(model: "Vendor Unknown 8TB")
+        var internalDrive = Self.externalCatalogDrive(model: "ST8000NM000A-2KE101")
+        internalDrive.isInternal = true
+        var systemDrive = Self.externalCatalogDrive(model: "ST8000NM000A-2KE101")
+        systemDrive.isSystemDisk = true
+        var nvmeDrive = Self.externalCatalogDrive(model: "ST8000NM000A-2KE101", protocolName: "PCI-Express")
+        nvmeDrive.isSolidState = true
+
+        XCTAssertNil(catalog.match(for: unknown))
+        XCTAssertNil(catalog.match(for: internalDrive))
+        XCTAssertNil(catalog.match(for: systemDrive))
+        XCTAssertNil(catalog.match(for: nvmeDrive))
+        XCTAssertEqual(unknown.catalogDisplayName, unknown.displayName)
+        XCTAssertEqual(internalDrive.catalogDisplayName, internalDrive.displayName)
+        XCTAssertEqual(nvmeDrive.catalogDisplayName, nvmeDrive.displayName)
+    }
+
+    func testExternalDriveModelCatalogRejectsUnsupportedSchemaAndInvalidRegex() {
+        let unsupportedSchema = Data(#"{"schemaVersion":2,"records":[]}"#.utf8)
+        let invalidRegex = Data(#"{"schemaVersion":1,"records":[{"id":"bad","manufacturer":"Vendor","family":"Family","mediaKind":"HDD","interfaces":["SATA"],"introduced":2024,"modelPatterns":["("],"capacityLabels":{"1":"1TB"},"sourceURL":"https://example.com","examples":[]}]}"#.utf8)
+
+        XCTAssertThrowsError(try ExternalDriveModelCatalog(data: unsupportedSchema))
+        XCTAssertThrowsError(try ExternalDriveModelCatalog(data: invalidRegex))
+    }
+
     func testDriveCapacityUsageDeduplicatesSharedAPFSSpaceAndAggregatesPartitions() throws {
         var drive = Self.fixtureDrive()
         drive.volumes = [
@@ -3075,6 +3159,29 @@ final class CapricornTests: XCTestCase {
             volumes: [],
             model: "APPLE SSD AP1024Z",
             serialNumber: "SN"
+        )
+    }
+
+    static func externalCatalogDrive(model: String, protocolName: String = "USB") -> DriveDevice {
+        DriveDevice(
+            bsdName: "disk99",
+            deviceNode: "/dev/disk99",
+            displayName: model,
+            mediaName: model,
+            protocolName: protocolName,
+            sizeBytes: 8_000_000_000_000,
+            blockSize: 512,
+            isInternal: false,
+            isRemovable: true,
+            isSolidState: false,
+            isWritable: true,
+            isVirtual: false,
+            isSystemDisk: false,
+            smartStatusRaw: "Verified",
+            nativeSmartKeys: [:],
+            volumes: [],
+            model: model,
+            serialNumber: "CATALOG"
         )
     }
 

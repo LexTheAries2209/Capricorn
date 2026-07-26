@@ -734,9 +734,10 @@ private struct DriveSidebarRow: View {
                 .foregroundStyle(snapshot?.health.tint ?? .secondary)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text(drive.displayName)
+                Text(drive.catalogDisplayName)
                     .font(.headline)
                     .lineLimit(1)
+                    .help(drive.catalogDisplayHelp(language: language))
                 Text(deviceSummary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -851,9 +852,10 @@ struct DrivePageHeaderView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(drive.displayName)
+                Text(drive.catalogDisplayName)
                     .font(.largeTitle.bold())
                     .lineLimit(2)
+                    .help(drive.catalogDisplayHelp(language: language))
                 Text(DrivePageHeaderText.subtitle(for: drive, language: language))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
