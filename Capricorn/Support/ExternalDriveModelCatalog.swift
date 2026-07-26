@@ -200,8 +200,18 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
 }
 
 extension DriveDevice {
+    var catalogMatch: ExternalDriveModelCatalog.Match? {
+        ExternalDriveModelCatalog.bundled.match(for: self)
+    }
+
     var catalogDisplayName: String {
-        ExternalDriveModelCatalog.bundled.match(for: self)?.displayName ?? displayName
+        catalogMatch?.displayName ?? displayName
+    }
+
+    var catalogHeaderDisplayName: String {
+        guard let match = catalogMatch else { return displayName }
+        let groupedMarketingName = match.marketingName.replacingOccurrences(of: " ", with: "\u{00A0}")
+        return "\(match.canonicalModel) · \(groupedMarketingName)"
     }
 
     func catalogDisplayHelp(language: AppLanguage) -> String {

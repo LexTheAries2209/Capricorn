@@ -734,15 +734,16 @@ private struct DriveSidebarRow: View {
                 .foregroundStyle(snapshot?.health.tint ?? .secondary)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text(drive.catalogDisplayName)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .help(drive.catalogDisplayHelp(language: language))
-                Text(deviceSummary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .help(identifierSummary)
+                driveName
+                HStack(spacing: 8) {
+                    Text(deviceSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help(identifierSummary)
+                    Spacer(minLength: 4)
+                    HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
+                }
                 if let capacitySummary {
                     Text(capacitySummary)
                         .font(.caption)
@@ -750,10 +751,29 @@ private struct DriveSidebarRow: View {
                         .lineLimit(1)
                 }
             }
-            Spacer()
-            HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private var driveName: some View {
+        if let match = drive.catalogMatch {
+            Text(match.marketingName)
+                .font(.subheadline.bold())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .help(drive.catalogDisplayHelp(language: language))
+            Text(match.canonicalModel)
+                .font(.caption.bold())
+                .lineLimit(1)
+                .help(drive.catalogDisplayHelp(language: language))
+        } else {
+            Text(drive.displayName)
+                .font(.headline)
+                .lineLimit(1)
+                .help(drive.displayName)
+        }
     }
 
     private var iconName: String {
@@ -852,7 +872,7 @@ struct DrivePageHeaderView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(drive.catalogDisplayName)
+                Text(drive.catalogHeaderDisplayName)
                     .font(.largeTitle.bold())
                     .lineLimit(2)
                     .help(drive.catalogDisplayHelp(language: language))

@@ -72,6 +72,18 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testExternalDriveCatalogProvidesStructuredSidebarAndGroupedHeaderNames() throws {
+        let drive = Self.externalCatalogDrive(model: "WUH722016CLE604")
+        let match = try XCTUnwrap(drive.catalogMatch)
+
+        XCTAssertEqual(match.marketingName, "Western Digital Ultrastar DC HC555 16TB")
+        XCTAssertEqual(match.canonicalModel, "WUH722016CLE604")
+        XCTAssertEqual(
+            drive.catalogHeaderDisplayName,
+            "WUH722016CLE604 · Western\u{00A0}Digital\u{00A0}Ultrastar\u{00A0}DC\u{00A0}HC555\u{00A0}16TB"
+        )
+    }
+
     func testExternalDriveModelCatalogUsesHardwareModelWhenBridgeNameIsGeneric() throws {
         var drive = Self.externalCatalogDrive(model: "USB 3.0 Device")
         drive.model = "ST8000NM000A-2KE101 Media"
