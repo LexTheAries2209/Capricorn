@@ -999,6 +999,10 @@ final class AppModel {
         smartSelfTestSession.isActive
     }
 
+    func clearSmartSelfTestMessage() {
+        smartSelfTestMessage = nil
+    }
+
     func smartSelfTestCapability(for drive: DriveDevice) -> SmartSelfTestCapabilityState {
         smartSelfTestCapabilities[drive.id] ?? .unknown
     }

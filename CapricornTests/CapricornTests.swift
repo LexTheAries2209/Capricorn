@@ -913,6 +913,19 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(adminRunner.calls.isEmpty)
     }
 
+    @MainActor
+    func testClearingSmartSelfTestMessageKeepsSessionState() {
+        let model = AppModel()
+        let failure = "Self-test command failed."
+        model.smartSelfTestSession = .failed(failure)
+        model.smartSelfTestMessage = failure
+
+        model.clearSmartSelfTestMessage()
+
+        XCTAssertNil(model.smartSelfTestMessage)
+        XCTAssertEqual(model.smartSelfTestSession, .failed(failure))
+    }
+
     func testNativeSmartFormatsKelvinTemperatureAndDataUnitsAsTB() async throws {
         var drive = Self.fixtureDrive()
         drive.nativeSmartKeys = [

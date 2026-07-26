@@ -450,6 +450,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Quick Self-Test": "快速自检",
         "Full Self-Test": "完整自检",
         "Abort Self-Test": "中止自检",
+        "Clear Self-Test Output": "清理自检输出",
         "Recent Self-Test Records": "最近自检记录",
         "Raw Self-Test Output": "原始自检输出",
         "Check Self-Test Support": "检测自检支持",

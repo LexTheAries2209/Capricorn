@@ -22,6 +22,11 @@ struct SmartAttributesView: View {
         SmartAttributeTableColumns.showsNormalizedColumns(for: attributes)
     }
 
+    private var attributesTableHeight: CGFloat {
+        let estimatedHeight = CGFloat(attributes.count) * 44 + 32
+        return min(max(estimatedHeight, 260), 420)
+    }
+
     private var saveMessageIsWarning: Bool {
         guard let saveMessage else { return false }
         return saveMessage.contains("failed") || saveMessage.contains("unavailable") || saveMessage.hasPrefix("Could not")
@@ -85,37 +90,49 @@ struct SmartAttributesView: View {
                 }
             }
 
-            if !attributes.isEmpty {
-                attributesTable
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 12) {
+                    if !attributes.isEmpty {
+                        attributesTable
+                            .frame(height: attributesTableHeight)
 
-                if showsNormalizedColumns {
-                    Label(language.t(normalizedValueHelp), systemImage: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        if showsNormalizedColumns {
+                            Label(language.t(normalizedValueHelp), systemImage: "info.circle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        ContentUnavailableView(
+                            language.t("No SMART Attributes"),
+                            systemImage: "questionmark.folder",
+                            description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+                    }
+
+                    supplementaryPanels
                 }
-            } else {
-                ContentUnavailableView(
-                    language.t("No SMART Attributes"),
-                    systemImage: "questionmark.folder",
-                    description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
-                )
-                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-
-            SmartSelfTestPanel(drive: drive, snapshot: snapshot, viewModel: viewModel)
-
-            if showsExternalSupportHelp {
-                ExternalSupportView(
-                    status: externalSupport,
-                    diagnostics: snapshot?.smartctlDiagnostics,
-                    isVerified: externalSmartIsVerified,
-                    refresh: verifyExternalSupport
-                )
-                    .id(drive.id)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            .scrollIndicators(.visible)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private var supplementaryPanels: some View {
+        SmartSelfTestPanel(drive: drive, snapshot: snapshot, viewModel: viewModel)
+
+        if showsExternalSupportHelp {
+            ExternalSupportView(
+                status: externalSupport,
+                diagnostics: snapshot?.smartctlDiagnostics,
+                isVerified: externalSmartIsVerified,
+                refresh: verifyExternalSupport
+            )
+                .id(drive.id)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var snapshotStorageSummary: some View {
@@ -214,6 +231,7 @@ struct SmartSelfTestPanel: View {
     let viewModel: AppModel
     @Environment(\.appLanguage) private var language
     @AppStorage(AppPreferences.Key.allowSystemDiskSelfTests) private var allowSystemDiskSelfTests = false
+    @State private var showsRecentSelfTestRecords = false
     @State private var showsRawOutput = false
 
     private var report: SmartSelfTestReport? { snapshot?.selfTestReport }
@@ -292,30 +310,39 @@ struct SmartSelfTestPanel: View {
                 }
 
                 if let message = viewModel.smartSelfTestMessage, isActiveForDrive || viewModel.smartSelfTestSession != .idle {
-                    Text(language.statusMessage(message))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(language.statusMessage(message))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Button {
+                            viewModel.clearSmartSelfTestMessage()
+                        } label: {
+                            Image(systemName: "xmark.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .help(language.t("Clear Self-Test Output"))
+                        .accessibilityLabel(language.t("Clear Self-Test Output"))
+                    }
                 }
 
-                if let entries = report?.entries, !entries.isEmpty {
+                if let entries = report?.entries, !entries.isEmpty, let latestEntry = report?.latestEntry {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(language.t("Recent Self-Test Records"))
-                            .font(.subheadline.bold())
-                        ForEach(entries) { entry in
-                            HStack(alignment: .top, spacing: 10) {
-                                Image(systemName: entry.state == .passed ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                                    .foregroundStyle(entry.state == .passed ? .green : .orange)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(kindTitle(entry.kind)) · \(language.statusMessage(entry.status))")
-                                        .font(.subheadline)
-                                    Text(entryDetails(entry))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                        DisclosureGroup(isExpanded: $showsRecentSelfTestRecords) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(entries) { entry in
+                                    selfTestEntryRow(entry)
                                 }
-                                Spacer()
                             }
-                            .padding(.vertical, 3)
+                        } label: {
+                            Label(language.t("Recent Self-Test Records"), systemImage: "clock.arrow.circlepath")
+                                .font(.subheadline.bold())
+                        }
+
+                        if !showsRecentSelfTestRecords {
+                            selfTestEntryRow(latestEntry)
                         }
                     }
                 }
@@ -333,6 +360,7 @@ struct SmartSelfTestPanel: View {
                         .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
                     } label: {
                         Label(language.t("Raw Self-Test Output"), systemImage: "doc.text.magnifyingglass")
+                            .font(.subheadline.bold())
                     }
                 }
             }
@@ -411,6 +439,22 @@ struct SmartSelfTestPanel: View {
     private var sessionRemainingPercent: Int? {
         guard case let .running(_, remainingPercent) = viewModel.smartSelfTestSession else { return nil }
         return remainingPercent
+    }
+
+    private func selfTestEntryRow(_ entry: SmartSelfTestEntry) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: entry.state == .passed ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .foregroundStyle(entry.state == .passed ? .green : .orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(kindTitle(entry.kind)) · \(language.statusMessage(entry.status))")
+                    .font(.subheadline)
+                Text(entryDetails(entry))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 3)
     }
 
     private func entryDetails(_ entry: SmartSelfTestEntry) -> String {
