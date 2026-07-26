@@ -242,6 +242,20 @@ func formatSmartDataUnits(_ units: Int64, unitBytes: Int64 = 512_000) -> String 
     return "\(formattedTerabytes) TB (\(units) units)"
 }
 
+func formatSmartLogicalBlocks(_ logicalBlocks: Int64, blockSizeBytes: Int64) -> String {
+    guard blockSizeBytes > 0 else { return "\(logicalBlocks)" }
+
+    let scaled = logicalBlocks.multipliedReportingOverflow(by: blockSizeBytes)
+    let byteCount: String
+    if scaled.overflow {
+        let terabytes = Double(logicalBlocks) * Double(blockSizeBytes) / 1_000_000_000_000
+        byteCount = String(format: "%.2f TB", terabytes)
+    } else {
+        byteCount = formatByteCount(scaled.partialValue)
+    }
+    return "\(byteCount) (\(logicalBlocks) LBA, \(blockSizeBytes) B/LBA)"
+}
+
 final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable {
     let providerName = "smartctl"
     private let runner: CommandRunning
@@ -758,7 +772,7 @@ enum SmartctlParser {
         let lifeRemaining = enduranceUsed.map { max(0, min(100, 100 - $0)) }
 
         appendNVMeAttributes(nvme, providerName: providerName, to: &attributes)
-        appendATAAttributes(root, providerName: providerName, to: &attributes)
+        appendATAAttributes(root, drive: drive, providerName: providerName, to: &attributes)
         appendUnifiedHealthAttributes(
             enduranceUsed: enduranceUsed,
             spareAvailable: spareAvailable,
@@ -1154,18 +1168,31 @@ enum SmartctlParser {
         }
     }
 
-    private static func appendATAAttributes(_ root: [String: Any], providerName: String, to attributes: inout [SmartAttribute]) {
+    private static func appendATAAttributes(
+        _ root: [String: Any],
+        drive: DriveDevice,
+        providerName: String,
+        to attributes: inout [SmartAttribute]
+    ) {
         let table = root.dictionary("ata_smart_attributes").arrayOfDictionaries("table")
+        let reportedBlockSize = root.int64("logical_block_size")
+        let logicalBlockSize = reportedBlockSize.flatMap { $0 > 0 ? $0 : nil }
+            ?? (drive.blockSize > 0 ? Int64(drive.blockSize) : nil)
         for item in table {
             guard let id = item.int("id") else { continue }
             let raw = item.dictionary("raw")
-            let rawValue = raw.valueDescription("value") ?? raw.string("string") ?? ""
+            let name = item.string("name") ?? "Attribute \(id)"
+            let rawValue = ataRawValue(
+                name: name,
+                raw: raw,
+                logicalBlockSize: logicalBlockSize
+            )
             let threshold = item.int("thresh")
             let current = item.int("value")
             let status = ataStatus(id: id, current: current, threshold: threshold, rawValue: raw.int64("value"))
             attributes.append(SmartAttribute(
                 id: String(format: "0x%02X", id),
-                name: item.string("name") ?? "Attribute \(id)",
+                name: name,
                 rawValue: rawValue,
                 current: current,
                 worst: item.int("worst"),
@@ -1174,6 +1201,31 @@ enum SmartctlParser {
                 source: providerName
             ))
         }
+    }
+
+    private static func ataRawValue(
+        name: String,
+        raw: [String: Any],
+        logicalBlockSize: Int64?
+    ) -> String {
+        let fallback = raw.string("string") ?? raw.valueDescription("value") ?? ""
+        guard isLogicalBlockCounter(name),
+              let logicalBlocks = raw.int64("value"),
+              logicalBlocks >= 0,
+              let logicalBlockSize else {
+            return fallback
+        }
+        return formatSmartLogicalBlocks(logicalBlocks, blockSizeBytes: logicalBlockSize)
+    }
+
+    private static func isLogicalBlockCounter(_ name: String) -> Bool {
+        let key = name
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .lowercased()
+            .split(separator: " ")
+            .joined(separator: " ")
+        return key == "total lbas written" || key == "total lbas read"
     }
 
     private static func ataStatus(id: Int, current: Int?, threshold: Int?, rawValue: Int64?) -> HealthStatus {

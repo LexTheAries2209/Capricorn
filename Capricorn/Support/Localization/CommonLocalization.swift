@@ -795,6 +795,126 @@ enum SmartAttributeCatalog {
                 englishDescription: "NVMe controller critical warning flags.",
                 chineseDescription: "NVMe 控制器报告的严重健康警告标志。"
             )),
+            ("Raw Read Error Rate", Entry(
+                englishTitle: "Raw Read Error Rate",
+                chineseTitle: "原始读取错误率",
+                englishDescription: "Read-error activity recorded by the drive. The raw encoding is vendor-specific; judge it mainly by the normalized value and threshold.",
+                chineseDescription: "磁盘记录的读取错误活动。原始值通常采用厂商专用编码，应主要结合当前归一化值和阈值判断，不能因原始数值很大就认定故障。"
+            )),
+            ("Throughput Performance", Entry(
+                englishTitle: "Throughput Performance",
+                chineseTitle: "吞吐性能",
+                englishDescription: "Vendor-normalized indicator of the drive's overall data throughput. Higher normalized values are generally better; the raw value has no universal unit.",
+                chineseDescription: "厂商归一化的磁盘整体数据吞吐性能指标。通常当前值越高越好；原始值没有跨厂商通用的单位。"
+            )),
+            ("Spin Up Time", Entry(
+                englishTitle: "Spin-Up Time",
+                chineseTitle: "启动旋转时间",
+                englishDescription: "Time required for the spindle to reach operating speed; the raw unit or encoding may be vendor-specific.",
+                chineseDescription: "盘片主轴从停止到达到工作转速所需的时间；原始单位或编码可能由厂商定义。"
+            )),
+            ("Start Stop Count", Entry(
+                englishTitle: "Start/Stop Count",
+                chineseTitle: "启停次数",
+                englishDescription: "Number of spindle start and stop cycles.",
+                chineseDescription: "盘片主轴累计启动和停止的循环次数。"
+            )),
+            ("Seek Error Rate", Entry(
+                englishTitle: "Seek Error Rate",
+                chineseTitle: "寻道错误率",
+                englishDescription: "Head-positioning seek-error activity. The raw encoding is vendor-specific; use the normalized value and threshold for health assessment.",
+                chineseDescription: "磁头定位和寻道过程记录的错误活动。原始值通常采用厂商专用编码，健康判断应结合当前归一化值和阈值。"
+            )),
+            ("Seek Time Performance", Entry(
+                englishTitle: "Seek-Time Performance",
+                chineseTitle: "寻道时间性能",
+                englishDescription: "Vendor-normalized indicator of magnetic-head seek performance. Higher normalized values are generally better; the raw value is vendor-specific.",
+                chineseDescription: "厂商归一化的磁头寻道速度和性能指标。通常当前值越高越好；原始值采用厂商专用编码。"
+            )),
+            ("Spin Retry Count", Entry(
+                englishTitle: "Spin Retry Count",
+                chineseTitle: "启动重试次数",
+                englishDescription: "Attempts to spin the drive up again after the first attempt did not reach operating speed.",
+                chineseDescription: "主轴首次未能达到工作转速后再次尝试启动的累计次数。"
+            )),
+            ("Head Health", Entry(
+                englishTitle: "Head Health",
+                chineseTitle: "磁头健康",
+                englishDescription: "Vendor-specific magnetic-head health indicator; interpret it using the drive's normalized value and threshold.",
+                chineseDescription: "厂商定义的磁头健康指标，应结合该磁盘给出的当前归一化值和阈值解释。"
+            )),
+            ("Helium Level", Entry(
+                englishTitle: "Internal Environment / Helium Status",
+                chineseTitle: "内部环境（氦气）状态",
+                englishDescription: "Sealed-drive internal-environment status, commonly used to monitor helium retention. The raw encoding is vendor-specific; use the normalized value and threshold.",
+                chineseDescription: "密封硬盘的内部环境状态，通常用于监测氦气密封保持情况。原始值采用厂商专用编码，应结合当前归一化值和阈值判断。"
+            )),
+            ("Unknown Ultrastar Attribute 0x52", Entry(
+                englishTitle: "Unknown Vendor Attribute 0x52",
+                chineseTitle: "未知厂商属性 0x52",
+                englishDescription: "smartctl does not identify this field for the current model. ID 82 is called Head Health Score on some related Ultrastar models, but that meaning is not confirmed for this drive; do not judge health from its raw value alone.",
+                chineseDescription: "smartctl 尚未识别当前型号的此字段。相近 Ultrastar 型号把 ID 82 定义为“磁头健康评分”，但该含义尚未在这块硬盘的公开资料中确认；不要仅凭原始值判断健康。"
+            )),
+            ("End-to-End Error", Entry(
+                englishTitle: "End-to-End Data-Path Errors",
+                chineseTitle: "端到端数据路径错误",
+                englishDescription: "Data-integrity or parity errors detected in the drive's internal path between cache and media. A nonzero value warrants attention.",
+                chineseDescription: "磁盘内部缓存与介质之间的数据路径检测到的完整性或奇偶校验错误。非零值需要重点关注。"
+            )),
+            ("Reported Uncorrect", Entry(
+                englishTitle: "Reported Uncorrectable Errors",
+                chineseTitle: "已报告不可校正错误",
+                englishDescription: "Errors that could not be corrected by the drive and were reported to the host.",
+                chineseDescription: "磁盘内部纠错仍无法修复并已报告给主机的错误数量。"
+            )),
+            ("Reported Uncorrectable Errors", Entry(
+                englishTitle: "Reported Uncorrectable Errors",
+                chineseTitle: "已报告不可校正错误",
+                englishDescription: "Errors that could not be corrected by the drive and were reported to the host.",
+                chineseDescription: "磁盘内部纠错仍无法修复并已报告给主机的错误数量。"
+            )),
+            ("Command Timeout", Entry(
+                englishTitle: "Command Timeout",
+                chineseTitle: "命令超时",
+                englishDescription: "Commands aborted because the drive did not complete them in time; power, cabling, bridges, or the drive can be involved.",
+                chineseDescription: "磁盘未在规定时间内完成而被中止的命令计数；供电、线缆、USB 桥接器或磁盘本身都可能相关。"
+            )),
+            ("Airflow Temperature Cel", Entry(
+                englishTitle: "Airflow Temperature",
+                chineseTitle: "气流温度",
+                englishDescription: "Drive airflow or internal temperature indicator. Some drives pack current, minimum, and maximum temperatures into the raw value.",
+                chineseDescription: "磁盘气流或内部温度指标；部分磁盘会把当前、最低和最高温度一起编码在原始值中。"
+            )),
+            ("Power-Off Retract Count", Entry(
+                englishTitle: "Power-Off Retract Count",
+                chineseTitle: "断电磁头回收次数",
+                englishDescription: "Emergency head-retraction events caused by power loss or an unsafe shutdown.",
+                chineseDescription: "因断电或非正常关机触发磁头紧急回收的累计次数。"
+            )),
+            ("Load Cycle Count", Entry(
+                englishTitle: "Load Cycle Count",
+                chineseTitle: "磁头加载循环次数",
+                englishDescription: "Number of head load and unload cycles.",
+                chineseDescription: "磁头从停泊区加载到盘面并再次卸载停泊的累计循环次数。"
+            )),
+            ("Temperature Celsius", Entry(
+                englishTitle: "Temperature",
+                chineseTitle: "磁盘温度",
+                englishDescription: "Drive temperature attribute. Some vendors pack current, minimum, and maximum temperatures into the raw value.",
+                chineseDescription: "磁盘温度属性；部分厂商会把当前、最低和最高温度一起编码在原始值中。"
+            )),
+            ("Hardware ECC Recovered", Entry(
+                englishTitle: "Hardware ECC Recovered",
+                chineseTitle: "硬件 ECC 已校正",
+                englishDescription: "Read errors corrected by hardware error-correction logic. The raw encoding is vendor-specific; use normalized values for health assessment.",
+                chineseDescription: "由硬件纠错逻辑成功校正的读取错误活动。原始值通常采用厂商专用编码，健康判断应以归一化值为主。"
+            )),
+            ("Head Flying Hours", Entry(
+                englishTitle: "Head Flying Hours",
+                chineseTitle: "磁头工作时间",
+                englishDescription: "Time the heads have spent positioned over the media. Raw encoding can include vendor-specific subfields.",
+                chineseDescription: "磁头处于盘面上方工作状态的累计时间；原始值可能还包含厂商定义的附加字段。"
+            )),
             ("Reallocated Sectors Count", Entry(
                 englishTitle: "Reallocated Sectors Count",
                 chineseTitle: "重映射扇区数",
@@ -824,6 +944,12 @@ enum SmartAttributeCatalog {
                 chineseTitle: "离线不可校正扇区",
                 englishDescription: "Uncorrectable sectors found by offline scans.",
                 chineseDescription: "离线扫描中发现且无法校正的扇区数量。"
+            )),
+            ("Reallocated Event Count", Entry(
+                englishTitle: "Reallocation Event Count",
+                chineseTitle: "扇区重映射事件数",
+                englishDescription: "Number of sector-remapping attempts or events, which can include successful and unsuccessful remaps. Compare it with reallocated and pending sector counts.",
+                chineseDescription: "尝试执行扇区重映射的事件次数，可能同时包含成功和未成功的尝试；应结合重映射扇区数与待定扇区数判断。"
             )),
             ("UDMA CRC Error Count", Entry(
                 englishTitle: "UDMA CRC Error Count",
@@ -861,6 +987,7 @@ enum SmartAttributeCatalog {
 
     private static let entriesByID: [String: Entry] = [
         "0X05": entriesByName[normalizedKey("Reallocated Sectors Count")]!,
+        "0X52": entriesByName[normalizedKey("Unknown Ultrastar Attribute 0x52")]!,
         "0XC5": entriesByName[normalizedKey("Current Pending Sector Count")]!,
         "0XC6": entriesByName[normalizedKey("Offline Uncorrectable Sector Count")]!,
         "0XC7": entriesByName[normalizedKey("UDMA CRC Error Count")]!

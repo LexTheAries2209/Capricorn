@@ -907,7 +907,8 @@ final class CapricornTests: XCTestCase {
             configuredPath: "/usr/bin/true",
             ioServiceTargetResolver: StaticSmartctlTargetResolver(
                 descriptor: SmartctlTargetDescriptor(path: path, type: "nvme")
-            )
+            ),
+            avoidsWakingSleepingDisks: { true }
         )
 
         let snapshotValue = await provider.snapshot(for: Self.fixtureDrive())
@@ -1002,6 +1003,74 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Temperature" })?.rawValue, "312 K (39 °C)")
         XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Data Units Read" })?.rawValue, formatSmartDataUnits(189403549))
         XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Data Units Written" })?.rawValue, formatSmartDataUnits(95506302))
+    }
+
+    func testSmartctlATAParserFormatsTotalLBAsUsingReportedLogicalBlockSize() throws {
+        let fixture = """
+        {
+          "smartctl": {"exit_status": 0},
+          "smart_status": {"passed": true},
+          "logical_block_size": 512,
+          "ata_smart_attributes": {
+            "table": [
+              {"id": 241, "name": "Total_LBAs_Written", "value": 100, "worst": 253, "thresh": 0, "raw": {"value": 7574194599, "string": "7574194599"}},
+              {"id": 242, "name": "Total_LBAs_Read", "value": 100, "worst": 253, "thresh": 0, "raw": {"value": 7426501503, "string": "7426501503"}},
+              {"id": 241, "name": "Lifetime_Writes_GiB", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 12, "string": "12"}},
+              {"id": 190, "name": "Airflow_Temperature_Cel", "value": 54, "worst": 48, "thresh": 40, "raw": {"value": 874250286, "string": "46 (Min/Max 28/52)"}},
+              {"id": 240, "name": "Head_Flying_Hours", "value": 100, "worst": 253, "thresh": 0, "raw": {"value": 2332072752447503, "string": "15h+09m+02.978s"}}
+            ]
+          }
+        }
+        """
+        var drive = Self.fixtureDrive()
+        drive.blockSize = 4_096
+
+        let snapshot = SmartctlParser.parseSnapshot(
+            Data(fixture.utf8),
+            drive: drive,
+            providerName: "smartctl",
+            exitStatus: 0
+        )
+
+        let written = try XCTUnwrap(snapshot.attributes.first(where: { $0.name == "Total_LBAs_Written" }))
+        let read = try XCTUnwrap(snapshot.attributes.first(where: { $0.name == "Total_LBAs_Read" }))
+        let vendorSpecific = try XCTUnwrap(snapshot.attributes.first(where: { $0.name == "Lifetime_Writes_GiB" }))
+        let airflowTemperature = try XCTUnwrap(snapshot.attributes.first(where: { $0.name == "Airflow_Temperature_Cel" }))
+        let headFlyingHours = try XCTUnwrap(snapshot.attributes.first(where: { $0.name == "Head_Flying_Hours" }))
+        XCTAssertEqual(written.rawValue, formatSmartLogicalBlocks(7_574_194_599, blockSizeBytes: 512))
+        XCTAssertEqual(read.rawValue, formatSmartLogicalBlocks(7_426_501_503, blockSizeBytes: 512))
+        XCTAssertTrue(written.rawValue.contains("TB"))
+        XCTAssertTrue(written.rawValue.contains("512 B/LBA"))
+        XCTAssertEqual(vendorSpecific.rawValue, "12")
+        XCTAssertEqual(airflowTemperature.rawValue, "46 (Min/Max 28/52)")
+        XCTAssertEqual(headFlyingHours.rawValue, "15h+09m+02.978s")
+    }
+
+    func testSmartctlATAParserFallsBackToInventoryBlockSizeForTotalLBAs() throws {
+        let fixture = """
+        {
+          "smartctl": {"exit_status": 0},
+          "smart_status": {"passed": true},
+          "ata_smart_attributes": {
+            "table": [
+              {"id": 241, "name": "Total_LBAs_Written", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 250000000}}
+            ]
+          }
+        }
+        """
+        var drive = Self.fixtureDrive()
+        drive.blockSize = 4_096
+
+        let snapshot = SmartctlParser.parseSnapshot(
+            Data(fixture.utf8),
+            drive: drive,
+            providerName: "smartctl",
+            exitStatus: 0
+        )
+
+        let written = try XCTUnwrap(snapshot.attributes.first)
+        XCTAssertEqual(written.rawValue, formatSmartLogicalBlocks(250_000_000, blockSizeBytes: 4_096))
+        XCTAssertTrue(written.rawValue.contains("4096 B/LBA"))
     }
 
     func testSmartctl75UnifiedHealthFieldsPopulateCanonicalMetrics() throws {
@@ -1164,6 +1233,66 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(display.title, "可用备用空间")
         XCTAssertTrue(display.subtitle.contains("备用块"))
         XCTAssertTrue(display.help.contains("Available Spare"))
+    }
+
+    func testSmartAttributeDisplayTranslatesCommonExternalATAFields() {
+        let expectedTitles = [
+            "Raw_Read_Error_Rate": "原始读取错误率",
+            "Throughput_Performance": "吞吐性能",
+            "Spin_Up_Time": "启动旋转时间",
+            "Start_Stop_Count": "启停次数",
+            "Seek_Error_Rate": "寻道错误率",
+            "Seek_Time_Performance": "寻道时间性能",
+            "Spin_Retry_Count": "启动重试次数",
+            "Head_Health": "磁头健康",
+            "Helium_Level": "内部环境（氦气）状态",
+            "End-to-End_Error": "端到端数据路径错误",
+            "Reported_Uncorrect": "已报告不可校正错误",
+            "Command_Timeout": "命令超时",
+            "Airflow_Temperature_Cel": "气流温度",
+            "Power-Off_Retract_Count": "断电磁头回收次数",
+            "Load_Cycle_Count": "磁头加载循环次数",
+            "Temperature_Celsius": "磁盘温度",
+            "Hardware_ECC_Recovered": "硬件 ECC 已校正",
+            "Head_Flying_Hours": "磁头工作时间",
+            "Reallocated_Event_Count": "扇区重映射事件数"
+        ]
+
+        for (name, expectedTitle) in expectedTitles {
+            let attribute = SmartAttribute(
+                id: "fixture.\(name)",
+                name: name,
+                rawValue: "0",
+                current: 100,
+                worst: 100,
+                threshold: 0,
+                status: .good,
+                source: "Fixture"
+            )
+            let display = AppLanguage.simplifiedChinese.smartAttributeDisplay(attribute)
+            XCTAssertEqual(display.title, expectedTitle, name)
+            XCTAssertFalse(display.subtitle.contains("扩展 SMART 字段"), name)
+        }
+    }
+
+    func testSmartAttributeDisplayExplainsUnknownUltrastarAttributeWithoutClaimingConfirmation() {
+        let attribute = SmartAttribute(
+            id: "0x52",
+            name: "Unknown_Attribute",
+            rawValue: "16711935",
+            current: 100,
+            worst: 100,
+            threshold: 0,
+            status: .good,
+            source: "smartctl"
+        )
+
+        let display = AppLanguage.simplifiedChinese.smartAttributeDisplay(attribute)
+
+        XCTAssertEqual(display.title, "未知厂商属性 0x52")
+        XCTAssertTrue(display.subtitle.contains("磁头健康评分"))
+        XCTAssertTrue(display.subtitle.contains("尚未"))
+        XCTAssertFalse(display.subtitle.contains("扩展 SMART 字段"))
     }
 
     func testSmartAttributeDisplayKeepsUnknownFieldName() {
