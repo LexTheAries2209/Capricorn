@@ -142,7 +142,7 @@ struct ContentView: View {
     }
 
     private var sidebar: some View {
-        List(selection: $viewModel.selectedDriveID) {
+        List(selection: sidebarDriveSelection) {
             Section(language.t("Drives")) {
                 ForEach(viewModel.drives) { drive in
                     DriveSidebarRow(drive: drive, snapshot: viewModel.snapshots[drive.id])
@@ -150,6 +150,7 @@ struct ContentView: View {
                             driveContextMenu(for: drive)
                         }
                         .tag(drive.id as String?)
+                        .disabled(viewModel.isLiveActivityDriveSelectionLocked && drive.id != viewModel.selectedDriveID)
                 }
             }
         }
@@ -247,6 +248,14 @@ struct ContentView: View {
             .background(.bar)
         }
         .navigationSplitViewColumnWidth(min: 260, ideal: 300)
+    }
+
+    private var sidebarDriveSelection: Binding<String?> {
+        Binding {
+            viewModel.selectedDriveID
+        } set: { driveID in
+            viewModel.selectDriveFromSidebar(driveID)
+        }
     }
 
     private var sidebarStatusText: String {
@@ -845,7 +854,7 @@ private struct DriveDetailView: View {
             BenchmarkView(drive: drive, viewModel: viewModel, saveResults: saveBenchmarkResults)
                 .tabItem { Label(language.t("Benchmark"), systemImage: "speedometer") }
                 .tag(DriveFeatureTab.benchmark)
-            DiskActivityView(initialDrive: drive, viewModel: viewModel, activityHistory: activityHistory)
+            DiskActivityView(drive: drive, viewModel: viewModel, activityHistory: activityHistory)
                 .tabItem { Label(language.t("Live Activity"), systemImage: "waveform.path.ecg.rectangle") }
                 .tag(DriveFeatureTab.liveActivity)
             HistoryReportView(

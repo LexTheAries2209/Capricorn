@@ -4,11 +4,12 @@ import SwiftData
 import SwiftUI
 
 struct DiskActivityView: View {
-    let initialDrive: DriveDevice
+    let drive: DriveDevice
     var viewModel: AppModel
     let activityHistory: [DiskActivityHistoryRecord]
     @AppStorage("diskActivitySampleInterval") private var selectedIntervalSeconds = DiskActivitySampleInterval.default.seconds
-    @AppStorage("diskActivityWorkloadTargetFolder") private var workloadTargetFolderPath = ""
+    @AppStorage("diskActivityWorkloadTargetsByDrive") private var workloadTargetPreferencesJSON = ""
+    @AppStorage("diskActivityWorkloadTargetFolder") private var legacyWorkloadTargetFolderPath = ""
     @AppStorage("diskActivityWorkloadOperation") private var workloadOperationRaw = DiskActivityWorkloadOperation.write.rawValue
     @AppStorage("diskActivityWorkloadFileSize") private var workloadFileSizeRaw = DiskActivityWorkloadFileSize.gib32.rawValue
     @AppStorage("diskActivityWorkloadLoopEnabled") private var workloadLoopEnabled = false
@@ -16,15 +17,36 @@ struct DiskActivityView: View {
     @Environment(\.appLanguage) private var language
     @State private var saveMessage: String?
     @State private var showHiddenActivityHistory = false
+    @State private var workloadTargetSelectionError: String?
     private let activityHistoryScrollThreshold = 10
     private let activityHistoryRowHeight: CGFloat = 58
 
-    private var selectedDriveID: String {
-        viewModel.liveActivitySelectedDriveID ?? initialDrive.id
+    private var isShowingCurrentSession: Bool {
+        viewModel.liveActivityDriveID == drive.id
     }
 
-    private var selectedDrive: DriveDevice {
-        viewModel.drives.first(where: { $0.id == selectedDriveID }) ?? initialDrive
+    private var displayedSamples: [DiskActivitySample] {
+        isShowingCurrentSession ? viewModel.liveActivitySamples : []
+    }
+
+    private var displayedCurrentActivity: DiskActivitySample? {
+        isShowingCurrentSession ? viewModel.currentLiveActivity : nil
+    }
+
+    private var isMonitoringThisDrive: Bool {
+        isShowingCurrentSession && viewModel.isLiveActivityMonitoring
+    }
+
+    private var targetPreferences: DiskActivityWorkloadTargetPreferences {
+        DiskActivityWorkloadTargetPreferences.decode(workloadTargetPreferencesJSON)
+    }
+
+    private var workloadTargetSelection: DiskActivityWorkloadTargetSelection {
+        targetPreferences.selection(for: drive)
+    }
+
+    private var resolvedWorkloadTarget: DiskActivityWorkloadResolvedTarget {
+        DiskActivityWorkloadTargetResolver.resolve(workloadTargetSelection, for: drive)
     }
 
     private var selectedInterval: DiskActivitySampleInterval {
@@ -40,16 +62,15 @@ struct DiskActivityView: View {
     }
 
     private var workloadTargetFolderURL: URL? {
-        guard !workloadTargetFolderPath.isEmpty else { return nil }
-        return URL(fileURLWithPath: workloadTargetFolderPath, isDirectory: true)
+        resolvedWorkloadTarget.folderURL
+    }
+
+    private var workloadTargetFolderPath: String {
+        workloadTargetFolderURL?.path ?? ""
     }
 
     private var workloadTargetFolderIsUsable: Bool {
-        guard !workloadTargetFolderPath.isEmpty else { return false }
-        var isDirectory: ObjCBool = false
-        return FileManager.default.fileExists(atPath: workloadTargetFolderPath, isDirectory: &isDirectory)
-            && isDirectory.boolValue
-            && FileManager.default.isWritableFile(atPath: workloadTargetFolderPath)
+        DiskActivityWorkloadTargetResolver.isUsableFolder(workloadTargetFolderPath)
     }
 
     private var workloadTargetAvailableCapacity: Int64 {
@@ -68,7 +89,7 @@ struct DiskActivityView: View {
 
     private var workloadTargetDriveMismatch: Bool {
         guard workloadTargetFolderIsUsable else { return false }
-        return !BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(workloadTargetFolderPath, drive: selectedDrive)
+        return !BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(workloadTargetFolderPath, drive: drive)
     }
 
     private var canStartWorkload: Bool {
@@ -83,18 +104,18 @@ struct DiskActivityView: View {
     }
 
     private var selectedDriveHistory: [DiskActivityHistoryRecord] {
-        HistoryVisibility.visible(activityHistory.filter { $0.driveID == selectedDrive.id })
+        HistoryVisibility.visible(activityHistory.filter { $0.driveID == drive.id })
     }
 
     private var selectedDriveHiddenHistory: [DiskActivityHistoryRecord] {
-        HistoryVisibility.hidden(activityHistory.filter { $0.driveID == selectedDrive.id })
+        HistoryVisibility.hidden(activityHistory.filter { $0.driveID == drive.id })
     }
 
     private var summary: DiskActivitySummary {
-        let fallbackEnd = viewModel.isLiveActivityMonitoring ? Date() : viewModel.liveActivityEndedAt
+        let fallbackEnd = isMonitoringThisDrive ? Date() : (isShowingCurrentSession ? viewModel.liveActivityEndedAt : nil)
         return DiskActivityStatistics.summarize(
-            samples: viewModel.liveActivitySamples,
-            startedAt: viewModel.liveActivityStartedAt,
+            samples: displayedSamples,
+            startedAt: isShowingCurrentSession ? viewModel.liveActivityStartedAt : nil,
             endedAt: fallbackEnd
         )
     }
@@ -104,7 +125,7 @@ struct DiskActivityView: View {
             VStack(alignment: .leading, spacing: 14) {
                 header
                 controls
-                if let error = viewModel.liveActivityError {
+                if isShowingCurrentSession, let error = viewModel.liveActivityError {
                     Label(language.statusMessage(error), systemImage: "info.circle")
                         .font(.caption)
                         .foregroundStyle(.orange)
@@ -112,8 +133,8 @@ struct DiskActivityView: View {
                 workloadPanel
                 DiskActivityChartView(
                     title: language.t("Live Disk Activity"),
-                    samples: viewModel.liveActivitySamples,
-                    current: viewModel.currentLiveActivity,
+                    samples: displayedSamples,
+                    current: displayedCurrentActivity,
                     style: .expanded
                 )
                 metricGrid
@@ -122,17 +143,23 @@ struct DiskActivityView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .onAppear {
-            if viewModel.liveActivitySelectedDriveID == nil {
-                viewModel.liveActivitySelectedDriveID = initialDrive.id
-            }
+            prepareWorkloadTarget()
             adjustWorkloadFileSizeForTarget()
         }
         .onChange(of: workloadTargetFolderPath) { _, _ in
-            viewModel.liveActivityWorkloadError = nil
+            workloadTargetSelectionError = nil
+            adjustWorkloadFileSizeForTarget()
+        }
+        .onChange(of: drive.id) { _, _ in
+            saveMessage = nil
+            workloadTargetSelectionError = nil
+            prepareWorkloadTarget()
             adjustWorkloadFileSizeForTarget()
         }
         .onChange(of: workloadOperationRaw) { _, _ in
-            viewModel.liveActivityWorkloadError = nil
+            if isShowingCurrentSession {
+                viewModel.liveActivityWorkloadError = nil
+            }
             adjustWorkloadFileSizeForTarget()
         }
     }
@@ -141,7 +168,12 @@ struct DiskActivityView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(language.t("Live Activity"))
                 .font(.largeTitle.bold())
-            Text(language.t(selectedDrive.isNetwork ? "Network drives do not provide per-disk IOKit activity counters." : "Monitors total I/O reported by macOS for the selected physical disk."))
+            Text(drive.catalogDisplayName)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .help(drive.catalogDisplayHelp(language: language))
+            Text(language.t(drive.isNetwork ? "Network drives do not provide per-disk IOKit activity counters." : "Monitors total I/O reported by macOS for the selected physical disk."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -150,22 +182,6 @@ struct DiskActivityView: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .bottom, spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(language.t("Drive"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Picker("", selection: selectedDriveBinding) {
-                        ForEach(viewModel.drives) { drive in
-                            Text("\(drive.catalogDisplayName) (\(drive.bsdName))")
-                                .help(drive.catalogDisplayHelp(language: language))
-                                .tag(drive.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 280, alignment: .leading)
-                    .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning)
-                }
-
                 VStack(alignment: .leading, spacing: 4) {
                     Text(language.t("Sample Interval"))
                         .font(.caption2)
@@ -187,27 +203,27 @@ struct DiskActivityView: View {
             HStack(spacing: 8) {
                 Button {
                     saveMessage = nil
-                    viewModel.startLiveActivityMonitoring(drive: selectedDrive, interval: selectedInterval)
+                    viewModel.startLiveActivityMonitoring(drive: drive, interval: selectedInterval)
                 } label: {
                     Label(language.t("Start Monitoring"), systemImage: "play.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.drives.isEmpty || selectedDrive.isNetwork)
+                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || drive.isNetwork)
 
                 Button {
                     saveMessage = nil
-                    viewModel.continueLiveActivityMonitoring(drive: selectedDrive, interval: selectedInterval)
+                    viewModel.continueLiveActivityMonitoring(drive: drive, interval: selectedInterval)
                 } label: {
                     Label(language.t("Continue Monitoring"), systemImage: "play.circle")
                 }
-                .disabled(!viewModel.canContinueLiveActivityMonitoring(for: selectedDrive))
+                .disabled(!viewModel.canContinueLiveActivityMonitoring(for: drive))
 
                 Button {
                     viewModel.stopLiveActivityMonitoring()
                 } label: {
                     Label(language.t("Stop Monitoring"), systemImage: "stop.fill")
                 }
-                .disabled(!viewModel.isLiveActivityMonitoring)
+                .disabled(!isMonitoringThisDrive)
 
                 Spacer(minLength: 10)
 
@@ -216,7 +232,7 @@ struct DiskActivityView: View {
                 } label: {
                     Label(language.t("Save to History"), systemImage: "tray.and.arrow.down")
                 }
-                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.liveActivitySamples.isEmpty)
+                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || displayedSamples.isEmpty)
 
                 Button {
                     saveMessage = nil
@@ -224,7 +240,7 @@ struct DiskActivityView: View {
                 } label: {
                     Label(language.t("Clear Chart"), systemImage: "xmark.circle")
                 }
-                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || viewModel.liveActivitySamples.isEmpty)
+                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || displayedSamples.isEmpty)
             }
         }
         .padding(10)
@@ -235,28 +251,49 @@ struct DiskActivityView: View {
         }
     }
 
-    private var selectedDriveBinding: Binding<String> {
-        Binding {
-            selectedDriveID
-        } set: { nextValue in
-            viewModel.liveActivitySelectedDriveID = nextValue
-            saveMessage = nil
-        }
-    }
-
     private var workloadPanel: some View {
         InfoPanel(title: language.t("Large File Workload"), symbol: "bolt.horizontal.circle") {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .bottom, spacing: 10) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(language.t("Target Folder"))
+                        Text(language.t("Target Location"))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        Button {
-                            chooseWorkloadTargetFolder()
+                        Menu {
+                            Button {
+                                setWorkloadTargetSelection(.automatic)
+                            } label: {
+                                Label(
+                                    automaticTargetTitle,
+                                    systemImage: workloadTargetSelection == .automatic ? "checkmark" : "internaldrive"
+                                )
+                            }
+
+                            Divider()
+
+                            ForEach(DiskActivityWorkloadTargetResolver.orderedVolumes(for: drive)) { volume in
+                                Button {
+                                    setWorkloadTargetSelection(.volume(deviceIdentifier: volume.deviceIdentifier))
+                                } label: {
+                                    Label(
+                                        workloadVolumeTitle(volume),
+                                        systemImage: workloadTargetSelection == .volume(deviceIdentifier: volume.deviceIdentifier) ? "checkmark" : "externaldrive"
+                                    )
+                                }
+                                .disabled(!DiskActivityWorkloadTargetResolver.isUsable(volume))
+                            }
+
+                            Divider()
+
+                            Button {
+                                chooseWorkloadTargetFolder()
+                            } label: {
+                                Label(language.t("Choose Folder…"), systemImage: "folder.badge.gearshape")
+                            }
                         } label: {
-                            Label(workloadTargetFolderPath.isEmpty ? language.t("Choose Target Folder") : language.t("Change Folder"), systemImage: "folder.badge.gearshape")
+                            Label(workloadTargetMenuTitle, systemImage: "folder")
                         }
+                        .frame(width: 220, alignment: .leading)
                         .disabled(viewModel.isLiveActivityWorkloadRunning)
                     }
 
@@ -304,7 +341,9 @@ struct DiskActivityView: View {
                         .frame(width: 110)
                         .disabled(viewModel.isLiveActivityWorkloadRunning)
                     }
+                }
 
+                HStack(spacing: 8) {
                     Spacer(minLength: 10)
 
                     Button {
@@ -320,7 +359,7 @@ struct DiskActivityView: View {
                     } label: {
                         Label(language.t("Stop Workload"), systemImage: "stop.fill")
                     }
-                    .disabled(!viewModel.isLiveActivityWorkloadRunning)
+                    .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
                 }
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -340,7 +379,7 @@ struct DiskActivityView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if let progress = viewModel.liveActivityWorkloadProgress {
+                if isShowingCurrentSession, let progress = viewModel.liveActivityWorkloadProgress {
                     VStack(alignment: .leading, spacing: 6) {
                         ProgressView(value: progress.fraction)
                         Text(workloadProgressText(progress))
@@ -349,7 +388,7 @@ struct DiskActivityView: View {
                     }
                 }
 
-                if let error = viewModel.liveActivityWorkloadError {
+                if let error = workloadTargetSelectionError ?? (isShowingCurrentSession ? viewModel.liveActivityWorkloadError : nil) {
                     Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -360,7 +399,7 @@ struct DiskActivityView: View {
 
     private var workloadTargetStatusText: String {
         if workloadTargetFolderPath.isEmpty {
-            return language.t("Choose a writable target folder")
+            return language.t("No writable mounted volume")
         }
         guard workloadTargetFolderIsUsable else {
             return language.t("Target folder is not writable")
@@ -376,6 +415,42 @@ struct DiskActivityView: View {
             return language.t("Selected workload size exceeds available free space")
         }
         return language.t("Target folder is writable")
+    }
+
+    private var automaticTargetTitle: String {
+        guard let volume = DiskActivityWorkloadTargetResolver.defaultVolume(for: drive) else {
+            return language.t("Automatic")
+        }
+        return "\(language.t("Automatic")) · \(volume.name)"
+    }
+
+    private var workloadTargetMenuTitle: String {
+        if resolvedWorkloadTarget.didFallBackToAutomatic {
+            return automaticTargetTitle
+        }
+        switch workloadTargetSelection {
+        case .automatic:
+            return automaticTargetTitle
+        case .volume:
+            return resolvedWorkloadTarget.volume?.name ?? automaticTargetTitle
+        case let .folder(path):
+            let name = URL(fileURLWithPath: path, isDirectory: true).lastPathComponent
+            return name.isEmpty ? path : name
+        }
+    }
+
+    private func workloadVolumeTitle(_ volume: DriveDevice.Volume) -> String {
+        let base = "\(volume.name) (\(volume.deviceIdentifier))"
+        guard volume.mountPoint != nil else {
+            return "\(base) · \(language.t("Not Mounted"))"
+        }
+        guard volume.isWritable else {
+            return "\(base) · \(language.t("Read Only"))"
+        }
+        guard DiskActivityWorkloadTargetResolver.isUsable(volume) else {
+            return "\(base) · \(language.t("Unavailable"))"
+        }
+        return base
     }
 
     private var workloadTargetStatusSymbol: String {
@@ -436,28 +511,67 @@ struct DiskActivityView: View {
         panel.canCreateDirectories = true
         if let workloadTargetFolderURL {
             panel.directoryURL = workloadTargetFolderURL
-        } else if let fallback = selectedDrive.benchmarkMountPoint {
+        } else if let fallback = DiskActivityWorkloadTargetResolver.defaultVolume(for: drive)?.mountPoint {
             panel.directoryURL = URL(fileURLWithPath: fallback, isDirectory: true)
         }
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        workloadTargetFolderPath = url.path
-        viewModel.liveActivityWorkloadError = nil
+        guard DiskActivityWorkloadTargetResolver.isUsableFolder(url.path),
+              let volume = BenchmarkTargetFolderMatcher.matchingVolume(for: url.path, drive: drive),
+              volume.isWritable else {
+            workloadTargetSelectionError = language.t("The selected folder must be writable and on the selected drive.")
+            return
+        }
+        setWorkloadTargetSelection(.folder(path: url.path))
+    }
+
+    private func setWorkloadTargetSelection(_ selection: DiskActivityWorkloadTargetSelection) {
+        var preferences = targetPreferences
+        preferences.setSelection(selection, for: drive)
+        workloadTargetPreferencesJSON = preferences.encoded()
+        workloadTargetSelectionError = nil
+        if isShowingCurrentSession {
+            viewModel.liveActivityWorkloadError = nil
+        }
         adjustWorkloadFileSizeForTarget()
+    }
+
+    private func prepareWorkloadTarget() {
+        var preferences = targetPreferences
+        let currentSelection = preferences.selection(for: drive)
+
+        if !legacyWorkloadTargetFolderPath.isEmpty {
+            if currentSelection == .automatic {
+                _ = preferences.migrateLegacyFolder(legacyWorkloadTargetFolderPath, to: drive)
+            }
+            legacyWorkloadTargetFolderPath = ""
+        }
+
+        let requestedSelection = preferences.selection(for: drive)
+        let resolved = DiskActivityWorkloadTargetResolver.resolve(requestedSelection, for: drive)
+        if resolved.didFallBackToAutomatic {
+            preferences.setSelection(.automatic, for: drive)
+        }
+
+        let encoded = preferences.encoded()
+        if encoded != workloadTargetPreferencesJSON {
+            workloadTargetPreferencesJSON = encoded
+        }
     }
 
     private func startWorkload() {
         guard let targetURL = workloadTargetFolderURL,
               let fileSize = workloadResolvedFileSize else {
-            viewModel.liveActivityWorkloadError = "Choose a writable target folder before starting."
+            workloadTargetSelectionError = language.t("Choose a writable target folder before starting.")
             return
         }
         guard canStartWorkload else {
-            viewModel.liveActivityWorkloadError = workloadTargetStatusText
+            workloadTargetSelectionError = workloadTargetStatusText
             return
         }
 
         saveMessage = nil
+        workloadTargetSelectionError = nil
         viewModel.startLiveActivityWorkload(
             configuration: DiskActivityWorkloadConfiguration(
                 targetFolderURL: targetURL,
@@ -466,7 +580,7 @@ struct DiskActivityView: View {
                 fileSizeBytes: fileSize,
                 loopEnabled: workloadLoopEnabled
             ),
-            drive: selectedDrive,
+            drive: drive,
             interval: selectedInterval
         )
     }
@@ -658,19 +772,19 @@ struct DiskActivityView: View {
 
     private func hideAllVisibleActivityHistory() {
         do {
-            try HistoryRepository(modelContext: modelContext).hideAll(selectedDriveHistory, driveID: selectedDrive.id)
+            try HistoryRepository(modelContext: modelContext).hideAll(selectedDriveHistory, driveID: drive.id)
         } catch {
             saveMessage = UserFacingError.message("Could not update activity history.", error: error)
         }
     }
 
     private func saveActivityHistory() {
-        let start = viewModel.liveActivityStartedAt ?? viewModel.liveActivitySamples.first?.timestamp ?? Date()
-        let end = viewModel.liveActivityEndedAt ?? viewModel.liveActivitySamples.last?.timestamp ?? Date()
+        let start = viewModel.liveActivityStartedAt ?? displayedSamples.first?.timestamp ?? Date()
+        let end = viewModel.liveActivityEndedAt ?? displayedSamples.last?.timestamp ?? Date()
         do {
             try HistoryRepository(modelContext: modelContext).saveActivity(
-                drive: selectedDrive,
-                samples: viewModel.liveActivitySamples,
+                drive: drive,
+                samples: displayedSamples,
                 sampleInterval: selectedInterval,
                 startedAt: start,
                 endedAt: end

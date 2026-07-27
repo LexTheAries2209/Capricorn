@@ -35,6 +35,71 @@ extension CapricornTests {
     }
 
     @MainActor
+    func testSidebarDriveSelectionLocksToLiveActivitySessionDriveUntilStopped() {
+        var firstDrive = Self.fixtureDrive(mountedAt: "/Volumes/First")
+        firstDrive.bsdName = "disk8"
+        var secondDrive = Self.fixtureDrive(mountedAt: "/Volumes/Second")
+        secondDrive.bsdName = "disk9"
+        let model = DITViewModel()
+        model.drives = [firstDrive, secondDrive]
+        model.selectedDriveID = firstDrive.id
+        model.liveActivityDriveID = firstDrive.id
+
+        model.isLiveActivityMonitoring = true
+        model.selectDriveFromSidebar(secondDrive.id)
+        XCTAssertEqual(model.selectedDriveID, firstDrive.id)
+
+        model.isLiveActivityMonitoring = false
+        model.selectDriveFromSidebar(secondDrive.id)
+        XCTAssertEqual(model.selectedDriveID, secondDrive.id)
+        XCTAssertEqual(model.liveActivityDriveID, firstDrive.id)
+
+        model.isLiveActivityWorkloadRunning = true
+        model.selectDriveFromSidebar(firstDrive.id)
+        XCTAssertEqual(model.selectedDriveID, secondDrive.id)
+
+        model.isLiveActivityWorkloadRunning = false
+        model.selectDriveFromSidebar(firstDrive.id)
+        XCTAssertEqual(model.selectedDriveID, firstDrive.id)
+    }
+
+    @MainActor
+    func testRejectedCrossDriveWorkloadDoesNotReassignExistingSession() throws {
+        let firstRoot = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        let secondRoot = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: firstRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondRoot, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: firstRoot)
+            try? FileManager.default.removeItem(at: secondRoot)
+        }
+
+        var firstDrive = Self.fixtureDrive(mountedAt: firstRoot.path)
+        firstDrive.bsdName = "disk8"
+        var secondDrive = Self.fixtureDrive(mountedAt: secondRoot.path)
+        secondDrive.bsdName = "disk9"
+        let model = DITViewModel()
+        model.drives = [firstDrive, secondDrive]
+        model.liveActivityDriveID = firstDrive.id
+
+        model.startLiveActivityWorkload(
+            configuration: DiskActivityWorkloadConfiguration(
+                targetFolderURL: firstRoot,
+                operation: .write,
+                fileSizeOption: .gib32,
+                fileSizeBytes: 16_384,
+                loopEnabled: false
+            ),
+            drive: secondDrive,
+            interval: .tenth
+        )
+
+        XCTAssertEqual(model.liveActivityDriveID, firstDrive.id)
+        XCTAssertFalse(model.isLiveActivityWorkloadRunning)
+        XCTAssertEqual(model.liveActivityWorkloadError, "Workload target folder must be on the selected drive.")
+    }
+
+    @MainActor
     func testLiveActivityContinueAppendsToStoppedChartForSameDrive() async {
         let drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
         let start = Date(timeIntervalSince1970: 1_000)
@@ -49,7 +114,7 @@ extension CapricornTests {
             diskActivityProvider: FakeDiskActivityProvider(reader: FakeDiskActivityReader(counters: counters))
         )
         model.drives = [drive]
-        model.liveActivitySelectedDriveID = drive.id
+        model.liveActivityDriveID = drive.id
 
         model.startLiveActivityMonitoring(drive: drive, interval: .tenth)
         let initialSamplesArrived = await AsyncTestWaiter.wait {
@@ -101,7 +166,7 @@ extension CapricornTests {
             diskActivityProvider: FakeDiskActivityProvider(reader: FakeDiskActivityReader(counters: []))
         )
         model.drives = [drive]
-        model.liveActivitySelectedDriveID = drive.id
+        model.liveActivityDriveID = drive.id
         model.liveActivityStartedAt = oldStart
         model.liveActivityEndedAt = oldStart.addingTimeInterval(10)
         model.liveActivitySamples = [
@@ -136,7 +201,7 @@ extension CapricornTests {
             liveActivityWorkloadRunner: workloadRunner
         )
         model.drives = [drive]
-        model.liveActivitySelectedDriveID = drive.id
+        model.liveActivityDriveID = drive.id
 
         model.startLiveActivityWorkload(
             configuration: DiskActivityWorkloadConfiguration(

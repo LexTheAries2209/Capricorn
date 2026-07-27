@@ -72,9 +72,9 @@ final class AppModel {
         set { liveActivitySession.isMonitoring = newValue }
     }
 
-    var liveActivitySelectedDriveID: String? {
-        get { liveActivitySession.selectedDriveID }
-        set { liveActivitySession.selectedDriveID = newValue }
+    var liveActivityDriveID: String? {
+        get { liveActivitySession.driveID }
+        set { liveActivitySession.driveID = newValue }
     }
 
     var liveActivityStartedAt: Date? {
@@ -105,6 +105,15 @@ final class AppModel {
     var isLiveActivityWorkloadRunning: Bool {
         get { liveActivitySession.isWorkloadActive }
         set { liveActivitySession.workloadState = newValue ? .running : .idle }
+    }
+
+    var isLiveActivityDriveSelectionLocked: Bool {
+        isLiveActivityMonitoring || isLiveActivityWorkloadRunning
+    }
+
+    func selectDriveFromSidebar(_ driveID: String?) {
+        guard !isLiveActivityDriveSelectionLocked || driveID == selectedDriveID else { return }
+        selectedDriveID = driveID
     }
 
     var diskOpenFileInspection: DiskOpenFileInspection? {
@@ -349,8 +358,14 @@ final class AppModel {
             if selectedDriveID == nil || !loadedDrives.contains(where: { $0.id == selectedDriveID }) {
                 selectedDriveID = loadedDrives.first?.id
             }
-            if liveActivitySelectedDriveID == nil || !loadedDrives.contains(where: { $0.id == liveActivitySelectedDriveID }) {
-                liveActivitySelectedDriveID = selectedDriveID ?? loadedDrives.first?.id
+            if let liveActivityDriveID,
+               !loadedDrives.contains(where: { $0.id == liveActivityDriveID }),
+               isLiveActivityMonitoring || isLiveActivityWorkloadRunning {
+                if isLiveActivityWorkloadRunning {
+                    stopLiveActivityWorkload()
+                }
+                stopLiveActivityMonitoring()
+                liveActivityError = "The active drive is no longer available."
             }
 
             for drive in loadedDrives {
@@ -790,7 +805,7 @@ final class AppModel {
     func startLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {
         guard liveActivitySession.workloadState == .idle, !diskOperations.isFirstAidBlocking else { return }
         stopLiveActivityMonitoring()
-        liveActivitySelectedDriveID = drive.id
+        liveActivityDriveID = drive.id
         liveActivitySession.continuationDriveID = nil
         liveActivityStartedAt = Date()
         liveActivityEndedAt = nil
@@ -819,7 +834,7 @@ final class AppModel {
 
     func continueLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {
         guard canContinueLiveActivityMonitoring(for: drive) else { return }
-        liveActivitySelectedDriveID = drive.id
+        liveActivityDriveID = drive.id
         liveActivityEndedAt = nil
         currentLiveActivity = liveActivitySamples.last
         liveActivityError = nil
@@ -834,7 +849,7 @@ final class AppModel {
         liveActivityBaselineRunID = nil
         if wasMonitoring {
             liveActivityEndedAt = Date()
-            liveActivitySession.continuationDriveID = liveActivitySamples.isEmpty ? nil : liveActivitySelectedDriveID
+            liveActivitySession.continuationDriveID = liveActivitySamples.isEmpty ? nil : liveActivityDriveID
         }
         isLiveActivityMonitoring = false
     }
@@ -853,7 +868,7 @@ final class AppModel {
 
     func loadLiveActivityRecord(_ record: DiskActivityHistoryRecord) {
         guard !isLiveActivityMonitoring, !isLiveActivityWorkloadRunning else { return }
-        liveActivitySelectedDriveID = record.driveID
+        liveActivityDriveID = record.driveID
         liveActivityStartedAt = record.startedAt
         liveActivityEndedAt = record.endedAt
         liveActivitySession.continuationDriveID = nil
@@ -873,7 +888,7 @@ final class AppModel {
             return
         }
 
-        liveActivitySelectedDriveID = drive.id
+        liveActivityDriveID = drive.id
         liveActivityWorkloadError = nil
         liveActivityWorkloadProgress = DiskActivityWorkloadProgress(
             operation: configuration.operation,
@@ -1207,7 +1222,7 @@ final class AppModel {
 
     private func startLiveActivityMonitoringForWorkload(drive: DriveDevice, interval: DiskActivitySampleInterval) {
         stopLiveActivityMonitoring()
-        liveActivitySelectedDriveID = drive.id
+        liveActivityDriveID = drive.id
         liveActivitySession.continuationDriveID = nil
         liveActivityStartedAt = Date()
         liveActivityEndedAt = nil

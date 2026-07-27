@@ -1821,6 +1821,111 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(other.path, drive: drive))
     }
 
+    func testActivityWorkloadAutomaticTargetUsesFirstWritableMountedVolumeInDeviceOrder() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        let readOnly = root.appendingPathComponent("ReadOnly")
+        let firstWritable = root.appendingPathComponent("FirstWritable")
+        let laterWritable = root.appendingPathComponent("LaterWritable")
+        try FileManager.default.createDirectory(at: readOnly, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: firstWritable, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: laterWritable, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk9s10", name: "Later", mountPoint: laterWritable.path, sizeBytes: 1_000, isWritable: true, isSystem: false),
+            DriveDevice.Volume(deviceIdentifier: "disk9s1", name: "Unmounted", mountPoint: nil, sizeBytes: 1_000, isWritable: true, isSystem: false),
+            DriveDevice.Volume(deviceIdentifier: "disk9s2", name: "Read Only", mountPoint: readOnly.path, sizeBytes: 1_000, isWritable: false, isSystem: false),
+            DriveDevice.Volume(deviceIdentifier: "disk9s3", name: "First", mountPoint: firstWritable.path, sizeBytes: 1_000, isWritable: true, isSystem: false)
+        ]
+
+        let resolved = DiskActivityWorkloadTargetResolver.resolve(.automatic, for: drive)
+
+        XCTAssertEqual(resolved.volume?.deviceIdentifier, "disk9s3")
+        XCTAssertEqual(resolved.folderURL?.path, firstWritable.path)
+        XCTAssertFalse(resolved.didFallBackToAutomatic)
+    }
+
+    func testActivityWorkloadTargetResolvesVolumeAndFolderAndRejectsOtherDrive() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        let firstVolume = root.appendingPathComponent("First")
+        let secondVolume = root.appendingPathComponent("Second")
+        let folder = firstVolume.appendingPathComponent("Workload")
+        let outside = root.appendingPathComponent("Outside")
+        for directory in [firstVolume, secondVolume, folder, outside] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk9s1", name: "First", mountPoint: firstVolume.path, sizeBytes: 1_000, isWritable: true, isSystem: false),
+            DriveDevice.Volume(deviceIdentifier: "disk9s2", name: "Second", mountPoint: secondVolume.path, sizeBytes: 1_000, isWritable: true, isSystem: false)
+        ]
+
+        let volumeTarget = DiskActivityWorkloadTargetResolver.resolve(.volume(deviceIdentifier: "disk9s2"), for: drive)
+        XCTAssertEqual(volumeTarget.folderURL?.path, secondVolume.path)
+        XCTAssertFalse(volumeTarget.didFallBackToAutomatic)
+
+        let folderTarget = DiskActivityWorkloadTargetResolver.resolve(.folder(path: folder.path), for: drive)
+        XCTAssertEqual(folderTarget.folderURL?.path, folder.path)
+        XCTAssertEqual(folderTarget.volume?.deviceIdentifier, "disk9s1")
+
+        let rejectedTarget = DiskActivityWorkloadTargetResolver.resolve(.folder(path: outside.path), for: drive)
+        XCTAssertTrue(rejectedTarget.didFallBackToAutomatic)
+        XCTAssertEqual(rejectedTarget.folderURL?.path, firstVolume.path)
+    }
+
+    func testActivityWorkloadTargetPreferencesPersistPerDriveAndMigrateValidLegacyFolder() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        let firstVolume = root.appendingPathComponent("First")
+        let firstFolder = firstVolume.appendingPathComponent("Folder")
+        let secondVolume = root.appendingPathComponent("Second")
+        let outside = root.appendingPathComponent("Outside")
+        for directory in [firstVolume, firstFolder, secondVolume, outside] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var firstDrive = Self.fixtureDrive()
+        firstDrive.bsdName = "disk8"
+        firstDrive.serialNumber = "SERIAL-A"
+        firstDrive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk8s1", name: "First", mountPoint: firstVolume.path, sizeBytes: 1_000, isWritable: true, isSystem: false)
+        ]
+        var secondDrive = Self.fixtureDrive()
+        secondDrive.bsdName = "disk9"
+        secondDrive.serialNumber = "SERIAL-B"
+        secondDrive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk9s1", name: "Second", mountPoint: secondVolume.path, sizeBytes: 1_000, isWritable: true, isSystem: false)
+        ]
+
+        var preferences = DiskActivityWorkloadTargetPreferences()
+        XCTAssertTrue(preferences.migrateLegacyFolder(firstFolder.path, to: firstDrive))
+        preferences.setSelection(.volume(deviceIdentifier: "disk9s1"), for: secondDrive)
+
+        let restored = DiskActivityWorkloadTargetPreferences.decode(preferences.encoded())
+        XCTAssertEqual(restored.selection(for: firstDrive), .folder(path: firstFolder.path))
+        XCTAssertEqual(restored.selection(for: secondDrive), .volume(deviceIdentifier: "disk9s1"))
+
+        var rejected = DiskActivityWorkloadTargetPreferences()
+        XCTAssertFalse(rejected.migrateLegacyFolder(outside.path, to: firstDrive))
+        XCTAssertEqual(rejected.selection(for: firstDrive), .automatic)
+    }
+
+    func testActivityWorkloadAutomaticTargetIsEmptyWithoutWritableMountedVolume() {
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk9s1", name: "Unmounted", mountPoint: nil, sizeBytes: 1_000, isWritable: true, isSystem: false),
+            DriveDevice.Volume(deviceIdentifier: "disk9s2", name: "Read Only", mountPoint: "/missing", sizeBytes: 1_000, isWritable: false, isSystem: false)
+        ]
+
+        let resolved = DiskActivityWorkloadTargetResolver.resolve(.automatic, for: drive)
+
+        XCTAssertNil(resolved.volume)
+        XCTAssertNil(resolved.folderURL)
+    }
+
     func testBenchmarkDefaultsMatchDiskMarkControls() {
         XCTAssertEqual(BenchmarkProfile.defaultRuns, 3)
         XCTAssertEqual(BenchmarkProfile.defaultTestSize, 1_073_741_824)
