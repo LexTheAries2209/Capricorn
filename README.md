@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.2.5`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.2.10`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v1.2.5.md](docs/releases/v1.2.5.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v1.2.10.md](docs/releases/v1.2.10.md)
 
 ---
 
@@ -20,11 +20,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.2.5-macOS.zip`。
-2. 解压后把 `Capricorn V1.2.5.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.2.10-macOS.zip`。
+2. 解压后把 `Capricorn V1.2.10.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V1.2.5 的中文发布说明见 [docs/releases/v1.2.5.zh-CN.md](docs/releases/v1.2.5.zh-CN.md)。
+V1.2.10 的中文发布说明见 [docs/releases/v1.2.10.zh-CN.md](docs/releases/v1.2.10.zh-CN.md)。
 
 典型用途：
 
@@ -50,6 +50,9 @@ V1.2.5 的中文发布说明见 [docs/releases/v1.2.5.zh-CN.md](docs/releases/v1
 - 自检操作会根据设备能力和传输层禁用不支持的目标；系统盘自检可在设置中单独允许，macOS NVMe 不支持的 admin command 不会被强行执行。
 - smartctl 7.5 数据兼容性得到加强，保留诊断信息；默认避免为 SMART 刷新唤醒休眠磁盘，并在无法安全识别设备类型时保留上一份数据。
 - 外接磁盘 SMART 支持状态和诊断默认折叠（已验证时），可展开查看 smartctl、SAT 驱动、设备路径和打开错误。
+- SMART 属性页支持独立纵向滚动、折叠历史自检记录和清除状态消息；常见外接 ATA 字段提供中文解释，Total LBAs Read/Written 会按逻辑块大小换算为可读容量，同时保留原始 LBA 信息。
+- 内置外接机械硬盘型号目录可识别一组已验证的厂商型号编码，并在侧边栏、SMART、测速、实时活动和历史页显示规范型号、产品系列与容量；无法确认的设备继续显示系统原始名称。
+- 侧边栏和概览显示物理磁盘或网络卷的总容量、已用和可用空间；APFS 共享容器只统计一次可用空间，避免重复汇总。
 - SMART 温度会按数据源区分单位：原生 Kelvin 数值同时显示换算后的摄氏度，已是摄氏度的数值保持摄氏度显示。
 - NVMe 累计读取量和写入量会把 macOS 原生与 `smartctl` 的 Data Units 转换为 TB，并保留原始 units 计数。
 - macOS 原生 SMART 优先，可选使用用户已安装的 `smartctl` 获取更完整的 ATA/NVMe 数据。
@@ -62,6 +65,8 @@ V1.2.5 的中文发布说明见 [docs/releases/v1.2.5.zh-CN.md](docs/releases/v1
 - “提高小块文件测试效率”可按 5%、10%、20%、30% 或 50% 缩减 4 KiB、16 KiB 和 64 KiB 项目的实际测试文件量，默认关闭，首次开启默认为 20%。
 - 测速页显示实时磁盘活动曲线，保存测速结果时会保存本次曲线样本。
 - 实时活动页支持 0.1s、0.2s、0.5s、1s 采样间隔、图表保留和保存到历史。
+- 实时活动页的监控磁盘完全跟随左侧侧边栏；监控或负载运行期间锁定其他磁盘，设备消失时停止任务并显示错误，停止后可切换磁盘且不同磁盘的未保存样本不会串联。
+- 大文件负载默认使用当前物理磁盘按设备标识排序后的第一个已挂载可写分区，并支持选择同盘分区或文件夹；只读、未挂载和跨盘目标会被拒绝，目标选择按磁盘分别记忆。
 - 停止实时活动监控后可以“继续监控”并从现有图表续接；“开始监控”仍会清空图表并创建新的监控段。
 - 实时活动大文件负载支持读取、写入、读写混合、固定大小和全盘 95% 模式。
 - 历史页支持 SMART、测速、实时活动记录的隐藏、管理隐藏记录和恢复。
@@ -137,8 +142,8 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 例如：
 
 - `Version = 1.2`
-- `Build = 5`
-- `Display Name = Capricorn V1.2.5`
+- `Build = 10`
+- `Display Name = Capricorn V1.2.10`
 
 ### 当前限制
 
@@ -158,11 +163,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v1.2.5-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V1.2.5.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v1.2.10-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V1.2.10.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V1.2.5 are available at [docs/releases/v1.2.5.en.md](docs/releases/v1.2.5.en.md).
+English release notes for V1.2.10 are available at [docs/releases/v1.2.10.en.md](docs/releases/v1.2.10.en.md).
 
 Common use cases:
 
@@ -188,6 +193,9 @@ Common use cases:
 - Disables unsupported self-test operations based on device capability and transport; system-disk self-tests can be allowed separately in Settings, and unsupported macOS NVMe admin commands are never forced.
 - Improves smartctl 7.5 compatibility and diagnostics, avoids waking sleeping disks by default for SMART refresh, and retains the previous snapshot when safe device identification is unavailable.
 - External-drive SMART support and diagnostics are collapsed by default after verification, with an expandable view for smartctl, SAT driver, target path, and open errors.
+- SMART attributes have an independently scrolling table, collapsible self-test history, and dismissible status messages. Common external ATA fields have clearer localized explanations, while Total LBAs Read/Written values are converted using the reported logical block size without dropping the original LBA details.
+- A bundled external HDD model catalog recognizes a verified set of vendor model codes and can show canonical model, product family, and capacity across the sidebar, SMART, benchmark, activity, and history surfaces. Unknown devices keep their original system-reported name.
+- The sidebar and overview show total, used, and available capacity for physical and network drives. APFS volumes that share one container are deduplicated before capacity aggregation.
 - Formats native Kelvin temperatures with a Celsius conversion while keeping already-Celsius values in Celsius.
 - Converts native macOS and `smartctl` NVMe Data Units Read/Written values to TB while retaining the raw unit count.
 - Uses native macOS SMART first, with optional user-installed `smartctl` for deeper ATA/NVMe data.
@@ -200,6 +208,8 @@ Common use cases:
 - An optional small-block efficiency control scales the actual test data for 4 KiB, 16 KiB, and 64 KiB items to 5%, 10%, 20%, 30%, or 50%; it is off by default and starts at 20% when first enabled.
 - Benchmark results can include the live activity samples captured during the run.
 - Live Activity supports 0.1s, 0.2s, 0.5s, and 1s sampling, retained charts, and history saving.
+- Live Activity follows the physical drive selected in the sidebar. Other drive rows are locked while monitoring or workload activity runs, disappearing devices stop the active tasks with an error, and unsaved samples remain isolated by drive after switching.
+- Large-file workloads automatically use the first writable mounted partition in natural device order, with explicit same-drive partition or folder selection. Read-only, unmounted, and cross-drive targets are rejected, and target choices are remembered separately for each drive.
 - After stopping Live Activity, Continue Monitoring appends new samples to the existing chart; Start Monitoring keeps the original clear-and-start-new behavior.
 - Large-file workloads support read, write, mixed read/write, fixed sizes, and a 95% free-space mode.
 - History supports SMART, benchmark, and activity record hiding, hidden-record management, and restore.
@@ -275,8 +285,8 @@ The public Display Name uses a three-part version label composed from Xcode `Ver
 Example:
 
 - `Version = 1.2`
-- `Build = 5`
-- `Display Name = Capricorn V1.2.5`
+- `Build = 10`
+- `Display Name = Capricorn V1.2.10`
 
 ### Current Limitations
 
