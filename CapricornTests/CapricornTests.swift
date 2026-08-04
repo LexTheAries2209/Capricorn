@@ -272,7 +272,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Continue Monitoring"), "继续监控")
     }
 
-    func testExternalSmartDisclosureDefaultsToCollapsedOnlyAfterSmartctlVerification() {
+    func testExternalSmartDisclosureVerificationRequiresAvailableSmartctlWithoutOpenError() {
         let verified = [ProviderStatus(name: "smartctl", state: .available, message: "Available")]
         let nativeOnly = [ProviderStatus(name: "Native macOS", state: .available, message: "Available")]
 
@@ -281,6 +281,60 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(ExternalSmartDisclosurePolicy.isVerified(
             providerStatuses: verified,
             diagnostics: SmartctlDiagnostics(openError: "Device open failed")
+        ))
+    }
+
+    func testSATSmartDriverPathTitleIsExplicitlyLocalized() {
+        XCTAssertEqual(AppLanguage.english.t("SAT SMART Driver Paths"), "SAT SMART Driver Paths")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("SAT SMART Driver Paths"), "SAT SMART Driver 路径")
+    }
+
+    func testExternalSmartDisclosureVisibilityAndInitialExpansionPolicy() {
+        let missingSupport = ExternalSupportStatus(
+            satDriverInstalled: false,
+            smartctlInstalled: false,
+            driverPaths: [],
+            message: "Missing"
+        )
+        let installedSupport = ExternalSupportStatus(
+            satDriverInstalled: true,
+            smartctlInstalled: true,
+            driverPaths: ["/Library/Extensions/SATSMARTDriver.kext"],
+            message: "Installed"
+        )
+        let internalDrive = Self.fixtureDrive()
+        var externalDrive = internalDrive
+        externalDrive.isInternal = false
+        externalDrive.isRemovable = true
+        var networkDrive = externalDrive
+        networkDrive.isNetwork = true
+        var memoryCard = externalDrive
+        memoryCard.isMemoryCard = true
+
+        XCTAssertTrue(ExternalSmartDisclosurePolicy.showsPanel(for: internalDrive))
+        XCTAssertTrue(ExternalSmartDisclosurePolicy.showsPanel(for: externalDrive))
+        XCTAssertFalse(ExternalSmartDisclosurePolicy.showsPanel(for: networkDrive))
+        XCTAssertFalse(ExternalSmartDisclosurePolicy.showsPanel(for: memoryCard))
+
+        XCTAssertFalse(ExternalSmartDisclosurePolicy.startsExpanded(
+            for: internalDrive,
+            status: missingSupport,
+            isVerified: false
+        ))
+        XCTAssertFalse(ExternalSmartDisclosurePolicy.startsExpanded(
+            for: externalDrive,
+            status: installedSupport,
+            isVerified: false
+        ))
+        XCTAssertTrue(ExternalSmartDisclosurePolicy.startsExpanded(
+            for: externalDrive,
+            status: missingSupport,
+            isVerified: false
+        ))
+        XCTAssertFalse(ExternalSmartDisclosurePolicy.startsExpanded(
+            for: externalDrive,
+            status: missingSupport,
+            isVerified: true
         ))
     }
 

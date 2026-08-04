@@ -32,14 +32,8 @@ struct SmartAttributesView: View {
         return saveMessage.contains("failed") || saveMessage.contains("unavailable") || saveMessage.hasPrefix("Could not")
     }
 
-    private var showsExternalSupportHelp: Bool {
-        guard !drive.isNetwork, !drive.isMemoryCard else { return false }
-        guard let snapshot else { return false }
-        let hasAvailableProvider = snapshot.providerStatuses.contains { $0.state == .available }
-        let hasLimitedProvider = snapshot.providerStatuses.contains { $0.state == .limited }
-        let externalDrive = !drive.isInternal || drive.isRemovable
-        let lacksUsableSmart = attributes.isEmpty || snapshot.health == .unavailable || !hasAvailableProvider
-        return externalDrive || lacksUsableSmart || hasLimitedProvider
+    private var showsExternalSupportPanel: Bool {
+        ExternalSmartDisclosurePolicy.showsPanel(for: drive)
     }
 
     private var externalSmartIsVerified: Bool {
@@ -123,11 +117,16 @@ struct SmartAttributesView: View {
     private var supplementaryPanels: some View {
         SmartSelfTestPanel(drive: drive, snapshot: snapshot, viewModel: viewModel)
 
-        if showsExternalSupportHelp {
+        if showsExternalSupportPanel {
             ExternalSupportView(
                 status: externalSupport,
                 diagnostics: snapshot?.smartctlDiagnostics,
                 isVerified: externalSmartIsVerified,
+                initiallyExpanded: ExternalSmartDisclosurePolicy.startsExpanded(
+                    for: drive,
+                    status: externalSupport,
+                    isVerified: externalSmartIsVerified
+                ),
                 refresh: verifyExternalSupport
             )
                 .id(drive.id)
@@ -212,6 +211,22 @@ struct SmartAttributesView: View {
 }
 
 enum ExternalSmartDisclosurePolicy {
+    static func showsPanel(for drive: DriveDevice) -> Bool {
+        !drive.isNetwork && !drive.isMemoryCard
+    }
+
+    static func startsExpanded(
+        for drive: DriveDevice,
+        status: ExternalSupportStatus,
+        isVerified: Bool
+    ) -> Bool {
+        guard showsPanel(for: drive) else { return false }
+        if drive.isInternal || (status.smartctlInstalled && status.satDriverInstalled) {
+            return false
+        }
+        return !isVerified
+    }
+
     static func isVerified(
         providerStatuses: [ProviderStatus],
         diagnostics: SmartctlDiagnostics?

@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.2.10`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.2.11`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v1.2.10.md](docs/releases/v1.2.10.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v1.2.11.md](docs/releases/v1.2.11.md)
 
 ---
 
@@ -20,11 +20,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.2.10-macOS.zip`。
-2. 解压后把 `Capricorn V1.2.10.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.2.11-macOS.zip`。
+2. 解压后把 `Capricorn V1.2.11.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V1.2.10 的中文发布说明见 [docs/releases/v1.2.10.zh-CN.md](docs/releases/v1.2.10.zh-CN.md)。
+V1.2.11 的中文发布说明见 [docs/releases/v1.2.11.zh-CN.md](docs/releases/v1.2.11.zh-CN.md)。
 
 典型用途：
 
@@ -49,7 +49,8 @@ V1.2.10 的中文发布说明见 [docs/releases/v1.2.10.zh-CN.md](docs/releases/
 - SMART 页面支持 ATA、NVMe 和 SAT 设备的快速/完整自检、自动轮询、中止操作、最近记录和原始 smartctl 输出回退；概览仅显示最近一次设备自检摘要。
 - 自检操作会根据设备能力和传输层禁用不支持的目标；系统盘自检可在设置中单独允许，macOS NVMe 不支持的 admin command 不会被强行执行。
 - smartctl 7.5 数据兼容性得到加强，保留诊断信息；默认避免为 SMART 刷新唤醒休眠磁盘，并在无法安全识别设备类型时保留上一份数据。
-- 外接磁盘 SMART 支持状态和诊断默认折叠（已验证时），可展开查看 smartctl、SAT 驱动、设备路径和打开错误。
+- 本地物理磁盘的 SMART 页面始终保留可折叠的“外接磁盘 SMART”支持区；内置磁盘或同时检测到 smartctl 与 SAT SMART Driver 时默认折叠，缺少依赖或尚未验证的外接磁盘默认展开。
+- “驱动诊断”集中显示 smartctl 目标路径、设备类型、协议、打开错误和明确标注的 SAT SMART Driver 路径；未检测到 SAT 驱动时提供开源项目仓库入口，检测成功后不再显示重复的安装或重连提示。
 - SMART 属性页支持独立纵向滚动、折叠历史自检记录和清除状态消息；常见外接 ATA 字段提供中文解释，Total LBAs Read/Written 会按逻辑块大小换算为可读容量，同时保留原始 LBA 信息。
 - 内置外接机械硬盘型号目录可识别一组已验证的厂商型号编码，并在侧边栏、SMART、测速、实时活动和历史页显示规范型号、产品系列与容量；无法确认的设备继续显示系统原始名称。
 - 侧边栏和概览显示物理磁盘或网络卷的总容量、已用和可用空间；APFS 共享容器只统计一次可用空间，避免重复汇总。
@@ -78,7 +79,7 @@ V1.2.10 的中文发布说明见 [docs/releases/v1.2.10.zh-CN.md](docs/releases/
 - 急救会阻断 SMART 故障、系统盘、内置盘、网络卷、虚拟盘、只读卷、锁定卷和 NTFS；NTFS 仅提供 Windows CHKDSK 指引。
 - Shell 命令取消时会终止对应子进程，并区分启动失败、非零退出和主动取消。
 - 设置页支持虚拟磁盘显示、报告序列号、普通 Tab 切页和自定义 `smartctl` 路径，并完整支持简体中文。
-- 支持 `Command-R` 刷新、`Command-P` 打开设置、`Control-Tab` / `Control-Shift-Tab` 切换功能页；普通 `Tab` 切页可在设置中关闭。
+- 应用菜单只保留系统 `Settings…` 设置入口，并使用 `Command-P` 打开；另支持 `Command-R` 刷新、`Control-Tab` / `Control-Shift-Tab` 切换功能页，普通 `Tab` 切页可在设置中关闭。
 - 界面支持较小窗口和自适应控制栏、指标卡布局，宽表格保留水平滚动。
 - SwiftData 历史记录使用版本化 Schema、迁移计划和统一 Repository，保存或导出失败会显示明确错误。
 - 内置简体中文和英文界面。
@@ -89,6 +90,7 @@ macOS 原生 SMART 对 NVMe、SATA、USB、SD 卡和网络卷的支持程度不�
 
 - 内置 Apple NVMe 通常可以显示 macOS 原生 SMART 摘要。
 - 部分外接 USB-SATA 设备需要用户自行安装 SAT SMART Driver 或通过 `smartctl` 读取。
+- 未检测到 SAT SMART Driver 时，SMART 支持区可直接打开 [OS-X-SAT-SMART-Driver 开源项目仓库](https://github.com/kasbert/OS-X-SAT-SMART-Driver)；Capricorn 只提供入口，不会自动下载或安装驱动。
 - USB NVMe、SD/SDXC 卡和网络卷通常不会暴露标准 SMART 健康属性。
 - Capricorn 不会安装或卸载内核扩展，也不会捆绑 GPL `smartctl` 二进制文件。
 
@@ -142,8 +144,8 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 例如：
 
 - `Version = 1.2`
-- `Build = 10`
-- `Display Name = Capricorn V1.2.10`
+- `Build = 11`
+- `Display Name = Capricorn V1.2.11`
 
 ### 当前限制
 
@@ -163,11 +165,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v1.2.10-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V1.2.10.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v1.2.11-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V1.2.11.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V1.2.10 are available at [docs/releases/v1.2.10.en.md](docs/releases/v1.2.10.en.md).
+English release notes for V1.2.11 are available at [docs/releases/v1.2.11.en.md](docs/releases/v1.2.11.en.md).
 
 Common use cases:
 
@@ -192,7 +194,8 @@ Common use cases:
 - Adds quick/full SMART self-tests for supported ATA, NVMe, and SAT devices, automatic polling, abort, recent records, and raw smartctl fallback; Overview keeps only the latest device-reported summary.
 - Disables unsupported self-test operations based on device capability and transport; system-disk self-tests can be allowed separately in Settings, and unsupported macOS NVMe admin commands are never forced.
 - Improves smartctl 7.5 compatibility and diagnostics, avoids waking sleeping disks by default for SMART refresh, and retains the previous snapshot when safe device identification is unavailable.
-- External-drive SMART support and diagnostics are collapsed by default after verification, with an expandable view for smartctl, SAT driver, target path, and open errors.
+- The SMART page keeps an expandable External Drive SMART support section available for every local physical drive. It starts collapsed for internal drives or when both smartctl and SAT SMART Driver are detected, and starts expanded for external drives with missing or unverified support.
+- Driver Diagnostics groups the smartctl target path, device type, protocol, open errors, and explicitly labeled SAT SMART Driver paths. When the SAT driver is missing, it links to the open-source project; after detection, redundant installation and reconnect guidance stays hidden.
 - SMART attributes have an independently scrolling table, collapsible self-test history, and dismissible status messages. Common external ATA fields have clearer localized explanations, while Total LBAs Read/Written values are converted using the reported logical block size without dropping the original LBA details.
 - A bundled external HDD model catalog recognizes a verified set of vendor model codes and can show canonical model, product family, and capacity across the sidebar, SMART, benchmark, activity, and history surfaces. Unknown devices keep their original system-reported name.
 - The sidebar and overview show total, used, and available capacity for physical and network drives. APFS volumes that share one container are deduplicated before capacity aggregation.
@@ -221,7 +224,7 @@ Common use cases:
 - Blocks First Aid for failing SMART health, system/internal disks, network or virtual volumes, read-only/locked volumes, and NTFS; NTFS shows Windows CHKDSK guidance only.
 - Cancelling a shell command terminates its child process and distinguishes launch failures, non-zero exits, and user cancellation.
 - Settings cover virtual-drive visibility, report serial numbers, plain-Tab navigation, and a custom `smartctl` path, with complete Simplified Chinese content.
-- Supports `Command-R` to refresh, `Command-P` to open Settings, and `Control-Tab` / `Control-Shift-Tab` to switch feature pages; plain-Tab switching can be disabled.
+- The application menu keeps only the system `Settings…` command and maps it to `Command-P`. Capricorn also supports `Command-R` to refresh and `Control-Tab` / `Control-Shift-Tab` to switch feature pages; plain-Tab switching can be disabled.
 - Responsive controls and metric grids support smaller windows while wide tables keep horizontal scrolling.
 - SwiftData history uses a versioned schema, migration plan, and repository boundary with explicit save/export errors.
 - Provides Simplified Chinese and English UI text.
@@ -232,6 +235,7 @@ macOS exposes different SMART data depending on NVMe, SATA, USB, SD card, bridge
 
 - Internal Apple NVMe drives usually expose a native SMART summary.
 - Some external USB-SATA devices require a user-installed SAT SMART Driver or `smartctl`.
+- When SAT SMART Driver is not detected, the SMART support section links directly to the [OS-X-SAT-SMART-Driver open-source repository](https://github.com/kasbert/OS-X-SAT-SMART-Driver). Capricorn provides the link but does not download or install the driver.
 - USB NVMe, SD/SDXC cards, and network volumes often do not expose standard SMART health attributes.
 - Capricorn does not install or remove kernel extensions and does not bundle the GPL `smartctl` binary.
 
@@ -285,8 +289,8 @@ The public Display Name uses a three-part version label composed from Xcode `Ver
 Example:
 
 - `Version = 1.2`
-- `Build = 10`
-- `Display Name = Capricorn V1.2.10`
+- `Build = 11`
+- `Display Name = Capricorn V1.2.11`
 
 ### Current Limitations
 

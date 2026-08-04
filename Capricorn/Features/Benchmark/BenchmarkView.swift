@@ -1420,13 +1420,14 @@ struct ExternalSupportView: View {
         status: ExternalSupportStatus,
         diagnostics: SmartctlDiagnostics? = nil,
         isVerified: Bool,
+        initiallyExpanded: Bool,
         refresh: @escaping () -> Void
     ) {
         self.status = status
         self.diagnostics = diagnostics
         self.isVerified = isVerified
         self.refresh = refresh
-        _isExpanded = State(initialValue: !isVerified)
+        _isExpanded = State(initialValue: initiallyExpanded)
     }
 
     var body: some View {
@@ -1462,10 +1463,12 @@ struct ExternalSupportView: View {
                             .foregroundStyle(.secondary)
                         StatusLine(title: "smartctl", isOn: status.smartctlInstalled)
                         StatusLine(title: "SAT SMART Driver", isOn: status.satDriverInstalled)
-                        Text(language.statusMessage(status.message))
-                            .foregroundStyle(.secondary)
+                        if !status.satDriverInstalled {
+                            Text(language.statusMessage(status.message))
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    InfoPanel(title: language.t("smartctl Diagnostics"), symbol: "waveform.path.ecg.rectangle") {
+                    InfoPanel(title: language.t("Driver Diagnostics"), symbol: "waveform.path.ecg.rectangle") {
                         if let diagnostics {
                             diagnosticRow(language.t("smartctl Version"), diagnostics.version)
                             diagnosticRow(language.t("Drive Database"), diagnostics.driveDatabaseVersion)
@@ -1494,6 +1497,24 @@ struct ExternalSupportView: View {
                             Text(language.t("No smartctl target diagnostics are available for this disk."))
                                 .foregroundStyle(.secondary)
                         }
+
+                        Divider()
+
+                        Text(language.t("SAT SMART Driver Paths"))
+                            .font(.headline)
+                        if status.driverPaths.isEmpty {
+                            Text(language.t("No SAT SMART Driver bundle was detected in standard extension locations."))
+                                .foregroundStyle(.secondary)
+                            Link(destination: URL(string: "https://github.com/kasbert/OS-X-SAT-SMART-Driver")!) {
+                                Label(language.t("Open SAT SMART Driver open-source repository"), systemImage: "safari")
+                            }
+                        } else {
+                            ForEach(status.driverPaths, id: \.self) { path in
+                                Text(path)
+                                    .font(.system(.body, design: .monospaced))
+                                    .textSelection(.enabled)
+                            }
+                        }
                     }
                     if !status.smartctlInstalled {
                         InfoPanel(title: language.t("Install smartmontools"), symbol: "terminal") {
@@ -1513,19 +1534,6 @@ struct ExternalSupportView: View {
                                 Label(language.t("Open Homebrew smartmontools formula"), systemImage: "safari")
                             }
                         }
-                    }
-                    InfoPanel(title: language.t("Driver Paths"), symbol: "shippingbox") {
-                        if status.driverPaths.isEmpty {
-                            Text(language.t("No SAT SMART Driver bundle was detected in standard extension locations."))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(status.driverPaths, id: \.self) { path in
-                                Text(path).monospaced()
-                            }
-                        }
-                    }
-                    Link(destination: URL(string: "https://github.com/kasbert/OS-X-SAT-SMART-Driver")!) {
-                        Label(language.t("Open SAT SMART Driver project"), systemImage: "safari")
                     }
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))

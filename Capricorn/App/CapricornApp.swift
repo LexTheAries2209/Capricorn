@@ -33,10 +33,8 @@ struct CapricornApp: App {
         .defaultSize(width: 1433, height: 732)
         .modelContainer(modelContainer)
         .commands {
-            CommandGroup(after: .appSettings) {
-                SettingsLink {
-                    Text(language.t("Settings"))
-                }
+            CommandGroup(replacing: .appSettings) {
+                SettingsLink()
                 .keyboardShortcut(
                     AppCommandShortcut.settingsKeyEquivalent,
                     modifiers: AppCommandShortcut.settings.modifiers
@@ -85,6 +83,7 @@ struct CapricornApp: App {
         Settings {
             CapricornSettingsView(preferences: preferences)
         }
+        .commandsRemoved()
     }
 
     private var menuBarSummary: String {
