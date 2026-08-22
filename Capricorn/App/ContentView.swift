@@ -359,31 +359,21 @@ struct ContentView: View {
         }
 
         let fileURL = URL(fileURLWithPath: exportFolderPath, isDirectory: true)
-            .appendingPathComponent(snapshotFileName(drive: drive, date: snapshot.capturedAt))
-        do {
-            let report = try ReportExporter.jsonReport(
+            .appendingPathComponent(ReportExporter.smartSnapshotFileName(
                 drive: drive,
+                date: snapshot.capturedAt,
+                language: language
+            ))
+        do {
+            let report = ReportExporter.smartSnapshotCSVReport(
                 snapshot: snapshot,
-                benchmarkResults: [],
-                includeSerial: false
+                language: language
             )
             try report.write(to: fileURL, atomically: true, encoding: .utf8)
             return "SMART snapshot saved to history and \(fileURL.lastPathComponent)."
         } catch {
             return UserFacingError.message("SMART snapshot saved to history, but export failed.", error: error)
         }
-    }
-
-    private func snapshotFileName(drive: DriveDevice, date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        let stamp = formatter.string(from: date)
-            .replacingOccurrences(of: ":", with: "-")
-        let safeName = drive.displayName
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .joined(separator: "-")
-        return "Capricorn-\(safeName.isEmpty ? drive.bsdName : safeName)-\(stamp).json"
     }
 
     private func saveBenchmarkResults(drive: DriveDevice, results: [BenchmarkResult], activitySamples: [DiskActivitySample]) {

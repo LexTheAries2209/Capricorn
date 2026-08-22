@@ -84,6 +84,51 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testSmartSnapshotFileNameUsesLocalizedTimeZoneAndCSVExtension() {
+        let drive = Self.fixtureDrive()
+        let date = Date(timeIntervalSince1970: 0)
+
+        XCTAssertEqual(
+            ReportExporter.smartSnapshotFileName(drive: drive, date: date, language: .simplifiedChinese),
+            "Capricorn-APPLE-SSD-AP1024Z-1970-01-01T08-00-00+0800-UTC+8.csv"
+        )
+        XCTAssertEqual(
+            ReportExporter.smartSnapshotFileName(drive: drive, date: date, language: .english),
+            "Capricorn-APPLE-SSD-AP1024Z-1970-01-01T00-00-00Z-UTC+0.csv"
+        )
+    }
+
+    func testSmartSnapshotCSVReportIncludesOnlyAttributesAndEscapesValues() {
+        var snapshot = Self.fixtureSnapshot(for: Self.fixtureDrive())
+        snapshot.attributes = [
+            SmartAttribute(
+                id: "AVAILABLE_SPARE",
+                name: "Available Spare",
+                rawValue: "value, with \"quotes\"",
+                current: 100,
+                worst: 99,
+                threshold: 10,
+                status: .good,
+                source: "Fixture"
+            )
+        ]
+
+        let englishCSV = ReportExporter.smartSnapshotCSVReport(snapshot: snapshot, language: .english)
+        XCTAssertEqual(
+            englishCSV.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init),
+            "attribute_id,attribute_name,description,raw_value,current,worst,threshold,status,source"
+        )
+        XCTAssertFalse(englishCSV.contains("chinese_name"))
+        XCTAssertTrue(englishCSV.contains("AVAILABLE_SPARE,Available Spare,Remaining NVMe spare capacity.,\"value, with \"\"quotes\"\"\",100,99,10,Good,Fixture"))
+
+        let chineseCSV = ReportExporter.smartSnapshotCSVReport(snapshot: snapshot, language: .simplifiedChinese)
+        XCTAssertEqual(
+            chineseCSV.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init),
+            "attribute_id,attribute_name,chinese_name,description,raw_value,current,worst,threshold,status,source"
+        )
+        XCTAssertTrue(chineseCSV.contains("AVAILABLE_SPARE,Available Spare,可用备用空间,NVMe 备用块剩余比例，低于阈值时需要关注。,\"value, with \"\"quotes\"\"\",100,99,10,Good,Fixture"))
+    }
+
     func testExternalDriveModelCatalogUsesHardwareModelWhenBridgeNameIsGeneric() throws {
         var drive = Self.externalCatalogDrive(model: "USB 3.0 Device")
         drive.model = "ST8000NM000A-2KE101 Media"

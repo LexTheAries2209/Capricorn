@@ -269,6 +269,58 @@ enum ReportExporter {
         return lines.joined(separator: "\n")
     }
 
+    /// Exports the SMART attribute table as a compact CSV document. Snapshot
+    /// metadata is intentionally omitted; localized names and descriptions are
+    /// resolved from the same catalog used by the SMART table UI.
+    static func smartSnapshotCSVReport(snapshot: SmartSnapshot, language: AppLanguage) -> String {
+        var header = ["attribute_id", "attribute_name"]
+        if language == .simplifiedChinese {
+            header.append("chinese_name")
+        }
+        header += [
+            "description", "raw_value", "current", "worst", "threshold", "status", "source"
+        ]
+        var lines = [header.map(escapeCSV).joined(separator: ",")]
+        lines += snapshot.attributes.map { attribute in
+            let display = SmartAttributeCatalog.display(for: attribute, language: language)
+            var values = [
+                attribute.id,
+                attribute.name,
+            ]
+            if language == .simplifiedChinese {
+                values.append(display.title)
+            }
+            values += [
+                display.subtitle,
+                attribute.rawValue,
+                attribute.current.map(String.init) ?? "",
+                attribute.worst.map(String.init) ?? "",
+                attribute.threshold.map(String.init) ?? "",
+                attribute.status.title,
+                attribute.source
+            ]
+            return values.map(escapeCSV).joined(separator: ",")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    static func smartSnapshotFileName(drive: DriveDevice, date: Date, language: AppLanguage) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = language == .simplifiedChinese
+            ? TimeZone(secondsFromGMT: 8 * 60 * 60)
+            : TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH-mm-ss"
+
+        let timeZoneLabel = language == .simplifiedChinese ? "+0800-UTC+8" : "Z-UTC+0"
+        let safeName = drive.displayName
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
+        return "Capricorn-\(safeName.isEmpty ? drive.bsdName : safeName)-\(formatter.string(from: date))\(timeZoneLabel).csv"
+    }
+
     static func textReport(drive: DriveDevice, snapshot: SmartSnapshot?, results: [BenchmarkResult], includeSerial: Bool) -> String {
         let redactedDrive = redacted(drive, includeSerial: includeSerial)
         var lines = [

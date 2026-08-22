@@ -78,7 +78,7 @@ struct SmartAttributesView: View {
                     Button {
                         saveMessage = saveSnapshot(snapshotExportFolderPath.isEmpty ? nil : snapshotExportFolderPath)
                     } label: {
-                        Label(language.t("Save SMART Snapshot"), systemImage: "tray.and.arrow.down")
+                        Label(language.t("Save SMART Snapshot CSV"), systemImage: "tray.and.arrow.down")
                     }
                     .disabled(snapshot == nil)
                 }
@@ -148,7 +148,7 @@ struct SmartAttributesView: View {
     private func chooseSnapshotExportFolder() {
         let panel = NSOpenPanel()
         panel.title = language.t("Choose Storage Folder")
-        panel.message = language.t("Choose an optional folder for exported SMART snapshot JSON files.")
+        panel.message = language.t("Choose an optional folder for exported SMART snapshot CSV files.")
         panel.prompt = language.t("Use Folder")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
