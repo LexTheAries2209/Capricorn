@@ -6,14 +6,18 @@ import SwiftUI
 struct CapricornApp: App {
     @State private var viewModel: AppModel
     @State private var preferences: AppPreferences
+    @State private var updateChecker: AppUpdateChecker
+    @Environment(\.openSettings) private var openSettings
     private let modelContainer: ModelContainer
 
     init() {
         let preferences = AppPreferences()
         let viewModel = AppModel()
+        let updateChecker = AppUpdateChecker()
         viewModel.showVirtualDisks = preferences.showVirtualDisks
         _preferences = State(initialValue: preferences)
         _viewModel = State(initialValue: viewModel)
+        _updateChecker = State(initialValue: updateChecker)
         do {
             modelContainer = try ModelContainerFactory.makeApplication()
         } catch {
@@ -29,11 +33,20 @@ struct CapricornApp: App {
         WindowGroup {
             ContentView(viewModel: viewModel, preferences: preferences)
                 .frame(minWidth: 1050, minHeight: 680)
+                .task {
+                    await updateChecker.checkQuietlyAtLaunch()
+                }
         }
         .defaultSize(width: 1433, height: 732)
         .modelContainer(modelContainer)
         .commands {
             CommandGroup(replacing: .appSettings) {
+                Button(language.t("Check for Updates…")) {
+                    openSettings()
+                    Task { await updateChecker.checkNow() }
+                }
+                .disabled(updateChecker.state == .checking)
+
                 SettingsLink()
                 .keyboardShortcut(
                     AppCommandShortcut.settingsKeyEquivalent,
@@ -81,7 +94,7 @@ struct CapricornApp: App {
         }
 
         Settings {
-            CapricornSettingsView(preferences: preferences)
+            CapricornSettingsView(preferences: preferences, updateChecker: updateChecker)
         }
         .commandsRemoved()
     }

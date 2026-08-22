@@ -80,6 +80,7 @@ final class AppPreferences {
 
 struct CapricornSettingsView: View {
     @Bindable var preferences: AppPreferences
+    @Bindable var updateChecker: AppUpdateChecker
 
     private var language: AppLanguage {
         preferences.language
@@ -87,6 +88,8 @@ struct CapricornSettingsView: View {
 
     var body: some View {
         Form {
+            AppUpdateSettingsSection(updateChecker: updateChecker, language: language)
+
             Picker(language.t("Language"), selection: $preferences.languageRawValue) {
                 ForEach(AppLanguage.allCases) { language in
                     Text(language.shortTitle).tag(language.rawValue)

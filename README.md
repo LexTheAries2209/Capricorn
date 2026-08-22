@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.2.11`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v1.2.12`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v1.2.11.md](docs/releases/v1.2.11.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v1.2.12.md](docs/releases/v1.2.12.md)
 
 ---
 
@@ -20,11 +20,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.2.11-macOS.zip`。
-2. 解压后把 `Capricorn V1.2.11.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v1.2.12-macOS.zip`。
+2. 解压后把 `Capricorn V1.2.12.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V1.2.11 的中文发布说明见 [docs/releases/v1.2.11.zh-CN.md](docs/releases/v1.2.11.zh-CN.md)。
+V1.2.12 的中文发布说明见 [docs/releases/v1.2.12.zh-CN.md](docs/releases/v1.2.12.zh-CN.md)。
 
 典型用途：
 
@@ -72,6 +72,7 @@ V1.2.11 的中文发布说明见 [docs/releases/v1.2.11.zh-CN.md](docs/releases/
 - 实时活动大文件负载支持读取、写入、读写混合、固定大小和全盘 95% 模式。
 - 历史页支持 SMART、测速、实时活动记录的隐藏、管理隐藏记录和恢复。
 - 报告导出支持 JSON、CSV 和纯文本，默认隐藏序列号。
+- SMART 快照导出为紧凑 CSV；中文界面额外包含中文名称，英文界面使用 SMART 属性的英文名称和说明。
 - 测速和实时负载使用明确的运行会话与取消状态，停止后会等待进程、文件句柄和临时文件完成清理，并拒绝旧任务的晚到回调。
 - 修复测速取消、重启和后台回调导致的界面卡顿问题，停止后会等待真实清理完成。
 - 磁盘刷新使用受控并发和单次 `smartctl` 扫描；重叠刷新时只有最新结果可以更新界面。
@@ -80,6 +81,7 @@ V1.2.11 的中文发布说明见 [docs/releases/v1.2.11.zh-CN.md](docs/releases/
 - Shell 命令取消时会终止对应子进程，并区分启动失败、非零退出和主动取消。
 - 设置页支持虚拟磁盘显示、报告序列号、普通 Tab 切页和自定义 `smartctl` 路径，并完整支持简体中文。
 - 应用菜单只保留系统 `Settings…` 设置入口，并使用 `Command-P` 打开；另支持 `Command-R` 刷新、`Control-Tab` / `Control-Shift-Tab` 切换功能页，普通 `Tab` 切页可在设置中关闭。
+- 应用启动时静默检查 GitHub 最新稳定版；设置页和应用菜单提供手动检查、重试、打开 Releases 和查看发布说明入口，不会主动弹出更新提醒。
 - 界面支持较小窗口和自适应控制栏、指标卡布局，宽表格保留水平滚动。
 - SwiftData 历史记录使用版本化 Schema、迁移计划和统一 Repository，保存或导出失败会显示明确错误。
 - 内置简体中文和英文界面。
@@ -144,8 +146,8 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 例如：
 
 - `Version = 1.2`
-- `Build = 11`
-- `Display Name = Capricorn V1.2.11`
+- `Build = 12`
+- `Display Name = Capricorn V1.2.12`
 
 ### 当前限制
 
@@ -165,11 +167,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v1.2.11-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V1.2.11.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v1.2.12-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V1.2.12.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V1.2.11 are available at [docs/releases/v1.2.11.en.md](docs/releases/v1.2.11.en.md).
+English release notes for V1.2.12 are available at [docs/releases/v1.2.12.en.md](docs/releases/v1.2.12.en.md).
 
 Common use cases:
 
@@ -217,7 +219,9 @@ Common use cases:
 - Large-file workloads support read, write, mixed read/write, fixed sizes, and a 95% free-space mode.
 - History supports SMART, benchmark, and activity record hiding, hidden-record management, and restore.
 - Exports JSON, CSV, and plain-text reports with serial numbers redacted by default.
+- SMART snapshots use a compact CSV export; the Simplified Chinese UI adds a Chinese name column, while the English UI uses the English attribute name and explanation.
 - Benchmark and live-workload sessions use explicit run and cancellation states, wait for process/file cleanup, and reject late callbacks from superseded work.
+- Performs a quiet GitHub stable-release check at launch; Settings and the application menu provide manual check, retry, Releases, and release-notes actions without proactively interrupting the user.
 - Fixes benchmark cancellation/restart paths that could make the UI stall, while waiting for real cleanup before a new run starts.
 - Drive refresh uses bounded concurrency and one `smartctl` scan; only the newest overlapping refresh may update the UI.
 - Adds a guarded First Aid flow for explicitly selected external or removable APFS/ExFAT volumes using `diskutil repairVolume`, with preflight checks, open-file warnings, serial streaming output, and post-run refresh.
@@ -289,8 +293,8 @@ The public Display Name uses a three-part version label composed from Xcode `Ver
 Example:
 
 - `Version = 1.2`
-- `Build = 11`
-- `Display Name = Capricorn V1.2.11`
+- `Build = 12`
+- `Display Name = Capricorn V1.2.12`
 
 ### Current Limitations
 
