@@ -247,7 +247,7 @@ struct ContentView: View {
             .padding(12)
             .background(.bar)
         }
-        .navigationSplitViewColumnWidth(min: 260, ideal: 300)
+        .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 420)
     }
 
     private var sidebarDriveSelection: Binding<String?> {
