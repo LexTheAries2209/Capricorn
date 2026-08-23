@@ -713,6 +713,10 @@ enum AppFeatureTabKeyRouter {
 }
 
 enum DrivePageHeaderText {
+    static func serialNumber(for drive: DriveDevice) -> String {
+        drive.serialNumber ?? "nil"
+    }
+
     static func mediaKind(for drive: DriveDevice, language: AppLanguage) -> String {
         if drive.isNetwork {
             return language.t("Network Drive")

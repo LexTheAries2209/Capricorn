@@ -880,6 +880,15 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(DrivePageHeaderText.subtitle(for: drive, language: .english), "disk0 · Secure Digital · SD Card")
     }
 
+    func testDrivePageHeaderTextShowsFullSerialOrNil() {
+        var drive = Self.fixtureDrive()
+        drive.serialNumber = "ZR51JYMS"
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive), "ZR51JYMS")
+
+        drive.serialNumber = nil
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive), "nil")
+    }
+
     @MainActor
     func testViewModelCreatesDiskActionFailureWithOpenFilesWhenUnmountFails() async {
         let diskActionService = DiskActionService(runner: StaticCommandRunner(stdout: "", stderr: "Resource busy", terminationStatus: 16))
