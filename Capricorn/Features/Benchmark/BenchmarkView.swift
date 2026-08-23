@@ -31,7 +31,12 @@ struct BenchmarkView: View {
     let saveResults: ([BenchmarkResult], [DiskActivitySample]) -> Void
     @Environment(\.appLanguage) private var language
 
-    @AppStorage("benchmarkTargetFolder") private var targetFolderPath = ""
+    // Keep the benchmark target in the same per-drive preference store as the
+    // live activity workload. The selected sidebar drive therefore owns the
+    // target, while the legacy global path is migrated only after same-drive
+    // validation succeeds.
+    @AppStorage("diskActivityWorkloadTargetsByDrive") private var targetPreferencesJSON = ""
+    @AppStorage("benchmarkTargetFolder") private var legacyTargetFolderPath = ""
     @AppStorage("benchmarkRunCount") private var selectedRunCount = BenchmarkProfile.defaultRuns
     @AppStorage("benchmarkFileSizeBytes") private var selectedFileSizeBytes = Int(BenchmarkProfile.defaultTestSize)
     @AppStorage("benchmarkDataPattern") private var selectedDataPatternRaw = BenchmarkProfile.defaultDataPattern.rawValue
@@ -212,9 +217,24 @@ struct BenchmarkView: View {
         driveResults.filter { $0.profileID == profile.id }
     }
 
+    private var targetPreferences: DiskActivityWorkloadTargetPreferences {
+        DiskActivityWorkloadTargetPreferences.decode(targetPreferencesJSON)
+    }
+
+    private var targetSelection: DiskActivityWorkloadTargetSelection {
+        targetPreferences.selection(for: drive)
+    }
+
+    private var resolvedTarget: DiskActivityWorkloadResolvedTarget {
+        DiskActivityWorkloadTargetResolver.resolve(targetSelection, for: drive)
+    }
+
+    private var targetFolderPath: String {
+        resolvedTarget.folderURL?.path ?? ""
+    }
+
     private var targetFolderURL: URL? {
-        guard !targetFolderPath.isEmpty else { return nil }
-        return URL(fileURLWithPath: targetFolderPath, isDirectory: true)
+        resolvedTarget.folderURL
     }
 
     private var targetFolderIsUsable: Bool {
@@ -290,6 +310,12 @@ struct BenchmarkView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .onAppear {
+            prepareBenchmarkTarget()
+            adjustSelectedFileSizeForTarget()
+        }
+        .onChange(of: drive.id) { _, _ in
+            viewModel.benchmarkError = nil
+            prepareBenchmarkTarget()
             adjustSelectedFileSizeForTarget()
         }
         .onChange(of: targetFolderPath) { _, _ in
@@ -535,15 +561,45 @@ struct BenchmarkView: View {
     private var targetFolderControl: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Label(language.t("Target Folder"), systemImage: "folder")
+                Label(language.t("Target Location"), systemImage: "folder")
                     .font(.headline)
 
-                Button {
-                    chooseTargetFolder()
+                Menu {
+                    Button {
+                        setBenchmarkTargetSelection(.automatic)
+                    } label: {
+                        Label(
+                            automaticTargetTitle,
+                            systemImage: targetSelection == .automatic ? "checkmark" : "internaldrive"
+                        )
+                    }
+
+                    Divider()
+
+                    ForEach(DiskActivityWorkloadTargetResolver.orderedVolumes(for: drive)) { volume in
+                        Button {
+                            setBenchmarkTargetSelection(.volume(deviceIdentifier: volume.deviceIdentifier))
+                        } label: {
+                            Label(
+                                benchmarkVolumeTitle(volume),
+                                systemImage: targetSelection == .volume(deviceIdentifier: volume.deviceIdentifier) ? "checkmark" : "externaldrive"
+                            )
+                        }
+                        .disabled(!DiskActivityWorkloadTargetResolver.isUsable(volume))
+                    }
+
+                    Divider()
+
+                    Button {
+                        chooseTargetFolder()
+                    } label: {
+                        Label(language.t("Choose Folder…"), systemImage: "folder.badge.gearshape")
+                    }
                 } label: {
-                    Label(targetFolderPath.isEmpty ? language.t("Choose Target Folder") : language.t("Change Folder"), systemImage: "folder.badge.gearshape")
+                    Label(benchmarkTargetMenuTitle, systemImage: "folder")
                 }
                 .buttonStyle(.bordered)
+                .disabled(viewModel.isBenchmarking)
 
                 Label(targetFolderStatusText, systemImage: targetFolderStatusSymbol)
                     .font(.caption)
@@ -577,7 +633,7 @@ struct BenchmarkView: View {
 
     private var targetFolderStatusText: String {
         if targetFolderPath.isEmpty {
-            return language.t("Choose a writable target folder")
+            return language.t("No writable mounted volume")
         }
         if targetFolderIsUsable, !hasAnyAvailableFileSize {
             return language.t("Not enough free space for the smallest test size")
@@ -668,14 +724,88 @@ struct BenchmarkView: View {
         panel.canCreateDirectories = true
         if let targetFolderURL {
             panel.directoryURL = targetFolderURL
-        } else if let fallback = drive.benchmarkMountPoint {
+        } else if let fallback = DiskActivityWorkloadTargetResolver.defaultVolume(for: drive)?.mountPoint {
             panel.directoryURL = URL(fileURLWithPath: fallback, isDirectory: true)
         }
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        targetFolderPath = url.path
+        guard DiskActivityWorkloadTargetResolver.isUsableFolder(url.path),
+              let volume = BenchmarkTargetFolderMatcher.matchingVolume(for: url.path, drive: drive),
+              volume.isWritable else {
+            viewModel.benchmarkError = "The selected folder must be writable and on the selected drive."
+            return
+        }
+        setBenchmarkTargetSelection(.folder(path: url.path))
         viewModel.benchmarkError = nil
         adjustSelectedFileSizeForTarget()
+    }
+
+    private var automaticTargetTitle: String {
+        guard let volume = DiskActivityWorkloadTargetResolver.defaultVolume(for: drive) else {
+            return language.t("Automatic")
+        }
+        return "\(language.t("Automatic")) · \(volume.name)"
+    }
+
+    private var benchmarkTargetMenuTitle: String {
+        if resolvedTarget.didFallBackToAutomatic {
+            return automaticTargetTitle
+        }
+        switch targetSelection {
+        case .automatic:
+            return automaticTargetTitle
+        case .volume:
+            return resolvedTarget.volume?.name ?? automaticTargetTitle
+        case let .folder(path):
+            let name = URL(fileURLWithPath: path, isDirectory: true).lastPathComponent
+            return name.isEmpty ? path : name
+        }
+    }
+
+    private func benchmarkVolumeTitle(_ volume: DriveDevice.Volume) -> String {
+        let base = "\(volume.name) (\(volume.deviceIdentifier))"
+        guard volume.mountPoint != nil else {
+            return "\(base) · \(language.t("Not Mounted"))"
+        }
+        guard volume.isWritable else {
+            return "\(base) · \(language.t("Read Only"))"
+        }
+        guard DiskActivityWorkloadTargetResolver.isUsable(volume) else {
+            return "\(base) · \(language.t("Unavailable"))"
+        }
+        return base
+    }
+
+    private func setBenchmarkTargetSelection(_ selection: DiskActivityWorkloadTargetSelection) {
+        var preferences = targetPreferences
+        preferences.setSelection(selection, for: drive)
+        targetPreferencesJSON = preferences.encoded()
+        viewModel.benchmarkError = nil
+        adjustSelectedFileSizeForTarget()
+    }
+
+    private func prepareBenchmarkTarget() {
+        var preferences = targetPreferences
+        if !legacyTargetFolderPath.isEmpty {
+            if preferences.selection(for: drive) == .automatic {
+                _ = preferences.migrateLegacyFolder(legacyTargetFolderPath, to: drive)
+            }
+            if preferences.selection(for: drive) != .automatic ||
+                !DiskActivityWorkloadTargetResolver.isUsableFolder(legacyTargetFolderPath) {
+                legacyTargetFolderPath = ""
+            }
+        }
+
+        let requestedSelection = preferences.selection(for: drive)
+        let resolved = DiskActivityWorkloadTargetResolver.resolve(requestedSelection, for: drive)
+        if resolved.didFallBackToAutomatic {
+            preferences.setSelection(.automatic, for: drive)
+        }
+
+        let encoded = preferences.encoded()
+        if encoded != targetPreferencesJSON {
+            targetPreferencesJSON = encoded
+        }
     }
 
     private func requestBenchmarkStart() {
@@ -738,7 +868,7 @@ struct BenchmarkView: View {
 
     private func validateTargetFolderForRun(profile runProfile: BenchmarkProfile? = nil) -> Bool {
         guard let targetFolderURL else {
-            viewModel.benchmarkError = "Choose a writable target folder before starting."
+            viewModel.benchmarkError = "This drive has no mounted writable volume available for safe file-based benchmarking."
             return false
         }
 
@@ -749,6 +879,11 @@ struct BenchmarkView: View {
         }
         guard isDirectory.boolValue else {
             viewModel.benchmarkError = "The benchmark target must be a folder."
+            return false
+        }
+
+        guard !targetFolderDriveMismatch else {
+            viewModel.benchmarkError = "The selected folder must be writable and on the selected drive."
             return false
         }
 
