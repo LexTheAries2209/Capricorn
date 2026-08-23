@@ -152,7 +152,7 @@ extension CapricornTests {
             startedAt: originalStartedAt ?? start,
             endedAt: model.liveActivityEndedAt ?? start
         )
-        model.loadLiveActivityRecord(historyRecord)
+        model.loadLiveActivityRecord(historyRecord, drive: drive)
         XCTAssertFalse(model.canContinueLiveActivityMonitoring(for: drive))
     }
 
@@ -403,18 +403,11 @@ extension CapricornTests {
     }
 
     @MainActor
-    func testVersionedContainerOpensLegacyUnversionedStoreWithoutLosingHistory() throws {
-        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let storeURL = root.appendingPathComponent("Capricorn.store")
-        let drive = Self.fixtureDrive()
+    func testHistoryStoreUsesDedicatedCapricornDirectory() {
+        let applicationSupport = URL(fileURLWithPath: "/tmp/Application Support", isDirectory: true)
+        let storeURL = ModelContainerFactory.historyStoreURL(in: applicationSupport)
 
-        try Self.createLegacyHistoryStore(at: storeURL, drive: drive)
-        let migrated = try ModelContainerFactory.makePersistent(at: storeURL)
-
-        XCTAssertEqual(try migrated.mainContext.fetch(FetchDescriptor<SmartHistoryRecord>()).count, 1)
-        XCTAssertEqual(try migrated.mainContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>()).count, 1)
-        XCTAssertEqual(try migrated.mainContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>()).count, 1)
+        XCTAssertEqual(storeURL.deletingLastPathComponent().lastPathComponent, "CapricornHistory")
+        XCTAssertEqual(storeURL.lastPathComponent, "CapricornHistory.store")
     }
 }

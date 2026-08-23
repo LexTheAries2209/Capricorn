@@ -3,9 +3,9 @@ import Foundation
 import OSLog
 import SwiftData
 
-enum CapricornSchemaV1: VersionedSchema {
+enum CapricornSchemaV2: VersionedSchema {
     static var versionIdentifier: Schema.Version {
-        Schema.Version(1, 0, 0)
+        Schema.Version(2, 0, 0)
     }
 
     static var models: [any PersistentModel.Type] {
@@ -20,7 +20,7 @@ enum CapricornSchemaV1: VersionedSchema {
 
 enum CapricornMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CapricornSchemaV1.self]
+        [CapricornSchemaV2.self]
     }
 
     static var stages: [MigrationStage] {
@@ -30,8 +30,26 @@ enum CapricornMigrationPlan: SchemaMigrationPlan {
 
 @MainActor
 enum ModelContainerFactory {
+    static let historyDirectoryName = "CapricornHistory"
+    static let historyStoreFileName = "CapricornHistory.store"
+
     static func makeApplication() throws -> ModelContainer {
-        try make(isStoredInMemoryOnly: false)
+        let applicationSupport = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let storeURL = historyStoreURL(in: applicationSupport)
+        let directory = storeURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return try makePersistent(at: storeURL)
+    }
+
+    static func historyStoreURL(in applicationSupportDirectory: URL) -> URL {
+        applicationSupportDirectory
+            .appendingPathComponent(historyDirectoryName, isDirectory: true)
+            .appendingPathComponent(historyStoreFileName)
     }
 
     static func makePreview() throws -> ModelContainer {
@@ -43,7 +61,7 @@ enum ModelContainerFactory {
     }
 
     static func makePersistent(at url: URL) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CapricornSchemaV1.self)
+        let schema = Schema(versionedSchema: CapricornSchemaV2.self)
         let configuration = ModelConfiguration(
             "Capricorn",
             schema: schema,
@@ -58,7 +76,7 @@ enum ModelContainerFactory {
     }
 
     private static func make(isStoredInMemoryOnly: Bool) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CapricornSchemaV1.self)
+        let schema = Schema(versionedSchema: CapricornSchemaV2.self)
         let configuration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: isStoredInMemoryOnly
@@ -129,8 +147,8 @@ final class HistoryRepository {
         try modelContext.save()
     }
 
-    func hideAll<T: HistoryDisplayRecord>(_ records: [T], at date: Date = Date(), driveID: String? = nil) throws {
-        HistoryVisibility.hideAll(records, at: date, driveID: driveID)
+    func hideAll<T: HistoryDisplayRecord>(_ records: [T], at date: Date = Date(), serialNumber: String? = nil) throws {
+        HistoryVisibility.hideAll(records, at: date, serialNumber: serialNumber)
         try modelContext.save()
     }
 
@@ -139,8 +157,8 @@ final class HistoryRepository {
         try modelContext.save()
     }
 
-    func restoreAll<T: HistoryDisplayRecord>(_ records: [T], driveID: String? = nil) throws {
-        HistoryVisibility.restoreAll(records, driveID: driveID)
+    func restoreAll<T: HistoryDisplayRecord>(_ records: [T], serialNumber: String? = nil) throws {
+        HistoryVisibility.restoreAll(records, serialNumber: serialNumber)
         try modelContext.save()
     }
 }

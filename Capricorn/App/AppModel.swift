@@ -866,9 +866,11 @@ final class AppModel {
         liveActivityWorkloadProgress = nil
     }
 
-    func loadLiveActivityRecord(_ record: DiskActivityHistoryRecord) {
-        guard !isLiveActivityMonitoring, !isLiveActivityWorkloadRunning else { return }
-        liveActivityDriveID = record.driveID
+    func loadLiveActivityRecord(_ record: DiskActivityHistoryRecord, drive: DriveDevice) {
+        guard !isLiveActivityMonitoring,
+              !isLiveActivityWorkloadRunning,
+              HistoryDriveMatcher.matches(recordSerialNumber: record.serialNumber, drive: drive) else { return }
+        liveActivityDriveID = drive.id
         liveActivityStartedAt = record.startedAt
         liveActivityEndedAt = record.endedAt
         liveActivitySession.continuationDriveID = nil

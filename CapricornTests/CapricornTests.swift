@@ -2418,7 +2418,7 @@ final class CapricornTests: XCTestCase {
             endedAt: start.addingTimeInterval(1)
         )
 
-        XCTAssertEqual(record.driveID, drive.id)
+        XCTAssertEqual(record.serialNumber, drive.serialNumber)
         XCTAssertEqual(record.sampleInterval, .half)
         XCTAssertEqual(record.durationSeconds, 1)
         XCTAssertEqual(record.peakReadMegabytesPerSecond, 30)
@@ -3416,12 +3416,13 @@ final class CapricornTests: XCTestCase {
         let drive = Self.fixtureDrive()
         var otherDrive = drive
         otherDrive.bsdName = "disk9"
+        otherDrive.serialNumber = "OTHER-SERIAL"
         let currentDriveRecord = SmartHistoryRecord(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
         let otherDriveRecord = SmartHistoryRecord(drive: otherDrive, snapshot: Self.fixtureSnapshot(for: otherDrive))
 
         HistoryVisibility.hide(currentDriveRecord, at: Date(timeIntervalSince1970: 1))
         HistoryVisibility.hide(otherDriveRecord, at: Date(timeIntervalSince1970: 2))
-        HistoryVisibility.restoreAll([currentDriveRecord, otherDriveRecord], driveID: drive.id)
+        HistoryVisibility.restoreAll([currentDriveRecord, otherDriveRecord], serialNumber: drive.serialNumber)
 
         XCTAssertNil(currentDriveRecord.hiddenAt)
         XCTAssertNotNil(otherDriveRecord.hiddenAt)
@@ -3431,15 +3432,39 @@ final class CapricornTests: XCTestCase {
         let drive = Self.fixtureDrive()
         var otherDrive = drive
         otherDrive.bsdName = "disk9"
+        otherDrive.serialNumber = "OTHER-SERIAL"
         let currentDriveRecord = SmartHistoryRecord(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
         let otherDriveRecord = SmartHistoryRecord(drive: otherDrive, snapshot: Self.fixtureSnapshot(for: otherDrive))
 
-        HistoryVisibility.hideAll([currentDriveRecord, otherDriveRecord], at: Date(timeIntervalSince1970: 1), driveID: drive.id)
+        HistoryVisibility.hideAll([currentDriveRecord, otherDriveRecord], at: Date(timeIntervalSince1970: 1), serialNumber: drive.serialNumber)
 
         XCTAssertNotNil(currentDriveRecord.hiddenAt)
         XCTAssertNil(otherDriveRecord.hiddenAt)
         XCTAssertEqual(HistoryVisibility.visible([currentDriveRecord, otherDriveRecord]).map(\.id), [otherDriveRecord.id])
         XCTAssertEqual(HistoryVisibility.hidden([currentDriveRecord, otherDriveRecord]).map(\.id), [currentDriveRecord.id])
+    }
+
+    func testHistoryDriveMatcherUsesSerialNumberWhenBSDNameChanges() {
+        let originalDrive = Self.fixtureDrive()
+        let record = SmartHistoryRecord(drive: originalDrive, snapshot: Self.fixtureSnapshot(for: originalDrive))
+        var reattachedDrive = originalDrive
+        reattachedDrive.bsdName = "disk19"
+        reattachedDrive.serialNumber = " sn "
+
+        XCTAssertTrue(HistoryDriveMatcher.matches(recordSerialNumber: record.serialNumber, drive: reattachedDrive))
+    }
+
+    func testHistoryDriveMatcherRejectsDifferentOrMissingSerialNumbers() {
+        let drive = Self.fixtureDrive()
+        let record = SmartHistoryRecord(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
+        var differentDrive = drive
+        differentDrive.serialNumber = "OTHER-SERIAL"
+        var missingSerialDrive = drive
+        missingSerialDrive.serialNumber = nil
+
+        XCTAssertFalse(HistoryDriveMatcher.matches(recordSerialNumber: record.serialNumber, drive: differentDrive))
+        XCTAssertFalse(HistoryDriveMatcher.matches(recordSerialNumber: record.serialNumber, drive: missingSerialDrive))
+        XCTAssertFalse(HistoryDriveMatcher.matches(recordSerialNumber: nil, drive: drive))
     }
 
 
@@ -3532,37 +3557,6 @@ final class CapricornTests: XCTestCase {
             latencyMicroseconds: 10,
             bytesTransferred: 65_536
         )
-    }
-
-    @MainActor
-    static func createLegacyHistoryStore(at url: URL, drive: DriveDevice) throws {
-        let schema = Schema([
-            SmartHistoryRecord.self,
-            BenchmarkHistoryRecord.self,
-            DiskActivityHistoryRecord.self,
-            AppSettingsRecord.self
-        ])
-        let configuration = ModelConfiguration(
-            "LegacyCapricorn",
-            schema: schema,
-            url: url,
-            cloudKitDatabase: .none
-        )
-        let container = try ModelContainer(for: schema, configurations: [configuration])
-        let context = container.mainContext
-        let snapshot = fixtureSnapshot(for: drive)
-        let benchmark = fixtureBenchmarkResult(for: drive)
-        let sample = DiskActivitySample(timestamp: Date(), readMegabytesPerSecond: 1, writeMegabytesPerSecond: 2)
-        context.insert(SmartHistoryRecord(drive: drive, snapshot: snapshot))
-        context.insert(BenchmarkHistoryRecord(drive: drive, result: benchmark, activitySamples: [sample]))
-        context.insert(DiskActivityHistoryRecord(
-            drive: drive,
-            samples: [sample],
-            sampleInterval: DiskActivitySampleInterval.default,
-            startedAt: sample.timestamp,
-            endedAt: sample.timestamp.addingTimeInterval(1)
-        ))
-        try context.save()
     }
 
     private static func fixtureActivityRecord(for drive: DriveDevice) -> DiskActivityHistoryRecord {

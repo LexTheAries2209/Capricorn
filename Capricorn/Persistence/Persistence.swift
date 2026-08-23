@@ -5,7 +5,7 @@ import SwiftData
 @Model
 final class SmartHistoryRecord {
     @Attribute(.unique) var id: UUID
-    var driveID: String
+    var serialNumber: String?
     var driveName: String
     var capturedAt: Date
     var healthRaw: String
@@ -17,7 +17,7 @@ final class SmartHistoryRecord {
 
     init(drive: DriveDevice, snapshot: SmartSnapshot) {
         self.id = UUID()
-        self.driveID = drive.id
+        self.serialNumber = HistoryDriveMatcher.normalize(drive.serialNumber)
         self.driveName = drive.displayName
         self.capturedAt = snapshot.capturedAt
         self.healthRaw = snapshot.health.rawValue
@@ -36,7 +36,7 @@ final class SmartHistoryRecord {
 @Model
 final class BenchmarkHistoryRecord {
     @Attribute(.unique) var id: UUID
-    var driveID: String
+    var serialNumber: String?
     var driveName: String
     var volumePath: String
     var profileName: String
@@ -51,7 +51,7 @@ final class BenchmarkHistoryRecord {
 
     init(drive: DriveDevice, result: BenchmarkResult, activitySamples: [DiskActivitySample] = []) {
         self.id = UUID()
-        self.driveID = drive.id
+        self.serialNumber = HistoryDriveMatcher.normalize(drive.serialNumber)
         self.driveName = drive.displayName
         self.volumePath = result.volumePath
         self.profileName = result.profileName
@@ -81,7 +81,7 @@ final class BenchmarkHistoryRecord {
 @Model
 final class DiskActivityHistoryRecord {
     @Attribute(.unique) var id: UUID
-    var driveID: String
+    var serialNumber: String?
     var driveName: String
     var bsdName: String
     var startedAt: Date
@@ -105,7 +105,7 @@ final class DiskActivityHistoryRecord {
     ) {
         let summary = DiskActivityStatistics.summarize(samples: samples, startedAt: startedAt, endedAt: endedAt)
         self.id = UUID()
-        self.driveID = drive.id
+        self.serialNumber = HistoryDriveMatcher.normalize(drive.serialNumber)
         self.driveName = drive.displayName
         self.bsdName = drive.bsdName
         self.startedAt = startedAt
@@ -135,7 +135,7 @@ final class DiskActivityHistoryRecord {
 }
 
 protocol HistoryDisplayRecord: AnyObject {
-    var driveID: String { get }
+    var serialNumber: String? { get }
     var hiddenAt: Date? { get set }
 }
 
@@ -156,8 +156,9 @@ enum HistoryVisibility {
         record.hiddenAt = date
     }
 
-    static func hideAll<T: HistoryDisplayRecord>(_ records: [T], at date: Date = Date(), driveID: String? = nil) {
-        for record in records where driveID == nil || record.driveID == driveID {
+    static func hideAll<T: HistoryDisplayRecord>(_ records: [T], at date: Date = Date(), serialNumber: String? = nil) {
+        let normalizedSerialNumber = HistoryDriveMatcher.normalize(serialNumber)
+        for record in records where normalizedSerialNumber == nil || record.serialNumber == normalizedSerialNumber {
             record.hiddenAt = date
         }
     }
@@ -166,10 +167,29 @@ enum HistoryVisibility {
         record.hiddenAt = nil
     }
 
-    static func restoreAll<T: HistoryDisplayRecord>(_ records: [T], driveID: String? = nil) {
-        for record in records where driveID == nil || record.driveID == driveID {
+    static func restoreAll<T: HistoryDisplayRecord>(_ records: [T], serialNumber: String? = nil) {
+        let normalizedSerialNumber = HistoryDriveMatcher.normalize(serialNumber)
+        for record in records where normalizedSerialNumber == nil || record.serialNumber == normalizedSerialNumber {
             record.hiddenAt = nil
         }
+    }
+}
+
+enum HistoryDriveMatcher {
+    static func normalize(_ serialNumber: String?) -> String? {
+        guard let serialNumber else { return nil }
+        let normalized = serialNumber
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        return normalized.isEmpty || normalized == "NIL" ? nil : normalized
+    }
+
+    static func matches(recordSerialNumber: String?, drive: DriveDevice) -> Bool {
+        guard let recordSerialNumber = normalize(recordSerialNumber),
+              let driveSerialNumber = normalize(drive.serialNumber) else {
+            return false
+        }
+        return recordSerialNumber == driveSerialNumber
     }
 }
 
