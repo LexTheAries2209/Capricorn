@@ -51,6 +51,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         if message.hasPrefix("Last refreshed ") {
             return message.replacingOccurrences(of: "Last refreshed ", with: "上次刷新 ")
         }
+        if message.hasPrefix("Using Native SMART data last read at ") {
+            return message.replacingOccurrences(of: "Using Native SMART data last read at ", with: "正在使用上次读取的原生 SMART 数据，读取时间：")
+        }
+        if message.hasPrefix("Native SMART data could not be read after 3 attempts.") {
+            return message.replacingOccurrences(of: "Native SMART data could not be read after 3 attempts.", with: "尝试 3 次后仍无法读取原生 SMART 数据。")
+        }
         if message.hasPrefix("Disk action failed: ") {
             return message.replacingOccurrences(of: "Disk action failed: ", with: "磁盘操作失败：")
         }
@@ -191,6 +197,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Open Releases": "打开 Releases",
         "Open Release Notes": "打开发布说明",
         "Use Tab to switch feature pages": "使用 Tab 切换功能页面",
+        "Redact serial numbers": "序列号脱敏",
+        "When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value.": "启用后，序列号仅显示前四位，其余字符以星号替代。内部匹配和历史记录仍使用完整序列号。",
         "SMART Self-Tests": "SMART 自检",
         "Allow self-tests on the system disk": "允许系统盘执行自检",
         "System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option.": "系统盘自检可能降低性能并增加持续存储负载。开启前请确保已有最新备份。",
@@ -560,6 +568,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Network drives do not provide per-disk IOKit activity counters.": "网络硬盘不提供本机单盘 IOKit 活动计数。",
         "SD cards do not expose standard SMART health data on macOS.": "SD 卡在 macOS 上不提供标准 SMART 健康数据。",
         "Native SMART data is not exposed for this device.": "macOS 未暴露此设备的原生 SMART 数据。",
+        "Refreshing Native SMART data...": "正在刷新原生 SMART 数据...",
+        "Native SMART is not supported for this device.": "此设备不支持原生 SMART。",
+        "Native SMART data is temporarily unavailable.": "原生 SMART 数据暂时不可用。",
+        "Native SMART status is available, but attributes were not returned after retrying.": "原生 SMART 状态可用，但重试后仍未返回属性。",
+        "Native SMART provider returned no data.": "原生 SMART 提供器未返回数据。",
+        "Native SMART refresh was cancelled.": "原生 SMART 刷新已取消。",
         "Native SMART keys parsed.": "已解析原生 SMART 键。",
         "SMART status not reported, device-specific keys available.": "未报告 SMART 状态，但存在设备专用键。",
         "smartctl was not found. Install smartmontools to enable deep SMART details.": "未找到 smartctl。安装 smartmontools 可启用更详细的 SMART 信息。",

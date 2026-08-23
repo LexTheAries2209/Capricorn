@@ -2,6 +2,7 @@
 import Foundation
 import IOKit
 import IOKit.storage
+import OSLog
 import UserNotifications
 
 protocol SmartProviding: Sendable {
@@ -90,24 +91,186 @@ struct IOKitSmartctlTargetResolver: SmartctlIOServiceTargetResolving {
     }
 }
 
+struct NativeSmartData: Equatable, Sendable {
+    var smartStatusRaw: String?
+    var deviceSpecificKeys: [String: Int64]
+}
+
+enum NativeSmartProbeResult: Equatable, Sendable {
+    case available(NativeSmartData)
+    case limited(NativeSmartData, message: String)
+    case unsupported(message: String)
+    case failed(message: String)
+}
+
+protocol NativeSmartProbing: Sendable {
+    func probe(drive: DriveDevice) async -> NativeSmartProbeResult
+}
+
+enum NativeSmartDataParser {
+    static func parse(_ data: Data) throws -> NativeSmartData {
+        guard let info = try PropertyListSerialization.propertyList(
+            from: data,
+            options: [],
+            format: nil
+        ) as? [String: Any] else {
+            throw DiskutilParserError.invalidPlist
+        }
+
+        let status = cleanString(info["SMARTStatus"] as? String)
+        let dictionary = info["SMARTDeviceSpecificKeysMayVaryNotGuaranteed"] as? [String: Any] ?? [:]
+        var keys: [String: Int64] = [:]
+        for (key, value) in dictionary {
+            if let number = value as? NSNumber {
+                keys[key] = number.int64Value
+            } else if let value = value as? Int64 {
+                keys[key] = value
+            } else if let value = value as? String, let integer = Int64(value) {
+                keys[key] = integer
+            }
+        }
+        return NativeSmartData(smartStatusRaw: status, deviceSpecificKeys: keys)
+    }
+
+    private static func cleanString(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+}
+
+final class DiskutilNativeSmartProbe: NativeSmartProbing, @unchecked Sendable {
+    typealias Sleeper = @Sendable (TimeInterval) async throws -> Void
+
+    private let runner: CommandRunning
+    private let diskutilPath: String
+    private let timeout: TimeInterval
+    private let retryDelays: [TimeInterval]
+    private let sleeper: Sleeper
+
+    init(
+        runner: CommandRunning = ShellCommandRunner(),
+        diskutilPath: String = "/usr/sbin/diskutil",
+        timeout: TimeInterval = 5,
+        retryDelays: [TimeInterval] = [0, 1, 3],
+        sleeper: @escaping Sleeper = { delay in
+            guard delay > 0 else { return }
+            try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
+    ) {
+        self.runner = runner
+        self.diskutilPath = diskutilPath
+        self.timeout = timeout
+        self.retryDelays = retryDelays.isEmpty ? [0] : retryDelays
+        self.sleeper = sleeper
+    }
+
+    func probe(drive: DriveDevice) async -> NativeSmartProbeResult {
+        if drive.isNetwork {
+            return .unsupported(message: "Network volumes do not expose local SMART data.")
+        }
+        if drive.isMemoryCard {
+            return .unsupported(message: "SD cards do not expose standard SMART health data on macOS.")
+        }
+
+        var lastLimitedData: NativeSmartData?
+        var lastErrorMessage = "Native SMART data is temporarily unavailable."
+
+        for (index, delay) in retryDelays.enumerated() {
+            do {
+                try await sleeper(delay)
+                try Task.checkCancellation()
+                let startedAt = Date()
+                let result = try await runner.run(
+                    diskutilPath,
+                    arguments: ["info", "-plist", drive.bsdName],
+                    timeout: timeout
+                )
+                let duration = Date().timeIntervalSince(startedAt)
+                CapricornLog.inventory.debug(
+                    "Native SMART probe \(drive.bsdName, privacy: .public) attempt \(index + 1) completed in \(duration, format: .fixed(precision: 3)) seconds with status \(result.terminationStatus)"
+                )
+
+                if result.terminationStatus != 0 {
+                    let output = result.stdoutString + "\n" + result.stderrString
+                    if Self.explicitlyReportsUnsupported(output) {
+                        return .unsupported(message: "Native SMART is not supported for this device.")
+                    }
+                    lastErrorMessage = "diskutil could not read Native SMART data."
+                    continue
+                }
+
+                let data = try NativeSmartDataParser.parse(result.stdout)
+                if Self.explicitlyReportsUnsupported(data.smartStatusRaw ?? "") {
+                    return .unsupported(message: "Native SMART is not supported for this device.")
+                }
+                if !data.deviceSpecificKeys.isEmpty {
+                    return .available(data)
+                }
+                if data.smartStatusRaw != nil {
+                    lastLimitedData = data
+                    lastErrorMessage = "Native SMART attributes were not returned yet."
+                } else {
+                    lastErrorMessage = "Native SMART fields were not returned yet."
+                }
+            } catch is CancellationError {
+                return .failed(message: "Native SMART refresh was cancelled.")
+            } catch let error as CommandError {
+                lastErrorMessage = error.localizedDescription
+                CapricornLog.inventory.notice(
+                    "Native SMART probe \(drive.bsdName, privacy: .public) attempt \(index + 1) failed: \(error.localizedDescription, privacy: .public)"
+                )
+            } catch {
+                lastErrorMessage = error.localizedDescription
+                CapricornLog.inventory.notice(
+                    "Native SMART probe \(drive.bsdName, privacy: .public) attempt \(index + 1) returned invalid data: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+
+        if let lastLimitedData {
+            return .limited(lastLimitedData, message: "Native SMART status is available, but attributes were not returned after retrying.")
+        }
+        return .failed(message: "Native SMART data could not be read after 3 attempts. \(lastErrorMessage)")
+    }
+
+    private static func explicitlyReportsUnsupported(_ value: String) -> Bool {
+        let normalized = value.lowercased()
+        return normalized.contains("not supported") || normalized.contains("unsupported")
+    }
+}
+
 final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
     let providerName = "Native macOS"
     private let evaluator = DriveHealthEvaluator()
+    private let probe: NativeSmartProbing
+
+    init(probe: NativeSmartProbing = DiskutilNativeSmartProbe()) {
+        self.probe = probe
+    }
 
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot? {
-        if drive.isNetwork {
-            return SmartSnapshot.unavailable(for: drive, reason: "Network volumes do not expose local SMART data.")
+        switch await probe.probe(drive: drive) {
+        case let .available(data):
+            return snapshot(for: drive, data: data, state: .available, message: data.smartStatusRaw ?? "Native SMART keys parsed.")
+        case let .limited(data, message):
+            return snapshot(for: drive, data: data, state: .limited, message: message)
+        case let .unsupported(message):
+            return unavailableSnapshot(for: drive, state: .unavailable, message: message)
+        case let .failed(message):
+            return unavailableSnapshot(for: drive, state: .failed, message: message)
         }
-        if drive.isMemoryCard {
-            return SmartSnapshot.unavailable(for: drive, reason: "SD cards do not expose standard SMART health data on macOS.")
-        }
+    }
 
-        guard drive.smartStatusRaw != nil || !drive.nativeSmartKeys.isEmpty else {
-            return SmartSnapshot.unavailable(for: drive, reason: "Native SMART data is not exposed for this device.")
-        }
-
+    private func snapshot(
+        for drive: DriveDevice,
+        data: NativeSmartData,
+        state: ProviderState,
+        message: String
+    ) -> SmartSnapshot {
         var attributes: [SmartAttribute] = []
-        let keys = drive.nativeSmartKeys
+        let keys = data.deviceSpecificKeys
         let temperatureC = nativeTemperature(from: keys["TEMPERATURE"])
         let percentageUsed = intValue(keys["PERCENTAGE_USED"])
         let spareAvailable = intValue(keys["AVAILABLE_SPARE"])
@@ -134,12 +297,12 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
             driveID: drive.id,
             capturedAt: Date(),
             health: .unavailable,
-            summary: drive.smartStatusRaw ?? "Native SMART keys parsed.",
+            summary: data.smartStatusRaw ?? message,
             providerStatuses: [
                 ProviderStatus(
                     name: providerName,
-                    state: drive.nativeSmartKeys.isEmpty ? .limited : .available,
-                    message: drive.smartStatusRaw ?? "SMART status not reported, device-specific keys available."
+                    state: state,
+                    message: message
                 )
             ],
             attributes: attributes,
@@ -149,15 +312,35 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
             powerCycleCount: powerCycles,
             mediaErrors: mediaErrors,
             unsafeShutdowns: unsafeShutdowns,
-            smartStatusRaw: drive.smartStatusRaw,
+            smartStatusRaw: data.smartStatusRaw,
             selfTestStatus: nil,
             enduranceUsedPercent: percentageUsed,
             spareAvailablePercent: spareAvailable,
             spareAvailableThresholdPercent: spareThreshold
         )
+        snapshot.nativeSmartCapturedAt = snapshot.capturedAt
         snapshot.health = evaluator.evaluate(drive: drive, snapshot: snapshot)
         snapshot.summary = evaluator.summary(for: drive, snapshot: snapshot)
         return snapshot
+    }
+
+    private func unavailableSnapshot(for drive: DriveDevice, state: ProviderState, message: String) -> SmartSnapshot {
+        SmartSnapshot(
+            driveID: drive.id,
+            capturedAt: Date(),
+            health: .unavailable,
+            summary: message,
+            providerStatuses: [ProviderStatus(name: providerName, state: state, message: message)],
+            attributes: [],
+            temperatureCelsius: nil,
+            lifeRemainingPercent: nil,
+            powerOnHours: nil,
+            powerCycleCount: nil,
+            mediaErrors: nil,
+            unsafeShutdowns: nil,
+            smartStatusRaw: nil,
+            selfTestStatus: nil
+        )
     }
 
     private func nativeTemperature(from kelvin: Int64?) -> Double? {
@@ -1283,12 +1466,38 @@ final class SmartSnapshotService: @unchecked Sendable {
         async let native = nativeProvider.snapshot(for: drive)
         async let smartctl = smartctlSnapshot(for: drive, resolvedTargetDescriptor: smartctlTargetDescriptor)
 
-        let snapshots = await [native, smartctl].compactMap { $0 }
+        return merge(
+            snapshots: await [native, smartctl].compactMap { $0 },
+            for: drive
+        )
+    }
+
+    func nativeSnapshot(for drive: DriveDevice) async -> SmartSnapshot {
+        await nativeProvider.snapshot(for: drive)
+            ?? SmartSnapshot.unavailable(for: drive, reason: "Native SMART provider returned no data.")
+    }
+
+    func snapshot(
+        for drive: DriveDevice,
+        nativeSnapshot: SmartSnapshot,
+        smartctlTargetDescriptor: SmartctlTargetDescriptor?
+    ) async -> SmartSnapshot {
+        let smartctl = await smartctlSnapshot(for: drive, resolvedTargetDescriptor: smartctlTargetDescriptor)
+        return merge(
+            snapshots: [nativeSnapshot, smartctl].compactMap { $0 },
+            for: drive
+        )
+    }
+
+    private func merge(snapshots: [SmartSnapshot], for drive: DriveDevice) -> SmartSnapshot {
         guard !snapshots.isEmpty else {
             return SmartSnapshot.unavailable(for: drive, reason: "No SMART provider returned data.")
         }
 
-        var merged = snapshots.first(where: { !$0.attributes.isEmpty || $0.health != .unavailable }) ?? snapshots[0]
+        // Native is intentionally first. Starting from it preserves its failed
+        // or limited provider status when smartctl is the only successful
+        // source, which is required for last-known-good Native retention.
+        var merged = snapshots[0]
         for snapshot in snapshots.dropFirst() {
             merged.providerStatuses.append(contentsOf: snapshot.providerStatuses.filter { status in
                 !merged.providerStatuses.contains(where: { $0.name == status.name })
@@ -1310,6 +1519,7 @@ final class SmartSnapshotService: @unchecked Sendable {
             merged.spareAvailablePercent = snapshot.spareAvailablePercent ?? merged.spareAvailablePercent
             merged.spareAvailableThresholdPercent = snapshot.spareAvailableThresholdPercent ?? merged.spareAvailableThresholdPercent
             merged.smartctlDiagnostics = snapshot.smartctlDiagnostics ?? merged.smartctlDiagnostics
+            merged.nativeSmartCapturedAt = snapshot.nativeSmartCapturedAt ?? merged.nativeSmartCapturedAt
         }
 
         merged.health = evaluator.evaluate(drive: drive, snapshot: merged)
@@ -1340,25 +1550,19 @@ final class DriveHealthEvaluator {
         }
 
         var health: HealthStatus = .good
-        if snapshot.attributes.contains(where: { $0.status == .failed }) {
+        let healthAttributes = snapshot.attributes.filter { !Self.isTemperatureAttribute($0) }
+        if healthAttributes.contains(where: { $0.status == .failed }) {
             health = max(health, .failed)
         }
-        if snapshot.attributes.contains(where: { $0.status == .preFail }) {
+        if healthAttributes.contains(where: { $0.status == .preFail }) {
             health = max(health, .preFail)
         }
-        if snapshot.attributes.contains(where: { $0.status == .warning }) {
+        if healthAttributes.contains(where: { $0.status == .warning }) {
             health = max(health, .warning)
         }
 
         if let mediaErrors = snapshot.mediaErrors, mediaErrors > 0 {
             health = max(health, .preFail)
-        }
-        if let temp = snapshot.temperatureCelsius {
-            if temp >= 85 {
-                health = max(health, .preFail)
-            } else if temp >= 70 {
-                health = max(health, .warning)
-            }
         }
         if let life = snapshot.lifeRemainingPercent {
             if life <= 0 {
@@ -1382,6 +1586,14 @@ final class DriveHealthEvaluator {
         }
 
         return health
+    }
+
+    private static func isTemperatureAttribute(_ attribute: SmartAttribute) -> Bool {
+        let key = "\(attribute.id) \(attribute.name)"
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .lowercased()
+        return key.contains("temperature") || key.contains("温度")
     }
 
     func summary(for drive: DriveDevice, snapshot: SmartSnapshot) -> String {

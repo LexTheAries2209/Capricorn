@@ -336,7 +336,12 @@ enum ReportExporter {
     /// Exports drive identity metadata and the SMART attribute table in one
     /// CSV document. Metadata rows keep the existing attribute-table header
     /// compatible with spreadsheet and parser consumers.
-    static func smartSnapshotCSVReport(drive: DriveDevice, snapshot: SmartSnapshot, language: AppLanguage) -> String {
+    static func smartSnapshotCSVReport(
+        drive: DriveDevice,
+        snapshot: SmartSnapshot,
+        language: AppLanguage,
+        redactSerialNumbers: Bool = false
+    ) -> String {
         var header = ["attribute_id", "attribute_name"]
         if language == .simplifiedChinese {
             header.append("chinese_name")
@@ -345,7 +350,12 @@ enum ReportExporter {
             "description", "raw_value", "current", "worst", "threshold", "status", "source"
         ]
         var lines = [header.map(escapeCSV).joined(separator: ",")]
-        lines += metadataRows(drive: drive, snapshot: snapshot, language: language).map { row in
+        lines += metadataRows(
+            drive: drive,
+            snapshot: snapshot,
+            language: language,
+            redactSerialNumbers: redactSerialNumbers
+        ).map { row in
             var values = [row.id, row.englishName]
             if language == .simplifiedChinese {
                 values.append(row.chineseName)
@@ -384,7 +394,12 @@ enum ReportExporter {
         var value: String
     }
 
-    private static func metadataRows(drive: DriveDevice, snapshot: SmartSnapshot, language: AppLanguage) -> [MetadataRow] {
+    private static func metadataRows(
+        drive: DriveDevice,
+        snapshot: SmartSnapshot,
+        language: AppLanguage,
+        redactSerialNumbers: Bool
+    ) -> [MetadataRow] {
         var rows = [
             MetadataRow(
                 id: "drive_name",
@@ -398,7 +413,9 @@ enum ReportExporter {
                 englishName: "Serial Number",
                 chineseName: "序列号",
                 description: language == .simplifiedChinese ? "设备报告的硬件序列号" : "Hardware serial reported by the device",
-                value: drive.serialNumber ?? ""
+                value: drive.serialNumber.map {
+                    SerialNumberDisplayFormatter.displayValue($0, redact: redactSerialNumbers)
+                } ?? ""
             ),
             MetadataRow(
                 id: "device_type",

@@ -8,6 +8,7 @@ private let capricornGitHubURL = URL(string: "https://github.com/LexTheAries2209
 struct ContentView: View {
     @State private var viewModel: AppModel
     @State private var preferences: AppPreferences
+    @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistory: [SmartHistoryRecord]
     @Query(sort: \BenchmarkHistoryRecord.measuredAt, order: .reverse) private var benchmarkHistory: [BenchmarkHistoryRecord]
@@ -368,7 +369,8 @@ struct ContentView: View {
             let report = ReportExporter.smartSnapshotCSVReport(
                 drive: drive,
                 snapshot: snapshot,
-                language: language
+                language: language,
+                redactSerialNumbers: redactSerialNumbers
             )
             try report.write(to: fileURL, atomically: true, encoding: .utf8)
             return "SMART snapshot saved to history and \(fileURL.lastPathComponent)."
@@ -726,6 +728,7 @@ private struct DriveSidebarRow: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
     @Environment(\.appLanguage) private var language
+    @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -734,8 +737,17 @@ private struct DriveSidebarRow: View {
                 .foregroundStyle(snapshot?.health.tint ?? .secondary)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
-                driveName
-                Text(DrivePageHeaderText.serialNumberLine(for: drive, language: language))
+                Text(drive.sidebarVolumeName)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(drive.sidebarVolumeName)
+                Text(drive.catalogSidebarDisplayName)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(drive.catalogDisplayHelp(language: language))
+                Text(DrivePageHeaderText.serialNumberLine(for: drive, language: language, redact: redactSerialNumbers))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -756,26 +768,6 @@ private struct DriveSidebarRow: View {
             HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
         }
         .padding(.vertical, 4)
-    }
-
-    @ViewBuilder
-    private var driveName: some View {
-        if let match = drive.catalogMatch {
-            Text(match.marketingName)
-                .font(.subheadline.bold())
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .help(drive.catalogDisplayHelp(language: language))
-            Text(match.canonicalModel)
-                .font(.caption.bold())
-                .lineLimit(1)
-                .help(drive.catalogDisplayHelp(language: language))
-        } else {
-            Text(drive.displayName)
-                .font(.headline)
-                .lineLimit(1)
-                .help(drive.displayName)
-        }
     }
 
     private var iconName: String {
@@ -873,6 +865,7 @@ struct DrivePageHeaderView: View {
     var showsHealthBadge = true
     var showsSerialNumber = false
     @Environment(\.appLanguage) private var language
+    @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
@@ -882,7 +875,7 @@ struct DrivePageHeaderView: View {
                     .lineLimit(2)
                     .help(drive.catalogDisplayHelp(language: language))
                 if showsSerialNumber {
-                    Text(DrivePageHeaderText.serialNumberLine(for: drive, language: language))
+                    Text(DrivePageHeaderText.serialNumberLine(for: drive, language: language, redact: redactSerialNumbers))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

@@ -1,3 +1,5 @@
 DerivedData/
+tmp/
+output/
 *.xcuserdatad/
 Capricorn旧版软件/

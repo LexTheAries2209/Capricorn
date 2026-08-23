@@ -14,12 +14,14 @@ extension CapricornTests {
         XCTAssertTrue(preferences.usesPlainTabForFeatureSwitching)
         XCTAssertFalse(preferences.allowSystemDiskSelfTests)
         XCTAssertTrue(preferences.avoidWakingSleepingDisks)
+        XCTAssertFalse(preferences.redactSerialNumbers)
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
         preferences.showVirtualDisks = true
         preferences.smartctlPath = "/usr/bin/true"
         preferences.usesPlainTabForFeatureSwitching = false
         preferences.allowSystemDiskSelfTests = true
         preferences.avoidWakingSleepingDisks = false
+        preferences.redactSerialNumbers = true
 
         let reloaded = AppPreferences(defaults: defaults)
         XCTAssertEqual(reloaded.languageRawValue, AppLanguage.simplifiedChinese.rawValue)
@@ -28,6 +30,7 @@ extension CapricornTests {
         XCTAssertFalse(reloaded.usesPlainTabForFeatureSwitching)
         XCTAssertTrue(reloaded.allowSystemDiskSelfTests)
         XCTAssertFalse(reloaded.avoidWakingSleepingDisks)
+        XCTAssertTrue(reloaded.redactSerialNumbers)
         reloaded.restoreAutomaticSmartctlDetection()
         XCTAssertNil(defaults.string(forKey: AppPreferences.Key.smartctlPath))
     }
@@ -327,15 +330,134 @@ extension CapricornTests {
             runner: runner,
             networkProvider: nil,
             serialNumberProvider: StaticDriveSerialProvider(
-                serialNumbersByBSDName: ["disk8": "SERIAL-8", "disk9": "SERIAL-9"]
+                serialNumbersByBSDName: ["disk8": "SERIAL-8", "disk9": "SERIAL-9", "disk10": "SERIAL-10"]
             )
         )
 
         let drives = try await provider.loadDrives(showVirtual: false)
 
-        XCTAssertEqual(drives.map(\.bsdName), ["disk8", "disk9"])
-        XCTAssertEqual(drives.map(\.serialNumber), ["SERIAL-8", "SERIAL-9"])
-        XCTAssertGreaterThan(runner.maximumConcurrentInfoCalls, 1)
+        XCTAssertEqual(drives.map(\.bsdName), ["disk8", "disk9", "disk10"])
+        XCTAssertEqual(drives.map(\.serialNumber), ["SERIAL-8", "SERIAL-9", "SERIAL-10"])
+        XCTAssertEqual(runner.maximumConcurrentInfoCalls, 2)
+    }
+
+    func testDiskInventoryKeepsPhysicalDriveWhenItsInfoCallTimesOut() async throws {
+        let listData = Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <plist version="1.0"><dict>
+          <key>WholeDisks</key><array><string>disk0</string><string>disk10</string></array>
+          <key>AllDisksAndPartitions</key><array>
+            <dict><key>DeviceIdentifier</key><string>disk0</string><key>Size</key><integer>1000000</integer></dict>
+            <dict><key>DeviceIdentifier</key><string>disk10</string><key>Size</key><integer>4000000</integer></dict>
+          </array>
+        </dict></plist>
+        """.utf8)
+        let disk0Info = Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <plist version="1.0"><dict>
+          <key>DeviceIdentifier</key><string>disk0</string>
+          <key>DeviceNode</key><string>/dev/disk0</string>
+          <key>WholeDisk</key><true/>
+          <key>MediaName</key><string>System SSD</string>
+          <key>BusProtocol</key><string>NVMe</string>
+          <key>TotalSize</key><integer>1000000</integer>
+          <key>Internal</key><true/>
+          <key>SolidState</key><true/>
+        </dict></plist>
+        """.utf8)
+        let runner = HangingDiskInfoCommandRunner(
+            listData: listData,
+            physicalListData: listData,
+            infoDataByDisk: ["disk0": disk0Info]
+        )
+        let provider = DiskutilInventoryProvider(
+            runner: runner,
+            networkProvider: nil,
+            serialNumberProvider: StaticDriveSerialProvider(serialNumbersByBSDName: [:])
+        )
+
+        let drives = try await provider.loadDrives(showVirtual: false)
+
+        XCTAssertEqual(drives.map(\.bsdName), ["disk0", "disk10"])
+        let fallback = try XCTUnwrap(drives.first(where: { $0.bsdName == "disk10" }))
+        XCTAssertEqual(fallback.sizeBytes, 4_000_000)
+        XCTAssertEqual(fallback.deviceNode, "/dev/disk10")
+        XCTAssertEqual(fallback.protocolName, "Unknown")
+    }
+
+    func testDriveRefreshPublishesFastNativeSnapshotBeforeSlowExternalDrive() async throws {
+        var systemDrive = Self.fixtureDrive()
+        systemDrive.bsdName = "disk0"
+        systemDrive.isSystemDisk = true
+        systemDrive.isSolidState = true
+
+        var externalSSD = Self.fixtureDrive()
+        externalSSD.bsdName = "disk10"
+        externalSSD.isSystemDisk = false
+        externalSSD.isInternal = false
+        externalSSD.isSolidState = true
+
+        var hardDrive = Self.fixtureDrive()
+        hardDrive.bsdName = "disk11"
+        hardDrive.isSystemDisk = false
+        hardDrive.isInternal = false
+        hardDrive.isSolidState = false
+
+        let provider = DelayedSmartProvider(
+            delays: [systemDrive.id: 10_000_000, externalSSD.id: 300_000_000]
+        ) { drive in
+            var snapshot = Self.fixtureSnapshot(for: drive)
+            snapshot.providerStatuses = [ProviderStatus(name: "Native macOS", state: .available, message: "Verified")]
+            return snapshot
+        }
+        let service = DriveRefreshService(
+            inventoryProvider: SequencedInventoryProvider(responses: [.init(delayNanoseconds: 0, drives: [])]),
+            smartService: SmartSnapshotService(
+                nativeProvider: provider,
+                smartctlProvider: UnavailableSmartProvider()
+            ),
+            externalDetector: ExternalDriveSupportDetector(),
+            maximumConcurrentSnapshots: 2
+        )
+
+        let startedAt = Date()
+        let stream = await service.snapshotUpdates(for: [hardDrive, externalSSD, systemDrive])
+        var iterator = stream.makeAsyncIterator()
+        let firstUpdate = await iterator.next()
+        let first = try XCTUnwrap(firstUpdate)
+
+        XCTAssertEqual(first.phase, .native)
+        XCTAssertEqual(first.driveID, systemDrive.id)
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.2)
+        XCTAssertEqual(Set(provider.requestedDriveIDs.prefix(2)), Set([systemDrive.id, externalSSD.id]))
+    }
+
+    @MainActor
+    func testAppModelPublishesDriveDiscoveryBeforeSnapshotUpdatesFinish() async {
+        let drive = Self.fixtureDrive()
+        let completed = Self.fixtureSnapshot(for: drive)
+        let service = StagedDriveRefreshService(
+            discovery: DriveRefreshSnapshot(
+                drives: [drive],
+                snapshots: [drive.id: .refreshingNative(for: drive)],
+                externalSupport: ExternalDriveSupportDetector().detect()
+            ),
+            updateDelayNanoseconds: 250_000_000,
+            updates: [DriveSnapshotUpdate(driveID: drive.id, snapshot: completed, phase: .complete)]
+        )
+        let model = DITViewModel(refreshService: service)
+
+        let task = Task { @MainActor in await model.refresh() }
+        let discoveryPublished = await AsyncTestWaiter.wait(timeout: 0.15) {
+            !model.drives.isEmpty
+        }
+
+        XCTAssertTrue(discoveryPublished)
+        XCTAssertTrue(model.isRefreshing)
+        XCTAssertEqual(model.snapshots[drive.id]?.providerStatuses.first?.message, "Refreshing Native SMART data...")
+        await task.value
+        XCTAssertFalse(model.isRefreshing)
+        XCTAssertEqual(model.snapshots[drive.id]?.capturedAt, completed.capturedAt)
     }
 
     func testSmartctlResolvesAllDriveTargetsWithOneScan() async {
@@ -375,6 +497,23 @@ extension CapricornTests {
         } catch {
             XCTFail("Expected CancellationError, got \(error)")
         }
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 1)
+    }
+
+    func testShellCommandRunnerTerminatesAndReapsTimedOutProcess() async {
+        let runner = ShellCommandRunner()
+        let startedAt = Date()
+
+        do {
+            _ = try await runner.run("/bin/sleep", arguments: ["5"], timeout: 0.1)
+            XCTFail("Expected timeout")
+        } catch let CommandError.timedOut(executable, seconds) {
+            XCTAssertEqual(executable, "/bin/sleep")
+            XCTAssertEqual(seconds, 0.1, accuracy: 0.001)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
         XCTAssertLessThan(Date().timeIntervalSince(startedAt), 1)
     }
 

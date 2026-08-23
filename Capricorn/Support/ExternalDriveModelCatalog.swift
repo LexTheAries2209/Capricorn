@@ -23,6 +23,7 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
         var introduced: Int
         var modelPatterns: [String]
         var capacityLabels: [String: String]
+        var prefersMarketingNameOnly: Bool?
         var sourceURL: String
         var examples: [Example]
 
@@ -34,12 +35,60 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
 
     struct Match: Equatable, Sendable {
         var recordID: String
+        var family: String
+        var capacityLabel: String
         var canonicalModel: String
         var marketingName: String
         var reportedModel: String
+        var prefersMarketingNameOnly: Bool
 
         var displayName: String {
             "\(canonicalModel) · \(marketingName)"
+        }
+
+        /// Product-facing names such as "ARES 4T" or "Gold P31 1TB" are
+        /// already more useful than the catalog's part-number presentation.
+        /// Requiring both the family and capacity, plus a word boundary in the
+        /// reported value, prevents opaque codes such as KXG80ZNV1T02 from
+        /// being mistaken for an intentional marketing name.
+        func preservesReportedName(_ name: String) -> Bool {
+            guard name.rangeOfCharacter(from: .whitespacesAndNewlines) != nil else {
+                return false
+            }
+
+            let nameTokens = Self.wordTokens(name)
+            let familyTokens = Self.wordTokens(family)
+            let capacityKey = Self.capacityKey(capacityLabel)
+            return !familyTokens.isEmpty
+                && !capacityKey.isEmpty
+                && Self.containsSequence(familyTokens, in: nameTokens)
+                && Self.comparisonKey(name).contains(capacityKey)
+        }
+
+        private static func wordTokens(_ value: String) -> [String] {
+            value.uppercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+        }
+
+        private static func containsSequence(_ needle: [String], in haystack: [String]) -> Bool {
+            guard !needle.isEmpty, needle.count <= haystack.count else { return false }
+            return haystack.indices.contains { start in
+                guard start + needle.count <= haystack.count else { return false }
+                return Array(haystack[start..<(start + needle.count)]) == needle
+            }
+        }
+
+        private static func comparisonKey(_ value: String) -> String {
+            String(value.uppercased().filter { $0.isLetter || $0.isNumber })
+        }
+
+        private static func capacityKey(_ value: String) -> String {
+            let key = comparisonKey(value)
+            if key.hasSuffix("TB") || key.hasSuffix("GB") {
+                return String(key.dropLast())
+            }
+            return key
         }
     }
 
@@ -127,6 +176,9 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
             let normalized = Self.normalized(candidate)
             let range = NSRange(normalized.startIndex..<normalized.endIndex, in: normalized)
             for compiled in compiledRecords {
+                guard Self.transportIsCompatible(drive: drive, record: compiled.record) else {
+                    continue
+                }
                 for expression in compiled.expressions {
                     guard let result = expression.firstMatch(in: normalized, range: range),
                           let model = Self.capture(named: "model", from: result, in: normalized),
@@ -136,9 +188,12 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
                     }
                     return Match(
                         recordID: compiled.record.id,
+                        family: compiled.record.family,
+                        capacityLabel: compiled.record.capacityLabels[capacityToken.uppercased()] ?? capacityToken,
                         canonicalModel: model.uppercased(),
                         marketingName: marketingName,
-                        reportedModel: candidate
+                        reportedModel: candidate,
+                        prefersMarketingNameOnly: compiled.record.prefersMarketingNameOnly ?? false
                     )
                 }
             }
@@ -147,18 +202,26 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
     }
 
     private static func isEligible(_ drive: DriveDevice) -> Bool {
-        guard !drive.isInternal,
-              !drive.isSystemDisk,
-              !drive.isNetwork,
+        guard !drive.isNetwork,
               !drive.isVirtual,
               !drive.isMemoryCard else {
             return false
         }
 
+        return true
+    }
+
+    private static func transportIsCompatible(drive: DriveDevice, record: Record) -> Bool {
         let transport = drive.protocolName.lowercased()
-        return !transport.contains("nvme")
-            && !transport.contains("pci-express")
-            && !transport.contains("apple fabric")
+        let isPCIeDevice = transport.contains("nvme")
+            || transport.contains("pci-express")
+            || transport.contains("apple fabric")
+        guard isPCIeDevice else { return true }
+
+        let declaredInterfaces = record.interfaces.joined(separator: " ").lowercased()
+        return declaredInterfaces.contains("nvme")
+            || declaredInterfaces.contains("pcie")
+            || declaredInterfaces.contains("m.2")
     }
 
     private static func normalized(_ value: String) -> String {
@@ -205,12 +268,21 @@ extension DriveDevice {
     }
 
     var catalogDisplayName: String {
-        catalogMatch?.displayName ?? displayName
+        guard let match = catalogMatch else { return displayName }
+        if match.preservesReportedName(displayName) { return displayName }
+        return match.prefersMarketingNameOnly ? match.marketingName : match.displayName
+    }
+
+    var catalogSidebarDisplayName: String {
+        guard let match = catalogMatch else { return displayName }
+        return match.preservesReportedName(displayName) ? displayName : match.marketingName
     }
 
     var catalogHeaderDisplayName: String {
         guard let match = catalogMatch else { return displayName }
+        guard !match.preservesReportedName(displayName) else { return displayName }
         let groupedMarketingName = match.marketingName.replacingOccurrences(of: " ", with: "\u{00A0}")
+        guard !match.prefersMarketingNameOnly else { return groupedMarketingName }
         return "\(match.canonicalModel) · \(groupedMarketingName)"
     }
 

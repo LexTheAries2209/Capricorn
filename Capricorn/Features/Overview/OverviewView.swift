@@ -26,7 +26,12 @@ struct OverviewView: View {
                         StatTile(title: language.t("Available Capacity"), value: formatByteCount(capacityUsage.availableBytes), symbol: "internaldrive")
                     }
                     StatTile(title: language.t("Format"), value: drive.fileSystemSummary ?? language.t("Unavailable"), symbol: "doc.richtext")
-                    StatTile(title: language.t("Temperature"), value: snapshot?.temperatureCelsius.map { String(format: "%.1f C", $0) } ?? language.t("Unavailable"), symbol: "thermometer.medium")
+                    StatTile(
+                        title: language.t("Temperature"),
+                        value: snapshot?.temperatureCelsius.map { String(format: "%.1f C", $0) } ?? language.t("Unavailable"),
+                        symbol: "thermometer.medium",
+                        valueTint: temperatureValueTint
+                    )
                     StatTile(title: language.t("Life Remaining"), value: snapshot?.lifeRemainingPercent.map { "\($0)%" } ?? language.t("Unavailable"), symbol: "battery.75percent")
                     StatTile(title: language.t("Power-On Hours"), value: snapshot?.powerOnHours.map(String.init) ?? language.t("Unavailable"), symbol: "timer")
                     StatTile(title: language.t("Media Errors"), value: snapshot?.mediaErrors.map(String.init) ?? language.t("Unavailable"), symbol: "exclamationmark.triangle")
@@ -84,6 +89,19 @@ struct OverviewView: View {
             return path
         }
         return "\(path) · \(format)"
+    }
+
+    private func temperatureTint(for celsius: Double) -> Color? {
+        switch DriveTemperatureLevel(celsius: celsius) {
+        case .normal: nil
+        case .elevated: .yellow
+        case .critical: .red
+        }
+    }
+
+    private var temperatureValueTint: Color? {
+        guard let celsius = snapshot?.temperatureCelsius else { return nil }
+        return temperatureTint(for: celsius)
     }
 }
 

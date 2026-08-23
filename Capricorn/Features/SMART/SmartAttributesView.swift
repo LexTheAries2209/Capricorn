@@ -57,6 +57,14 @@ struct SmartAttributesView: View {
                     Text(language.t("SMART Attributes"))
                         .font(.title2.bold())
                     snapshotStorageSummary
+                    if let nativeStatus = snapshot?.providerStatuses.first(where: {
+                        $0.name.caseInsensitiveCompare("Native macOS") == .orderedSame
+                            && $0.state == .limited
+                    }) {
+                        Label(language.statusMessage(nativeStatus.message), systemImage: "clock.arrow.circlepath")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     if let saveMessage {
                         Label(language.statusMessage(saveMessage), systemImage: saveMessageIsWarning ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                             .font(.caption)

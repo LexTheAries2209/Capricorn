@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
+import Darwin
 
 struct CommandResult: Sendable {
     var stdout: Data
@@ -19,9 +20,23 @@ protocol CommandRunning: Sendable {
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult
 }
 
+protocol TimedCommandRunning: CommandRunning {
+    func run(_ executable: String, arguments: [String], timeout: TimeInterval) async throws -> CommandResult
+}
+
+extension CommandRunning {
+    func run(_ executable: String, arguments: [String], timeout: TimeInterval) async throws -> CommandResult {
+        guard let timedRunner = self as? any TimedCommandRunning else {
+            return try await run(executable, arguments: arguments)
+        }
+        return try await timedRunner.run(executable, arguments: arguments, timeout: timeout)
+    }
+}
+
 enum CommandError: Error, LocalizedError {
     case nonZeroExit(executable: String, status: Int32, stderr: String)
     case launchFailed(String)
+    case timedOut(executable: String, seconds: TimeInterval)
 
     var errorDescription: String? {
         switch self {
@@ -29,6 +44,8 @@ enum CommandError: Error, LocalizedError {
             "\(executable) exited with status \(status). \(stderr)"
         case let .launchFailed(message):
             message
+        case let .timedOut(executable, seconds):
+            "\(executable) timed out after \(seconds.formatted(.number.precision(.fractionLength(0...1)))) seconds."
         }
     }
 }
@@ -63,34 +80,57 @@ private final class OneShotContinuation<Value: Sendable>: @unchecked Sendable {
 }
 
 private final class CommandProcessHandle: @unchecked Sendable {
+    enum StopReason {
+        case none
+        case cancelled
+        case timedOut
+    }
+
     private struct State {
         weak var process: Process?
-        var isCancelled = false
+        var stopReason = StopReason.none
+        var isFinished = false
     }
 
     private let state = LockedState(State())
 
+    var stopReason: StopReason {
+        state.withLock { $0.stopReason }
+    }
+
     var isCancelled: Bool {
-        state.withLock { $0.isCancelled }
+        stopReason == .cancelled
     }
 
     func attach(_ process: Process) {
-        let shouldCancel = state.withLock { state in
+        let shouldStop = state.withLock { state in
             state.process = process
-            return state.isCancelled
+            return state.stopReason != .none
         }
-        if shouldCancel {
+        if shouldStop {
+            terminate(process)
+        }
+    }
+
+    func stop(_ reason: StopReason) {
+        let process = state.withLock { state -> Process? in
+            guard !state.isFinished, state.stopReason == .none else { return nil }
+            state.stopReason = reason
+            return state.process
+        }
+        if let process {
             terminate(process)
         }
     }
 
     func cancel() {
-        let process = state.withLock { state -> Process? in
-            state.isCancelled = true
-            return state.process
-        }
-        if let process {
-            terminate(process)
+        stop(.cancelled)
+    }
+
+    func finish() -> StopReason {
+        state.withLock { state in
+            state.isFinished = true
+            return state.stopReason
         }
     }
 
@@ -99,21 +139,29 @@ private final class CommandProcessHandle: @unchecked Sendable {
         process.terminate()
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25) {
             if process.isRunning {
-                process.interrupt()
+                Darwin.kill(process.processIdentifier, SIGKILL)
             }
         }
     }
 }
 
-final class ShellCommandRunner: CommandRunning, @unchecked Sendable {
+final class ShellCommandRunner: TimedCommandRunning, @unchecked Sendable {
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        try await run(executable, arguments: arguments, timeout: nil)
+    }
+
+    func run(_ executable: String, arguments: [String], timeout: TimeInterval) async throws -> CommandResult {
+        try await run(executable, arguments: arguments, timeout: Optional(timeout))
+    }
+
+    private func run(_ executable: String, arguments: [String], timeout: TimeInterval?) async throws -> CommandResult {
         let processHandle = CommandProcessHandle()
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await withCheckedThrowingContinuation { continuation in
                 let completion = OneShotContinuation(continuation)
                 DispatchQueue.global(qos: .utility).async {
-                    if processHandle.isCancelled {
+                    if processHandle.stopReason == .cancelled {
                         completion.resume(throwing: CancellationError())
                         return
                     }
@@ -135,6 +183,18 @@ final class ShellCommandRunner: CommandRunning, @unchecked Sendable {
                         return
                     }
 
+                    let timeoutWorkItem = timeout.map { timeout in
+                        DispatchWorkItem {
+                            processHandle.stop(.timedOut)
+                        }
+                    }
+                    if let timeout, let timeoutWorkItem {
+                        DispatchQueue.global(qos: .utility).asyncAfter(
+                            deadline: .now() + max(0, timeout),
+                            execute: timeoutWorkItem
+                        )
+                    }
+
                     let outputGroup = DispatchGroup()
                     let output = LockedState(BufferedCommandOutput())
 
@@ -153,11 +213,22 @@ final class ShellCommandRunner: CommandRunning, @unchecked Sendable {
                     }
 
                     process.waitUntilExit()
+                    timeoutWorkItem?.cancel()
+                    let stopReason = processHandle.finish()
                     outputGroup.wait()
 
-                    if processHandle.isCancelled {
+                    switch stopReason {
+                    case .cancelled:
                         completion.resume(throwing: CancellationError())
                         return
+                    case .timedOut:
+                        completion.resume(throwing: CommandError.timedOut(
+                            executable: executable,
+                            seconds: timeout ?? 0
+                        ))
+                        return
+                    case .none:
+                        break
                     }
                     let finalOutput = output.snapshot()
                     completion.resume(returning: CommandResult(
@@ -168,7 +239,7 @@ final class ShellCommandRunner: CommandRunning, @unchecked Sendable {
                 }
             }
         } onCancel: {
-            processHandle.cancel()
+            processHandle.stop(.cancelled)
         }
     }
 }

@@ -14,6 +14,7 @@ final class AppPreferences {
         static let usesPlainTabForFeatureSwitching = "usesPlainTabForFeatureSwitching"
         static let allowSystemDiskSelfTests = "allowSystemDiskSelfTests"
         static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
+        static let redactSerialNumbers = "redactSerialNumbers"
     }
 
     private let defaults: UserDefaults
@@ -49,6 +50,12 @@ final class AppPreferences {
         didSet { defaults.set(avoidWakingSleepingDisks, forKey: Key.avoidWakingSleepingDisks) }
     }
 
+    /// Controls only user-facing serial-number rendering. Internal identity,
+    /// history matching, and persistence continue to use the full value.
+    var redactSerialNumbers: Bool {
+        didSet { defaults.set(redactSerialNumbers, forKey: Key.redactSerialNumbers) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
@@ -57,6 +64,7 @@ final class AppPreferences {
         usesPlainTabForFeatureSwitching = defaults.object(forKey: Key.usesPlainTabForFeatureSwitching) as? Bool ?? true
         allowSystemDiskSelfTests = defaults.bool(forKey: Key.allowSystemDiskSelfTests)
         avoidWakingSleepingDisks = defaults.object(forKey: Key.avoidWakingSleepingDisks) as? Bool ?? true
+        redactSerialNumbers = defaults.bool(forKey: Key.redactSerialNumbers)
     }
 
     var language: AppLanguage {
@@ -92,6 +100,10 @@ struct CapricornSettingsView: View {
 
             Toggle(language.t("Show virtual disks"), isOn: $preferences.showVirtualDisks)
             Toggle(language.t("Use Tab to switch feature pages"), isOn: $preferences.usesPlainTabForFeatureSwitching)
+            Toggle(language.t("Redact serial numbers"), isOn: $preferences.redactSerialNumbers)
+            Text(language.t("When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             Section(language.t("SMART Self-Tests")) {
                 Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)

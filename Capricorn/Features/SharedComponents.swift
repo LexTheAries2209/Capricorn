@@ -27,6 +27,7 @@ struct StatTile: View {
     let title: String
     let value: String
     let symbol: String
+    var valueTint: Color? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -34,6 +35,7 @@ struct StatTile: View {
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.title3.bold())
+                .foregroundStyle(valueTint ?? Color.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Text(title)

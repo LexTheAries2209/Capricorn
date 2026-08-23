@@ -2,6 +2,7 @@
 import Foundation
 import IOKit
 import IOKit.storage
+import OSLog
 
 protocol DiskInventoryProviding: Sendable {
     func loadDrives(showVirtual: Bool) async throws -> [DriveDevice]
@@ -9,6 +10,7 @@ protocol DiskInventoryProviding: Sendable {
 
 struct DiskutilListModel: Sendable {
     var wholeDiskIDs: [String]
+    var wholeDiskSizes: [String: Int64]
     var volumesByPhysicalDisk: [String: [DriveDevice.Volume]]
 }
 
@@ -107,6 +109,12 @@ enum DiskutilPlistParser {
 
         let wholeDisks = root["WholeDisks"] as? [String] ?? root["AllDisks"] as? [String] ?? []
         let entries = root["AllDisksAndPartitions"] as? [[String: Any]] ?? []
+        let wholeDiskSizes = Dictionary(uniqueKeysWithValues: entries.compactMap { entry -> (String, Int64)? in
+            guard let identifier = entry.string("DeviceIdentifier"),
+                  wholeDisks.contains(identifier),
+                  let size = entry.int64("Size") else { return nil }
+            return (identifier, size)
+        })
         var partitionToWholeDisk: [String: String] = [:]
 
         for entry in entries {
@@ -160,7 +168,11 @@ enum DiskutilPlistParser {
             }
         }
 
-        return DiskutilListModel(wholeDiskIDs: wholeDisks, volumesByPhysicalDisk: volumesByDisk)
+        return DiskutilListModel(
+            wholeDiskIDs: wholeDisks,
+            wholeDiskSizes: wholeDiskSizes,
+            volumesByPhysicalDisk: volumesByDisk
+        )
     }
 
     private static func parseMountedPartitionVolume(_ partition: [String: Any]) -> DriveDevice.Volume? {
@@ -217,8 +229,6 @@ enum DiskutilPlistParser {
             registryName: registryName,
             content: content
         )
-        let nativeSmartKeys = parseSmartKeys(info.dictionary("SMARTDeviceSpecificKeysMayVaryNotGuaranteed"))
-
         return DriveDevice(
             bsdName: bsdName,
             deviceNode: info.string("DeviceNode") ?? "/dev/\(bsdName)",
@@ -234,8 +244,11 @@ enum DiskutilPlistParser {
             isVirtual: isVirtual,
             isSystemDisk: volumes.contains(where: { $0.mountPoint == "/" }),
             isMemoryCard: isMemoryCard,
-            smartStatusRaw: cleanName(info.string("SMARTStatus")),
-            nativeSmartKeys: nativeSmartKeys,
+            // Native SMART is intentionally collected by NativeSmartProbe after
+            // inventory has been published. Keeping it out of DriveDevice avoids
+            // treating a transient first diskutil response as permanent state.
+            smartStatusRaw: nil,
+            nativeSmartKeys: [:],
             volumes: deduplicatedVolumes(volumes),
             model: registryName,
             serialNumber: cleanName(info.string("DeviceSerial"))
@@ -255,20 +268,6 @@ enum DiskutilPlistParser {
             || searchable.contains("sdhc")
             || searchable.contains("sd card")
             || searchable.contains("secure digital")
-    }
-
-    private static func parseSmartKeys(_ dict: [String: Any]) -> [String: Int64] {
-        var result: [String: Int64] = [:]
-        for (key, value) in dict {
-            if let number = value as? NSNumber {
-                result[key] = number.int64Value
-            } else if let int = value as? Int64 {
-                result[key] = int
-            } else if let string = value as? String, let int = Int64(string) {
-                result[key] = int
-            }
-        }
-        return result
     }
 
     private static func wholeDiskName(from identifier: String) -> String {
@@ -680,12 +679,16 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
     private let diskutilPath: String
     private let networkProvider: NetworkVolumeInventoryProviding?
     private let serialNumberProvider: DriveSerialNumberProviding
+    private let maximumConcurrentInfoCalls: Int
+    private let infoTimeout: TimeInterval
 
     init(
         runner: CommandRunning = ShellCommandRunner(),
         diskutilPath: String = "/usr/sbin/diskutil",
         networkProvider: NetworkVolumeInventoryProviding? = NetworkMountInventoryProvider(),
-        serialNumberProvider: DriveSerialNumberProviding? = nil
+        serialNumberProvider: DriveSerialNumberProviding? = nil,
+        maximumConcurrentInfoCalls: Int = 2,
+        infoTimeout: TimeInterval = 5
     ) {
         self.runner = runner
         self.diskutilPath = diskutilPath
@@ -694,6 +697,8 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
             primary: SystemProfilerDriveSerialProvider(runner: runner),
             fallback: IOKitDriveSerialProvider()
         )
+        self.maximumConcurrentInfoCalls = max(1, maximumConcurrentInfoCalls)
+        self.infoTimeout = infoTimeout
     }
 
     func loadDrives(showVirtual: Bool) async throws -> [DriveDevice] {
@@ -703,7 +708,12 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
         }
 
         let list = try DiskutilPlistParser.parseList(listResult.stdout)
-        var devices = await loadPhysicalDevices(list: list, showVirtual: showVirtual)
+        let physicalDiskIDs = await loadPhysicalDiskIDs()
+        var devices = await loadPhysicalDevices(
+            list: list,
+            physicalDiskIDs: physicalDiskIDs,
+            showVirtual: showVirtual
+        )
         let serialNumbers = await serialNumberProvider.serialNumbers(for: devices)
         if !serialNumbers.isEmpty {
             devices = devices.map { drive in
@@ -730,19 +740,61 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
         }
     }
 
-    private func loadPhysicalDevices(list: DiskutilListModel, showVirtual: Bool) async -> [DriveDevice] {
+    private func loadPhysicalDiskIDs() async -> Set<String> {
+        do {
+            let result = try await runner.run(
+                diskutilPath,
+                arguments: ["list", "-plist", "physical"],
+                timeout: infoTimeout
+            )
+            guard result.terminationStatus == 0 else { return [] }
+            return Set(try DiskutilPlistParser.parseList(result.stdout).wholeDiskIDs)
+        } catch {
+            CapricornLog.inventory.notice(
+                "Physical disk list fallback is unavailable: \(error.localizedDescription, privacy: .public)"
+            )
+            return []
+        }
+    }
+
+    private func loadPhysicalDevices(
+        list: DiskutilListModel,
+        physicalDiskIDs: Set<String>,
+        showVirtual: Bool
+    ) async -> [DriveDevice] {
         let runner = runner
         let diskutilPath = diskutilPath
-        var iterator = Array(list.wholeDiskIDs.enumerated()).makeIterator()
+        let infoTimeout = infoTimeout
+        let maximumConcurrentInfoCalls = maximumConcurrentInfoCalls
+        let prioritizedDisks = Array(list.wholeDiskIDs.enumerated()).sorted { lhs, rhs in
+            let lhsIsSystem = (list.volumesByPhysicalDisk[lhs.element] ?? []).contains { $0.mountPoint == "/" }
+            let rhsIsSystem = (list.volumesByPhysicalDisk[rhs.element] ?? []).contains { $0.mountPoint == "/" }
+            if lhsIsSystem != rhsIsSystem { return lhsIsSystem }
+            return lhs.offset < rhs.offset
+        }
+        var iterator = prioritizedDisks.makeIterator()
 
         return await withTaskGroup(of: (Int, DriveDevice?).self) { group in
-            for _ in 0..<min(4, list.wholeDiskIDs.count) {
+            for _ in 0..<min(maximumConcurrentInfoCalls, prioritizedDisks.count) {
                 guard let (index, diskID) = iterator.next() else { break }
                 let volumes = Self.enrichMountedVolumeMetadata(list.volumesByPhysicalDisk[diskID] ?? [])
                 group.addTask {
                     do {
-                        let result = try await runner.run(diskutilPath, arguments: ["info", "-plist", diskID])
-                        guard result.terminationStatus == 0 else { return (index, nil) }
+                        let result = try await runner.run(
+                            diskutilPath,
+                            arguments: ["info", "-plist", diskID],
+                            timeout: infoTimeout
+                        )
+                        guard result.terminationStatus == 0 else {
+                            return (
+                                index,
+                                Self.fallbackPhysicalDevice(
+                                    diskID: diskID,
+                                    list: list,
+                                    physicalDiskIDs: physicalDiskIDs
+                                )
+                            )
+                        }
                         return (
                             index,
                             try DiskutilPlistParser.parseDevice(
@@ -752,7 +804,17 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
                             )
                         )
                     } catch {
-                        return (index, nil)
+                        CapricornLog.inventory.notice(
+                            "Disk inventory info failed for \(diskID, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                        )
+                        return (
+                            index,
+                            Self.fallbackPhysicalDevice(
+                                diskID: diskID,
+                                list: list,
+                                physicalDiskIDs: physicalDiskIDs
+                            )
+                        )
                     }
                 }
             }
@@ -766,8 +828,21 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
                     let volumes = Self.enrichMountedVolumeMetadata(list.volumesByPhysicalDisk[nextDiskID] ?? [])
                     group.addTask {
                         do {
-                            let result = try await runner.run(diskutilPath, arguments: ["info", "-plist", nextDiskID])
-                            guard result.terminationStatus == 0 else { return (nextIndex, nil) }
+                            let result = try await runner.run(
+                                diskutilPath,
+                                arguments: ["info", "-plist", nextDiskID],
+                                timeout: infoTimeout
+                            )
+                            guard result.terminationStatus == 0 else {
+                                return (
+                                    nextIndex,
+                                    Self.fallbackPhysicalDevice(
+                                        diskID: nextDiskID,
+                                        list: list,
+                                        physicalDiskIDs: physicalDiskIDs
+                                    )
+                                )
+                            }
                             return (
                                 nextIndex,
                                 try DiskutilPlistParser.parseDevice(
@@ -777,13 +852,61 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
                                 )
                             )
                         } catch {
-                            return (nextIndex, nil)
+                            CapricornLog.inventory.notice(
+                                "Disk inventory info failed for \(nextDiskID, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                            )
+                            return (
+                                nextIndex,
+                                Self.fallbackPhysicalDevice(
+                                    diskID: nextDiskID,
+                                    list: list,
+                                    physicalDiskIDs: physicalDiskIDs
+                                )
+                            )
                         }
                     }
                 }
             }
             return indexedDevices.sorted { $0.0 < $1.0 }.map(\.1)
         }
+    }
+
+    private static func fallbackPhysicalDevice(
+        diskID: String,
+        list: DiskutilListModel,
+        physicalDiskIDs: Set<String>
+    ) -> DriveDevice? {
+        guard physicalDiskIDs.contains(diskID) else { return nil }
+        let volumes = enrichMountedVolumeMetadata(list.volumesByPhysicalDisk[diskID] ?? [])
+        let isSystemDisk = volumes.contains { $0.mountPoint == "/" }
+        let representativeVolume = volumes.max { lhs, rhs in
+            lhs.sizeBytes < rhs.sizeBytes
+        }
+        let displayName = representativeVolume?.name ?? diskID
+
+        CapricornLog.inventory.notice(
+            "Using physical-list fallback metadata for \(diskID, privacy: .public)"
+        )
+        return DriveDevice(
+            bsdName: diskID,
+            deviceNode: "/dev/\(diskID)",
+            displayName: displayName,
+            mediaName: displayName,
+            protocolName: "Unknown",
+            sizeBytes: list.wholeDiskSizes[diskID] ?? representativeVolume?.sizeBytes ?? 0,
+            blockSize: 512,
+            isInternal: isSystemDisk,
+            isRemovable: !isSystemDisk,
+            isSolidState: false,
+            isWritable: volumes.contains(where: \.isWritable),
+            isVirtual: false,
+            isSystemDisk: isSystemDisk,
+            smartStatusRaw: nil,
+            nativeSmartKeys: [:],
+            volumes: volumes,
+            model: nil,
+            serialNumber: nil
+        )
     }
 
     private static func enrichMountedVolumeMetadata(_ volumes: [DriveDevice.Volume]) -> [DriveDevice.Volume] {

@@ -46,6 +46,22 @@ enum HealthStatus: String, Codable, CaseIterable, Identifiable, Comparable, Send
     }
 }
 
+enum DriveTemperatureLevel: String, Sendable {
+    case normal
+    case elevated
+    case critical
+
+    init(celsius: Double) {
+        if celsius >= 85 {
+            self = .critical
+        } else if celsius >= 70 {
+            self = .elevated
+        } else {
+            self = .normal
+        }
+    }
+}
+
 enum ProviderState: String, Codable, CaseIterable, Sendable {
     case available
     case limited
@@ -100,6 +116,26 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
 
     var capacityUsage: DriveCapacityUsage? {
         DriveCapacityUsage.resolve(volumes: volumes)
+    }
+
+    /// The volume name used to identify a drive in the sidebar. Prefer the
+    /// largest volume because it is usually the user-facing data volume. A
+    /// deterministic device-identifier tie-break keeps the label stable when
+    /// several APFS volumes report the same shared-container capacity.
+    var sidebarVolumeName: String {
+        let representativeVolume = volumes
+            .filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .sorted { lhs, rhs in
+                let lhsCapacity = lhs.totalCapacityBytes ?? lhs.sizeBytes
+                let rhsCapacity = rhs.totalCapacityBytes ?? rhs.sizeBytes
+                if lhsCapacity != rhsCapacity {
+                    return lhsCapacity > rhsCapacity
+                }
+                return lhs.deviceIdentifier.localizedStandardCompare(rhs.deviceIdentifier) == .orderedAscending
+            }
+            .first
+
+        return representativeVolume?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? displayName
     }
 
     /// Stable logical-volume identities reported by macOS. A physical drive
@@ -160,6 +196,27 @@ enum VolumeUUIDNormalizer {
 
     static func normalized<S: Sequence>(_ values: S) -> [String] where S.Element == String {
         Array(Set(values.compactMap(normalize))).sorted()
+    }
+}
+
+enum DriveStableIdentityMatcher {
+    static func matches(_ lhs: DriveDevice, _ rhs: DriveDevice) -> Bool {
+        let lhsSerial = normalizedSerial(lhs.serialNumber)
+        let rhsSerial = normalizedSerial(rhs.serialNumber)
+        if let lhsSerial, let rhsSerial {
+            return lhsSerial == rhsSerial
+        }
+
+        let lhsVolumeUUIDs = Set(lhs.volumeUUIDs)
+        let rhsVolumeUUIDs = Set(rhs.volumeUUIDs)
+        guard !lhsVolumeUUIDs.isEmpty, !rhsVolumeUUIDs.isEmpty else { return false }
+        return !lhsVolumeUUIDs.isDisjoint(with: rhsVolumeUUIDs)
+    }
+
+    private static func normalizedSerial(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        return normalized.isEmpty || normalized == "NIL" ? nil : normalized
     }
 }
 
@@ -736,12 +793,12 @@ enum AppFeatureTabKeyRouter {
 }
 
 enum DrivePageHeaderText {
-    static func serialNumber(for drive: DriveDevice) -> String {
-        drive.serialNumber ?? "nil"
+    static func serialNumber(for drive: DriveDevice, redact: Bool = false) -> String {
+        SerialNumberDisplayFormatter.displayValue(drive.serialNumber, redact: redact)
     }
 
-    static func serialNumberLine(for drive: DriveDevice, language: AppLanguage) -> String {
-        "\(language.t("Serial Number")): \(serialNumber(for: drive))"
+    static func serialNumberLine(for drive: DriveDevice, language: AppLanguage, redact: Bool = false) -> String {
+        "\(language.t("Serial Number")): \(serialNumber(for: drive, redact: redact))"
     }
 
     static func mediaKind(for drive: DriveDevice, language: AppLanguage) -> String {
@@ -756,6 +813,17 @@ enum DrivePageHeaderText {
 
     static func subtitle(for drive: DriveDevice, language: AppLanguage) -> String {
         "\(drive.bsdName) · \(drive.protocolName) · \(mediaKind(for: drive, language: language))"
+    }
+}
+
+enum SerialNumberDisplayFormatter {
+    static func displayValue(_ serialNumber: String?, redact: Bool) -> String {
+        guard let serialNumber, !serialNumber.isEmpty else { return "nil" }
+        guard redact else { return serialNumber }
+
+        let prefix = String(serialNumber.prefix(4))
+        let redactedCount = max(0, serialNumber.count - prefix.count)
+        return prefix + String(repeating: "*", count: redactedCount)
     }
 }
 
@@ -1054,6 +1122,7 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     var spareAvailablePercent: Int? = nil
     var spareAvailableThresholdPercent: Int? = nil
     var smartctlDiagnostics: SmartctlDiagnostics? = nil
+    var nativeSmartCapturedAt: Date? = nil
 
     static func unavailable(for drive: DriveDevice, reason: String) -> SmartSnapshot {
         SmartSnapshot(
@@ -1075,16 +1144,133 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
         )
     }
 
+    static func refreshingNative(for drive: DriveDevice) -> SmartSnapshot {
+        SmartSnapshot(
+            driveID: drive.id,
+            capturedAt: Date(),
+            health: .unavailable,
+            summary: "Refreshing Native SMART data...",
+            providerStatuses: [
+                ProviderStatus(
+                    name: "Native macOS",
+                    state: .limited,
+                    message: "Refreshing Native SMART data..."
+                )
+            ],
+            attributes: [],
+            temperatureCelsius: nil,
+            lifeRemainingPercent: nil,
+            powerOnHours: nil,
+            powerCycleCount: nil,
+            mediaErrors: nil,
+            unsafeShutdowns: nil,
+            smartStatusRaw: nil,
+            selfTestStatus: nil
+        )
+    }
+
     var smartReadSkippedToAvoidWake: Bool {
         smartctlDiagnostics?.readSkippedToAvoidWake == true
     }
 
-    func retainingSMARTData(from previous: SmartSnapshot) -> SmartSnapshot {
+    func retainingSMARTData(from previous: SmartSnapshot, for drive: DriveDevice) -> SmartSnapshot {
         guard smartReadSkippedToAvoidWake else { return self }
-        var retained = previous
-        retained.summary = summary
-        retained.providerStatuses = providerStatuses
-        retained.smartctlDiagnostics = smartctlDiagnostics
+        var retained = self
+        retained.attributes.removeAll {
+            $0.source.caseInsensitiveCompare("smartctl") == .orderedSame
+        }
+        retained.attributes.append(contentsOf: previous.attributes.filter {
+            $0.source.caseInsensitiveCompare("smartctl") == .orderedSame
+        })
+        retained.temperatureCelsius = retained.temperatureCelsius ?? previous.temperatureCelsius
+        retained.lifeRemainingPercent = retained.lifeRemainingPercent ?? previous.lifeRemainingPercent
+        retained.powerOnHours = retained.powerOnHours ?? previous.powerOnHours
+        retained.powerCycleCount = retained.powerCycleCount ?? previous.powerCycleCount
+        retained.mediaErrors = retained.mediaErrors ?? previous.mediaErrors
+        retained.unsafeShutdowns = retained.unsafeShutdowns ?? previous.unsafeShutdowns
+        retained.smartStatusRaw = retained.smartStatusRaw ?? previous.smartStatusRaw
+        retained.selfTestStatus = retained.selfTestStatus ?? previous.selfTestStatus
+        retained.selfTestReport = retained.selfTestReport ?? previous.selfTestReport
+        retained.enduranceUsedPercent = retained.enduranceUsedPercent ?? previous.enduranceUsedPercent
+        retained.spareAvailablePercent = retained.spareAvailablePercent ?? previous.spareAvailablePercent
+        retained.spareAvailableThresholdPercent = retained.spareAvailableThresholdPercent ?? previous.spareAvailableThresholdPercent
+        retained.nativeSmartCapturedAt = retained.nativeSmartCapturedAt ?? previous.nativeSmartCapturedAt
+        let evaluator = DriveHealthEvaluator()
+        retained.health = evaluator.evaluate(drive: drive, snapshot: retained)
+        retained.summary = evaluator.summary(for: drive, snapshot: retained)
+        return retained
+    }
+
+    func markingNativeSMARTRefreshing(for drive: DriveDevice) -> SmartSnapshot {
+        var refreshing = self
+        refreshing.driveID = drive.id
+        refreshing.providerStatuses.removeAll { $0.name.caseInsensitiveCompare("Native macOS") == .orderedSame }
+        refreshing.providerStatuses.insert(
+            ProviderStatus(
+                name: "Native macOS",
+                state: .limited,
+                message: "Refreshing Native SMART data..."
+            ),
+            at: 0
+        )
+        return refreshing
+    }
+
+    func retainingNativeSMARTDataIfNeeded(from previous: SmartSnapshot, for drive: DriveDevice) -> SmartSnapshot {
+        guard let currentNativeStatus = providerStatuses.first(where: {
+            $0.name.caseInsensitiveCompare("Native macOS") == .orderedSame
+        }) else { return self }
+
+        let currentNativeAttributes = attributes.filter {
+            $0.source.caseInsensitiveCompare("Native macOS") == .orderedSame
+        }
+        let readIsTransientlyIncomplete = currentNativeStatus.state == .failed
+            || (currentNativeStatus.state == .limited && currentNativeAttributes.isEmpty)
+        guard readIsTransientlyIncomplete else { return self }
+
+        let previousNativeAttributes = previous.attributes.filter {
+            $0.source.caseInsensitiveCompare("Native macOS") == .orderedSame
+        }
+        let previousNativeStatus = previous.providerStatuses.first {
+            $0.name.caseInsensitiveCompare("Native macOS") == .orderedSame
+        }
+        guard !previousNativeAttributes.isEmpty || previous.smartStatusRaw != nil,
+              previousNativeStatus?.state != .unavailable,
+              previousNativeStatus?.state != .failed else {
+            return self
+        }
+
+        var retained = self
+        retained.attributes.removeAll {
+            $0.source.caseInsensitiveCompare("Native macOS") == .orderedSame
+        }
+        retained.attributes.append(contentsOf: previousNativeAttributes)
+        retained.temperatureCelsius = retained.temperatureCelsius ?? previous.temperatureCelsius
+        retained.lifeRemainingPercent = retained.lifeRemainingPercent ?? previous.lifeRemainingPercent
+        retained.powerOnHours = retained.powerOnHours ?? previous.powerOnHours
+        retained.powerCycleCount = retained.powerCycleCount ?? previous.powerCycleCount
+        retained.mediaErrors = retained.mediaErrors ?? previous.mediaErrors
+        retained.unsafeShutdowns = retained.unsafeShutdowns ?? previous.unsafeShutdowns
+        retained.smartStatusRaw = retained.smartStatusRaw ?? previous.smartStatusRaw
+        retained.enduranceUsedPercent = retained.enduranceUsedPercent ?? previous.enduranceUsedPercent
+        retained.spareAvailablePercent = retained.spareAvailablePercent ?? previous.spareAvailablePercent
+        retained.spareAvailableThresholdPercent = retained.spareAvailableThresholdPercent ?? previous.spareAvailableThresholdPercent
+        retained.nativeSmartCapturedAt = previous.nativeSmartCapturedAt ?? previous.capturedAt
+        retained.providerStatuses.removeAll {
+            $0.name.caseInsensitiveCompare("Native macOS") == .orderedSame
+        }
+        let lastNativeRead = retained.nativeSmartCapturedAt ?? previous.capturedAt
+        retained.providerStatuses.insert(
+            ProviderStatus(
+                name: "Native macOS",
+                state: .limited,
+                message: "Using Native SMART data last read at \(lastNativeRead.ISO8601Format())."
+            ),
+            at: 0
+        )
+        let evaluator = DriveHealthEvaluator()
+        retained.health = evaluator.evaluate(drive: drive, snapshot: retained)
+        retained.summary = evaluator.summary(for: drive, snapshot: retained)
         return retained
     }
 }

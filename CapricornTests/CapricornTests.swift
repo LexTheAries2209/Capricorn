@@ -18,7 +18,10 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(drive.bsdName, "disk0")
         XCTAssertEqual(drive.displayName, "APPLE SSD AP1024Z")
-        XCTAssertEqual(drive.nativeSmartKeys["PERCENTAGE_USED"], 2)
+        XCTAssertTrue(drive.nativeSmartKeys.isEmpty)
+        XCTAssertNil(drive.smartStatusRaw)
+        let nativeData = try NativeSmartDataParser.parse(Self.disk0InfoFixture.data(using: .utf8)!)
+        XCTAssertEqual(nativeData.deviceSpecificKeys["PERCENTAGE_USED"], 2)
         XCTAssertEqual(drive.benchmarkMountPoint, "/System/Volumes/Data")
         XCTAssertEqual(drive.volumes.first?.fileSystemType, "APFS")
         XCTAssertEqual(drive.volumes.first?.capacityGroupIdentifier, "apfs:disk3")
@@ -123,7 +126,167 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(seagate.displayName, "ST8000NM000A · Seagate Exos 7E8 8TB")
         XCTAssertEqual(seagate.reportedModel, "ST8000NM000A-2KE101")
-        XCTAssertEqual(westernDigital.displayName, "WUH722016CLE604 · Western Digital Ultrastar DC HC555 16TB")
+        XCTAssertEqual(westernDigital.displayName, "WUH722016CLE604 · WD Ultrastar DC HC555 16TB")
+    }
+
+    func testExternalDriveModelCatalogIdentifiesSamsungPM9A1NVMe() throws {
+        var drive = Self.externalCatalogDrive(model: "SAMSUNG MZVL21T0HCLR-00B00")
+        drive.protocolName = "PCI-Express"
+        drive.isSolidState = true
+
+        let match = try XCTUnwrap(ExternalDriveModelCatalog.bundled.match(for: drive))
+
+        XCTAssertEqual(match.recordID, "samsung-pm9a1")
+        XCTAssertEqual(match.canonicalModel, "MZVL21T0HCLR")
+        XCTAssertEqual(match.marketingName, "Samsung PM9A1 1TB")
+        XCTAssertEqual(match.displayName, "MZVL21T0HCLR · Samsung PM9A1 1TB")
+
+        drive.isInternal = true
+        XCTAssertEqual(
+            ExternalDriveModelCatalog.bundled.match(for: drive)?.recordID,
+            "samsung-pm9a1"
+        )
+    }
+
+    func testExternalDriveModelCatalogIdentifiesSamsungProductSegments() throws {
+        let cases: [(reportedModel: String, protocolName: String, recordID: String, marketingName: String)] = [
+            ("SAMSUNG MZ-77E2T0B", "SATA", "samsung-870-evo", "Samsung 870 EVO 2TB"),
+            ("SAMSUNG MZ-V9P4T0GW", "PCI-Express", "samsung-990-pro", "Samsung 990 PRO 4TB"),
+            ("MU-PE4T0S/WW", "USB", "samsung-portable-t7-shield", "Samsung Portable SSD T7 Shield 4TB"),
+            ("SAMSUNG MZVLB1T0HBLR-00000", "PCI-Express", "samsung-pm981a", "Samsung PM981a 1TB"),
+            ("SAMSUNG MZQL21T9HCJR-00W07", "PCI-Express", "samsung-pm9a3", "Samsung PM9A3 1.92TB"),
+            ("SAMSUNG MZ3L67T6HBLC-00AW7", "PCI-Express", "samsung-pm9d3a", "Samsung PM9D3a 7.68TB"),
+            ("SAMSUNG MZ3LO7T6HBLT-00A07", "PCI-Express", "samsung-pm1743", "Samsung PM1743 7.68TB"),
+            ("SAMSUNG MZCL93T8HFLC-00AW7", "PCI-Express", "samsung-pm1753", "Samsung PM1753 3.84TB")
+        ]
+
+        for testCase in cases {
+            let drive = Self.externalCatalogDrive(
+                model: testCase.reportedModel,
+                protocolName: testCase.protocolName
+            )
+            let match = try XCTUnwrap(
+                ExternalDriveModelCatalog.bundled.match(for: drive),
+                testCase.reportedModel
+            )
+            XCTAssertEqual(match.recordID, testCase.recordID, testCase.reportedModel)
+            XCTAssertEqual(match.marketingName, testCase.marketingName, testCase.reportedModel)
+        }
+    }
+
+    func testExternalDriveModelCatalogIdentifiesExpandedSSDVendorFamilies() throws {
+        let cases: [(reportedModel: String, protocolName: String, recordID: String, marketingName: String)] = [
+            ("INTEL SSDPEKNW020T8", "PCI-Express", "intel-660p", "Intel 660p 2TB"),
+            ("SOLIDIGM SSDPFKNU020TZ", "PCI-Express", "solidigm-p41-plus", "Solidigm P41 Plus 2TB"),
+            ("SK hynix HFM512GD3JX013N", "PCI-Express", "sk-hynix-bc711", "SK hynix BC711 512GB"),
+            ("CT2000MX500SSD1", "SATA", "crucial-mx500", "Crucial MX500 2TB"),
+            ("MTFDKBG3T8TFR-1BC1ZABYY", "PCI-Express", "micron-7450", "Micron 7450 3.84TB"),
+            ("ZHITAI TiPlus7100 2TB", "PCI-Express", "zhitai-tiplus7100", "ZHITAI TiPlus7100 2TB"),
+            ("KIOXIA KXG80ZNV2T04", "PCI-Express", "kioxia-xg8", "KIOXIA XG8 2TB")
+        ]
+
+        for testCase in cases {
+            let drive = Self.externalCatalogDrive(
+                model: testCase.reportedModel,
+                protocolName: testCase.protocolName
+            )
+            let match = try XCTUnwrap(
+                ExternalDriveModelCatalog.bundled.match(for: drive),
+                testCase.reportedModel
+            )
+            XCTAssertEqual(match.recordID, testCase.recordID, testCase.reportedModel)
+            XCTAssertEqual(match.marketingName, testCase.marketingName, testCase.reportedModel)
+        }
+    }
+
+    func testExternalDriveModelCatalogIdentifiesExpandedConsumerOEMAndDataCenterFamilies() throws {
+        let cases: [(reportedModel: String, protocolName: String, recordID: String, marketingName: String)] = [
+            ("SOLIDIGM SSDPF2KX076T11Z", "PCI-Express", "solidigm-d7-p5520", "Solidigm D7-P5520 7.68TB"),
+            ("SSDPF2KE128T11Z", "PCI-Express", "solidigm-d7-p5620", "Solidigm D7-P5620 12.8TB"),
+            ("KIOXIA KCMY1RUG15T3", "PCI-Express", "kioxia-cm7-r", "KIOXIA CM7-R 15.36TB"),
+            ("Micron MTFDKCC30T7TGH1BC1ZABYY", "PCI-Express", "micron-9400", "Micron 9400 30.72TB"),
+            ("SK hynix PE8010 7.68TB", "PCI-Express", "sk-hynix-pe8010", "SK hynix PE8010 7.68TB"),
+            ("YMTC PC411 1TB", "PCI-Express", "ymtc-pc411", "YMTC PC411 1TB"),
+            ("WDC WD30EZZX-00Z5HB0", "SATA", "wd-blue-hdd", "WD Blue HDD 3TB"),
+            ("WDC WD120EFBX-68B0EN0", "SATA", "wd-red-plus-hdd", "WD Red Plus HDD 12TB"),
+            ("WDS400T1R0C", "PCI-Express", "wd-red-sn700", "WD Red SN700 4TB"),
+            ("SDDPNQD-1T00-1101", "PCI-Express", "wd-pc-sn740", "WD PC SN740 1TB"),
+            ("WUS5EA138ESP7E1", "PCI-Express", "wd-ultrastar-sn655", "WD Ultrastar DC SN655 3.84TB"),
+            ("ST2000DM008-2FR102", "SATA", "seagate-barracuda-hdd", "Seagate BarraCuda HDD 2TB"),
+            ("ZA2000CM10002", "SATA", "seagate-barracuda-ssd", "Seagate BarraCuda SSD 2TB"),
+            ("ZP2000GM30013", "PCI-Express", "seagate-firecuda-530", "Seagate FireCuda 530 2TB"),
+            ("XP12800LE70005", "PCI-Express", "seagate-nytro-5550", "Seagate Nytro 5550 12.8TB")
+        ]
+
+        for testCase in cases {
+            let drive = Self.externalCatalogDrive(
+                model: testCase.reportedModel,
+                protocolName: testCase.protocolName
+            )
+            let match = try XCTUnwrap(
+                ExternalDriveModelCatalog.bundled.match(for: drive),
+                testCase.reportedModel
+            )
+            XCTAssertEqual(match.recordID, testCase.recordID, testCase.reportedModel)
+            XCTAssertEqual(match.marketingName, testCase.marketingName, testCase.reportedModel)
+        }
+    }
+
+    func testExternalDriveModelCatalogCoversU2OrU3AcrossEnterpriseVendors() {
+        let requiredManufacturers = ["KIOXIA", "Micron", "Samsung", "Seagate", "SK hynix", "Solidigm", "WD", "YMTC"]
+        let catalog = ExternalDriveModelCatalog.bundled
+
+        for manufacturer in requiredManufacturers {
+            XCTAssertTrue(
+                catalog.records.contains {
+                    $0.manufacturer == manufacturer
+                        && $0.interfaces.contains { $0 == "U.2" || $0 == "U.3" }
+                },
+                manufacturer
+            )
+        }
+    }
+
+    func testExternalDriveModelCatalogPreservesAlreadyConciseProductNames() {
+        let concise = Self.externalCatalogDrive(
+            model: "ZHITAI TiPlus7100 2TB",
+            protocolName: "PCI-Express"
+        )
+        let alreadyConciseUncataloguedName = Self.externalCatalogDrive(
+            model: "ARES 4T",
+            protocolName: "PCI-Express"
+        )
+        let partNumber = Self.externalCatalogDrive(
+            model: "KIOXIA KXG80ZNV2T04",
+            protocolName: "PCI-Express"
+        )
+
+        XCTAssertEqual(concise.catalogDisplayName, "ZHITAI TiPlus7100 2TB")
+        XCTAssertEqual(concise.catalogSidebarDisplayName, "ZHITAI TiPlus7100 2TB")
+        XCTAssertEqual(concise.catalogHeaderDisplayName, "ZHITAI TiPlus7100 2TB")
+        XCTAssertEqual(
+            concise.catalogDisplayHelp(language: .english),
+            "ZHITAI TiPlus7100 2TB"
+        )
+        XCTAssertNil(alreadyConciseUncataloguedName.catalogMatch)
+        XCTAssertEqual(alreadyConciseUncataloguedName.catalogDisplayName, "ARES 4T")
+        XCTAssertEqual(alreadyConciseUncataloguedName.catalogSidebarDisplayName, "ARES 4T")
+        XCTAssertEqual(alreadyConciseUncataloguedName.catalogHeaderDisplayName, "ARES 4T")
+
+        XCTAssertEqual(partNumber.catalogDisplayName, "KIOXIA XG8 2TB")
+        XCTAssertEqual(partNumber.catalogSidebarDisplayName, "KIOXIA XG8 2TB")
+        XCTAssertEqual(
+            partNumber.catalogHeaderDisplayName,
+            "KIOXIA\u{00A0}XG8\u{00A0}2TB"
+        )
+        XCTAssertEqual(
+            partNumber.catalogDisplayHelp(language: .english),
+            "KIOXIA XG8 2TB\nOriginal model: KIOXIA KXG80ZNV2T04"
+        )
+
+        let toshibaMG = Self.externalCatalogDrive(model: "TOSHIBA MG10ACA20TE", protocolName: "SATA")
+        XCTAssertEqual(toshibaMG.catalogDisplayName, "Toshiba MG10 20TB")
+        XCTAssertEqual(toshibaMG.catalogSidebarDisplayName, "Toshiba MG10 20TB")
     }
 
     func testExternalDriveCatalogHelpRetainsLocalizedRawModel() {
@@ -143,11 +306,11 @@ final class CapricornTests: XCTestCase {
         let drive = Self.externalCatalogDrive(model: "WUH722016CLE604")
         let match = try XCTUnwrap(drive.catalogMatch)
 
-        XCTAssertEqual(match.marketingName, "Western Digital Ultrastar DC HC555 16TB")
+        XCTAssertEqual(match.marketingName, "WD Ultrastar DC HC555 16TB")
         XCTAssertEqual(match.canonicalModel, "WUH722016CLE604")
         XCTAssertEqual(
             drive.catalogHeaderDisplayName,
-            "WUH722016CLE604 · Western\u{00A0}Digital\u{00A0}Ultrastar\u{00A0}DC\u{00A0}HC555\u{00A0}16TB"
+            "WUH722016CLE604 · WD\u{00A0}Ultrastar\u{00A0}DC\u{00A0}HC555\u{00A0}16TB"
         )
     }
 
@@ -248,6 +411,69 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(chineseCSV.contains("volume_formats,Volume Formats,卷格式,顺序与卷名称一致；多个格式以英文句点分隔,APFS.ExFAT.HFS+.NTFS"))
     }
 
+    func testSmartSnapshotCSVReportRedactsSerialNumberOnlyWhenRequested() {
+        var drive = Self.fixtureDrive()
+        drive.serialNumber = "ZR51JYMS"
+        let snapshot = Self.fixtureSnapshot(for: drive)
+
+        let redactedCSV = ReportExporter.smartSnapshotCSVReport(
+            drive: drive,
+            snapshot: snapshot,
+            language: .english,
+            redactSerialNumbers: true
+        )
+        XCTAssertTrue(redactedCSV.contains("serial_number,Serial Number,Hardware serial reported by the device,ZR51****"))
+        XCTAssertFalse(redactedCSV.contains("ZR51JYMS"))
+
+        let fullCSV = ReportExporter.smartSnapshotCSVReport(
+            drive: drive,
+            snapshot: snapshot,
+            language: .english,
+            redactSerialNumbers: false
+        )
+        XCTAssertTrue(fullCSV.contains("serial_number,Serial Number,Hardware serial reported by the device,ZR51JYMS"))
+    }
+
+    func testSidebarVolumeNameUsesLargestVolumeWithStableTieBreakAndFallback() {
+        var drive = Self.fixtureDrive()
+        drive.displayName = "Physical Drive"
+        drive.volumes = [
+            DriveDevice.Volume(
+                deviceIdentifier: "disk9s3",
+                name: "Small",
+                mountPoint: "/Volumes/Small",
+                sizeBytes: 100,
+                isWritable: true,
+                isSystem: false
+            ),
+            DriveDevice.Volume(
+                deviceIdentifier: "disk9s2",
+                name: "Largest B",
+                mountPoint: "/Volumes/Largest B",
+                sizeBytes: 200,
+                isWritable: true,
+                isSystem: false,
+                totalCapacityBytes: 300
+            ),
+            DriveDevice.Volume(
+                deviceIdentifier: "disk9s1",
+                name: "Largest A",
+                mountPoint: "/Volumes/Largest A",
+                sizeBytes: 300,
+                isWritable: true,
+                isSystem: false
+            )
+        ]
+
+        XCTAssertEqual(drive.sidebarVolumeName, "Largest A")
+
+        drive.volumes[2].name = "   "
+        XCTAssertEqual(drive.sidebarVolumeName, "Largest B")
+
+        drive.volumes = []
+        XCTAssertEqual(drive.sidebarVolumeName, "Physical Drive")
+    }
+
     func testSmartSnapshotCSVReportClassifiesSDHDDAndNetworkDevices() {
         var sdDrive = Self.fixtureDrive()
         sdDrive.isMemoryCard = true
@@ -285,7 +511,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(match.reportedModel, "ST8000NM000A-2KE101 Media")
     }
 
-    func testExternalDriveModelCatalogLeavesUnknownInternalAndNVMeDrivesUntouched() {
+    func testExternalDriveModelCatalogMatchesPhysicalInternalDrivesAndRejectsIncompatibleDevices() {
         let catalog = ExternalDriveModelCatalog.bundled
         let unknown = Self.externalCatalogDrive(model: "Vendor Unknown 8TB")
         var internalDrive = Self.externalCatalogDrive(model: "ST8000NM000A-2KE101")
@@ -294,13 +520,21 @@ final class CapricornTests: XCTestCase {
         systemDrive.isSystemDisk = true
         var nvmeDrive = Self.externalCatalogDrive(model: "ST8000NM000A-2KE101", protocolName: "PCI-Express")
         nvmeDrive.isSolidState = true
+        var networkDrive = Self.externalCatalogDrive(model: "SAMSUNG MZVL21T0HCLR-00B00", protocolName: "PCI-Express")
+        networkDrive.isNetwork = true
+        var virtualDrive = Self.externalCatalogDrive(model: "SAMSUNG MZVL21T0HCLR-00B00", protocolName: "PCI-Express")
+        virtualDrive.isVirtual = true
+        var memoryCard = Self.externalCatalogDrive(model: "SAMSUNG MZVL21T0HCLR-00B00", protocolName: "PCI-Express")
+        memoryCard.isMemoryCard = true
 
         XCTAssertNil(catalog.match(for: unknown))
-        XCTAssertNil(catalog.match(for: internalDrive))
-        XCTAssertNil(catalog.match(for: systemDrive))
+        XCTAssertEqual(catalog.match(for: internalDrive)?.recordID, "seagate-exos-7e8")
+        XCTAssertEqual(catalog.match(for: systemDrive)?.recordID, "seagate-exos-7e8")
         XCTAssertNil(catalog.match(for: nvmeDrive))
+        XCTAssertNil(catalog.match(for: networkDrive))
+        XCTAssertNil(catalog.match(for: virtualDrive))
+        XCTAssertNil(catalog.match(for: memoryCard))
         XCTAssertEqual(unknown.catalogDisplayName, unknown.displayName)
-        XCTAssertEqual(internalDrive.catalogDisplayName, internalDrive.displayName)
         XCTAssertEqual(nvmeDrive.catalogDisplayName, nvmeDrive.displayName)
     }
 
@@ -1020,6 +1254,11 @@ final class CapricornTests: XCTestCase {
             DrivePageHeaderText.serialNumberLine(for: drive, language: .simplifiedChinese),
             "序列号: ZR51JYMS"
         )
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive, redact: true), "ZR51****")
+        XCTAssertEqual(
+            DrivePageHeaderText.serialNumberLine(for: drive, language: .simplifiedChinese, redact: true),
+            "序列号: ZR51****"
+        )
 
         drive.serialNumber = nil
         XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive), "nil")
@@ -1027,6 +1266,14 @@ final class CapricornTests: XCTestCase {
             DrivePageHeaderText.serialNumberLine(for: drive, language: .english),
             "Serial Number: nil"
         )
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive, redact: true), "nil")
+    }
+
+    func testSerialNumberDisplayFormatterPreservesShortValuesAndRedactsOnlyAfterFourCharacters() {
+        XCTAssertEqual(SerialNumberDisplayFormatter.displayValue("12345678", redact: true), "1234****")
+        XCTAssertEqual(SerialNumberDisplayFormatter.displayValue("ABC", redact: true), "ABC")
+        XCTAssertEqual(SerialNumberDisplayFormatter.displayValue("12345678", redact: false), "12345678")
+        XCTAssertEqual(SerialNumberDisplayFormatter.displayValue(nil, redact: true), "nil")
     }
 
     @MainActor
@@ -1380,19 +1627,129 @@ final class CapricornTests: XCTestCase {
     }
 
     func testNativeSmartFormatsKelvinTemperatureAndDataUnitsAsTB() async throws {
-        var drive = Self.fixtureDrive()
-        drive.nativeSmartKeys = [
-            "TEMPERATURE": 312,
-            "DATA_UNITS_READ": 189403549,
-            "DATA_UNITS_WRITTEN": 95506302
-        ]
+        let drive = Self.fixtureDrive()
+        let provider = NativeSmartProvider(probe: StaticNativeSmartProbe(result: .available(
+            NativeSmartData(
+                smartStatusRaw: "Verified",
+                deviceSpecificKeys: [
+                    "TEMPERATURE": 312,
+                    "DATA_UNITS_READ": 189403549,
+                    "DATA_UNITS_WRITTEN": 95506302
+                ]
+            )
+        )))
 
-        let snapshotValue = await NativeSmartProvider().snapshot(for: drive)
+        let snapshotValue = await provider.snapshot(for: drive)
         let snapshot = try XCTUnwrap(snapshotValue)
         XCTAssertEqual(snapshot.temperatureCelsius ?? 0, 38.85, accuracy: 0.001)
         XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Temperature" })?.rawValue, "312 K (39 °C)")
         XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Data Units Read" })?.rawValue, formatSmartDataUnits(189403549))
         XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Data Units Written" })?.rawValue, formatSmartDataUnits(95506302))
+    }
+
+    func testNativeSmartProbeRetriesMissingFieldsAndRecoversOnThirdAttempt() async throws {
+        let emptyData = Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <plist version="1.0"><dict>
+          <key>DeviceIdentifier</key><string>disk0</string>
+        </dict></plist>
+        """.utf8)
+        let availableData = Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <plist version="1.0"><dict>
+          <key>SMARTStatus</key><string>Verified</string>
+          <key>SMARTDeviceSpecificKeysMayVaryNotGuaranteed</key><dict>
+            <key>PERCENTAGE_USED</key><integer>2</integer>
+          </dict>
+        </dict></plist>
+        """.utf8)
+        let runner = SequencedNativeDiskutilRunner(results: [
+            CommandResult(stdout: emptyData, stderr: Data(), terminationStatus: 0),
+            CommandResult(stdout: emptyData, stderr: Data(), terminationStatus: 0),
+            CommandResult(stdout: availableData, stderr: Data(), terminationStatus: 0)
+        ])
+        let probe = DiskutilNativeSmartProbe(
+            runner: runner,
+            timeout: 5,
+            retryDelays: [0, 0, 0]
+        )
+
+        let result = await probe.probe(drive: Self.fixtureDrive())
+
+        guard case let .available(data) = result else {
+            return XCTFail("Expected available Native SMART data, got \(result)")
+        }
+        XCTAssertEqual(data.smartStatusRaw, "Verified")
+        XCTAssertEqual(data.deviceSpecificKeys["PERCENTAGE_USED"], 2)
+        XCTAssertEqual(runner.callCount, 3)
+    }
+
+    func testNativeSmartProbeDoesNotRetryExplicitUnsupportedResult() async {
+        let unsupportedData = Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <plist version="1.0"><dict>
+          <key>SMARTStatus</key><string>Not Supported</string>
+        </dict></plist>
+        """.utf8)
+        let runner = SequencedNativeDiskutilRunner(results: [
+            CommandResult(stdout: unsupportedData, stderr: Data(), terminationStatus: 0)
+        ])
+        let probe = DiskutilNativeSmartProbe(
+            runner: runner,
+            timeout: 5,
+            retryDelays: [0, 0, 0]
+        )
+
+        let result = await probe.probe(drive: Self.fixtureDrive())
+
+        guard case .unsupported = result else {
+            return XCTFail("Expected unsupported result, got \(result)")
+        }
+        XCTAssertEqual(runner.callCount, 1)
+    }
+
+    func testNativeSmartProbeRetriesTimeoutThreeTimes() async {
+        let runner = AlwaysTimeoutCommandRunner()
+        let probe = DiskutilNativeSmartProbe(
+            runner: runner,
+            timeout: 5,
+            retryDelays: [0, 0, 0]
+        )
+
+        let result = await probe.probe(drive: Self.fixtureDrive())
+
+        guard case let .failed(message) = result else {
+            return XCTFail("Expected failed result, got \(result)")
+        }
+        XCTAssertTrue(message.contains("after 3 attempts"))
+        XCTAssertEqual(runner.callCount, 3)
+    }
+
+    func testTransientNativeFailureRetainsLastKnownNativeValues() {
+        let drive = Self.fixtureDrive()
+        var previous = Self.fixtureSnapshot(for: drive)
+        previous.providerStatuses = [ProviderStatus(name: "Native macOS", state: .available, message: "Verified")]
+        previous.attributes = [
+            SmartAttribute(
+                id: "PERCENTAGE_USED",
+                name: "Percentage Used",
+                rawValue: "2%",
+                current: nil,
+                worst: nil,
+                threshold: nil,
+                status: .good,
+                source: "Native macOS"
+            )
+        ]
+        var failed = SmartSnapshot.unavailable(for: drive, reason: "Timed out")
+        failed.providerStatuses = [ProviderStatus(name: "Native macOS", state: .failed, message: "Timed out")]
+
+        let retained = failed.retainingNativeSMARTDataIfNeeded(from: previous, for: drive)
+
+        XCTAssertEqual(retained.attributes.first?.id, "PERCENTAGE_USED")
+        XCTAssertEqual(retained.temperatureCelsius, previous.temperatureCelsius)
+        XCTAssertEqual(retained.providerStatuses.first?.state, .limited)
+        XCTAssertTrue(retained.providerStatuses.first?.message.contains("last read") == true)
     }
 
     func testSmartctlATAParserFormatsTotalLBAsUsingReportedLogicalBlockSize() throws {
@@ -1514,12 +1871,12 @@ final class CapricornTests: XCTestCase {
             exitStatus: 0
         )
         let previous = Self.fixtureSnapshot(for: drive)
-        let retained = skipped.retainingSMARTData(from: previous)
+        let retained = skipped.retainingSMARTData(from: previous, for: drive)
 
         XCTAssertTrue(skipped.smartReadSkippedToAvoidWake)
         XCTAssertEqual(skipped.providerStatuses.first?.state, .limited)
         XCTAssertEqual(skipped.smartctlDiagnostics?.powerMode, "STANDBY")
-        XCTAssertEqual(retained.capturedAt, previous.capturedAt)
+        XCTAssertEqual(retained.capturedAt, skipped.capturedAt)
         XCTAssertEqual(retained.temperatureCelsius, previous.temperatureCelsius)
         XCTAssertEqual(retained.lifeRemainingPercent, previous.lifeRemainingPercent)
         XCTAssertEqual(retained.smartctlDiagnostics?.powerMode, "STANDBY")
@@ -1716,6 +2073,24 @@ final class CapricornTests: XCTestCase {
         )
 
         XCTAssertEqual(DriveHealthEvaluator().evaluate(drive: drive, snapshot: snapshot), .warning)
+    }
+
+    func testHealthEvaluatorIgnoresTemperatureForOverallHealth() {
+        let drive = Self.fixtureDrive()
+        var snapshot = Self.fixtureSnapshot(for: drive)
+        let evaluator = DriveHealthEvaluator()
+
+        for temperature in [70.0, 84.9, 85.0, 100.0] {
+            snapshot.temperatureCelsius = temperature
+            XCTAssertEqual(evaluator.evaluate(drive: drive, snapshot: snapshot), .good, "\(temperature) C")
+        }
+    }
+
+    func testDriveTemperatureLevelUsesOverviewOnlyThresholds() {
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 69.9), .normal)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 70), .elevated)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 84.9), .elevated)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 85), .critical)
     }
 
     func testExternalDetectorFindsSATDriverPath() throws {

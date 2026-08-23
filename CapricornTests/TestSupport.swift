@@ -72,6 +72,154 @@ struct UnavailableSmartProvider: SmartProviding {
     }
 }
 
+struct StaticNativeSmartProbe: NativeSmartProbing {
+    var result: NativeSmartProbeResult
+
+    func probe(drive: DriveDevice) async -> NativeSmartProbeResult {
+        result
+    }
+}
+
+final class SequencedNativeDiskutilRunner: CommandRunning, @unchecked Sendable {
+    private let state: LockedState<(results: [CommandResult], calls: Int)>
+
+    init(results: [CommandResult]) {
+        state = LockedState((results: results, calls: 0))
+    }
+
+    var callCount: Int {
+        state.snapshot().calls
+    }
+
+    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        state.withLock { state in
+            let index = min(state.calls, max(0, state.results.count - 1))
+            defer { state.calls += 1 }
+            return state.results[index]
+        }
+    }
+}
+
+final class AlwaysTimeoutCommandRunner: CommandRunning, @unchecked Sendable {
+    private let calls = LockedState(0)
+
+    var callCount: Int {
+        calls.snapshot()
+    }
+
+    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        calls.withLock { $0 += 1 }
+        throw CommandError.timedOut(executable: executable, seconds: 5)
+    }
+}
+
+final class HangingDiskInfoCommandRunner: CommandRunning, @unchecked Sendable {
+    private let listData: Data
+    private let physicalListData: Data
+    private let infoDataByDisk: [String: Data]
+
+    init(listData: Data, physicalListData: Data, infoDataByDisk: [String: Data]) {
+        self.listData = listData
+        self.physicalListData = physicalListData
+        self.infoDataByDisk = infoDataByDisk
+    }
+
+    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        if arguments == ["list", "-plist"] {
+            return CommandResult(stdout: listData, stderr: Data(), terminationStatus: 0)
+        }
+        if arguments == ["list", "-plist", "physical"] {
+            return CommandResult(stdout: physicalListData, stderr: Data(), terminationStatus: 0)
+        }
+        guard arguments.count == 3, arguments[0] == "info", arguments[1] == "-plist" else {
+            return CommandResult(stdout: Data(), stderr: Data(), terminationStatus: 1)
+        }
+        if let data = infoDataByDisk[arguments[2]] {
+            return CommandResult(stdout: data, stderr: Data(), terminationStatus: 0)
+        }
+        throw CommandError.timedOut(executable: executable, seconds: 5)
+    }
+}
+
+final class StagedDriveRefreshService: DriveRefreshing, @unchecked Sendable {
+    let discovery: DriveRefreshSnapshot
+    let updateDelayNanoseconds: UInt64
+    let updates: [DriveSnapshotUpdate]
+
+    init(
+        discovery: DriveRefreshSnapshot,
+        updateDelayNanoseconds: UInt64,
+        updates: [DriveSnapshotUpdate]
+    ) {
+        self.discovery = discovery
+        self.updateDelayNanoseconds = updateDelayNanoseconds
+        self.updates = updates
+    }
+
+    func discover(showVirtual: Bool) async throws -> DriveRefreshSnapshot {
+        discovery
+    }
+
+    func snapshotUpdates(for drives: [DriveDevice]) async -> AsyncStream<DriveSnapshotUpdate> {
+        let updates = updates
+        let delay = updateDelayNanoseconds
+        return AsyncStream { continuation in
+            let task = Task {
+                if delay > 0 {
+                    try? await Task.sleep(nanoseconds: delay)
+                }
+                guard !Task.isCancelled else {
+                    continuation.finish()
+                    return
+                }
+                for update in updates {
+                    continuation.yield(update)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+final class DelayedSmartProvider: SmartProviding, @unchecked Sendable {
+    private struct State {
+        var requestedDriveIDs: [String] = []
+        var completedDriveIDs: [String] = []
+    }
+
+    let providerName = "Native macOS"
+    private let delays: [String: UInt64]
+    private let snapshotFactory: @Sendable (DriveDevice) -> SmartSnapshot
+    private let state = LockedState(State())
+
+    init(
+        delays: [String: UInt64] = [:],
+        snapshotFactory: @escaping @Sendable (DriveDevice) -> SmartSnapshot
+    ) {
+        self.delays = delays
+        self.snapshotFactory = snapshotFactory
+    }
+
+    var requestedDriveIDs: [String] {
+        state.snapshot().requestedDriveIDs
+    }
+
+    var completedDriveIDs: [String] {
+        state.snapshot().completedDriveIDs
+    }
+
+    func snapshot(for drive: DriveDevice) async -> SmartSnapshot? {
+        state.withLock { $0.requestedDriveIDs.append(drive.id) }
+        if let delay = delays[drive.id], delay > 0 {
+            try? await Task.sleep(nanoseconds: delay)
+        }
+        let snapshot = snapshotFactory(drive)
+        state.withLock { $0.completedDriveIDs.append(drive.id) }
+        return snapshot
+    }
+}
+
 final class RecordingSmartProvider: SmartProviding, @unchecked Sendable {
     private let driveIDs = LockedState<[String]>([])
 
@@ -100,7 +248,7 @@ final class ConcurrentDiskutilCommandRunner: CommandRunning, @unchecked Sendable
     }
 
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
-        if arguments == ["list", "-plist"] {
+        if arguments == ["list", "-plist"] || arguments == ["list", "-plist", "physical"] {
             return CommandResult(stdout: Self.listData, stderr: Data(), terminationStatus: 0)
         }
         guard arguments.count == 3, arguments[0] == "info", arguments[1] == "-plist" else {
@@ -125,10 +273,11 @@ final class ConcurrentDiskutilCommandRunner: CommandRunning, @unchecked Sendable
     <?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
     <plist version="1.0"><dict>
-      <key>WholeDisks</key><array><string>disk8</string><string>disk9</string></array>
+      <key>WholeDisks</key><array><string>disk8</string><string>disk9</string><string>disk10</string></array>
       <key>AllDisksAndPartitions</key><array>
         <dict><key>DeviceIdentifier</key><string>disk8</string></dict>
         <dict><key>DeviceIdentifier</key><string>disk9</string></dict>
+        <dict><key>DeviceIdentifier</key><string>disk10</string></dict>
       </array>
     </dict></plist>
     """.utf8)

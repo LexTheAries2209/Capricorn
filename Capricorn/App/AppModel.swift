@@ -229,7 +229,7 @@ final class AppModel {
     private var activeLiveActivityWorkloadRunID: UUID?
     private var benchmarkTask: Task<Void, Never>?
     private var activeBenchmarkRunID: UUID?
-    private var refreshTask: Task<DriveRefreshSnapshot, Error>?
+    private var refreshTask: Task<Void, Never>?
     private var activeRefreshID: UUID?
     private var firstAidEventTask: Task<Void, Never>?
     private var activeFirstAidRunID: UUID?
@@ -326,60 +326,88 @@ final class AppModel {
         activeRefreshID = refreshID
         let refreshService = refreshService
         let showVirtualDisks = showVirtualDisks
-        let worker = Task {
-            try await refreshService.refresh(showVirtual: showVirtualDisks)
-        }
-        refreshTask = worker
         isRefreshing = true
         refreshMessage = "Scanning disks..."
         benchmarkError = nil
-        defer {
-            if activeRefreshID == refreshID {
-                refreshTask = nil
-                activeRefreshID = nil
-                isRefreshing = false
+        let worker = Task { [weak self] in
+            do {
+                let discovery = try await refreshService.discover(showVirtual: showVirtualDisks)
+                try Task.checkCancellation()
+                guard let self, self.activeRefreshID == refreshID else { return }
+                self.applyDriveDiscovery(discovery, refreshID: refreshID)
+
+                let updates = await refreshService.snapshotUpdates(for: discovery.drives)
+                for await update in updates {
+                    guard !Task.isCancelled, self.activeRefreshID == refreshID else { break }
+                    self.applyDriveSnapshotUpdate(update, refreshID: refreshID)
+                }
+                guard !Task.isCancelled, self.activeRefreshID == refreshID else { return }
+                self.refreshMessage = discovery.drives.isEmpty
+                    ? "No physical or network drives found."
+                    : "Last refreshed \(Date().formatted(date: .omitted, time: .standard))"
+            } catch is CancellationError {
+                return
+            } catch {
+                guard let self, self.activeRefreshID == refreshID else { return }
+                let error = error as NSError
+                CapricornLog.inventory.error("Drive refresh failed: \(error.domain, privacy: .public) \(error.code)")
+                self.refreshMessage = error.localizedDescription
             }
+
+            guard let self, self.activeRefreshID == refreshID else { return }
+            self.refreshTask = nil
+            self.activeRefreshID = nil
+            self.isRefreshing = false
         }
+        refreshTask = worker
+        await worker.value
+    }
 
-        do {
-            let refreshSnapshot = try await worker.value
-            guard activeRefreshID == refreshID else { return }
-            let loadedDrives = refreshSnapshot.drives
-            let previousSnapshots = snapshots
-            drives = loadedDrives
-            snapshots = refreshSnapshot.snapshots.mapValues { refreshed in
-                guard let previous = previousSnapshots[refreshed.driveID] else { return refreshed }
-                return refreshed.retainingSMARTData(from: previous)
-            }
-            if !isSmartSelfTestActive {
-                smartSelfTestCapabilities = [:]
-            }
-            externalSupport = refreshSnapshot.externalSupport
-            if selectedDriveID == nil || !loadedDrives.contains(where: { $0.id == selectedDriveID }) {
-                selectedDriveID = loadedDrives.first?.id
-            }
-            if let liveActivityDriveID,
-               !loadedDrives.contains(where: { $0.id == liveActivityDriveID }),
-               isLiveActivityMonitoring || isLiveActivityWorkloadRunning {
-                if isLiveActivityWorkloadRunning {
-                    stopLiveActivityWorkload()
-                }
-                stopLiveActivityMonitoring()
-                liveActivityError = "The active drive is no longer available."
-            }
+    private func applyDriveDiscovery(_ discovery: DriveRefreshSnapshot, refreshID: UUID) {
+        guard activeRefreshID == refreshID else { return }
+        let previousDrives = drives
+        let previousSnapshots = snapshots
+        let loadedDrives = discovery.drives
 
-            for drive in loadedDrives {
-                if let snapshot = refreshSnapshot.snapshots[drive.id] {
-                    notificationCoordinator.notifyIfNeeded(drive: drive, snapshot: snapshot)
-                }
+        drives = loadedDrives
+        snapshots = Dictionary(uniqueKeysWithValues: loadedDrives.map { drive in
+            let previousDrive = previousDrives.first { DriveStableIdentityMatcher.matches($0, drive) }
+            if let previousDrive, let previousSnapshot = previousSnapshots[previousDrive.id] {
+                return (drive.id, previousSnapshot.markingNativeSMARTRefreshing(for: drive))
             }
-            guard activeRefreshID == refreshID else { return }
-            refreshMessage = loadedDrives.isEmpty ? "No physical or network drives found." : "Last refreshed \(Date().formatted(date: .omitted, time: .standard))"
-        } catch {
-            guard activeRefreshID == refreshID else { return }
-            let error = error as NSError
-            CapricornLog.inventory.error("Drive refresh failed: \(error.domain, privacy: .public) \(error.code)")
-            refreshMessage = error.localizedDescription
+            return (drive.id, discovery.snapshots[drive.id] ?? SmartSnapshot.refreshingNative(for: drive))
+        })
+        if !isSmartSelfTestActive {
+            smartSelfTestCapabilities = [:]
+        }
+        externalSupport = discovery.externalSupport
+        if selectedDriveID == nil || !loadedDrives.contains(where: { $0.id == selectedDriveID }) {
+            selectedDriveID = loadedDrives.first?.id
+        }
+        if let liveActivityDriveID,
+           !loadedDrives.contains(where: { $0.id == liveActivityDriveID }),
+           isLiveActivityMonitoring || isLiveActivityWorkloadRunning {
+            if isLiveActivityWorkloadRunning {
+                stopLiveActivityWorkload()
+            }
+            stopLiveActivityMonitoring()
+            liveActivityError = "The active drive is no longer available."
+        }
+        refreshMessage = loadedDrives.isEmpty ? "No physical or network drives found." : "Reading SMART data..."
+    }
+
+    private func applyDriveSnapshotUpdate(_ update: DriveSnapshotUpdate, refreshID: UUID) {
+        guard activeRefreshID == refreshID,
+              let drive = drives.first(where: { $0.id == update.driveID }) else { return }
+        let previous = snapshots[update.driveID]
+        var refreshed = update.snapshot
+        if let previous {
+            refreshed = refreshed.retainingNativeSMARTDataIfNeeded(from: previous, for: drive)
+            refreshed = refreshed.retainingSMARTData(from: previous, for: drive)
+        }
+        snapshots[update.driveID] = refreshed
+        if update.phase == .complete {
+            notificationCoordinator.notifyIfNeeded(drive: drive, snapshot: refreshed)
         }
     }
 
