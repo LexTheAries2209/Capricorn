@@ -200,7 +200,10 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(englishCSV.contains("chinese_name"))
         XCTAssertTrue(englishCSV.contains("drive_name,Drive Name,Current display name,APPLE SSD AP1024Z"))
         XCTAssertTrue(englishCSV.contains("serial_number,Serial Number,Hardware serial reported by the device,SN"))
+        XCTAssertTrue(englishCSV.contains("device_type,Device Type,Device media type,SSD"))
         XCTAssertTrue(englishCSV.contains("volume_uuids,Volume UUIDs,UUIDs of volumes on this drive; multiple values are separated by semicolons,D714E346-9F5F-48DF-8E75-353B47128D9B"))
+        XCTAssertFalse(englishCSV.contains("volume_names,Volume Names,"))
+        XCTAssertFalse(englishCSV.contains("volume_formats,Volume Formats,"))
         XCTAssertFalse(englishCSV.contains("model,Model,"))
         XCTAssertFalse(englishCSV.contains("bsd_name,BSD Name,"))
         XCTAssertTrue(englishCSV.contains("AVAILABLE_SPARE,Available Spare,Remaining NVMe spare capacity.,\"value, with \"\"quotes\"\"\",100,99,10,Good,Fixture"))
@@ -212,7 +215,64 @@ final class CapricornTests: XCTestCase {
         )
         XCTAssertTrue(chineseCSV.contains("AVAILABLE_SPARE,Available Spare,可用备用空间,NVMe 备用块剩余比例，低于阈值时需要关注。,\"value, with \"\"quotes\"\"\",100,99,10,Good,Fixture"))
         XCTAssertTrue(chineseCSV.contains("serial_number,Serial Number,序列号,设备报告的硬件序列号,SN"))
+        XCTAssertTrue(chineseCSV.contains("device_type,Device Type,设备类型,设备介质类型,SSD"))
         XCTAssertTrue(chineseCSV.contains("volume_uuids,Volume UUIDs,卷 UUID,当前磁盘所含卷的 UUID；多个值以分号分隔,D714E346-9F5F-48DF-8E75-353B47128D9B"))
+    }
+
+    func testSmartSnapshotCSVReportSortsExternalVolumeNamesAndFormatsByCapacity() {
+        var drive = Self.fixtureDrive()
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk9s3", name: "Small", mountPoint: "/Volumes/Small", sizeBytes: 100, isWritable: true, isSystem: false, fileSystemType: "ntfs"),
+            DriveDevice.Volume(deviceIdentifier: "disk9s2", name: "Largest B", mountPoint: "/Volumes/Largest B", sizeBytes: 300, isWritable: true, isSystem: false, fileSystemType: "exfat"),
+            DriveDevice.Volume(deviceIdentifier: "disk9s1", name: "Largest A", mountPoint: "/Volumes/Largest A", sizeBytes: 300, isWritable: true, isSystem: false, fileSystemType: "apfs"),
+            DriveDevice.Volume(deviceIdentifier: "disk9s4", name: "Middle", mountPoint: "/Volumes/Middle", sizeBytes: 200, isWritable: true, isSystem: false, fileSystemType: "hfs+")
+        ]
+
+        let csv = ReportExporter.smartSnapshotCSVReport(
+            drive: drive,
+            snapshot: Self.fixtureSnapshot(for: drive),
+            language: .english
+        )
+
+        XCTAssertTrue(csv.contains("volume_names,Volume Names,Ordered by volume capacity from largest to smallest; multiple names are separated by periods,Largest A.Largest B.Middle.Small"))
+        XCTAssertTrue(csv.contains("volume_formats,Volume Formats,Ordered to match Volume Names; multiple formats are separated by periods,APFS.ExFAT.HFS+.NTFS"))
+
+        let chineseCSV = ReportExporter.smartSnapshotCSVReport(
+            drive: drive,
+            snapshot: Self.fixtureSnapshot(for: drive),
+            language: .simplifiedChinese
+        )
+        XCTAssertTrue(chineseCSV.contains("volume_names,Volume Names,卷名称,按卷容量从大到小排列；多个名称以英文句点分隔,Largest A.Largest B.Middle.Small"))
+        XCTAssertTrue(chineseCSV.contains("volume_formats,Volume Formats,卷格式,顺序与卷名称一致；多个格式以英文句点分隔,APFS.ExFAT.HFS+.NTFS"))
+    }
+
+    func testSmartSnapshotCSVReportClassifiesSDHDDAndNetworkDevices() {
+        var sdDrive = Self.fixtureDrive()
+        sdDrive.isMemoryCard = true
+        sdDrive.isSolidState = false
+        var hddDrive = Self.fixtureDrive()
+        hddDrive.isInternal = false
+        hddDrive.isSolidState = false
+        var networkDrive = Self.fixtureDrive()
+        networkDrive.isInternal = false
+        networkDrive.isNetwork = true
+
+        let cases: [(DriveDevice, String)] = [
+            (sdDrive, "SD"),
+            (hddDrive, "HDD"),
+            (networkDrive, "Net")
+        ]
+
+        for (drive, expectedType) in cases {
+            let csv = ReportExporter.smartSnapshotCSVReport(
+                drive: drive,
+                snapshot: Self.fixtureSnapshot(for: drive),
+                language: .english
+            )
+            XCTAssertTrue(csv.contains("device_type,Device Type,Device media type,\(expectedType)"))
+        }
     }
 
     func testExternalDriveModelCatalogUsesHardwareModelWhenBridgeNameIsGeneric() throws {

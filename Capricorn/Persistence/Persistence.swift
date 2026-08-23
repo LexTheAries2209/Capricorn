@@ -385,7 +385,7 @@ enum ReportExporter {
     }
 
     private static func metadataRows(drive: DriveDevice, snapshot: SmartSnapshot, language: AppLanguage) -> [MetadataRow] {
-        [
+        var rows = [
             MetadataRow(
                 id: "drive_name",
                 englishName: "Drive Name",
@@ -399,6 +399,13 @@ enum ReportExporter {
                 chineseName: "序列号",
                 description: language == .simplifiedChinese ? "设备报告的硬件序列号" : "Hardware serial reported by the device",
                 value: drive.serialNumber ?? ""
+            ),
+            MetadataRow(
+                id: "device_type",
+                englishName: "Device Type",
+                chineseName: "设备类型",
+                description: language == .simplifiedChinese ? "设备介质类型" : "Device media type",
+                value: smartSnapshotDeviceType(for: drive)
             ),
             MetadataRow(
                 id: "volume_uuids",
@@ -429,6 +436,53 @@ enum ReportExporter {
                 value: ISO8601DateFormatter().string(from: snapshot.capturedAt)
             )
         ]
+
+        if shouldIncludeVolumeDetails(for: drive) {
+            let volumes = sortedVolumesForSnapshotMetadata(drive.volumes)
+            let volumeNames = volumes.map(\.name).joined(separator: ".")
+            let volumeFormats = volumes
+                .map { FileSystemFormatResolver.normalized($0.fileSystemType) ?? "" }
+                .joined(separator: ".")
+            rows.insert(contentsOf: [
+                MetadataRow(
+                    id: "volume_names",
+                    englishName: "Volume Names",
+                    chineseName: "卷名称",
+                    description: language == .simplifiedChinese ? "按卷容量从大到小排列；多个名称以英文句点分隔" : "Ordered by volume capacity from largest to smallest; multiple names are separated by periods",
+                    value: volumeNames
+                ),
+                MetadataRow(
+                    id: "volume_formats",
+                    englishName: "Volume Formats",
+                    chineseName: "卷格式",
+                    description: language == .simplifiedChinese ? "顺序与卷名称一致；多个格式以英文句点分隔" : "Ordered to match Volume Names; multiple formats are separated by periods",
+                    value: volumeFormats
+                )
+            ], at: 3)
+        }
+
+        return rows
+    }
+
+    private static func smartSnapshotDeviceType(for drive: DriveDevice) -> String {
+        if drive.isNetwork { return "Net" }
+        if drive.isMemoryCard { return "SD" }
+        return drive.isSolidState ? "SSD" : "HDD"
+    }
+
+    private static func shouldIncludeVolumeDetails(for drive: DriveDevice) -> Bool {
+        !drive.isInternal || drive.isRemovable || drive.isMemoryCard || drive.isNetwork
+    }
+
+    private static func sortedVolumesForSnapshotMetadata(_ volumes: [DriveDevice.Volume]) -> [DriveDevice.Volume] {
+        volumes.sorted { lhs, rhs in
+            let lhsCapacity = lhs.totalCapacityBytes ?? lhs.sizeBytes
+            let rhsCapacity = rhs.totalCapacityBytes ?? rhs.sizeBytes
+            if lhsCapacity != rhsCapacity {
+                return lhsCapacity > rhsCapacity
+            }
+            return lhs.deviceIdentifier.localizedStandardCompare(rhs.deviceIdentifier) == .orderedAscending
+        }
     }
 
     static func smartSnapshotFileName(drive: DriveDevice, date: Date, language: AppLanguage) -> String {
