@@ -418,6 +418,10 @@ final class AppModel {
             benchmarkError = "This drive has no mounted writable volume available for safe file-based benchmarking."
             return
         }
+        guard BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(targetVolume, drive: drive) else {
+            benchmarkError = "The selected folder must be writable and on the selected drive."
+            return
+        }
 
         benchmarkError = nil
         CapricornLog.benchmark.info("Benchmark session started")

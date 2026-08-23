@@ -31,11 +31,10 @@ struct BenchmarkView: View {
     let saveResults: ([BenchmarkResult], [DiskActivitySample]) -> Void
     @Environment(\.appLanguage) private var language
 
-    // Keep the benchmark target in the same per-drive preference store as the
-    // live activity workload. The selected sidebar drive therefore owns the
-    // target, while the legacy global path is migrated only after same-drive
-    // validation succeeds.
-    @AppStorage("diskActivityWorkloadTargetsByDrive") private var targetPreferencesJSON = ""
+    // Benchmark and live-workload targets follow the same per-drive rules but
+    // remain independent preferences, so changing one feature's destination
+    // does not silently alter the other feature.
+    @AppStorage("benchmarkTargetsByDrive") private var targetPreferencesJSON = ""
     @AppStorage("benchmarkTargetFolder") private var legacyTargetFolderPath = ""
     @AppStorage("benchmarkRunCount") private var selectedRunCount = BenchmarkProfile.defaultRuns
     @AppStorage("benchmarkFileSizeBytes") private var selectedFileSizeBytes = Int(BenchmarkProfile.defaultTestSize)
@@ -790,10 +789,9 @@ struct BenchmarkView: View {
             if preferences.selection(for: drive) == .automatic {
                 _ = preferences.migrateLegacyFolder(legacyTargetFolderPath, to: drive)
             }
-            if preferences.selection(for: drive) != .automatic ||
-                !DiskActivityWorkloadTargetResolver.isUsableFolder(legacyTargetFolderPath) {
-                legacyTargetFolderPath = ""
-            }
+            // The old value was global rather than drive-scoped. Consume it
+            // once and discard it when it cannot be proven to belong here.
+            legacyTargetFolderPath = ""
         }
 
         let requestedSelection = preferences.selection(for: drive)

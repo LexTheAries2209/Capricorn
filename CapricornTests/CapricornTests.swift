@@ -1849,6 +1849,39 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(receivedProfile.tests.allSatisfy { $0.rowLabel == selectedRow })
     }
 
+    func testBenchmarkRejectsTargetFolderOnAnotherDriveBeforeRunning() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        let selectedVolume = root.appendingPathComponent("Selected")
+        let otherVolume = root.appendingPathComponent("Other")
+        try FileManager.default.createDirectory(at: selectedVolume, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: otherVolume, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let drive = Self.fixtureDrive(mountedAt: selectedVolume.path)
+        let runner = ImmediateBenchmarkRunner()
+        let provider = FakeDiskActivityProvider(reader: FakeDiskActivityReader(counters: []))
+        let model = await MainActor.run {
+            let model = DITViewModel(benchmarkRunner: runner, diskActivityProvider: provider)
+            model.drives = [drive]
+            model.selectedDriveID = drive.id
+            return model
+        }
+
+        let started = await MainActor.run {
+            model.startBenchmark(profile: BenchmarkProfile.default, volumePath: otherVolume.path)
+        }
+        XCTAssertTrue(started)
+        let rejected = await AsyncTestWaiter.wait {
+            let state = await MainActor.run { (model.isBenchmarking, model.benchmarkError) }
+            return !state.0 && state.1 != nil
+        }
+
+        XCTAssertTrue(rejected)
+        XCTAssertEqual(runner.runCount, 0)
+        let error = await MainActor.run { model.benchmarkError }
+        XCTAssertEqual(error, "The selected folder must be writable and on the selected drive.")
+    }
+
     func testBenchmarkProfileConfigurationSeparatesResultIDs() {
         let random = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .random)
         let zeroFill = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .zeroFill)
