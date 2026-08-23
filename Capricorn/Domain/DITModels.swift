@@ -717,6 +717,10 @@ enum DrivePageHeaderText {
         drive.serialNumber ?? "nil"
     }
 
+    static func serialNumberLine(for drive: DriveDevice, language: AppLanguage) -> String {
+        "\(language.t("Serial Number")): \(serialNumber(for: drive))"
+    }
+
     static func mediaKind(for drive: DriveDevice, language: AppLanguage) -> String {
         if drive.isNetwork {
             return language.t("Network Drive")

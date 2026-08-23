@@ -735,6 +735,11 @@ private struct DriveSidebarRow: View {
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 driveName
+                Text(DrivePageHeaderText.serialNumberLine(for: drive, language: language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 HStack(spacing: 8) {
                     Text(deviceSummary)
                         .font(.caption)
@@ -788,6 +793,9 @@ private struct DriveSidebarRow: View {
 
     private var deviceSummary: String {
         var components: [String] = []
+        if !drive.isNetwork, !drive.bsdName.isEmpty {
+            components.append(drive.bsdName)
+        }
         if let fileSystem = drive.fileSystemSummary {
             components.append(fileSystem)
         }
@@ -877,7 +885,7 @@ struct DrivePageHeaderView: View {
                     .lineLimit(2)
                     .help(drive.catalogDisplayHelp(language: language))
                 if showsSerialNumber {
-                    Text("\(language.t("Serial Number")): \(DrivePageHeaderText.serialNumber(for: drive))")
+                    Text(DrivePageHeaderText.serialNumberLine(for: drive, language: language))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

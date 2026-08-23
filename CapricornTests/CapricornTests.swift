@@ -910,9 +910,17 @@ final class CapricornTests: XCTestCase {
         var drive = Self.fixtureDrive()
         drive.serialNumber = "ZR51JYMS"
         XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive), "ZR51JYMS")
+        XCTAssertEqual(
+            DrivePageHeaderText.serialNumberLine(for: drive, language: .simplifiedChinese),
+            "序列号: ZR51JYMS"
+        )
 
         drive.serialNumber = nil
         XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive), "nil")
+        XCTAssertEqual(
+            DrivePageHeaderText.serialNumberLine(for: drive, language: .english),
+            "Serial Number: nil"
+        )
     }
 
     @MainActor
