@@ -382,7 +382,18 @@ extension CapricornTests {
     func testHistoryRepositoryPersistsAllHistoryTypesInVersionedContainer() throws {
         let container = try ModelContainerFactory.makeInMemory()
         let repository = HistoryRepository(modelContext: container.mainContext)
-        let drive = Self.fixtureDrive()
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(
+                deviceIdentifier: "disk0s2",
+                name: "Data",
+                mountPoint: "/System/Volumes/Data",
+                sizeBytes: drive.sizeBytes,
+                isWritable: true,
+                isSystem: false,
+                volumeUUID: "persisted-volume"
+            )
+        ]
         let snapshot = Self.fixtureSnapshot(for: drive)
         let benchmark = Self.fixtureBenchmarkResult(for: drive)
         let sample = DiskActivitySample(timestamp: Date(), readMegabytesPerSecond: 1, writeMegabytesPerSecond: 2)
@@ -397,9 +408,15 @@ extension CapricornTests {
             endedAt: sample.timestamp.addingTimeInterval(1)
         )
 
-        XCTAssertEqual(try container.mainContext.fetch(FetchDescriptor<SmartHistoryRecord>()).count, 1)
-        XCTAssertEqual(try container.mainContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>()).count, 1)
-        XCTAssertEqual(try container.mainContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>()).count, 1)
+        let smartRecords = try container.mainContext.fetch(FetchDescriptor<SmartHistoryRecord>())
+        let benchmarkRecords = try container.mainContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>())
+        let activityRecords = try container.mainContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>())
+        XCTAssertEqual(smartRecords.count, 1)
+        XCTAssertEqual(benchmarkRecords.count, 1)
+        XCTAssertEqual(activityRecords.count, 1)
+        XCTAssertEqual(smartRecords.first?.volumeUUIDs, ["PERSISTED-VOLUME"])
+        XCTAssertEqual(benchmarkRecords.first?.volumeUUIDs, ["PERSISTED-VOLUME"])
+        XCTAssertEqual(activityRecords.first?.volumeUUIDs, ["PERSISTED-VOLUME"])
     }
 
     @MainActor

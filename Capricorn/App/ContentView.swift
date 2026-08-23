@@ -43,8 +43,8 @@ struct ContentView: View {
                     drive: drive,
                     snapshot: viewModel.snapshots[drive.id],
                     viewModel: viewModel,
-                    smartHistory: smartHistory.filter { HistoryDriveMatcher.matches(recordSerialNumber: $0.serialNumber, drive: drive) },
-                    benchmarkHistory: benchmarkHistory.filter { HistoryDriveMatcher.matches(recordSerialNumber: $0.serialNumber, drive: drive) },
+                    smartHistory: smartHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
+                    benchmarkHistory: benchmarkHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     activityHistory: activityHistory,
                     saveSnapshot: { exportFolderPath in saveSnapshot(drive: drive, exportFolderPath: exportFolderPath) },
                     saveBenchmarkResults: { results, activitySamples in saveBenchmarkResults(drive: drive, results: results, activitySamples: activitySamples) }
@@ -858,7 +858,7 @@ private struct DriveDetailView: View {
                 snapshot: snapshot,
                 smartHistory: smartHistory,
                 benchmarkHistory: benchmarkHistory,
-                activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(recordSerialNumber: $0.serialNumber, drive: drive) }
+                activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
             )
             .tabItem { Label(language.t("History"), systemImage: "clock.arrow.circlepath") }
             .tag(DriveFeatureTab.history)

@@ -24,12 +24,25 @@ final class SmartHistoryRecord {
         self.temperatureCelsius = snapshot.temperatureCelsius
         self.lifeRemainingPercent = snapshot.lifeRemainingPercent
         self.summary = snapshot.summary
-        self.encodedSnapshot = try? JSONEncoder.dit.encode(snapshot)
+        self.encodedSnapshot = try? HistoryPayloadCoders.encode(
+            snapshot,
+            volumeUUIDs: drive.volumeUUIDs,
+            encoder: .dit
+        )
         self.hiddenAt = nil
     }
 
     var health: HealthStatus {
         HealthStatus(rawValue: healthRaw) ?? .unavailable
+    }
+
+    var volumeUUIDs: [String] {
+        guard let encodedSnapshot else { return [] }
+        return HistoryPayloadCoders.decode(
+            SmartSnapshot.self,
+            from: encodedSnapshot,
+            decoder: .dit
+        )?.volumeUUIDs ?? []
     }
 }
 
@@ -62,7 +75,10 @@ final class BenchmarkHistoryRecord {
         self.iops = result.iops
         self.latencyMicroseconds = result.latencyMicroseconds
         self.hiddenAt = nil
-        self.encodedActivitySamples = activitySamples.isEmpty ? nil : try? DiskActivitySampleCoders.encode(activitySamples)
+        self.encodedActivitySamples = try? DiskActivitySampleCoders.encode(
+            activitySamples,
+            volumeUUIDs: drive.volumeUUIDs
+        )
     }
 
     var operation: BenchmarkOperation {
@@ -75,6 +91,11 @@ final class BenchmarkHistoryRecord {
             return []
         }
         return decoded
+    }
+
+    var volumeUUIDs: [String] {
+        guard let encodedActivitySamples else { return [] }
+        return DiskActivitySampleCoders.volumeUUIDs(in: encodedActivitySamples)
     }
 }
 
@@ -117,7 +138,10 @@ final class DiskActivityHistoryRecord {
         self.averageReadMegabytesPerSecond = summary.averageReadMegabytesPerSecond
         self.averageWriteMegabytesPerSecond = summary.averageWriteMegabytesPerSecond
         self.sampleCount = summary.sampleCount
-        self.encodedSamples = try? DiskActivitySampleCoders.encode(samples)
+        self.encodedSamples = try? DiskActivitySampleCoders.encode(
+            samples,
+            volumeUUIDs: drive.volumeUUIDs
+        )
         self.hiddenAt = nil
     }
 
@@ -132,10 +156,16 @@ final class DiskActivityHistoryRecord {
         }
         return decoded
     }
+
+    var volumeUUIDs: [String] {
+        guard let encodedSamples else { return [] }
+        return DiskActivitySampleCoders.volumeUUIDs(in: encodedSamples)
+    }
 }
 
 protocol HistoryDisplayRecord: AnyObject {
     var serialNumber: String? { get }
+    var volumeUUIDs: [String] { get }
     var hiddenAt: Date? { get set }
 }
 
@@ -156,9 +186,9 @@ enum HistoryVisibility {
         record.hiddenAt = date
     }
 
-    static func hideAll<T: HistoryDisplayRecord>(_ records: [T], at date: Date = Date(), serialNumber: String? = nil) {
-        let normalizedSerialNumber = HistoryDriveMatcher.normalize(serialNumber)
-        for record in records where normalizedSerialNumber == nil || record.serialNumber == normalizedSerialNumber {
+    static func hideAll<T: HistoryDisplayRecord>(_ records: [T], at date: Date = Date(), matching drive: DriveDevice? = nil) {
+        for record in records {
+            guard drive.map({ HistoryDriveMatcher.matches(record: record, drive: $0) }) ?? true else { continue }
             record.hiddenAt = date
         }
     }
@@ -167,9 +197,9 @@ enum HistoryVisibility {
         record.hiddenAt = nil
     }
 
-    static func restoreAll<T: HistoryDisplayRecord>(_ records: [T], serialNumber: String? = nil) {
-        let normalizedSerialNumber = HistoryDriveMatcher.normalize(serialNumber)
-        for record in records where normalizedSerialNumber == nil || record.serialNumber == normalizedSerialNumber {
+    static func restoreAll<T: HistoryDisplayRecord>(_ records: [T], matching drive: DriveDevice? = nil) {
+        for record in records {
+            guard drive.map({ HistoryDriveMatcher.matches(record: record, drive: $0) }) ?? true else { continue }
             record.hiddenAt = nil
         }
     }
@@ -184,12 +214,21 @@ enum HistoryDriveMatcher {
         return normalized.isEmpty || normalized == "NIL" ? nil : normalized
     }
 
-    static func matches(recordSerialNumber: String?, drive: DriveDevice) -> Bool {
-        guard let recordSerialNumber = normalize(recordSerialNumber),
-              let driveSerialNumber = normalize(drive.serialNumber) else {
-            return false
+    static func matches<T: HistoryDisplayRecord>(record: T, drive: DriveDevice) -> Bool {
+        let recordSerialNumber = normalize(record.serialNumber)
+        let driveSerialNumber = normalize(drive.serialNumber)
+
+        // A definite serial mismatch must never be overridden by a logical
+        // volume match. Volume UUIDs are only a fallback when either side has
+        // no usable hardware serial.
+        if let recordSerialNumber, let driveSerialNumber {
+            return recordSerialNumber == driveSerialNumber
         }
-        return recordSerialNumber == driveSerialNumber
+
+        let recordVolumeUUIDs = Set(VolumeUUIDNormalizer.normalized(record.volumeUUIDs))
+        let driveVolumeUUIDs = Set(drive.volumeUUIDs)
+        guard !recordVolumeUUIDs.isEmpty, !driveVolumeUUIDs.isEmpty else { return false }
+        return !recordVolumeUUIDs.isDisjoint(with: driveVolumeUUIDs)
     }
 }
 
@@ -232,21 +271,64 @@ extension JSONDecoder {
     }
 }
 
+/// Keeps fallback identity beside each record's existing Codable content. The
+/// SwiftData columns stay unchanged, while the decoder still accepts payloads
+/// written before volume UUIDs were introduced.
+private struct HistoryPayload<Value: Codable>: Codable {
+    let value: Value
+    let volumeUUIDs: [String]
+}
+
+enum HistoryPayloadCoders {
+    static func encode<Value: Codable>(
+        _ value: Value,
+        volumeUUIDs: [String],
+        encoder: JSONEncoder
+    ) throws -> Data {
+        try encoder.encode(
+            HistoryPayload(
+                value: value,
+                volumeUUIDs: VolumeUUIDNormalizer.normalized(volumeUUIDs)
+            )
+        )
+    }
+
+    static func decode<Value: Codable>(
+        _ type: Value.Type,
+        from data: Data,
+        decoder: JSONDecoder
+    ) -> (value: Value, volumeUUIDs: [String])? {
+        if let payload = try? decoder.decode(HistoryPayload<Value>.self, from: data) {
+            return (payload.value, VolumeUUIDNormalizer.normalized(payload.volumeUUIDs))
+        }
+        guard let legacyValue = try? decoder.decode(Value.self, from: data) else { return nil }
+        return (legacyValue, [])
+    }
+}
+
 enum DiskActivitySampleCoders {
-    static func encode(_ samples: [DiskActivitySample]) throws -> Data {
+    static func encode(_ samples: [DiskActivitySample], volumeUUIDs: [String] = []) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .secondsSince1970
-        return try encoder.encode(samples)
+        return try HistoryPayloadCoders.encode(samples, volumeUUIDs: volumeUUIDs, encoder: encoder)
     }
 
     static func decode(_ data: Data) -> [DiskActivitySample]? {
+        decodePayload(data)?.value
+    }
+
+    static func volumeUUIDs(in data: Data) -> [String] {
+        decodePayload(data)?.volumeUUIDs ?? []
+    }
+
+    private static func decodePayload(_ data: Data) -> (value: [DiskActivitySample], volumeUUIDs: [String])? {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .secondsSince1970
-        if let decoded = try? decoder.decode([DiskActivitySample].self, from: data) {
+        if let decoded = HistoryPayloadCoders.decode([DiskActivitySample].self, from: data, decoder: decoder) {
             return decoded
         }
-        return try? JSONDecoder.dit.decode([DiskActivitySample].self, from: data)
+        return HistoryPayloadCoders.decode([DiskActivitySample].self, from: data, decoder: .dit)
     }
 }
 

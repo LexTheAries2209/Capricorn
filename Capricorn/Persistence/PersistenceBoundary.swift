@@ -147,8 +147,8 @@ final class HistoryRepository {
         try modelContext.save()
     }
 
-    func hideAll<T: HistoryDisplayRecord>(_ records: [T], at date: Date = Date(), serialNumber: String? = nil) throws {
-        HistoryVisibility.hideAll(records, at: date, serialNumber: serialNumber)
+    func hideAll<T: HistoryDisplayRecord>(_ records: [T], at date: Date = Date(), matching drive: DriveDevice? = nil) throws {
+        HistoryVisibility.hideAll(records, at: date, matching: drive)
         try modelContext.save()
     }
 
@@ -157,8 +157,8 @@ final class HistoryRepository {
         try modelContext.save()
     }
 
-    func restoreAll<T: HistoryDisplayRecord>(_ records: [T], serialNumber: String? = nil) throws {
-        HistoryVisibility.restoreAll(records, serialNumber: serialNumber)
+    func restoreAll<T: HistoryDisplayRecord>(_ records: [T], matching drive: DriveDevice? = nil) throws {
+        HistoryVisibility.restoreAll(records, matching: drive)
         try modelContext.save()
     }
 }

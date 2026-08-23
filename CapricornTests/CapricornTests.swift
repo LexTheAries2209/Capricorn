@@ -2482,7 +2482,18 @@ final class CapricornTests: XCTestCase {
     }
 
     func testDiskActivityHistoryRecordEncodesSamplesAndSummary() {
-        let drive = Self.fixtureDrive()
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(
+                deviceIdentifier: "disk0s2",
+                name: "Data",
+                mountPoint: "/System/Volumes/Data",
+                sizeBytes: drive.sizeBytes,
+                isWritable: true,
+                isSystem: false,
+                volumeUUID: "activity-volume"
+            )
+        ]
         let start = Date(timeIntervalSince1970: 1_000)
         let samples = [
             DiskActivitySample(timestamp: start, readMegabytesPerSecond: 10, writeMegabytesPerSecond: 20),
@@ -2498,6 +2509,7 @@ final class CapricornTests: XCTestCase {
         )
 
         XCTAssertEqual(record.serialNumber, drive.serialNumber)
+        XCTAssertEqual(record.volumeUUIDs, ["ACTIVITY-VOLUME"])
         XCTAssertEqual(record.sampleInterval, .half)
         XCTAssertEqual(record.durationSeconds, 1)
         XCTAssertEqual(record.peakReadMegabytesPerSecond, 30)
@@ -2508,7 +2520,18 @@ final class CapricornTests: XCTestCase {
     }
 
     func testBenchmarkHistoryRecordStoresBenchmarkActivitySamples() {
-        let drive = Self.fixtureDrive()
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(
+                deviceIdentifier: "disk0s2",
+                name: "Data",
+                mountPoint: "/System/Volumes/Data",
+                sizeBytes: drive.sizeBytes,
+                isWritable: true,
+                isSystem: false,
+                volumeUUID: "benchmark-volume"
+            )
+        ]
         let result = Self.fixtureBenchmarkResult(for: drive)
         let start = Date(timeIntervalSince1970: 1_000)
         let samples = [
@@ -2519,6 +2542,21 @@ final class CapricornTests: XCTestCase {
         let record = BenchmarkHistoryRecord(drive: drive, result: result, activitySamples: samples)
 
         XCTAssertEqual(record.activitySamples, samples)
+        XCTAssertEqual(record.volumeUUIDs, ["BENCHMARK-VOLUME"])
+    }
+
+    func testDiskActivitySampleCodersReadLegacySampleArrays() throws {
+        let sample = DiskActivitySample(
+            timestamp: Date(timeIntervalSince1970: 1_000),
+            readMegabytesPerSecond: 1,
+            writeMegabytesPerSecond: 2
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        let legacyData = try encoder.encode([sample])
+
+        XCTAssertEqual(DiskActivitySampleCoders.decode(legacyData), [sample])
+        XCTAssertEqual(DiskActivitySampleCoders.volumeUUIDs(in: legacyData), [])
     }
 
     func testDiskActivityWorkloadFullDiskUses95PercentOfAvailableCapacity() {
@@ -3501,7 +3539,7 @@ final class CapricornTests: XCTestCase {
 
         HistoryVisibility.hide(currentDriveRecord, at: Date(timeIntervalSince1970: 1))
         HistoryVisibility.hide(otherDriveRecord, at: Date(timeIntervalSince1970: 2))
-        HistoryVisibility.restoreAll([currentDriveRecord, otherDriveRecord], serialNumber: drive.serialNumber)
+        HistoryVisibility.restoreAll([currentDriveRecord, otherDriveRecord], matching: drive)
 
         XCTAssertNil(currentDriveRecord.hiddenAt)
         XCTAssertNotNil(otherDriveRecord.hiddenAt)
@@ -3515,7 +3553,7 @@ final class CapricornTests: XCTestCase {
         let currentDriveRecord = SmartHistoryRecord(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
         let otherDriveRecord = SmartHistoryRecord(drive: otherDrive, snapshot: Self.fixtureSnapshot(for: otherDrive))
 
-        HistoryVisibility.hideAll([currentDriveRecord, otherDriveRecord], at: Date(timeIntervalSince1970: 1), serialNumber: drive.serialNumber)
+        HistoryVisibility.hideAll([currentDriveRecord, otherDriveRecord], at: Date(timeIntervalSince1970: 1), matching: drive)
 
         XCTAssertNotNil(currentDriveRecord.hiddenAt)
         XCTAssertNil(otherDriveRecord.hiddenAt)
@@ -3523,27 +3561,100 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(HistoryVisibility.hidden([currentDriveRecord, otherDriveRecord]).map(\.id), [currentDriveRecord.id])
     }
 
+    func testHistoryVisibilityHideAllUsesVolumeUUIDFallback() {
+        var historicalDrive = Self.fixtureDrive()
+        historicalDrive.serialNumber = nil
+        historicalDrive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk0s2", name: "Data", mountPoint: "/", sizeBytes: 1, isWritable: true, isSystem: false, volumeUUID: "shared-volume")
+        ]
+        let matchingRecord = SmartHistoryRecord(
+            drive: historicalDrive,
+            snapshot: Self.fixtureSnapshot(for: historicalDrive)
+        )
+        var otherDrive = historicalDrive
+        otherDrive.volumes[0].volumeUUID = "other-volume"
+        let otherRecord = SmartHistoryRecord(
+            drive: otherDrive,
+            snapshot: Self.fixtureSnapshot(for: otherDrive)
+        )
+        var currentDrive = historicalDrive
+        currentDrive.serialNumber = "NOW-AVAILABLE"
+
+        HistoryVisibility.hideAll(
+            [matchingRecord, otherRecord],
+            at: Date(timeIntervalSince1970: 1),
+            matching: currentDrive
+        )
+
+        XCTAssertNotNil(matchingRecord.hiddenAt)
+        XCTAssertNil(otherRecord.hiddenAt)
+    }
+
     func testHistoryDriveMatcherUsesSerialNumberWhenBSDNameChanges() {
-        let originalDrive = Self.fixtureDrive()
+        var originalDrive = Self.fixtureDrive()
+        originalDrive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk0s2", name: "Data", mountPoint: "/", sizeBytes: 1, isWritable: true, isSystem: false, volumeUUID: "same-volume")
+        ]
         let record = SmartHistoryRecord(drive: originalDrive, snapshot: Self.fixtureSnapshot(for: originalDrive))
         var reattachedDrive = originalDrive
         reattachedDrive.bsdName = "disk19"
         reattachedDrive.serialNumber = " sn "
 
-        XCTAssertTrue(HistoryDriveMatcher.matches(recordSerialNumber: record.serialNumber, drive: reattachedDrive))
+        XCTAssertEqual(record.volumeUUIDs, ["SAME-VOLUME"])
+        XCTAssertTrue(HistoryDriveMatcher.matches(record: record, drive: reattachedDrive))
     }
 
-    func testHistoryDriveMatcherRejectsDifferentOrMissingSerialNumbers() {
-        let drive = Self.fixtureDrive()
+    func testHistoryDriveMatcherDoesNotOverrideSerialMismatchWithVolumeUUID() {
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk0s2", name: "Data", mountPoint: "/", sizeBytes: 1, isWritable: true, isSystem: false, volumeUUID: "same-volume")
+        ]
         let record = SmartHistoryRecord(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
         var differentDrive = drive
         differentDrive.serialNumber = "OTHER-SERIAL"
-        var missingSerialDrive = drive
-        missingSerialDrive.serialNumber = nil
 
-        XCTAssertFalse(HistoryDriveMatcher.matches(recordSerialNumber: record.serialNumber, drive: differentDrive))
-        XCTAssertFalse(HistoryDriveMatcher.matches(recordSerialNumber: record.serialNumber, drive: missingSerialDrive))
-        XCTAssertFalse(HistoryDriveMatcher.matches(recordSerialNumber: nil, drive: drive))
+        XCTAssertFalse(HistoryDriveMatcher.matches(record: record, drive: differentDrive))
+    }
+
+    func testHistoryDriveMatcherFallsBackToVolumeUUIDWhenRecordSerialIsMissing() {
+        var driveWithoutSerial = Self.fixtureDrive()
+        driveWithoutSerial.serialNumber = nil
+        driveWithoutSerial.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk0s2", name: "Data", mountPoint: "/", sizeBytes: 1, isWritable: true, isSystem: false, volumeUUID: "shared-volume")
+        ]
+        let record = SmartHistoryRecord(drive: driveWithoutSerial, snapshot: Self.fixtureSnapshot(for: driveWithoutSerial))
+        var currentDrive = driveWithoutSerial
+        currentDrive.serialNumber = "NOW-AVAILABLE"
+
+        XCTAssertTrue(HistoryDriveMatcher.matches(record: record, drive: currentDrive))
+    }
+
+    func testHistoryDriveMatcherFallsBackToVolumeUUIDWhenCurrentSerialIsMissing() {
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk0s2", name: "Data", mountPoint: "/", sizeBytes: 1, isWritable: true, isSystem: false, volumeUUID: "shared-volume")
+        ]
+        let record = SmartHistoryRecord(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
+        var currentDrive = drive
+        currentDrive.serialNumber = nil
+
+        XCTAssertTrue(HistoryDriveMatcher.matches(record: record, drive: currentDrive))
+    }
+
+    func testHistoryDriveMatcherRejectsMissingOrDifferentFallbackUUIDs() {
+        var sourceDrive = Self.fixtureDrive()
+        sourceDrive.serialNumber = nil
+        sourceDrive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk0s2", name: "Data", mountPoint: "/", sizeBytes: 1, isWritable: true, isSystem: false, volumeUUID: "source-volume")
+        ]
+        let record = SmartHistoryRecord(drive: sourceDrive, snapshot: Self.fixtureSnapshot(for: sourceDrive))
+        var differentDrive = sourceDrive
+        differentDrive.volumes[0].volumeUUID = "different-volume"
+        var missingUUIDDrive = sourceDrive
+        missingUUIDDrive.volumes = []
+
+        XCTAssertFalse(HistoryDriveMatcher.matches(record: record, drive: differentDrive))
+        XCTAssertFalse(HistoryDriveMatcher.matches(record: record, drive: missingUUIDDrive))
     }
 
 

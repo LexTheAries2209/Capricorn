@@ -104,11 +104,11 @@ struct DiskActivityView: View {
     }
 
     private var selectedDriveHistory: [DiskActivityHistoryRecord] {
-        HistoryVisibility.visible(activityHistory.filter { HistoryDriveMatcher.matches(recordSerialNumber: $0.serialNumber, drive: drive) })
+        HistoryVisibility.visible(activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) })
     }
 
     private var selectedDriveHiddenHistory: [DiskActivityHistoryRecord] {
-        HistoryVisibility.hidden(activityHistory.filter { HistoryDriveMatcher.matches(recordSerialNumber: $0.serialNumber, drive: drive) })
+        HistoryVisibility.hidden(activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) })
     }
 
     private var summary: DiskActivitySummary {
@@ -772,7 +772,7 @@ struct DiskActivityView: View {
 
     private func hideAllVisibleActivityHistory() {
         do {
-            try HistoryRepository(modelContext: modelContext).hideAll(selectedDriveHistory, serialNumber: drive.serialNumber)
+            try HistoryRepository(modelContext: modelContext).hideAll(selectedDriveHistory, matching: drive)
         } catch {
             saveMessage = UserFacingError.message("Could not update activity history.", error: error)
         }
