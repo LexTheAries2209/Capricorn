@@ -135,13 +135,6 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(chineseCSV.contains("serial_number,Serial Number,序列号,设备报告的硬件序列号,SN"))
     }
 
-    func testDriveSerialNumberFormatterMasksDisplayValue() {
-        XCTAssertEqual(DriveSerialNumberFormatter.masked("SN123456"), "SN••••56")
-        XCTAssertEqual(DriveSerialNumberFormatter.masked("ABCD"), "••••")
-        XCTAssertNil(DriveSerialNumberFormatter.masked(nil))
-        XCTAssertNil(DriveSerialNumberFormatter.masked("  "))
-    }
-
     func testExternalDriveModelCatalogUsesHardwareModelWhenBridgeNameIsGeneric() throws {
         var drive = Self.externalCatalogDrive(model: "USB 3.0 Device")
         drive.model = "ST8000NM000A-2KE101 Media"

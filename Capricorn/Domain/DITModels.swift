@@ -728,22 +728,6 @@ enum DrivePageHeaderText {
     }
 }
 
-enum DriveSerialNumberFormatter {
-    /// Keep a short prefix and suffix so users can distinguish a drive without
-    /// exposing the complete hardware serial number in the main UI.
-    static func masked(_ serialNumber: String?) -> String? {
-        guard let serialNumber else { return nil }
-        let value = serialNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return nil }
-
-        let characters = Array(value)
-        guard characters.count > 4 else {
-            return String(repeating: "•", count: characters.count)
-        }
-        return String(characters.prefix(2)) + "••••" + String(characters.suffix(2))
-    }
-}
-
 enum DriveFeatureTab: String, CaseIterable, Identifiable {
     case overview
     case smart

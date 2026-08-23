@@ -11,7 +11,7 @@ struct OverviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                DrivePageHeaderView(drive: drive, snapshot: snapshot, showsSerialNumber: true)
+                DrivePageHeaderView(drive: drive, snapshot: snapshot)
 
                 if let snapshot {
                     Text(language.statusMessage(snapshot.summary))
