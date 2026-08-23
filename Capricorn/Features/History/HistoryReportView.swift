@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import AppKit
 import SwiftData
 import SwiftUI
 
 struct HistoryReportView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
-    let benchmarkResults: [BenchmarkResult]
     let smartHistory: [SmartHistoryRecord]
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
-    @AppStorage("includeSerialsInReports") private var includeSerialsInReports = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @State private var showHiddenHistory = false
@@ -52,40 +49,10 @@ struct HistoryReportView: View {
                 HStack(alignment: .top, spacing: 16) {
                     DrivePageHeaderView(drive: drive, snapshot: snapshot, showsHealthBadge: false)
                     Spacer()
-                    Toggle(language.t("Include serials"), isOn: $includeSerialsInReports)
-                        .toggleStyle(.checkbox)
                 }
 
                 Text(language.t("History & Reports"))
                     .font(.title2.bold())
-
-                HStack {
-                    Button {
-                        do {
-                            copy(try ReportExporter.jsonReport(
-                                drive: drive,
-                                snapshot: snapshot,
-                                benchmarkResults: benchmarkResults,
-                                includeSerial: includeSerialsInReports
-                            ))
-                            reportError = nil
-                        } catch {
-                            reportError = language.t("Could not encode the report.")
-                        }
-                    } label: {
-                        Label(language.t("Copy JSON"), systemImage: "doc.on.doc")
-                    }
-                    Button {
-                        copy(ReportExporter.csvReport(results: benchmarkResults))
-                    } label: {
-                        Label(language.t("Copy CSV"), systemImage: "tablecells")
-                    }
-                    Button {
-                        copy(ReportExporter.textReport(drive: drive, snapshot: snapshot, results: benchmarkResults, includeSerial: includeSerialsInReports))
-                    } label: {
-                        Label(language.t("Copy Text"), systemImage: "text.page")
-                    }
-                }
 
                 if let reportError {
                     Label(reportError, systemImage: "exclamationmark.triangle.fill")
@@ -387,8 +354,4 @@ struct HistoryReportView: View {
         }
     }
 
-    private func copy(_ string: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(string, forType: .string)
-    }
 }

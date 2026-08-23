@@ -17,7 +17,6 @@ extension CapricornTests {
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
         preferences.showVirtualDisks = true
         preferences.smartctlPath = "/usr/bin/true"
-        preferences.includeSerialsInReports = true
         preferences.usesPlainTabForFeatureSwitching = false
         preferences.allowSystemDiskSelfTests = true
         preferences.avoidWakingSleepingDisks = false
@@ -26,7 +25,6 @@ extension CapricornTests {
         XCTAssertEqual(reloaded.languageRawValue, AppLanguage.simplifiedChinese.rawValue)
         XCTAssertTrue(reloaded.showVirtualDisks)
         XCTAssertEqual(reloaded.smartctlPath, "/usr/bin/true")
-        XCTAssertTrue(reloaded.includeSerialsInReports)
         XCTAssertFalse(reloaded.usesPlainTabForFeatureSwitching)
         XCTAssertTrue(reloaded.allowSystemDiskSelfTests)
         XCTAssertFalse(reloaded.avoidWakingSleepingDisks)

@@ -289,7 +289,6 @@ final class CapricornTests: XCTestCase {
     func testSettingsContentIsLocalized() {
         let expectedTranslations = [
             "Settings": "设置",
-            "Include serials in reports": "报告中包含序列号",
             "Use Tab to switch feature pages": "使用 Tab 切换功能页面",
             "SMART Refresh": "SMART 刷新",
             "Do not wake sleeping disks for SMART refresh": "SMART 刷新时不唤醒休眠磁盘",

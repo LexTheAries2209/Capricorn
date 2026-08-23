@@ -11,7 +11,6 @@ final class AppPreferences {
         static let language = "appLanguage"
         static let showVirtualDisks = "showVirtualDisks"
         static let smartctlPath = "smartctlPath"
-        static let includeSerialsInReports = "includeSerialsInReports"
         static let usesPlainTabForFeatureSwitching = "usesPlainTabForFeatureSwitching"
         static let allowSystemDiskSelfTests = "allowSystemDiskSelfTests"
         static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
@@ -38,10 +37,6 @@ final class AppPreferences {
         }
     }
 
-    var includeSerialsInReports: Bool {
-        didSet { defaults.set(includeSerialsInReports, forKey: Key.includeSerialsInReports) }
-    }
-
     var usesPlainTabForFeatureSwitching: Bool {
         didSet { defaults.set(usesPlainTabForFeatureSwitching, forKey: Key.usesPlainTabForFeatureSwitching) }
     }
@@ -59,7 +54,6 @@ final class AppPreferences {
         languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
         showVirtualDisks = defaults.bool(forKey: Key.showVirtualDisks)
         smartctlPath = defaults.string(forKey: Key.smartctlPath) ?? ""
-        includeSerialsInReports = defaults.bool(forKey: Key.includeSerialsInReports)
         usesPlainTabForFeatureSwitching = defaults.object(forKey: Key.usesPlainTabForFeatureSwitching) as? Bool ?? true
         allowSystemDiskSelfTests = defaults.bool(forKey: Key.allowSystemDiskSelfTests)
         avoidWakingSleepingDisks = defaults.object(forKey: Key.avoidWakingSleepingDisks) as? Bool ?? true
@@ -97,7 +91,6 @@ struct CapricornSettingsView: View {
             }
 
             Toggle(language.t("Show virtual disks"), isOn: $preferences.showVirtualDisks)
-            Toggle(language.t("Include serials in reports"), isOn: $preferences.includeSerialsInReports)
             Toggle(language.t("Use Tab to switch feature pages"), isOn: $preferences.usesPlainTabForFeatureSwitching)
 
             Section(language.t("SMART Self-Tests")) {

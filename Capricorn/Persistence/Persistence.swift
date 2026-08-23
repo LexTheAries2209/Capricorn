@@ -231,44 +231,6 @@ enum DiskActivitySampleCoders {
 }
 
 enum ReportExporter {
-    struct Report: Codable {
-        var generatedAt: Date
-        var drive: DriveDevice
-        var snapshot: SmartSnapshot?
-        var benchmarkResults: [BenchmarkResult]
-    }
-
-    static func jsonReport(
-        drive: DriveDevice,
-        snapshot: SmartSnapshot?,
-        benchmarkResults: [BenchmarkResult],
-        includeSerial: Bool
-    ) throws -> String {
-        let redactedDrive = redacted(drive, includeSerial: includeSerial)
-        let report = Report(generatedAt: Date(), drive: redactedDrive, snapshot: snapshot, benchmarkResults: benchmarkResults)
-        let data = try JSONEncoder.dit.encode(report)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    static func csvReport(results: [BenchmarkResult]) -> String {
-        var lines = ["date,profile,test,operation,volume,mbs,iops,latency_us"]
-        lines += results.map {
-            [
-                ISO8601DateFormatter().string(from: $0.measuredAt),
-                $0.profileName,
-                $0.testLabel,
-                $0.operation.title,
-                $0.volumePath,
-                String(format: "%.2f", $0.bestMegabytesPerSecond),
-                String(format: "%.1f", $0.iops),
-                String(format: "%.2f", $0.latencyMicroseconds)
-            ]
-            .map(escapeCSV)
-            .joined(separator: ",")
-        }
-        return lines.joined(separator: "\n")
-    }
-
     /// Exports the SMART attribute table as a compact CSV document. Snapshot
     /// metadata is intentionally omitted; localized names and descriptions are
     /// resolved from the same catalog used by the SMART table UI.
@@ -319,54 +281,6 @@ enum ReportExporter {
             .filter { !$0.isEmpty }
             .joined(separator: "-")
         return "Capricorn-\(safeName.isEmpty ? drive.bsdName : safeName)-\(formatter.string(from: date))\(timeZoneLabel).csv"
-    }
-
-    static func textReport(drive: DriveDevice, snapshot: SmartSnapshot?, results: [BenchmarkResult], includeSerial: Bool) -> String {
-        let redactedDrive = redacted(drive, includeSerial: includeSerial)
-        var lines = [
-            "Capricorn Report",
-            "Generated: \(Date().formatted())",
-            "Drive: \(redactedDrive.displayName) (\(redactedDrive.bsdName))",
-            "Protocol: \(redactedDrive.protocolName)",
-            "Capacity: \(formatByteCount(redactedDrive.sizeBytes))"
-        ]
-        if let serial = redactedDrive.serialNumber {
-            lines.append("Serial: \(serial)")
-        }
-        if let snapshot {
-            lines += [
-                "Health: \(snapshot.health.title)",
-                "Summary: \(snapshot.summary)"
-            ]
-            if let temp = snapshot.temperatureCelsius {
-                lines.append(String(format: "Temperature: %.1f C", temp))
-            }
-            if let life = snapshot.lifeRemainingPercent {
-                lines.append("Life Remaining: \(life)%")
-            }
-        }
-        if !results.isEmpty {
-            lines.append("")
-            lines.append("Benchmark")
-            for result in results {
-                lines.append(String(format: "%@ %@: %.2f MB/s, %.1f IOPS, %.2f us",
-                                    result.testLabel,
-                                    result.operation.title,
-                                    result.bestMegabytesPerSecond,
-                                    result.iops,
-                                    result.latencyMicroseconds))
-            }
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    private static func redacted(_ drive: DriveDevice, includeSerial: Bool) -> DriveDevice {
-        guard !includeSerial else { return drive }
-        var copy = drive
-        if copy.serialNumber != nil {
-            copy.serialNumber = "REDACTED"
-        }
-        return copy
     }
 
     private static func escapeCSV(_ value: String) -> String {

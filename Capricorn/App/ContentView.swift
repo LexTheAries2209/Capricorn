@@ -850,7 +850,6 @@ private struct DriveDetailView: View {
             HistoryReportView(
                 drive: drive,
                 snapshot: snapshot,
-                benchmarkResults: viewModel.benchmarkResults.filter { $0.driveID == drive.id },
                 smartHistory: smartHistory,
                 benchmarkHistory: benchmarkHistory,
                 activityHistory: activityHistory.filter { $0.driveID == drive.id }
