@@ -25,6 +25,47 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(drive.fileSystemSummary, "APFS")
     }
 
+    func testSystemProfilerDriveSerialParserMapsPhysicalBSDNames() {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><array>
+          <dict>
+            <key>_dataType</key><string>SPNVMeDataType</string>
+            <key>_items</key><array>
+              <dict><key>_items</key><array>
+                <dict>
+                  <key>_name</key><string>APPLE SSD AP1024Z</string>
+                  <key>bsd_name</key><string>disk0</string>
+                  <key>device_serial</key><string> 0ba01ee32464d219 </string>
+                  <key>volumes</key><array>
+                    <dict><key>bsd_name</key><string>disk0s1</string></dict>
+                  </array>
+                </dict>
+                <dict>
+                  <key>_name</key><string>Lexar SSD ARES 4TB</string>
+                  <key>bsd_name</key><string>disk10</string>
+                  <key>device_serial</key><string>NL86722004672P2202</string>
+                </dict>
+                <dict>
+                  <key>bsd_name</key><string>disk11</string>
+                  <key>device_serial</key><string>Unknown</string>
+                </dict>
+              </array></dict>
+            </array>
+          </dict>
+        </array></plist>
+        """
+
+        XCTAssertEqual(
+            SystemProfilerDriveSerialParser.parse(Data(xml.utf8)),
+            [
+                "disk0": "0ba01ee32464d219",
+                "disk10": "NL86722004672P2202"
+            ]
+        )
+    }
+
     func testBundledExternalDriveModelCatalogMatchesEveryDocumentedExample() throws {
         let catalog = ExternalDriveModelCatalog.bundled
 

@@ -55,6 +55,15 @@ final class SequencedInventoryProvider: DiskInventoryProviding, @unchecked Senda
     }
 }
 
+struct StaticDriveSerialProvider: DriveSerialNumberProviding {
+    var serialNumbersByBSDName: [String: String]
+
+    func serialNumbers(for drives: [DriveDevice]) async -> [String: String] {
+        let requestedBSDNames = Set(drives.map(\.bsdName))
+        return serialNumbersByBSDName.filter { requestedBSDNames.contains($0.key) }
+    }
+}
+
 struct UnavailableSmartProvider: SmartProviding {
     let providerName = "Test"
 

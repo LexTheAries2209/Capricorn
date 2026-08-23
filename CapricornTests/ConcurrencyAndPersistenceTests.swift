@@ -323,11 +323,18 @@ extension CapricornTests {
 
     func testDiskInventoryLoadsDiskInfoConcurrently() async throws {
         let runner = ConcurrentDiskutilCommandRunner()
-        let provider = DiskutilInventoryProvider(runner: runner, networkProvider: nil)
+        let provider = DiskutilInventoryProvider(
+            runner: runner,
+            networkProvider: nil,
+            serialNumberProvider: StaticDriveSerialProvider(
+                serialNumbersByBSDName: ["disk8": "SERIAL-8", "disk9": "SERIAL-9"]
+            )
+        )
 
         let drives = try await provider.loadDrives(showVirtual: false)
 
         XCTAssertEqual(drives.map(\.bsdName), ["disk8", "disk9"])
+        XCTAssertEqual(drives.map(\.serialNumber), ["SERIAL-8", "SERIAL-9"])
         XCTAssertGreaterThan(runner.maximumConcurrentInfoCalls, 1)
     }
 

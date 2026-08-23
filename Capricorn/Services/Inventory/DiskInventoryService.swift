@@ -47,6 +47,10 @@ protocol NetworkVolumeInventoryProviding: Sendable {
     func loadNetworkDrives() async throws -> [DriveDevice]
 }
 
+protocol DriveSerialNumberProviding: Sendable {
+    func serialNumbers(for drives: [DriveDevice]) async -> [String: String]
+}
+
 enum DiskutilParserError: Error, LocalizedError {
     case invalidPlist
 
@@ -273,6 +277,81 @@ enum DiskutilPlistParser {
     }
 }
 
+enum SystemProfilerDriveSerialParser {
+    static func parse(_ data: Data) -> [String: String] {
+        guard let propertyList = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) else {
+            return [:]
+        }
+
+        var serialNumbers: [String: String] = [:]
+        visit(propertyList, serialNumbers: &serialNumbers)
+        return serialNumbers
+    }
+
+    private static func visit(_ value: Any, serialNumbers: inout [String: String]) {
+        if let dictionary = value as? [String: Any] {
+            if let bsdName = string(in: dictionary, keys: ["bsd_name", "BSD Name"]),
+               let serialNumber = string(in: dictionary, keys: ["device_serial", "serial_number", "serial_num"]),
+               let normalizedSerial = normalize(serialNumber),
+               serialNumbers[bsdName] == nil {
+                serialNumbers[bsdName] = normalizedSerial
+            }
+
+            for child in dictionary.values {
+                visit(child, serialNumbers: &serialNumbers)
+            }
+            return
+        }
+
+        if let array = value as? [Any] {
+            for child in array {
+                visit(child, serialNumbers: &serialNumbers)
+            }
+        }
+    }
+
+    private static func string(in dictionary: [String: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let value = dictionary[key] as? String {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func normalize(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let invalidValues = ["unknown", "not available", "not specified", "n/a", "none"]
+        guard !invalidValues.contains(trimmed.lowercased()) else { return nil }
+        return trimmed
+    }
+}
+
+final class SystemProfilerDriveSerialProvider: DriveSerialNumberProviding, @unchecked Sendable {
+    private let runner: CommandRunning
+    private let executablePath: String
+
+    init(runner: CommandRunning = ShellCommandRunner(), executablePath: String = "/usr/sbin/system_profiler") {
+        self.runner = runner
+        self.executablePath = executablePath
+    }
+
+    func serialNumbers(for drives: [DriveDevice]) async -> [String: String] {
+        let physicalBSDNames = Set(drives.filter { !$0.isNetwork }.map(\.bsdName))
+        guard !physicalBSDNames.isEmpty,
+              let result = try? await runner.run(
+                  executablePath,
+                  arguments: ["SPNVMeDataType", "SPSerialATADataType", "SPUSBDataType", "-xml"]
+              ),
+              result.terminationStatus == 0 else {
+            return [:]
+        }
+
+        return SystemProfilerDriveSerialParser.parse(result.stdout).filter { physicalBSDNames.contains($0.key) }
+    }
+}
+
 enum NetworkVolumeMountParser {
     private static let networkFileSystemTypes: Set<String> = [
         "afpfs",
@@ -450,15 +529,18 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
     private let runner: CommandRunning
     private let diskutilPath: String
     private let networkProvider: NetworkVolumeInventoryProviding?
+    private let serialNumberProvider: DriveSerialNumberProviding
 
     init(
         runner: CommandRunning = ShellCommandRunner(),
         diskutilPath: String = "/usr/sbin/diskutil",
-        networkProvider: NetworkVolumeInventoryProviding? = NetworkMountInventoryProvider()
+        networkProvider: NetworkVolumeInventoryProviding? = NetworkMountInventoryProvider(),
+        serialNumberProvider: DriveSerialNumberProviding? = nil
     ) {
         self.runner = runner
         self.diskutilPath = diskutilPath
         self.networkProvider = networkProvider
+        self.serialNumberProvider = serialNumberProvider ?? SystemProfilerDriveSerialProvider(runner: runner)
     }
 
     func loadDrives(showVirtual: Bool) async throws -> [DriveDevice] {
@@ -469,6 +551,15 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
 
         let list = try DiskutilPlistParser.parseList(listResult.stdout)
         var devices = await loadPhysicalDevices(list: list, showVirtual: showVirtual)
+        let serialNumbers = await serialNumberProvider.serialNumbers(for: devices)
+        if !serialNumbers.isEmpty {
+            devices = devices.map { drive in
+                guard let serialNumber = serialNumbers[drive.bsdName] else { return drive }
+                var enriched = drive
+                enriched.serialNumber = serialNumber
+                return enriched
+            }
+        }
 
         if let networkProvider {
             do {
