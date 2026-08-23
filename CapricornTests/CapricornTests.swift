@@ -312,6 +312,26 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(drive.fileSystemSummary, "NTFS")
     }
 
+    func testDiskutilParserDoesNotTreatMountedPartitionTypeAsFilesystem() throws {
+        let list = try DiskutilPlistParser.parseList(Self.sdCardPartitionListFixture.data(using: .utf8)!)
+        let volume = try XCTUnwrap(list.volumesByPhysicalDisk["disk14"]?.first)
+
+        XCTAssertEqual(volume.mountPoint, "/Volumes/688 SD")
+        XCTAssertNil(volume.fileSystemType)
+        XCTAssertEqual(FileSystemFormatResolver.normalized("ExFAT"), "ExFAT")
+    }
+
+    func testMountedVolumeCapacityPrefersOrdinaryFreeSpaceOverImportantUsage() {
+        XCTAssertEqual(
+            MountedVolumeCapacityReader.resolve(totalBytes: 100, availableBytes: 56, importantUsageAvailableBytes: 0),
+            MountedVolumeCapacity(totalBytes: 100, availableBytes: 56)
+        )
+        XCTAssertEqual(
+            MountedVolumeCapacityReader.resolve(totalBytes: 100, availableBytes: nil, importantUsageAvailableBytes: 25),
+            MountedVolumeCapacity(totalBytes: 100, availableBytes: 25)
+        )
+    }
+
     func testNetworkMountParserDetectsMountedNetworkVolumes() {
         let output = """
         /dev/disk3s1 on / (apfs, sealed, local, read-only, journaled)
@@ -3620,6 +3640,31 @@ final class CapricornTests: XCTestCase {
             </dict>
           </array>
           <key>Size</key><integer>4096000000000</integer>
+        </dict>
+      </array>
+    </dict></plist>
+    """
+
+    private static let sdCardPartitionListFixture = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0"><dict>
+      <key>WholeDisks</key><array><string>disk14</string></array>
+      <key>AllDisksAndPartitions</key><array>
+        <dict>
+          <key>Content</key><string>FDisk_partition_scheme</string>
+          <key>DeviceIdentifier</key><string>disk14</string>
+          <key>Partitions</key><array>
+            <dict>
+              <key>DeviceIdentifier</key><string>disk14s1</string>
+              <key>Content</key><string>Windows_NTFS</string>
+              <key>MountPoint</key><string>/Volumes/688 SD</string>
+              <key>Size</key><integer>63946358784</integer>
+              <key>VolumeName</key><string>688 SD</string>
+              <key>ReadOnly</key><false/>
+            </dict>
+          </array>
+          <key>Size</key><integer>63963136000</integer>
         </dict>
       </array>
     </dict></plist>

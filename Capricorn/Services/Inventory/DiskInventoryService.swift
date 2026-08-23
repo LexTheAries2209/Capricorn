@@ -37,11 +37,28 @@ enum MountedVolumeCapacityReader {
             return nil
         }
 
-        let total = Int64(totalValue)
-        let available = values.volumeAvailableCapacityForImportantUsage
-            ?? values.volumeAvailableCapacity.map(Int64.init)
-        guard total > 0, let available, available >= 0 else { return nil }
-        return MountedVolumeCapacity(totalBytes: total, availableBytes: min(available, total))
+        return resolve(
+            totalBytes: Int64(totalValue),
+            availableBytes: values.volumeAvailableCapacity.map(Int64.init),
+            importantUsageAvailableBytes: values.volumeAvailableCapacityForImportantUsage.map { Int64(truncating: $0 as NSNumber) }
+        )
+    }
+
+    static func resolve(
+        totalBytes: Int64?,
+        availableBytes: Int64?,
+        importantUsageAvailableBytes: Int64?
+    ) -> MountedVolumeCapacity? {
+        guard let totalBytes, totalBytes > 0 else { return nil }
+        // The important-usage value can be zero on removable media even while
+        // the ordinary volume free-space value is accurate. Use the normal
+        // volume capacity first because this is the user-visible free space.
+        let availableBytes = availableBytes ?? importantUsageAvailableBytes
+        guard let availableBytes, availableBytes >= 0 else { return nil }
+        return MountedVolumeCapacity(
+            totalBytes: totalBytes,
+            availableBytes: min(availableBytes, totalBytes)
+        )
     }
 }
 
@@ -271,15 +288,20 @@ enum DiskutilPlistParser {
     }
 
     private static func parsedFileSystemType(from dictionary: [String: Any], fallback: String?) -> String? {
-        let candidates = [
+        var candidates = [
             dictionary.string("FilesystemName"),
             dictionary.string("FileSystemName"),
             dictionary.string("FilesystemType"),
             dictionary.string("FileSystemType"),
             dictionary.string("VolumeKind"),
-            dictionary.string("Content"),
-            fallback
         ]
+        // `Content` is a partition-map type, not necessarily the mounted
+        // filesystem. For example, an ExFAT card commonly reports
+        // `Windows_NTFS` here. Only use it as a fallback for unmounted media.
+        if normalizedMountPoint(dictionary.string("MountPoint")) == nil {
+            candidates.append(dictionary.string("Content"))
+        }
+        candidates.append(fallback)
 
         for candidate in candidates {
             if let normalized = FileSystemFormatResolver.normalized(candidate) {
@@ -750,8 +772,11 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
         volumes.map { volume in
             var enriched = volume
             guard let mountPoint = volume.mountPoint else { return enriched }
-            if enriched.fileSystemType == nil {
-                enriched.fileSystemType = FileSystemFormatResolver.fileSystemType(atMountPoint: mountPoint)
+            if let fileSystemType = FileSystemFormatResolver.fileSystemType(atMountPoint: mountPoint) {
+                // Mounted volume metadata is authoritative over the partition
+                // map's `Content` value, which can describe the partition type
+                // rather than the filesystem currently mounted on it.
+                enriched.fileSystemType = fileSystemType
             }
             if let capacity = MountedVolumeCapacityReader.read(at: mountPoint) {
                 enriched.totalCapacityBytes = capacity.totalBytes
