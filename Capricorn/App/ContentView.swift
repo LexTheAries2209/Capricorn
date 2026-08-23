@@ -728,7 +728,7 @@ private struct DriveSidebarRow: View {
     @Environment(\.appLanguage) private var language
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             Image(systemName: iconName)
                 .font(.title3)
                 .foregroundStyle(snapshot?.health.tint ?? .secondary)
@@ -740,15 +740,11 @@ private struct DriveSidebarRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                HStack(spacing: 8) {
-                    Text(deviceSummary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .help(identifierSummary)
-                    Spacer(minLength: 4)
-                    HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
-                }
+                Text(deviceSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help(identifierSummary)
                 if let capacitySummary {
                     Text(capacitySummary)
                         .font(.caption)
@@ -757,6 +753,7 @@ private struct DriveSidebarRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
         }
         .padding(.vertical, 4)
     }
