@@ -98,8 +98,9 @@ final class CapricornTests: XCTestCase {
         )
     }
 
-    func testSmartSnapshotCSVReportIncludesOnlyAttributesAndEscapesValues() {
-        var snapshot = Self.fixtureSnapshot(for: Self.fixtureDrive())
+    func testSmartSnapshotCSVReportIncludesMetadataAndEscapesValues() {
+        let drive = Self.fixtureDrive()
+        var snapshot = Self.fixtureSnapshot(for: drive)
         snapshot.attributes = [
             SmartAttribute(
                 id: "AVAILABLE_SPARE",
@@ -113,20 +114,32 @@ final class CapricornTests: XCTestCase {
             )
         ]
 
-        let englishCSV = ReportExporter.smartSnapshotCSVReport(snapshot: snapshot, language: .english)
+        let englishCSV = ReportExporter.smartSnapshotCSVReport(drive: drive, snapshot: snapshot, language: .english)
         XCTAssertEqual(
             englishCSV.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init),
             "attribute_id,attribute_name,description,raw_value,current,worst,threshold,status,source"
         )
         XCTAssertFalse(englishCSV.contains("chinese_name"))
+        XCTAssertTrue(englishCSV.contains("drive_name,Drive Name,Current display name,APPLE SSD AP1024Z"))
+        XCTAssertTrue(englishCSV.contains("model,Model,Model reported by the device,APPLE SSD AP1024Z"))
+        XCTAssertTrue(englishCSV.contains("serial_number,Serial Number,Hardware serial reported by the device,SN"))
+        XCTAssertTrue(englishCSV.contains("bsd_name,BSD Name,Current macOS device identifier,disk0"))
         XCTAssertTrue(englishCSV.contains("AVAILABLE_SPARE,Available Spare,Remaining NVMe spare capacity.,\"value, with \"\"quotes\"\"\",100,99,10,Good,Fixture"))
 
-        let chineseCSV = ReportExporter.smartSnapshotCSVReport(snapshot: snapshot, language: .simplifiedChinese)
+        let chineseCSV = ReportExporter.smartSnapshotCSVReport(drive: drive, snapshot: snapshot, language: .simplifiedChinese)
         XCTAssertEqual(
             chineseCSV.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init),
             "attribute_id,attribute_name,chinese_name,description,raw_value,current,worst,threshold,status,source"
         )
         XCTAssertTrue(chineseCSV.contains("AVAILABLE_SPARE,Available Spare,可用备用空间,NVMe 备用块剩余比例，低于阈值时需要关注。,\"value, with \"\"quotes\"\"\",100,99,10,Good,Fixture"))
+        XCTAssertTrue(chineseCSV.contains("serial_number,Serial Number,序列号,设备报告的硬件序列号,SN"))
+    }
+
+    func testDriveSerialNumberFormatterMasksDisplayValue() {
+        XCTAssertEqual(DriveSerialNumberFormatter.masked("SN123456"), "SN••••56")
+        XCTAssertEqual(DriveSerialNumberFormatter.masked("ABCD"), "••••")
+        XCTAssertNil(DriveSerialNumberFormatter.masked(nil))
+        XCTAssertNil(DriveSerialNumberFormatter.masked("  "))
     }
 
     func testExternalDriveModelCatalogUsesHardwareModelWhenBridgeNameIsGeneric() throws {

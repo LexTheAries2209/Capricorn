@@ -337,6 +337,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "SMART Attributes": "SMART 属性",
         "ID": "ID",
         "Name": "名称",
+        "Serial Number": "序列号",
         "Raw": "原始值",
         "Current": "当前",
         "Worst": "最差",

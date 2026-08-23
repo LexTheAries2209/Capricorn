@@ -231,10 +231,10 @@ enum DiskActivitySampleCoders {
 }
 
 enum ReportExporter {
-    /// Exports the SMART attribute table as a compact CSV document. Snapshot
-    /// metadata is intentionally omitted; localized names and descriptions are
-    /// resolved from the same catalog used by the SMART table UI.
-    static func smartSnapshotCSVReport(snapshot: SmartSnapshot, language: AppLanguage) -> String {
+    /// Exports drive identity metadata and the SMART attribute table in one
+    /// CSV document. Metadata rows keep the existing attribute-table header
+    /// compatible with spreadsheet and parser consumers.
+    static func smartSnapshotCSVReport(drive: DriveDevice, snapshot: SmartSnapshot, language: AppLanguage) -> String {
         var header = ["attribute_id", "attribute_name"]
         if language == .simplifiedChinese {
             header.append("chinese_name")
@@ -243,6 +243,14 @@ enum ReportExporter {
             "description", "raw_value", "current", "worst", "threshold", "status", "source"
         ]
         var lines = [header.map(escapeCSV).joined(separator: ",")]
+        lines += metadataRows(drive: drive, snapshot: snapshot, language: language).map { row in
+            var values = [row.id, row.englishName]
+            if language == .simplifiedChinese {
+                values.append(row.chineseName)
+            }
+            values += [row.description, row.value, "", "", "", "", "Capricorn metadata"]
+            return values.map(escapeCSV).joined(separator: ",")
+        }
         lines += snapshot.attributes.map { attribute in
             let display = SmartAttributeCatalog.display(for: attribute, language: language)
             var values = [
@@ -264,6 +272,68 @@ enum ReportExporter {
             return values.map(escapeCSV).joined(separator: ",")
         }
         return lines.joined(separator: "\n")
+    }
+
+    private struct MetadataRow {
+        var id: String
+        var englishName: String
+        var chineseName: String
+        var description: String
+        var value: String
+    }
+
+    private static func metadataRows(drive: DriveDevice, snapshot: SmartSnapshot, language: AppLanguage) -> [MetadataRow] {
+        [
+            MetadataRow(
+                id: "drive_name",
+                englishName: "Drive Name",
+                chineseName: "磁盘名称",
+                description: language == .simplifiedChinese ? "当前显示名称" : "Current display name",
+                value: drive.displayName
+            ),
+            MetadataRow(
+                id: "model",
+                englishName: "Model",
+                chineseName: "型号",
+                description: language == .simplifiedChinese ? "设备报告的型号" : "Model reported by the device",
+                value: drive.model ?? drive.mediaName
+            ),
+            MetadataRow(
+                id: "serial_number",
+                englishName: "Serial Number",
+                chineseName: "序列号",
+                description: language == .simplifiedChinese ? "设备报告的硬件序列号" : "Hardware serial reported by the device",
+                value: drive.serialNumber ?? ""
+            ),
+            MetadataRow(
+                id: "bsd_name",
+                englishName: "BSD Name",
+                chineseName: "BSD 名称",
+                description: language == .simplifiedChinese ? "当前 macOS 设备标识" : "Current macOS device identifier",
+                value: drive.bsdName
+            ),
+            MetadataRow(
+                id: "device_node",
+                englishName: "Device Node",
+                chineseName: "设备节点",
+                description: language == .simplifiedChinese ? "当前设备节点路径" : "Current device node path",
+                value: drive.deviceNode
+            ),
+            MetadataRow(
+                id: "protocol",
+                englishName: "Protocol",
+                chineseName: "协议",
+                description: language == .simplifiedChinese ? "设备连接协议" : "Device connection protocol",
+                value: drive.protocolName
+            ),
+            MetadataRow(
+                id: "captured_at",
+                englishName: "Captured At",
+                chineseName: "采集时间",
+                description: language == .simplifiedChinese ? "SMART 快照采集时间（ISO 8601）" : "SMART snapshot capture time (ISO 8601)",
+                value: ISO8601DateFormatter().string(from: snapshot.capturedAt)
+            )
+        ]
     }
 
     static func smartSnapshotFileName(drive: DriveDevice, date: Date, language: AppLanguage) -> String {

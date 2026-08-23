@@ -366,6 +366,7 @@ struct ContentView: View {
             ))
         do {
             let report = ReportExporter.smartSnapshotCSVReport(
+                drive: drive,
                 snapshot: snapshot,
                 language: language
             )
@@ -865,6 +866,7 @@ struct DrivePageHeaderView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
     var showsHealthBadge = true
+    var showsSerialNumber = false
     @Environment(\.appLanguage) private var language
 
     var body: some View {
@@ -874,6 +876,13 @@ struct DrivePageHeaderView: View {
                     .font(.largeTitle.bold())
                     .lineLimit(2)
                     .help(drive.catalogDisplayHelp(language: language))
+                if showsSerialNumber, let serialNumber = DriveSerialNumberFormatter.masked(drive.serialNumber) {
+                    Text("\(language.t("Serial Number")): \(serialNumber)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .textSelection(.enabled)
+                }
                 Text(DrivePageHeaderText.subtitle(for: drive, language: language))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

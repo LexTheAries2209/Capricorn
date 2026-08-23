@@ -45,7 +45,7 @@ struct SmartAttributesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            DrivePageHeaderView(drive: drive, snapshot: snapshot, showsHealthBadge: false)
+            DrivePageHeaderView(drive: drive, snapshot: snapshot, showsHealthBadge: false, showsSerialNumber: true)
 
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
