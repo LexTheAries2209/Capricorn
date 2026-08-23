@@ -166,7 +166,18 @@ final class CapricornTests: XCTestCase {
     }
 
     func testSmartSnapshotCSVReportIncludesMetadataAndEscapesValues() {
-        let drive = Self.fixtureDrive()
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(
+                deviceIdentifier: "disk0s2",
+                name: "Data",
+                mountPoint: "/System/Volumes/Data",
+                sizeBytes: drive.sizeBytes,
+                isWritable: true,
+                isSystem: false,
+                volumeUUID: " d714e346-9f5f-48df-8e75-353b47128d9b "
+            )
+        ]
         var snapshot = Self.fixtureSnapshot(for: drive)
         snapshot.attributes = [
             SmartAttribute(
@@ -188,9 +199,10 @@ final class CapricornTests: XCTestCase {
         )
         XCTAssertFalse(englishCSV.contains("chinese_name"))
         XCTAssertTrue(englishCSV.contains("drive_name,Drive Name,Current display name,APPLE SSD AP1024Z"))
-        XCTAssertTrue(englishCSV.contains("model,Model,Model reported by the device,APPLE SSD AP1024Z"))
         XCTAssertTrue(englishCSV.contains("serial_number,Serial Number,Hardware serial reported by the device,SN"))
-        XCTAssertTrue(englishCSV.contains("bsd_name,BSD Name,Current macOS device identifier,disk0"))
+        XCTAssertTrue(englishCSV.contains("volume_uuids,Volume UUIDs,UUIDs of volumes on this drive; multiple values are separated by semicolons,D714E346-9F5F-48DF-8E75-353B47128D9B"))
+        XCTAssertFalse(englishCSV.contains("model,Model,"))
+        XCTAssertFalse(englishCSV.contains("bsd_name,BSD Name,"))
         XCTAssertTrue(englishCSV.contains("AVAILABLE_SPARE,Available Spare,Remaining NVMe spare capacity.,\"value, with \"\"quotes\"\"\",100,99,10,Good,Fixture"))
 
         let chineseCSV = ReportExporter.smartSnapshotCSVReport(drive: drive, snapshot: snapshot, language: .simplifiedChinese)
@@ -200,6 +212,7 @@ final class CapricornTests: XCTestCase {
         )
         XCTAssertTrue(chineseCSV.contains("AVAILABLE_SPARE,Available Spare,可用备用空间,NVMe 备用块剩余比例，低于阈值时需要关注。,\"value, with \"\"quotes\"\"\",100,99,10,Good,Fixture"))
         XCTAssertTrue(chineseCSV.contains("serial_number,Serial Number,序列号,设备报告的硬件序列号,SN"))
+        XCTAssertTrue(chineseCSV.contains("volume_uuids,Volume UUIDs,卷 UUID,当前磁盘所含卷的 UUID；多个值以分号分隔,D714E346-9F5F-48DF-8E75-353B47128D9B"))
     }
 
     func testExternalDriveModelCatalogUsesHardwareModelWhenBridgeNameIsGeneric() throws {
@@ -318,6 +331,7 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(volume.mountPoint, "/Volumes/688 SD")
         XCTAssertNil(volume.fileSystemType)
+        XCTAssertEqual(volume.volumeUUID, "E5D026CA-07EF-36C0-A361-31B34F9F9242")
         XCTAssertEqual(FileSystemFormatResolver.normalized("ExFAT"), "ExFAT")
     }
 
@@ -330,6 +344,18 @@ final class CapricornTests: XCTestCase {
             MountedVolumeCapacityReader.resolve(totalBytes: 100, availableBytes: nil, importantUsageAvailableBytes: 25),
             MountedVolumeCapacity(totalBytes: 100, availableBytes: 25)
         )
+    }
+
+    func testDriveVolumeUUIDsNormalizeDeduplicateAndSort() {
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk9s1", name: "First", mountPoint: nil, sizeBytes: 1, isWritable: true, isSystem: false, volumeUUID: " bbbb "),
+            DriveDevice.Volume(deviceIdentifier: "disk9s2", name: "Second", mountPoint: nil, sizeBytes: 1, isWritable: true, isSystem: false, volumeUUID: "AAAA"),
+            DriveDevice.Volume(deviceIdentifier: "disk9s3", name: "Duplicate", mountPoint: nil, sizeBytes: 1, isWritable: true, isSystem: false, volumeUUID: "BBBB"),
+            DriveDevice.Volume(deviceIdentifier: "disk9s4", name: "Missing", mountPoint: nil, sizeBytes: 1, isWritable: true, isSystem: false, volumeUUID: "nil")
+        ]
+
+        XCTAssertEqual(drive.volumeUUIDs, ["AAAA", "BBBB"])
     }
 
     func testNetworkMountParserDetectsMountedNetworkVolumes() {
@@ -3695,6 +3721,7 @@ final class CapricornTests: XCTestCase {
               <key>Size</key><integer>63946358784</integer>
               <key>VolumeName</key><string>688 SD</string>
               <key>ReadOnly</key><false/>
+              <key>VolumeUUID</key><string>E5D026CA-07EF-36C0-A361-31B34F9F9242</string>
             </dict>
           </array>
           <key>Size</key><integer>63963136000</integer>

@@ -73,6 +73,7 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
         var capacityGroupIdentifier: String? = nil
         var totalCapacityBytes: Int64? = nil
         var availableCapacityBytes: Int64? = nil
+        var volumeUUID: String? = nil
     }
 
     var id: String { bsdName }
@@ -99,6 +100,13 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
 
     var capacityUsage: DriveCapacityUsage? {
         DriveCapacityUsage.resolve(volumes: volumes)
+    }
+
+    /// Stable logical-volume identities reported by macOS. A physical drive
+    /// may contain several volumes, so history stores the normalized set
+    /// rather than assuming one UUID identifies the entire device.
+    var volumeUUIDs: [String] {
+        VolumeUUIDNormalizer.normalized(volumes.compactMap(\.volumeUUID))
     }
 
     var benchmarkMountPoint: String? {
@@ -137,6 +145,21 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
             return formats[0]
         }
         return formats.joined(separator: " + ")
+    }
+}
+
+enum VolumeUUIDNormalizer {
+    static func normalize(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        guard !normalized.isEmpty, normalized != "NIL" else { return nil }
+        return normalized
+    }
+
+    static func normalized<S: Sequence>(_ values: S) -> [String] where S.Element == String {
+        Array(Set(values.compactMap(normalize))).sorted()
     }
 }
 

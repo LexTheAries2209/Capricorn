@@ -312,13 +312,6 @@ enum ReportExporter {
                 value: drive.displayName
             ),
             MetadataRow(
-                id: "model",
-                englishName: "Model",
-                chineseName: "型号",
-                description: language == .simplifiedChinese ? "设备报告的型号" : "Model reported by the device",
-                value: drive.model ?? drive.mediaName
-            ),
-            MetadataRow(
                 id: "serial_number",
                 englishName: "Serial Number",
                 chineseName: "序列号",
@@ -326,11 +319,11 @@ enum ReportExporter {
                 value: drive.serialNumber ?? ""
             ),
             MetadataRow(
-                id: "bsd_name",
-                englishName: "BSD Name",
-                chineseName: "BSD 名称",
-                description: language == .simplifiedChinese ? "当前 macOS 设备标识" : "Current macOS device identifier",
-                value: drive.bsdName
+                id: "volume_uuids",
+                englishName: "Volume UUIDs",
+                chineseName: "卷 UUID",
+                description: language == .simplifiedChinese ? "当前磁盘所含卷的 UUID；多个值以分号分隔" : "UUIDs of volumes on this drive; multiple values are separated by semicolons",
+                value: drive.volumeUUIDs.joined(separator: "; ")
             ),
             MetadataRow(
                 id: "device_node",

@@ -62,6 +62,16 @@ enum MountedVolumeCapacityReader {
     }
 }
 
+enum MountedVolumeUUIDReader {
+    static func read(at mountPoint: String) -> String? {
+        let url = URL(fileURLWithPath: mountPoint, isDirectory: true)
+        guard let values = try? url.resourceValues(forKeys: [.volumeUUIDStringKey]) else {
+            return nil
+        }
+        return VolumeUUIDNormalizer.normalize(values.volumeUUIDString)
+    }
+}
+
 protocol NetworkVolumeInventoryProviding: Sendable {
     func loadNetworkDrives() async throws -> [DriveDevice]
 }
@@ -130,7 +140,8 @@ enum DiskutilPlistParser {
                     isWritable: !(volume.bool("ReadOnly") ?? false),
                     isSystem: volume.bool("OSInternal") ?? false || normalizedMountPoint(volume.string("MountPoint")) == "/",
                     fileSystemType: parsedFileSystemType(from: volume, fallback: "APFS"),
-                    capacityGroupIdentifier: capacityGroupIdentifier
+                    capacityGroupIdentifier: capacityGroupIdentifier,
+                    volumeUUID: parsedVolumeUUID(from: volume)
                 )
             }
 
@@ -168,7 +179,8 @@ enum DiskutilPlistParser {
             isWritable: isWritable,
             isSystem: partition.bool("OSInternal") ?? false || mountPoint == "/",
             fileSystemType: parsedFileSystemType(from: partition, fallback: nil),
-            capacityGroupIdentifier: "volume:\(id)"
+            capacityGroupIdentifier: "volume:\(id)",
+            volumeUUID: parsedVolumeUUID(from: partition)
         )
     }
 
@@ -309,6 +321,12 @@ enum DiskutilPlistParser {
             }
         }
         return nil
+    }
+
+    private static func parsedVolumeUUID(from dictionary: [String: Any]) -> String? {
+        VolumeUUIDNormalizer.normalize(
+            dictionary.string("VolumeUUID") ?? dictionary.string("APFSVolumeUUID")
+        )
     }
 }
 
@@ -781,6 +799,9 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
             if let capacity = MountedVolumeCapacityReader.read(at: mountPoint) {
                 enriched.totalCapacityBytes = capacity.totalBytes
                 enriched.availableCapacityBytes = capacity.availableBytes
+            }
+            if enriched.volumeUUID == nil {
+                enriched.volumeUUID = MountedVolumeUUIDReader.read(at: mountPoint)
             }
             return enriched
         }
