@@ -66,6 +66,32 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testFallbackDriveSerialProviderKeepsPrimaryAndFillsMissingValues() async {
+        var disk0 = Self.fixtureDrive()
+        disk0.bsdName = "disk0"
+        var disk12 = Self.fixtureDrive()
+        disk12.bsdName = "disk12"
+
+        let provider = FallbackDriveSerialProvider(
+            primary: StaticDriveSerialProvider(serialNumbersByBSDName: ["disk0": "PRIMARY-0"]),
+            fallback: StaticDriveSerialProvider(serialNumbersByBSDName: [
+                "disk0": "FALLBACK-0",
+                "disk12": "ZR51JYMS"
+            ])
+        )
+
+        let serialNumbers = await provider.serialNumbers(for: [disk0, disk12])
+        XCTAssertEqual(serialNumbers["disk0"], "PRIMARY-0")
+        XCTAssertEqual(serialNumbers["disk12"], "ZR51JYMS")
+    }
+
+    func testDriveSerialNumberNormalizerRejectsPlaceholderValues() {
+        XCTAssertEqual(DriveSerialNumberNormalizer.normalize(" ZR50F43N "), "ZR50F43N")
+        XCTAssertNil(DriveSerialNumberNormalizer.normalize("Unknown"))
+        XCTAssertNil(DriveSerialNumberNormalizer.normalize("nil"))
+        XCTAssertNil(DriveSerialNumberNormalizer.normalize("  "))
+    }
+
     func testBundledExternalDriveModelCatalogMatchesEveryDocumentedExample() throws {
         let catalog = ExternalDriveModelCatalog.bundled
 

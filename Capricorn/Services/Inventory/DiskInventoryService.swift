@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
+import IOKit
+import IOKit.storage
 
 protocol DiskInventoryProviding: Sendable {
     func loadDrives(showVirtual: Bool) async throws -> [DriveDevice]
@@ -49,6 +51,17 @@ protocol NetworkVolumeInventoryProviding: Sendable {
 
 protocol DriveSerialNumberProviding: Sendable {
     func serialNumbers(for drives: [DriveDevice]) async -> [String: String]
+}
+
+enum DriveSerialNumberNormalizer {
+    static func normalize(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let invalidValues = ["unknown", "not available", "not specified", "n/a", "none", "nil"]
+        guard !invalidValues.contains(trimmed.lowercased()) else { return nil }
+        return trimmed
+    }
 }
 
 enum DiskutilParserError: Error, LocalizedError {
@@ -292,7 +305,7 @@ enum SystemProfilerDriveSerialParser {
         if let dictionary = value as? [String: Any] {
             if let bsdName = string(in: dictionary, keys: ["bsd_name", "BSD Name"]),
                let serialNumber = string(in: dictionary, keys: ["device_serial", "serial_number", "serial_num"]),
-               let normalizedSerial = normalize(serialNumber),
+               let normalizedSerial = DriveSerialNumberNormalizer.normalize(serialNumber),
                serialNumbers[bsdName] == nil {
                 serialNumbers[bsdName] = normalizedSerial
             }
@@ -318,14 +331,6 @@ enum SystemProfilerDriveSerialParser {
         }
         return nil
     }
-
-    private static func normalize(_ value: String) -> String? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let invalidValues = ["unknown", "not available", "not specified", "n/a", "none"]
-        guard !invalidValues.contains(trimmed.lowercased()) else { return nil }
-        return trimmed
-    }
 }
 
 final class SystemProfilerDriveSerialProvider: DriveSerialNumberProviding, @unchecked Sendable {
@@ -349,6 +354,111 @@ final class SystemProfilerDriveSerialProvider: DriveSerialNumberProviding, @unch
         }
 
         return SystemProfilerDriveSerialParser.parse(result.stdout).filter { physicalBSDNames.contains($0.key) }
+    }
+}
+
+struct IOKitDriveSerialProvider: DriveSerialNumberProviding {
+    func serialNumbers(for drives: [DriveDevice]) async -> [String: String] {
+        var serialNumbers: [String: String] = [:]
+        for drive in drives where !drive.isNetwork {
+            if let serialNumber = serialNumber(forBSDName: drive.bsdName) {
+                serialNumbers[drive.bsdName] = serialNumber
+            }
+        }
+        return serialNumbers
+    }
+
+    private func serialNumber(forBSDName bsdName: String) -> String? {
+        guard let media = copyWholeMedia(bsdName: bsdName) else { return nil }
+        defer { IOObjectRelease(media) }
+
+        // Walk from the whole-disk IOMedia node toward its hardware provider. SAT SMART
+        // Driver publishes the ATA serial on this path even when diskutil and
+        // system_profiler omit the USB disk entirely. Registry reads do not issue a
+        // SMART command and therefore do not wake a sleeping mechanical disk.
+        var current = media
+        var ownsCurrent = false
+        defer {
+            if ownsCurrent {
+                IOObjectRelease(current)
+            }
+        }
+
+        while true {
+            if let serialNumber = serialNumberProperty(from: current) {
+                return serialNumber
+            }
+
+            var parent: io_registry_entry_t = 0
+            guard IORegistryEntryGetParentEntry(current, kIOServicePlane, &parent) == KERN_SUCCESS else {
+                return nil
+            }
+            if ownsCurrent {
+                IOObjectRelease(current)
+            }
+            current = parent
+            ownsCurrent = true
+        }
+    }
+
+    private func copyWholeMedia(bsdName: String) -> io_registry_entry_t? {
+        guard let matching = IOServiceMatching(kIOMediaClass) else { return nil }
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else {
+            return nil
+        }
+        defer { IOObjectRelease(iterator) }
+
+        while true {
+            let media = IOIteratorNext(iterator)
+            guard media != 0 else { return nil }
+            let name = copyProperty(media, key: kIOBSDNameKey) as? String
+            let whole = copyProperty(media, key: kIOMediaWholeKey) as? Bool
+            if name == bsdName, whole == true {
+                return media
+            }
+            IOObjectRelease(media)
+        }
+    }
+
+    private func serialNumberProperty(from entry: io_registry_entry_t) -> String? {
+        if let serialNumber = copyProperty(entry, key: "Serial Number") as? String,
+           let normalized = DriveSerialNumberNormalizer.normalize(serialNumber) {
+            return normalized
+        }
+
+        if let characteristics = copyProperty(entry, key: "Device Characteristics") as? [String: Any],
+           let serialNumber = characteristics["Serial Number"] as? String {
+            return DriveSerialNumberNormalizer.normalize(serialNumber)
+        }
+        return nil
+    }
+
+    private func copyProperty(_ entry: io_registry_entry_t, key: String) -> Any? {
+        IORegistryEntryCreateCFProperty(entry, key as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue()
+    }
+}
+
+final class FallbackDriveSerialProvider: DriveSerialNumberProviding, @unchecked Sendable {
+    private let primary: DriveSerialNumberProviding
+    private let fallback: DriveSerialNumberProviding
+
+    init(primary: DriveSerialNumberProviding, fallback: DriveSerialNumberProviding) {
+        self.primary = primary
+        self.fallback = fallback
+    }
+
+    func serialNumbers(for drives: [DriveDevice]) async -> [String: String] {
+        var serialNumbers = await primary.serialNumbers(for: drives)
+        let unresolvedDrives = drives.filter { serialNumbers[$0.bsdName] == nil }
+        guard !unresolvedDrives.isEmpty else { return serialNumbers }
+
+        let fallbackSerialNumbers = await fallback.serialNumbers(for: unresolvedDrives)
+        for (bsdName, serialNumber) in fallbackSerialNumbers where serialNumbers[bsdName] == nil {
+            serialNumbers[bsdName] = serialNumber
+        }
+        return serialNumbers
     }
 }
 
@@ -540,7 +650,10 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
         self.runner = runner
         self.diskutilPath = diskutilPath
         self.networkProvider = networkProvider
-        self.serialNumberProvider = serialNumberProvider ?? SystemProfilerDriveSerialProvider(runner: runner)
+        self.serialNumberProvider = serialNumberProvider ?? FallbackDriveSerialProvider(
+            primary: SystemProfilerDriveSerialProvider(runner: runner),
+            fallback: IOKitDriveSerialProvider()
+        )
     }
 
     func loadDrives(showVirtual: Bool) async throws -> [DriveDevice] {
