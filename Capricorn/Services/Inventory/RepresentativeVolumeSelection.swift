@@ -139,7 +139,7 @@ enum RepresentativeVolumeResolver {
     }
 
     static func orderedVolumes(for drive: DriveDevice) -> [DriveDevice.Volume] {
-        drive.volumes.sorted { lhs, rhs in
+        drive.volumes.filter(isVisibleVolume).sorted { lhs, rhs in
             let lhsCapacity = volumeCapacity(lhs)
             let rhsCapacity = volumeCapacity(rhs)
             if lhsCapacity != rhsCapacity {
@@ -149,8 +149,35 @@ enum RepresentativeVolumeResolver {
         }
     }
 
+    /// Returns only user-facing volumes. diskutil reports EFI partitions and
+    /// APFS container backing partitions alongside real mounted volumes; the
+    /// former are boot metadata and the latter are storage topology, so
+    /// neither should appear as a volume the user can operate on.
+    static func isVisibleVolume(_ volume: DriveDevice.Volume) -> Bool {
+        let name = volume.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let identifier = volume.deviceIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let fileSystem = FileSystemFormatResolver.normalized(volume.fileSystemType)?.lowercased()
+
+        if name == "efi" || fileSystem == "efi" {
+            return false
+        }
+
+        // An APFS backing partition has no mount point, no user-facing name,
+        // and is represented by its BSD identifier (for example disk10s2).
+        // An unmounted real APFS volume normally retains a distinct name or
+        // UUID, so it remains visible and can be shown as unavailable.
+        if fileSystem == "apfs",
+           volume.mountPoint == nil,
+           name == identifier {
+            return false
+        }
+
+        return true
+    }
+
     static func isSelectable(_ volume: DriveDevice.Volume) -> Bool {
-        guard !volume.isSystem,
+        guard isVisibleVolume(volume),
+              !volume.isSystem,
               !isTimeMachineVolume(volume),
               volume.isWritable,
               let mountPoint = volume.mountPoint else {

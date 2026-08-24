@@ -910,7 +910,7 @@ final class DiskCheckService {
 
     private func uniqueVolumes(_ volumes: [DriveDevice.Volume]) -> [DriveDevice.Volume] {
         var seen = Set<String>()
-        return volumes.filter { volume in
+        return volumes.filter(RepresentativeVolumeResolver.isVisibleVolume).filter { volume in
             let key = volume.mountPoint ?? volume.deviceIdentifier
             guard !key.isEmpty, !seen.contains(key) else { return false }
             seen.insert(key)

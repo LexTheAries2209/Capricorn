@@ -22,6 +22,47 @@ final class RepresentativeVolumeSelectionTests: XCTestCase {
         XCTAssertTrue(RepresentativeVolumeResolver.isSelectable(drive.volumes[5]))
     }
 
+    func testStructuralEFIAndAPFSBackingEntriesAreHiddenFromVolumeChoices() {
+        let efi = DriveDevice.Volume(
+            deviceIdentifier: "disk10s1",
+            name: "EFI",
+            mountPoint: nil,
+            sizeBytes: 209_715_200,
+            isWritable: true,
+            isSystem: false,
+            fileSystemType: "EFI"
+        )
+        let apfsBacking = DriveDevice.Volume(
+            deviceIdentifier: "disk10s2",
+            name: "disk10s2",
+            mountPoint: nil,
+            sizeBytes: 4_100_000_000_000,
+            isWritable: true,
+            isSystem: false,
+            fileSystemType: "APFS"
+        )
+        let data = DriveDevice.Volume(
+            deviceIdentifier: "disk10s3",
+            name: "40G4T_APFS_F",
+            mountPoint: "/Volumes/40G4T_APFS_F",
+            sizeBytes: 4_000_000_000_000,
+            isWritable: true,
+            isSystem: false,
+            fileSystemType: "APFS",
+            volumeUUID: "data-volume"
+        )
+        var drive = CapricornTests.fixtureDrive()
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.volumes = [efi, apfsBacking, data]
+
+        XCTAssertEqual(RepresentativeVolumeResolver.orderedVolumes(for: drive).map(\.deviceIdentifier), ["disk10s3"])
+        XCTAssertEqual(drive.displayableVolumes.map(\.deviceIdentifier), ["disk10s3"])
+        XCTAssertEqual(RepresentativeVolumeResolver.fallbackVolume(for: drive)?.deviceIdentifier, "disk10s3")
+        XCTAssertFalse(RepresentativeVolumeResolver.isVisibleVolume(efi))
+        XCTAssertFalse(RepresentativeVolumeResolver.isVisibleVolume(apfsBacking))
+    }
+
     func testPreferencesFollowStableSerialInsteadOfChangingBSDName() {
         var drive = CapricornTests.fixtureDrive()
         drive.isInternal = false

@@ -128,6 +128,7 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     /// several APFS volumes report the same shared-container capacity.
     var sidebarVolumeName: String {
         let representativeVolume = volumes
+            .filter(RepresentativeVolumeResolver.isVisibleVolume)
             .filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .sorted { lhs, rhs in
                 let lhsCapacity = lhs.totalCapacityBytes ?? lhs.sizeBytes
@@ -140,6 +141,13 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
             .first
 
         return representativeVolume?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? displayName
+    }
+
+    /// Real user-facing volumes used by the Overview volume list. Structural
+    /// EFI/APFS backing entries remain in `volumes` for device topology but are
+    /// intentionally omitted from this presentation collection.
+    var displayableVolumes: [Volume] {
+        volumes.filter(RepresentativeVolumeResolver.isVisibleVolume)
     }
 
     /// Stable logical-volume identities reported by macOS. A physical drive

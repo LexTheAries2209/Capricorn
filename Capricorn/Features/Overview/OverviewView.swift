@@ -40,11 +40,11 @@ struct OverviewView: View {
                 }
 
                 InfoPanel(title: language.t("Volumes"), symbol: "opticaldiscdrive") {
-                    if drive.volumes.isEmpty {
+                    if drive.displayableVolumes.isEmpty {
                         Text(language.t("No mounted volumes are mapped to this physical disk."))
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(drive.volumes) { volume in
+                        ForEach(drive.displayableVolumes) { volume in
                             HStack {
                                 VStack(alignment: .leading) {
                                     Text(volume.name)
