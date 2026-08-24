@@ -1725,6 +1725,138 @@
       "examples": [{"reportedModel": "KIOXIA KCD81VUG6T40", "canonicalModel": "KCD81VUG6T40", "capacityToken": "6T40"}]
     },
     {
+      "id": "intel-solidigm-d5-p4320",
+      "manufacturer": "Intel/Solidigm",
+      "family": "D5-P4320",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 3.1", "U.2"],
+      "introduced": 2020,
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPE2NV(?<capacity>076)T8[A-Z0-9]*)(?:[-/ ].*)?$"],
+      "capacityLabels": {"076": "7.68TB"},
+      "sourceURL": "https://www.solidigm.com/content/dam/solidigm/en/site/products/documents/pcn/PCN117969-00.pdf",
+      "examples": [{"reportedModel": "INTEL SSDPE2NV076T801", "canonicalModel": "SSDPE2NV076T801", "capacityToken": "076"}]
+    },
+    {
+      "id": "intel-solidigm-d5-p4326",
+      "manufacturer": "Intel/Solidigm",
+      "family": "D5-P4326",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 3.1", "U.2", "E1.L"],
+      "introduced": 2020,
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPE(?:2|W|X)NV(?<capacity>153)T8[A-Z0-9]*)(?:[-/ ].*)?$"],
+      "capacityLabels": {"153": "15.36TB"},
+      "sourceURL": "https://www.solidigm.com/content/dam/solidigm/en/site/products/documents/pcn/PCN117969-00.pdf",
+      "examples": [{"reportedModel": "INTEL SSDPE2NV153T801", "canonicalModel": "SSDPE2NV153T801", "capacityToken": "153"}]
+    },
+    {
+      "id": "intel-solidigm-d5-p4420",
+      "manufacturer": "Intel/Solidigm",
+      "family": "D5-P4420",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 3.1", "U.2"],
+      "introduced": 2020,
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPE2NU(?<capacity>076)T8[A-Z0-9]*)(?:[-/ ].*)?$"],
+      "capacityLabels": {"076": "7.68TB"},
+      "sourceURL": "https://www.solidigm.com/content/dam/solidigm/en/site/products/documents/pcn/PCN117969-00.pdf",
+      "examples": [{"reportedModel": "INTEL SSDPE2NU076T801", "canonicalModel": "SSDPE2NU076T801", "capacityToken": "076"}]
+    },
+    {
+      "id": "intel-solidigm-d7-p4510",
+      "manufacturer": "Intel/Solidigm",
+      "family": "D7-P4510",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 3.1", "U.2", "E1.L"],
+      "introduced": 2017,
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPE(?:2|W)KX(?<capacity>010|016|019|020|038|040|080|153)T8[A-Z0-9]*)(?:[-/ ].*)?$"],
+      "capacityLabels": {"010": "1TB", "016": "1.6TB", "019": "1.92TB", "020": "2TB", "038": "3.84TB", "040": "4TB", "080": "8TB", "153": "15.36TB"},
+      "sourceURL": "https://www.solidigm.com/content/dam/solidigm/en/site/products/documents/pcn/PCN117969-00.pdf",
+      "examples": [{"reportedModel": "INTEL SSDPE2KX020T801", "canonicalModel": "SSDPE2KX020T801", "capacityToken": "020"}]
+    },
+    {
+      "id": "intel-solidigm-d7-p4511",
+      "manufacturer": "Intel/Solidigm",
+      "family": "D7-P4511",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 3.1", "M.2 110", "E1.S"],
+      "introduced": 2018,
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPE(?:L|Y)KX(?<capacity>010|020|040)T8[A-Z0-9]*)(?:[-/ ].*)?$"],
+      "capacityLabels": {"010": "1TB", "020": "2TB", "040": "4TB"},
+      "sourceURL": "https://www.solidigm.com/content/dam/solidigm/en/site/products/documents/pcn/PCN117969-00.pdf",
+      "examples": [{"reportedModel": "INTEL SSDPELKX020T801", "canonicalModel": "SSDPELKX020T801", "capacityToken": "020"}]
+    },
+    {
+      "id": "intel-solidigm-d7-p4610",
+      "manufacturer": "Intel/Solidigm",
+      "family": "D7-P4610",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 3.1", "U.2"],
+      "introduced": 2017,
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPE2KE(?<capacity>016|032|064|076|128)T8[A-Z0-9]*)(?:[-/ ].*)?$"],
+      "capacityLabels": {"016": "1.6TB", "032": "3.2TB", "064": "6.4TB", "076": "7.68TB", "128": "12.8TB"},
+      "sourceURL": "https://www.solidigm.com/products/data-center/d7/p4610.html",
+      "examples": [{"reportedModel": "INTEL SSDPE2KE064T801", "canonicalModel": "SSDPE2KE064T801", "capacityToken": "064"}]
+    },
+    {
+      "id": "solidigm-d7-p5810",
+      "manufacturer": "Solidigm",
+      "family": "D7-P5810",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 4.0", "U.2"],
+      "introduced": 2021,
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPF2SQ(?<capacity>800G|016T|032T)Z01)(?:[-/ ].*)?$"],
+      "capacityLabels": {"800G": "800GB", "016T": "1.6TB", "032T": "3.2TB"},
+      "sourceURL": "https://www.solidigm.com/content/dam/solidigm/en/site/products/documents/pcn/PCN0000029802-00.pdf",
+      "examples": [{"reportedModel": "SOLIDIGM SSDPF2SQ016TZ01", "canonicalModel": "SSDPF2SQ016TZ01", "capacityToken": "016T"}]
+    },
+    {
+      "id": "solidigm-d5-p5430",
+      "manufacturer": "Solidigm",
+      "family": "D5-P5430",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 4.0", "U.2", "E1.S", "E3.S"],
+      "introduced": 2023,
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SBFPF(?:2|U|A)BU(?<capacity>038|076|153|307)T[A-Z0-9]*)(?:[-/ ].*)?$"],
+      "capacityLabels": {"038": "3.84TB", "076": "7.68TB", "153": "15.36TB", "307": "30.72TB"},
+      "sourceURL": "https://www.solidigm.com/products/data-center/d5/p5430.html",
+      "examples": [{"reportedModel": "SOLIDIGM SBFPF2BU307T001", "canonicalModel": "SBFPF2BU307T001", "capacityToken": "307"}]
+    },
+    {
+      "id": "solidigm-d5-p5336",
+      "manufacturer": "Solidigm",
+      "family": "D5-P5336",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 4.0", "U.2", "E1.L", "E3.S"],
+      "introduced": 2023,
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SBFPF(?:2|W|A)BV(?<capacity>076|153|307|614|0P12)[A-Z0-9]*)(?:[-/ ].*)?$"],
+      "capacityLabels": {"076": "7.68TB", "153": "15.36TB", "307": "30.72TB", "614": "61.44TB", "0P12": "122.88TB"},
+      "sourceURL": "https://www.solidigm.com/content/dam/solidigm/en/site/products/documents/pcn/PCN0000040342-00.pdf",
+      "examples": [{"reportedModel": "SOLIDIGM SBFPF2BV0P12001", "canonicalModel": "SBFPF2BV0P12001", "capacityToken": "0P12"}]
+    },
+    {
+      "id": "solidigm-d7-ps1010",
+      "manufacturer": "Solidigm",
+      "family": "D7-PS1010",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 5.0", "U.2", "E1.S", "E3.S"],
+      "introduced": 2024,
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SB5PH(?:27|U7|A7)X(?<capacity>019|038|076|153)T[A-Z0-9]*)(?:[-/ ].*)?$"],
+      "capacityLabels": {"019": "1.92TB", "038": "3.84TB", "076": "7.68TB", "153": "15.36TB"},
+      "sourceURL": "https://www.solidigm.com/content/dam/solidigm/en/site/products/data-center/ps1010-ps1030/documents/solidigm-d7-ps1010-ps1030-product-brief.pdf",
+      "examples": [{"reportedModel": "SOLIDIGM SB5PH27X076T001", "canonicalModel": "SB5PH27X076T001", "capacityToken": "076"}]
+    },
+    {
+      "id": "solidigm-d7-ps1030",
+      "manufacturer": "Solidigm",
+      "family": "D7-PS1030",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 5.0", "U.2", "E3.S"],
+      "introduced": 2025,
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SB5PH(?:27|A7)E(?<capacity>016|032|064|128)T[A-Z0-9]*)(?:[-/ ].*)?$"],
+      "capacityLabels": {"016": "1.6TB", "032": "3.2TB", "064": "6.4TB", "128": "12.8TB"},
+      "sourceURL": "https://www.solidigm.com/content/dam/solidigm/en/site/products/data-center/ps1010-ps1030/documents/solidigm-d7-ps1010-ps1030-product-brief.pdf",
+      "examples": [{"reportedModel": "SOLIDIGM SB5PH27E128T001", "canonicalModel": "SB5PH27E128T001", "capacityToken": "128"}]
+    },
+    {
       "id": "solidigm-d7-p5510",
       "manufacturer": "Solidigm",
       "family": "D7-P5510",
@@ -1743,7 +1875,7 @@
       "mediaKind": "SSD",
       "interfaces": ["NVMe", "PCIe 4.0", "U.2", "E1.S", "E1.L"],
       "introduced": 2022,
-      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPF2KX(?<capacity>019|038|076|153)T11Z)(?:[-/ ].*)?$"],
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPF(?:2|U|W)KX(?<capacity>019|038|076|153)T(?:11Z|1N1))(?:[-/ ].*)?$"],
       "capacityLabels": {"019": "1.92TB", "038": "3.84TB", "076": "7.68TB", "153": "15.36TB"},
       "sourceURL": "https://www.solidigm.com/products/data-center/d7/p5520.html",
       "examples": [{"reportedModel": "SOLIDIGM SSDPF2KX076T11Z", "canonicalModel": "SSDPF2KX076T11Z", "capacityToken": "076"}]
@@ -1755,7 +1887,7 @@
       "mediaKind": "SSD",
       "interfaces": ["NVMe", "PCIe 4.0", "U.2"],
       "introduced": 2022,
-      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPF2KE(?<capacity>016|032|064|128)T11Z)(?:[-/ ].*)?$"],
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPF(?:2|U|W)KE(?<capacity>016|032|064|128)T(?:11Z|1N1))(?:[-/ ].*)?$"],
       "capacityLabels": {"016": "1.6TB", "032": "3.2TB", "064": "6.4TB", "128": "12.8TB"},
       "sourceURL": "https://www.solidigm.com/products/data-center/d7/p5620.html",
       "examples": [{"reportedModel": "SSDPF2KE128T11Z", "canonicalModel": "SSDPF2KE128T11Z", "capacityToken": "128"}]
@@ -1767,7 +1899,7 @@
       "mediaKind": "SSD",
       "interfaces": ["NVMe", "PCIe 4.0", "U.2", "E1.L"],
       "introduced": 2021,
-      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPF2NV(?<capacity>153|307)TZ1Z)(?:[-/ ].*)?$"],
+      "modelPatterns": ["^(?:(?:SOLIDIGM|INTEL)\\s+)?(?<model>SSDPF(?:2|W)NV(?<capacity>153|307)TZ(?:1Z|N1|OS))(?:[-/ ].*)?$"],
       "capacityLabels": {"153": "15.36TB", "307": "30.72TB"},
       "sourceURL": "https://www.solidigm.com/products/data-center/d5/p5316.html",
       "examples": [{"reportedModel": "SOLIDIGM SSDPF2NV307TZ1Z", "canonicalModel": "SSDPF2NV307TZ1Z", "capacityToken": "307"}]
@@ -2094,6 +2226,21 @@
       "capacityLabels": {"19": "1.92TB", "38": "3.84TB", "76": "7.68TB", "A1": "15.36TB", "16": "1.6TB", "32": "3.2TB", "64": "6.4TB"},
       "sourceURL": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/data-center-drives/ultrastar-nvme-series/data-sheet-ultrastar-dc-sn840.pdf",
       "examples": [{"reportedModel": "WUS4BA176DSP3X3", "canonicalModel": "WUS4BA176DSP3X3", "capacityToken": "76"}]
+    },
+    {
+      "id": "wd-ultrastar-sn640",
+      "manufacturer": "WD",
+      "family": "Ultrastar DC SN640",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe 3.0", "U.2"],
+      "introduced": 2020,
+      "modelPatterns": [
+        "^(?:WDC\\s+)?(?<model>WUS4BB(?<capacity>080|096|019|038|076)D7P3E[135])(?:[-/ ].*)?$",
+        "^(?:WDC\\s+)?(?<model>WUS4CB(?<capacity>080|016|032|064)D7P3E[135])(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"080": "800GB", "096": "960GB", "016": "1.6TB", "019": "1.92TB", "032": "3.2TB", "038": "3.84TB", "064": "6.4TB", "076": "7.68TB"},
+      "sourceURL": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/data-center-drives/ultrastar-nvme-series/data-sheet-ultrastar-dc-sn640.pdf",
+      "examples": [{"reportedModel": "WDC WUS4BB038D7P3E5", "canonicalModel": "WUS4BB038D7P3E5", "capacityToken": "038"}]
     },
     {
       "id": "wd-ultrastar-sn655",
