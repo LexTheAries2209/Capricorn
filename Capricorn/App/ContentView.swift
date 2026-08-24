@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var viewModel: AppModel
     @State private var preferences: AppPreferences
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
+    @AppStorage("representativeVolumeSelectionsByDrive") private var representativeVolumePreferencesJSON = ""
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistory: [SmartHistoryRecord]
     @Query(sort: \BenchmarkHistoryRecord.measuredAt, order: .reverse) private var benchmarkHistory: [BenchmarkHistoryRecord]
@@ -74,6 +75,10 @@ struct ContentView: View {
             .frame(width: 0, height: 0)
         }
         .task {
+            viewModel.configureRepresentativeVolumes(
+                startupPreference: preferences.representativeVolumeStartupPreference,
+                encodedPreferences: representativeVolumePreferencesJSON
+            )
             viewModel.startDriveSystemEventMonitoring()
             viewModel.showVirtualDisks = preferences.showVirtualDisks
             await viewModel.refreshIfNeeded()
@@ -150,7 +155,11 @@ struct ContentView: View {
         List(selection: sidebarDriveSelection) {
             Section(language.t("Drives")) {
                 ForEach(viewModel.drives) { drive in
-                    DriveSidebarRow(drive: drive, snapshot: viewModel.snapshots[drive.id])
+                    DriveSidebarRow(
+                        drive: drive,
+                        representativeVolume: viewModel.representativeVolume(for: drive),
+                        snapshot: viewModel.snapshots[drive.id]
+                    )
                         .contextMenu {
                             driveContextMenu(for: drive)
                         }
@@ -274,6 +283,9 @@ struct ContentView: View {
     @ViewBuilder
     private func driveContextMenu(for drive: DriveDevice) -> some View {
         Menu {
+            representativeVolumeMenu(for: drive)
+            Divider()
+
             let checkAndRepairActions = DiskSidebarActionPolicy.checkAndRepairActions(for: drive)
             if preferences.showsCheckAndRepairActions, !checkAndRepairActions.isEmpty {
                 Menu {
@@ -293,6 +305,50 @@ struct ContentView: View {
         } label: {
             Label(language.t("Disk Actions"), systemImage: "externaldrive.badge.gearshape")
         }
+    }
+
+    @ViewBuilder
+    private func representativeVolumeMenu(for drive: DriveDevice) -> some View {
+        Menu {
+            ForEach(RepresentativeVolumeResolver.orderedVolumes(for: drive)) { volume in
+                Button {
+                    selectRepresentativeVolume(volume, for: drive)
+                } label: {
+                    Label(
+                        representativeVolumeMenuTitle(volume, for: drive),
+                        systemImage: viewModel.representativeVolume(for: drive)?.deviceIdentifier == volume.deviceIdentifier
+                            ? "checkmark"
+                            : "externaldrive"
+                    )
+                }
+                .disabled(!RepresentativeVolumeResolver.isSelectable(volume))
+            }
+        } label: {
+            Label(language.t("Switch Volume"), systemImage: "arrow.triangle.2.circlepath")
+        }
+        .disabled(!RepresentativeVolumeResolver.maySwitchVolume(for: drive))
+    }
+
+    private func representativeVolumeMenuTitle(_ volume: DriveDevice.Volume, for drive: DriveDevice) -> String {
+        let base = "\(volume.name) (\(volume.deviceIdentifier))"
+        if drive.isSystemDisk || volume.isSystem {
+            return "\(base) · \(language.t("System Volume"))"
+        }
+        if RepresentativeVolumeResolver.isTimeMachineVolume(volume) {
+            return "\(base) · \(language.t("Time Machine Backup"))"
+        }
+        guard volume.mountPoint != nil else {
+            return "\(base) · \(language.t("Not Mounted"))"
+        }
+        guard volume.isWritable else {
+            return "\(base) · \(language.t("Read Only"))"
+        }
+        return base
+    }
+
+    private func selectRepresentativeVolume(_ volume: DriveDevice.Volume, for drive: DriveDevice) {
+        viewModel.selectRepresentativeVolume(volume, for: drive)
+        representativeVolumePreferencesJSON = viewModel.encodedRepresentativeVolumePreferences
     }
 
     @ViewBuilder
@@ -349,7 +405,7 @@ struct ContentView: View {
         alert.addButton(withTitle: language.t("Cancel"))
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
-        textField.stringValue = drive.actionTargetVolume?.name ?? drive.displayName
+        textField.stringValue = viewModel.representativeVolume(for: drive)?.name ?? drive.displayName
         alert.accessoryView = textField
 
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
@@ -748,6 +804,7 @@ private struct DiskOpenFileList: View {
 
 private struct DriveSidebarRow: View {
     let drive: DriveDevice
+    let representativeVolume: DriveDevice.Volume?
     let snapshot: SmartSnapshot?
     @Environment(\.appLanguage) private var language
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
@@ -759,11 +816,11 @@ private struct DriveSidebarRow: View {
                 .foregroundStyle(snapshot?.health.tint ?? .secondary)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text(drive.sidebarVolumeName)
+                Text(representativeVolume?.name ?? drive.sidebarVolumeName)
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help(drive.sidebarVolumeName)
+                    .help(representativeVolume?.name ?? drive.sidebarVolumeName)
                 Text(drive.catalogSidebarDisplayName)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)

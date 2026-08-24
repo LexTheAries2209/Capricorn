@@ -26,6 +26,11 @@ final class AppModel {
     var smartSelfTestDriveID: String?
     var smartSelfTestMessage: String?
     var smartSelfTestCapabilities: [String: SmartSelfTestCapabilityState] = [:]
+    private var representativeVolumePreferences = RepresentativeVolumePreferences()
+    private var activeRepresentativeVolumeIDsByDrive: [String: String] = [:]
+    private var manuallySelectedRepresentativeVolumeKeys: Set<String> = []
+    private var representativeVolumeStartupPreference: RepresentativeVolumeStartupPreference = .largestCapacity
+    private var hasConfiguredRepresentativeVolumes = false
 
     var benchmarkProgress: BenchmarkProgress? {
         get { benchmarkSession.progress }
@@ -296,6 +301,43 @@ final class AppModel {
         return snapshots[selectedDrive.id]
     }
 
+    /// Applies persisted choices only once at launch. Later manual changes are
+    /// kept in memory for this session even when the next-launch default is
+    /// configured as the largest volume.
+    func configureRepresentativeVolumes(
+        startupPreference: RepresentativeVolumeStartupPreference,
+        encodedPreferences: String
+    ) {
+        guard !hasConfiguredRepresentativeVolumes else { return }
+        representativeVolumeStartupPreference = startupPreference
+        representativeVolumePreferences = RepresentativeVolumePreferences.decode(encodedPreferences)
+        hasConfiguredRepresentativeVolumes = true
+        refreshRepresentativeVolumeSelections(for: drives)
+    }
+
+    var encodedRepresentativeVolumePreferences: String {
+        representativeVolumePreferences.encoded()
+    }
+
+    func representativeVolume(for drive: DriveDevice) -> DriveDevice.Volume? {
+        let key = RepresentativeVolumeResolver.preferenceKey(for: drive)
+        return RepresentativeVolumeResolver.resolve(
+            for: drive,
+            preferredVolumeID: activeRepresentativeVolumeIDsByDrive[key]
+        )
+    }
+
+    func selectRepresentativeVolume(_ volume: DriveDevice.Volume, for drive: DriveDevice) {
+        guard RepresentativeVolumeResolver.maySwitchVolume(for: drive),
+              RepresentativeVolumeResolver.isSelectable(volume) else {
+            return
+        }
+        let key = RepresentativeVolumeResolver.preferenceKey(for: drive)
+        activeRepresentativeVolumeIDsByDrive[key] = volume.deviceIdentifier
+        manuallySelectedRepresentativeVolumeKeys.insert(key)
+        representativeVolumePreferences.setSelectedVolumeID(volume.deviceIdentifier, for: drive)
+    }
+
     var worstHealth: HealthStatus {
         let values = snapshots.values.map(\.health).filter { $0 != .unavailable }
         return values.max() ?? .unavailable
@@ -433,6 +475,7 @@ final class AppModel {
         let loadedDrives = discovery.drives
 
         drives = loadedDrives
+        refreshRepresentativeVolumeSelections(for: loadedDrives)
         snapshots = Dictionary(uniqueKeysWithValues: loadedDrives.map { drive in
             let previousDrive = previousDrives.first { DriveStableIdentityMatcher.matches($0, drive) }
             if let previousDrive, let previousSnapshot = previousSnapshots[previousDrive.id] {
@@ -457,6 +500,28 @@ final class AppModel {
             liveActivityError = "The active drive is no longer available."
         }
         refreshMessage = loadedDrives.isEmpty ? "No physical or network drives found." : "Reading SMART data..."
+    }
+
+    private func refreshRepresentativeVolumeSelections(for drives: [DriveDevice]) {
+        for drive in drives {
+            let key = RepresentativeVolumeResolver.preferenceKey(for: drive)
+            if let activeID = activeRepresentativeVolumeIDsByDrive[key],
+               drive.volumes.contains(where: {
+                   $0.deviceIdentifier == activeID && RepresentativeVolumeResolver.isSelectable($0)
+               }) {
+                continue
+            }
+
+            let persistedID = (manuallySelectedRepresentativeVolumeKeys.contains(key)
+                || representativeVolumeStartupPreference == .lastSelected)
+                ? representativeVolumePreferences.selectedVolumeID(for: drive)
+                : nil
+            if let volume = RepresentativeVolumeResolver.resolve(for: drive, preferredVolumeID: persistedID) {
+                activeRepresentativeVolumeIDsByDrive[key] = volume.deviceIdentifier
+            } else {
+                activeRepresentativeVolumeIDsByDrive.removeValue(forKey: key)
+            }
+        }
     }
 
     private func applyDriveSnapshotUpdate(_ update: DriveSnapshotUpdate, refreshID: UUID) {
@@ -504,7 +569,7 @@ final class AppModel {
             benchmarkError = "Select a drive before running a benchmark."
             return
         }
-        let targetVolume = volumePath ?? drive.benchmarkMountPoint
+        let targetVolume = volumePath ?? representativeVolume(for: drive)?.mountPoint
         guard let targetVolume else {
             benchmarkError = "This drive has no mounted writable volume available for safe file-based benchmarking."
             return
@@ -609,7 +674,12 @@ final class AppModel {
         diskActionFailure = nil
 
         do {
-            try await diskActionService.perform(action, on: drive, newName: newName)
+            try await diskActionService.perform(
+                action,
+                on: drive,
+                newName: newName,
+                targetVolumeID: representativeVolume(for: drive)?.deviceIdentifier
+            )
             await refresh()
             refreshMessage = "Disk action completed."
             CapricornLog.diskOperations.info("Disk operation completed: \(action.rawValue, privacy: .public)")

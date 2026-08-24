@@ -149,7 +149,8 @@ enum DiskutilPlistParser {
                     isSystem: volume.bool("OSInternal") ?? false || normalizedMountPoint(volume.string("MountPoint")) == "/",
                     fileSystemType: parsedFileSystemType(from: volume, fallback: "APFS"),
                     capacityGroupIdentifier: capacityGroupIdentifier,
-                    volumeUUID: parsedVolumeUUID(from: volume)
+                    volumeUUID: parsedVolumeUUID(from: volume),
+                    apfsRole: volume.stringList("APFSVolumeRole") ?? volume.stringList("Role")
                 )
             }
 
@@ -176,10 +177,10 @@ enum DiskutilPlistParser {
     }
 
     private static func parseMountedPartitionVolume(_ partition: [String: Any]) -> DriveDevice.Volume? {
-        guard let id = partition.string("DeviceIdentifier"),
-              let mountPoint = normalizedMountPoint(partition.string("MountPoint")) else {
+        guard let id = partition.string("DeviceIdentifier") else {
             return nil
         }
+        let mountPoint = normalizedMountPoint(partition.string("MountPoint"))
 
         let isReadOnly = partition.bool("ReadOnly") ?? false
         let isWritable = partition.bool("Writable") ?? !isReadOnly
@@ -192,7 +193,8 @@ enum DiskutilPlistParser {
             isSystem: partition.bool("OSInternal") ?? false || mountPoint == "/",
             fileSystemType: parsedFileSystemType(from: partition, fallback: nil),
             capacityGroupIdentifier: "volume:\(id)",
-            volumeUUID: parsedVolumeUUID(from: partition)
+            volumeUUID: parsedVolumeUUID(from: partition),
+            apfsRole: partition.stringList("APFSVolumeRole") ?? partition.stringList("Role")
         )
     }
 
@@ -934,6 +936,15 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
 private extension Dictionary where Key == String, Value == Any {
     func string(_ key: String) -> String? {
         self[key] as? String
+    }
+
+    /// diskutil currently emits APFS roles as strings, while some plist
+    /// producers represent the same role set as an array. Normalize both
+    /// shapes so protected backup volumes cannot become write targets.
+    func stringList(_ key: String) -> String? {
+        if let value = string(key) { return value }
+        guard let values = self[key] as? [String], !values.isEmpty else { return nil }
+        return values.joined(separator: ",")
     }
 
     func int(_ key: String) -> Int? {

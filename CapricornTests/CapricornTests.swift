@@ -28,6 +28,36 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(drive.fileSystemSummary, "APFS")
     }
 
+    func testDiskutilParserPreservesAPFSBackupRoleFromRoleList() throws {
+        let plist = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+          <key>WholeDisks</key><array><string>disk9</string></array>
+          <key>AllDisksAndPartitions</key><array>
+            <dict><key>DeviceIdentifier</key><string>disk9</string><key>Partitions</key><array><dict><key>DeviceIdentifier</key><string>disk9s2</string></dict></array></dict>
+            <dict>
+              <key>DeviceIdentifier</key><string>disk10</string>
+              <key>APFSPhysicalStores</key><array><dict><key>DeviceIdentifier</key><string>disk9s2</string></dict></array>
+              <key>APFSVolumes</key><array><dict>
+                <key>DeviceIdentifier</key><string>disk10s1</string>
+                <key>VolumeName</key><string>Backup</string>
+                <key>MountPoint</key><string>/Volumes/Backup</string>
+                <key>Size</key><integer>1000</integer>
+                <key>APFSVolumeRole</key><array><string>Backup</string></array>
+              </dict></array>
+            </dict>
+          </array>
+        </dict></plist>
+        """
+
+        let list = try DiskutilPlistParser.parseList(Data(plist.utf8))
+        let volume = try XCTUnwrap(list.volumesByPhysicalDisk["disk9"]?.first)
+        XCTAssertEqual(volume.apfsRole, "Backup")
+        XCTAssertTrue(RepresentativeVolumeResolver.isTimeMachineVolume(volume))
+        XCTAssertFalse(RepresentativeVolumeResolver.isSelectable(volume))
+    }
+
     func testSystemProfilerDriveSerialParserMapsPhysicalBSDNames() {
         let xml = """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -968,13 +998,30 @@ final class CapricornTests: XCTestCase {
         try await service.perform(.forceUnmount, on: drive)
         try await service.perform(.eject, on: drive)
         try await service.perform(.rename, on: drive, newName: "Renamed")
+        drive.volumes.append(
+            DriveDevice.Volume(
+                deviceIdentifier: "disk0s2",
+                name: "Selected",
+                mountPoint: "/Volumes/Selected",
+                sizeBytes: 2_000,
+                isWritable: true,
+                isSystem: false
+            )
+        )
+        try await service.perform(
+            .rename,
+            on: drive,
+            newName: "Renamed Selected",
+            targetVolumeID: "disk0s2"
+        )
 
         XCTAssertEqual(runner.calls.map(\.arguments), [
             ["mountDisk", "disk0"],
             ["unmountDisk", "disk0"],
             ["unmountDisk", "force", "disk0"],
             ["eject", "disk0"],
-            ["renameVolume", "/Volumes/Unit", "Renamed"]
+            ["renameVolume", "/Volumes/Unit", "Renamed"],
+            ["renameVolume", "/Volumes/Selected", "Renamed Selected"]
         ])
     }
 
@@ -2576,7 +2623,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(other.path, drive: drive))
     }
 
-    func testActivityWorkloadAutomaticTargetUsesFirstWritableMountedVolumeInDeviceOrder() throws {
+    func testActivityWorkloadAutomaticTargetUsesLargestWritableMountedVolume() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         let readOnly = root.appendingPathComponent("ReadOnly")
         let firstWritable = root.appendingPathComponent("FirstWritable")
@@ -2588,16 +2635,16 @@ final class CapricornTests: XCTestCase {
 
         var drive = Self.fixtureDrive()
         drive.volumes = [
-            DriveDevice.Volume(deviceIdentifier: "disk9s10", name: "Later", mountPoint: laterWritable.path, sizeBytes: 1_000, isWritable: true, isSystem: false),
+            DriveDevice.Volume(deviceIdentifier: "disk9s10", name: "Largest", mountPoint: laterWritable.path, sizeBytes: 2_000, isWritable: true, isSystem: false),
             DriveDevice.Volume(deviceIdentifier: "disk9s1", name: "Unmounted", mountPoint: nil, sizeBytes: 1_000, isWritable: true, isSystem: false),
             DriveDevice.Volume(deviceIdentifier: "disk9s2", name: "Read Only", mountPoint: readOnly.path, sizeBytes: 1_000, isWritable: false, isSystem: false),
-            DriveDevice.Volume(deviceIdentifier: "disk9s3", name: "First", mountPoint: firstWritable.path, sizeBytes: 1_000, isWritable: true, isSystem: false)
+            DriveDevice.Volume(deviceIdentifier: "disk9s3", name: "Smaller", mountPoint: firstWritable.path, sizeBytes: 1_000, isWritable: true, isSystem: false)
         ]
 
         let resolved = DiskActivityWorkloadTargetResolver.resolve(.automatic, for: drive)
 
-        XCTAssertEqual(resolved.volume?.deviceIdentifier, "disk9s3")
-        XCTAssertEqual(resolved.folderURL?.path, firstWritable.path)
+        XCTAssertEqual(resolved.volume?.deviceIdentifier, "disk9s10")
+        XCTAssertEqual(resolved.folderURL?.path, laterWritable.path)
         XCTAssertFalse(resolved.didFallBackToAutomatic)
     }
 

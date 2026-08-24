@@ -46,7 +46,11 @@ struct DiskActivityView: View {
     }
 
     private var resolvedWorkloadTarget: DiskActivityWorkloadResolvedTarget {
-        DiskActivityWorkloadTargetResolver.resolve(workloadTargetSelection, for: drive)
+        DiskActivityWorkloadTargetResolver.resolve(
+            workloadTargetSelection,
+            for: drive,
+            preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
+        )
     }
 
     private var selectedInterval: DiskActivitySampleInterval {
@@ -418,7 +422,10 @@ struct DiskActivityView: View {
     }
 
     private var automaticTargetTitle: String {
-        guard let volume = DiskActivityWorkloadTargetResolver.defaultVolume(for: drive) else {
+        guard let volume = DiskActivityWorkloadTargetResolver.defaultVolume(
+            for: drive,
+            preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
+        ) else {
             return language.t("Automatic")
         }
         return "\(language.t("Automatic")) · \(volume.name)"
@@ -511,7 +518,10 @@ struct DiskActivityView: View {
         panel.canCreateDirectories = true
         if let workloadTargetFolderURL {
             panel.directoryURL = workloadTargetFolderURL
-        } else if let fallback = DiskActivityWorkloadTargetResolver.defaultVolume(for: drive)?.mountPoint {
+        } else if let fallback = DiskActivityWorkloadTargetResolver.defaultVolume(
+            for: drive,
+            preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
+        )?.mountPoint {
             panel.directoryURL = URL(fileURLWithPath: fallback, isDirectory: true)
         }
 
@@ -548,7 +558,11 @@ struct DiskActivityView: View {
         }
 
         let requestedSelection = preferences.selection(for: drive)
-        let resolved = DiskActivityWorkloadTargetResolver.resolve(requestedSelection, for: drive)
+        let resolved = DiskActivityWorkloadTargetResolver.resolve(
+            requestedSelection,
+            for: drive,
+            preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
+        )
         if resolved.didFallBackToAutomatic {
             preferences.setSelection(.automatic, for: drive)
         }

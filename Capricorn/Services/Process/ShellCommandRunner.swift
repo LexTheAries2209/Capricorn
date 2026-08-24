@@ -550,7 +550,12 @@ final class DiskActionService {
         self.openPath = openPath
     }
 
-    func perform(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async throws {
+    func perform(
+        _ action: DiskSidebarAction,
+        on drive: DriveDevice,
+        newName: String? = nil,
+        targetVolumeID: String? = nil
+    ) async throws {
         if DiskSidebarActionPolicy.isProtectedSystemControlAction(action, for: drive) {
             throw DiskActionError.protectedSystemDisk
         }
@@ -582,7 +587,7 @@ final class DiskActionService {
             guard let newName = newName?.trimmingCharacters(in: .whitespacesAndNewlines), !newName.isEmpty else {
                 throw DiskActionError.missingName
             }
-            try await runDiskutil(["renameVolume", try renameTarget(for: drive), newName])
+            try await runDiskutil(["renameVolume", try renameTarget(for: drive, targetVolumeID: targetVolumeID), newName])
         case .disconnect:
             guard drive.isNetwork else { throw DiskActionError.unsupportedAction }
             try await runDiskutil(["unmount", try mountedPath(for: drive)])
@@ -609,8 +614,11 @@ final class DiskActionService {
         return mountPoint
     }
 
-    private func renameTarget(for drive: DriveDevice) throws -> String {
-        guard let volume = drive.actionTargetVolume else {
+    private func renameTarget(for drive: DriveDevice, targetVolumeID: String?) throws -> String {
+        let volume = targetVolumeID.flatMap { volumeID in
+            drive.volumes.first(where: { $0.deviceIdentifier == volumeID })
+        } ?? RepresentativeVolumeResolver.resolve(for: drive)
+        guard let volume, RepresentativeVolumeResolver.isSelectable(volume) else {
             throw DiskActionError.missingVolume
         }
         return volume.mountPoint ?? volume.deviceIdentifier

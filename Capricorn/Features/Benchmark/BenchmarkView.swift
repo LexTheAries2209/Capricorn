@@ -225,7 +225,11 @@ struct BenchmarkView: View {
     }
 
     private var resolvedTarget: DiskActivityWorkloadResolvedTarget {
-        DiskActivityWorkloadTargetResolver.resolve(targetSelection, for: drive)
+        DiskActivityWorkloadTargetResolver.resolve(
+            targetSelection,
+            for: drive,
+            preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
+        )
     }
 
     private var targetFolderPath: String {
@@ -723,7 +727,10 @@ struct BenchmarkView: View {
         panel.canCreateDirectories = true
         if let targetFolderURL {
             panel.directoryURL = targetFolderURL
-        } else if let fallback = DiskActivityWorkloadTargetResolver.defaultVolume(for: drive)?.mountPoint {
+        } else if let fallback = DiskActivityWorkloadTargetResolver.defaultVolume(
+            for: drive,
+            preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
+        )?.mountPoint {
             panel.directoryURL = URL(fileURLWithPath: fallback, isDirectory: true)
         }
 
@@ -740,7 +747,10 @@ struct BenchmarkView: View {
     }
 
     private var automaticTargetTitle: String {
-        guard let volume = DiskActivityWorkloadTargetResolver.defaultVolume(for: drive) else {
+        guard let volume = DiskActivityWorkloadTargetResolver.defaultVolume(
+            for: drive,
+            preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
+        ) else {
             return language.t("Automatic")
         }
         return "\(language.t("Automatic")) · \(volume.name)"
@@ -795,7 +805,11 @@ struct BenchmarkView: View {
         }
 
         let requestedSelection = preferences.selection(for: drive)
-        let resolved = DiskActivityWorkloadTargetResolver.resolve(requestedSelection, for: drive)
+        let resolved = DiskActivityWorkloadTargetResolver.resolve(
+            requestedSelection,
+            for: drive,
+            preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
+        )
         if resolved.didFallBackToAutomatic {
             preferences.setSelection(.automatic, for: drive)
         }

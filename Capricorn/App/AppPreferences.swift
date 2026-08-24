@@ -50,6 +50,7 @@ final class AppPreferences {
         static let redactSerialNumbers = "redactSerialNumbers"
         static let automaticRefreshIntervalMinutes = "automaticRefreshIntervalMinutes"
         static let showsCheckAndRepairActions = "showsCheckAndRepairActions"
+        static let representativeVolumeStartupPreference = "representativeVolumeStartupPreference"
     }
 
     private let defaults: UserDefaults
@@ -107,6 +108,12 @@ final class AppPreferences {
         didSet { defaults.set(showsCheckAndRepairActions, forKey: Key.showsCheckAndRepairActions) }
     }
 
+    /// Controls the initial representative volume for each non-system drive.
+    /// Manual sidebar changes remain active for the current application session.
+    var representativeVolumeStartupPreference: RepresentativeVolumeStartupPreference {
+        didSet { defaults.set(representativeVolumeStartupPreference.rawValue, forKey: Key.representativeVolumeStartupPreference) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
@@ -121,6 +128,9 @@ final class AppPreferences {
             rawValue: defaults.integer(forKey: Key.automaticRefreshIntervalMinutes)
         ) ?? .off
         showsCheckAndRepairActions = defaults.bool(forKey: Key.showsCheckAndRepairActions)
+        representativeVolumeStartupPreference = RepresentativeVolumeStartupPreference(
+            rawValue: defaults.string(forKey: Key.representativeVolumeStartupPreference) ?? ""
+        ) ?? .largestCapacity
     }
 
     var language: AppLanguage {
@@ -165,6 +175,18 @@ struct CapricornSettingsView: View {
             Section(language.t("Disk Actions")) {
                 Toggle(language.t("Show Check and Repair in Disk Actions"), isOn: $preferences.showsCheckAndRepairActions)
                 Text(language.t("When disabled, Check and Repair is hidden from the disk action menu."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker(
+                    language.t("Volume selected when Capricorn opens"),
+                    selection: $preferences.representativeVolumeStartupPreference
+                ) {
+                    ForEach(RepresentativeVolumeStartupPreference.allCases) { preference in
+                        Text(preference.title(language: language)).tag(preference)
+                    }
+                }
+                Text(language.t("This applies only when Capricorn starts. Switching a volume from Disk Actions takes effect immediately."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

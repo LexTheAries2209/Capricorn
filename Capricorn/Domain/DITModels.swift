@@ -90,6 +90,10 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
         var totalCapacityBytes: Int64? = nil
         var availableCapacityBytes: Int64? = nil
         var volumeUUID: String? = nil
+        /// APFS exposes roles such as System, Data, and Backup through
+        /// diskutil. Backup identifies a Time Machine destination even when
+        /// its user-visible volume name has been customized.
+        var apfsRole: String? = nil
     }
 
     var id: String { bsdName }
@@ -146,8 +150,7 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     }
 
     var benchmarkMountPoint: String? {
-        volumes.first(where: { $0.isWritable && !$0.isSystem && $0.mountPoint != nil })?.mountPoint
-            ?? volumes.first(where: { $0.isWritable && $0.mountPoint != nil })?.mountPoint
+        RepresentativeVolumeResolver.fallbackVolume(for: self)?.mountPoint
     }
 
     var primaryMountPoint: String? {
@@ -156,9 +159,7 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     }
 
     var actionTargetVolume: Volume? {
-        volumes.first(where: { !$0.isSystem && $0.mountPoint != nil })
-            ?? volumes.first(where: { $0.mountPoint != nil })
-            ?? volumes.first
+        RepresentativeVolumeResolver.fallbackVolume(for: self)
     }
 
     var fileSystemSummary: String? {
@@ -414,7 +415,7 @@ enum DiskSidebarActionPolicy {
         case .firstAid:
             return !drive.isNetwork && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
         case .rename:
-            return !drive.isNetwork && !drive.isSystemDisk && drive.actionTargetVolume != nil
+            return !drive.isNetwork && !drive.isSystemDisk && RepresentativeVolumeResolver.fallbackVolume(for: drive) != nil
         case .revealInFinder:
             return drive.primaryMountPoint != nil
         case .refresh:

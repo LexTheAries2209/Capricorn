@@ -74,28 +74,39 @@ enum DiskActivityWorkloadTargetResolver {
     }
 
     static func orderedVolumes(for drive: DriveDevice) -> [DriveDevice.Volume] {
-        drive.volumes.sorted {
-            $0.deviceIdentifier.localizedStandardCompare($1.deviceIdentifier) == .orderedAscending
-        }
+        RepresentativeVolumeResolver.orderedVolumes(for: drive)
     }
 
     static func isUsable(_ volume: DriveDevice.Volume, fileManager: FileManager = .default) -> Bool {
-        guard volume.isWritable, let mountPoint = volume.mountPoint else { return false }
+        guard RepresentativeVolumeResolver.isSelectable(volume), let mountPoint = volume.mountPoint else { return false }
         return isUsableFolder(mountPoint, fileManager: fileManager)
     }
 
-    static func defaultVolume(for drive: DriveDevice, fileManager: FileManager = .default) -> DriveDevice.Volume? {
-        orderedVolumes(for: drive).first { isUsable($0, fileManager: fileManager) }
+    /// Automatic workload targets use the current representative volume when
+    /// it is usable. If it disappears, falls read-only, or is a protected
+    /// backup/system volume, fall back to the largest safe mounted volume.
+    static func defaultVolume(
+        for drive: DriveDevice,
+        preferredVolumeID: String? = nil,
+        fileManager: FileManager = .default
+    ) -> DriveDevice.Volume? {
+        let usableVolumes = orderedVolumes(for: drive).filter { isUsable($0, fileManager: fileManager) }
+        if let preferredVolumeID,
+           let preferred = usableVolumes.first(where: { $0.deviceIdentifier == preferredVolumeID }) {
+            return preferred
+        }
+        return usableVolumes.first
     }
 
     static func resolve(
         _ selection: DiskActivityWorkloadTargetSelection,
         for drive: DriveDevice,
+        preferredVolumeID: String? = nil,
         fileManager: FileManager = .default
     ) -> DiskActivityWorkloadResolvedTarget {
         switch selection {
         case .automatic:
-            return automaticTarget(for: drive, fileManager: fileManager, didFallBack: false)
+            return automaticTarget(for: drive, preferredVolumeID: preferredVolumeID, fileManager: fileManager, didFallBack: false)
         case let .volume(deviceIdentifier):
             if let volume = orderedVolumes(for: drive).first(where: {
                 $0.deviceIdentifier == deviceIdentifier && isUsable($0, fileManager: fileManager)
@@ -120,7 +131,7 @@ enum DiskActivityWorkloadTargetResolver {
             }
         }
 
-        return automaticTarget(for: drive, fileManager: fileManager, didFallBack: true)
+        return automaticTarget(for: drive, preferredVolumeID: preferredVolumeID, fileManager: fileManager, didFallBack: true)
     }
 
     static func isUsableFolder(_ path: String, fileManager: FileManager = .default) -> Bool {
@@ -133,10 +144,11 @@ enum DiskActivityWorkloadTargetResolver {
 
     private static func automaticTarget(
         for drive: DriveDevice,
+        preferredVolumeID: String?,
         fileManager: FileManager,
         didFallBack: Bool
     ) -> DiskActivityWorkloadResolvedTarget {
-        let volume = defaultVolume(for: drive, fileManager: fileManager)
+        let volume = defaultVolume(for: drive, preferredVolumeID: preferredVolumeID, fileManager: fileManager)
         let folderURL = volume?.mountPoint.map { URL(fileURLWithPath: $0, isDirectory: true) }
         return DiskActivityWorkloadResolvedTarget(
             selection: .automatic,
