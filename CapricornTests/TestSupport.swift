@@ -55,6 +55,27 @@ final class SequencedInventoryProvider: DiskInventoryProviding, @unchecked Senda
     }
 }
 
+final class ManualDriveSystemEventMonitor: DriveSystemEventMonitoring, @unchecked Sendable {
+    private let continuation = LockedState<AsyncStream<DriveSystemEvent>.Continuation?>(nil)
+
+    var hasSubscriber: Bool {
+        continuation.snapshot() != nil
+    }
+
+    func events() -> AsyncStream<DriveSystemEvent> {
+        AsyncStream { streamContinuation in
+            continuation.withLock { $0 = streamContinuation }
+            streamContinuation.onTermination = { [weak self] _ in
+                self?.continuation.withLock { $0 = nil }
+            }
+        }
+    }
+
+    func send(_ event: DriveSystemEvent) {
+        continuation.snapshot()?.yield(event)
+    }
+}
+
 struct StaticDriveSerialProvider: DriveSerialNumberProviding {
     var serialNumbersByBSDName: [String: String]
 

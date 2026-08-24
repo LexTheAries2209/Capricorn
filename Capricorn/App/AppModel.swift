@@ -220,6 +220,8 @@ final class AppModel {
     private let diskFirstAidService: DiskFirstAidRunning
     private let externalDetector: ExternalDriveSupportDetector
     private let notificationCoordinator: NotificationCoordinator
+    private let driveSystemEventMonitor: DriveSystemEventMonitoring
+    private let driveSystemEventDebounceNanoseconds: UInt64
     private var diskActivityTask: Task<Void, Never>?
     private var liveActivityTask: Task<Void, Never>?
     private var activeLiveActivityMonitoringRunID: UUID?
@@ -231,6 +233,8 @@ final class AppModel {
     private var activeBenchmarkRunID: UUID?
     private var refreshTask: Task<Void, Never>?
     private var activeRefreshID: UUID?
+    private var driveSystemEventTask: Task<Void, Never>?
+    private var driveSystemEventDebounceTask: Task<Void, Never>?
     private var firstAidEventTask: Task<Void, Never>?
     private var activeFirstAidRunID: UUID?
     private var activeFirstAidPreparationID: UUID?
@@ -244,6 +248,8 @@ final class AppModel {
         inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(),
         smartService: SmartSnapshotService = SmartSnapshotService(),
         refreshService: DriveRefreshing? = nil,
+        driveSystemEventMonitor: DriveSystemEventMonitoring = SystemDriveSystemEventMonitor(),
+        driveSystemEventDebounceNanoseconds: UInt64 = 750_000_000,
         benchmarkRunner: BenchmarkRunning = BenchmarkRunnerRouter(),
         diskActivityProvider: DiskActivityProviding = IOKitDiskActivityProvider(),
         liveActivityWorkloadRunner: DiskActivityWorkloadRunning = NativeDiskActivityWorkloadRunner(),
@@ -275,6 +281,8 @@ final class AppModel {
         self.diskFirstAidService = diskFirstAidService
         self.externalDetector = externalDetector
         self.notificationCoordinator = notificationCoordinator
+        self.driveSystemEventMonitor = driveSystemEventMonitor
+        self.driveSystemEventDebounceNanoseconds = driveSystemEventDebounceNanoseconds
         self.externalSupport = externalDetector.detect()
     }
 
@@ -317,6 +325,40 @@ final class AppModel {
         }
         guard drives.isEmpty else { return }
         await refresh()
+    }
+
+    func startDriveSystemEventMonitoring() {
+        guard driveSystemEventTask == nil else { return }
+        let eventMonitor = driveSystemEventMonitor
+        driveSystemEventTask = Task { [weak self] in
+            for await event in eventMonitor.events() {
+                guard !Task.isCancelled else { break }
+                self?.scheduleRefresh(for: event)
+            }
+        }
+    }
+
+    func stopDriveSystemEventMonitoring() {
+        driveSystemEventTask?.cancel()
+        driveSystemEventTask = nil
+        driveSystemEventDebounceTask?.cancel()
+        driveSystemEventDebounceTask = nil
+    }
+
+    private func scheduleRefresh(for event: DriveSystemEvent) {
+        CapricornLog.inventory.info("Scheduling refresh after system event: \(event.rawValue, privacy: .public)")
+        driveSystemEventDebounceTask?.cancel()
+        let delay = driveSystemEventDebounceNanoseconds
+        driveSystemEventDebounceTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: delay)
+            } catch {
+                return
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.driveSystemEventDebounceTask = nil
+            await self.refresh()
+        }
     }
 
     func refresh(allowDuringFirstAid: Bool = false) async {

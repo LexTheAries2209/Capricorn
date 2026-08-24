@@ -74,6 +74,7 @@ struct ContentView: View {
             .frame(width: 0, height: 0)
         }
         .task {
+            viewModel.startDriveSystemEventMonitoring()
             viewModel.showVirtualDisks = preferences.showVirtualDisks
             await viewModel.refreshIfNeeded()
         }

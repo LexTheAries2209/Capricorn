@@ -298,6 +298,40 @@ extension CapricornTests {
         XCTAssertEqual(model.selectedDriveID, newDrive.id)
     }
 
+    @MainActor
+    func testDriveSystemEventsAreDebouncedIntoOneRefresh() async {
+        let drive = Self.fixtureDrive(mountedAt: "/Volumes/HotPlug")
+        let inventory = SequencedInventoryProvider(responses: [
+            .init(delayNanoseconds: 0, drives: [drive])
+        ])
+        let smartService = SmartSnapshotService(
+            nativeProvider: UnavailableSmartProvider(),
+            smartctlProvider: UnavailableSmartProvider()
+        )
+        let monitor = ManualDriveSystemEventMonitor()
+        let model = DITViewModel(
+            inventoryProvider: inventory,
+            smartService: smartService,
+            driveSystemEventMonitor: monitor,
+            driveSystemEventDebounceNanoseconds: 25_000_000
+        )
+
+        model.startDriveSystemEventMonitoring()
+        let subscribed = await AsyncTestWaiter.wait { monitor.hasSubscriber }
+        XCTAssertTrue(subscribed)
+
+        monitor.send(.deviceAppeared)
+        monitor.send(.volumeMounted)
+        monitor.send(.volumeUnmounted)
+        monitor.send(.deviceTerminated)
+
+        let refreshed = await AsyncTestWaiter.wait { inventory.callCount == 1 }
+        XCTAssertTrue(refreshed)
+        try? await Task.sleep(nanoseconds: 75_000_000)
+        XCTAssertEqual(inventory.callCount, 1)
+        model.stopDriveSystemEventMonitoring()
+    }
+
     func testDriveRefreshServiceLoadsSmartSnapshotsForEveryDrive() async throws {
         var firstDrive = Self.fixtureDrive(mountedAt: "/Volumes/First")
         firstDrive.bsdName = "disk8"
