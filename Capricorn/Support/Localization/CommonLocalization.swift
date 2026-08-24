@@ -338,6 +338,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Rename": "重命名",
         "Providers": "数据来源",
         "Save SMART Snapshot CSV": "保存 SMART 快照 CSV",
+        "Save SMART Snapshot CSV (Command-S)": "保存 SMART 快照 CSV（Command-S）",
         "Choose Storage Folder": "选择存储文件夹",
         "Change Storage Folder": "更改存储文件夹",
         "Clear Storage Folder": "清除存储文件夹",

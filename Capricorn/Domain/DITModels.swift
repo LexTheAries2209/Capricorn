@@ -763,6 +763,8 @@ enum DiskOpenFileTableLayout {
 enum AppCommandShortcut {
     static let refreshDisks = (key: "r", modifiers: EventModifiers.command)
     static let refreshDisksKeyEquivalent = KeyEquivalent("r")
+    static let saveSmartSnapshot = (key: "s", modifiers: EventModifiers.command)
+    static let saveSmartSnapshotKeyEquivalent = KeyEquivalent("s")
     static let settings = (key: "p", modifiers: EventModifiers.command)
     static let settingsKeyEquivalent = KeyEquivalent("p")
     static let nextFeatureTab = (key: "tab", modifiers: EventModifiers.control)

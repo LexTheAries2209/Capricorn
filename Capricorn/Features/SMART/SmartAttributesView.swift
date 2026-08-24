@@ -93,7 +93,12 @@ struct SmartAttributesView: View {
                     } label: {
                         Label(language.t("Save SMART Snapshot CSV"), systemImage: "tray.and.arrow.down")
                     }
+                    .keyboardShortcut(
+                        AppCommandShortcut.saveSmartSnapshotKeyEquivalent,
+                        modifiers: AppCommandShortcut.saveSmartSnapshot.modifiers
+                    )
                     .disabled(snapshot == nil)
+                    .help(language.t("Save SMART Snapshot CSV (Command-S)"))
                 }
             }
 

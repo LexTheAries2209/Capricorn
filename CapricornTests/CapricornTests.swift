@@ -1159,6 +1159,16 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(AppCommandShortcut.refreshDisks.modifiers.contains(.command))
     }
 
+    func testSaveSmartSnapshotShortcutUsesCommandS() {
+        XCTAssertEqual(AppCommandShortcut.saveSmartSnapshot.key, "s")
+        XCTAssertTrue(AppCommandShortcut.saveSmartSnapshot.modifiers.contains(.command))
+        XCTAssertEqual(AppCommandShortcut.saveSmartSnapshotKeyEquivalent, KeyEquivalent("s"))
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Save SMART Snapshot CSV (Command-S)"),
+            "保存 SMART 快照 CSV（Command-S）"
+        )
+    }
+
     func testSettingsShortcutUsesCommandP() {
         XCTAssertEqual(AppCommandShortcut.settings.key, "p")
         XCTAssertTrue(AppCommandShortcut.settings.modifiers.contains(.command))
