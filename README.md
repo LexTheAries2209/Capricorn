@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.1.1`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.2.1`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v2.1.1.md](docs/releases/v2.1.1.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v2.2.1.md](docs/releases/v2.2.1.md)
 
 ---
 
@@ -20,11 +20,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.1.1-macOS.zip`。
-2. 解压后把 `Capricorn V2.1.1.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.2.1-macOS.zip`。
+2. 解压后把 `Capricorn V2.2.1.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V2.1.1 的中文发布说明见 [docs/releases/v2.1.1.zh-CN.md](docs/releases/v2.1.1.zh-CN.md)。
+V2.2.1 的中文发布说明见 [docs/releases/v2.2.1.zh-CN.md](docs/releases/v2.2.1.zh-CN.md)。
 
 典型用途：
 
@@ -52,8 +52,8 @@ V2.1.1 的中文发布说明见 [docs/releases/v2.1.1.zh-CN.md](docs/releases/v2
 - 本地物理磁盘的 SMART 页面始终保留可折叠的“外接磁盘 SMART”支持区；内置磁盘或同时检测到 smartctl 与 SAT SMART Driver 时默认折叠，缺少依赖或尚未验证的外接磁盘默认展开。
 - “驱动诊断”集中显示 smartctl 目标路径、设备类型、协议、打开错误和明确标注的 SAT SMART Driver 路径；未检测到 SAT 驱动时提供开源项目仓库入口，检测成功后不再显示重复的安装或重连提示。
 - SMART 属性页支持独立纵向滚动、折叠历史自检记录和清除状态消息；常见外接 ATA 字段提供中文解释，Total LBAs Read/Written 会按逻辑块大小换算为可读容量，同时保留原始 LBA 信息。
-- 内置 177 条物理硬盘型号规则，覆盖 Samsung、Intel、Solidigm、SK hynix、Micron、Crucial、KIOXIA、Toshiba、WD、Seagate、YMTC 和致钛的消费级、OEM、数据中心及企业系列；已足够精简或无法确认的型号继续显示系统原始名称。
-- 侧边栏优先显示最大容量卷的名称，下一行显示硬盘商品名/型号，再显示序列号；宽度与行距受到约束，便于区分多块同型号硬盘。
+- 内置物理硬盘型号规则，覆盖 Samsung、Intel、Solidigm、SK hynix、Micron、Crucial、KIOXIA、Toshiba、WD、Seagate、YMTC 和致钛的消费级、OEM、数据中心及企业系列；V2.2.1 补充 Intel/Solidigm D5、D7 和 PCIe 5.0 系列，以及 WD Ultrastar DC SN640。已足够精简或无法确认的型号继续显示系统原始名称。
+- 侧边栏显示当前代表卷名称、硬盘商品名/型号和序列号；多卷外接盘可从右键菜单切换代表卷，默认使用容量最大的可操作卷，也可在设置中选择下次启动恢复上次手动选择。宽度与行距受到约束，便于区分多块同型号硬盘。
 - 侧边栏和概览显示物理磁盘或网络卷的总容量、已用和可用空间；APFS 共享容器只统计一次可用空间，避免重复汇总。
 - SMART 温度会按数据源区分单位：原生 Kelvin 数值同时显示换算后的摄氏度，已是摄氏度的数值保持摄氏度显示。概览中 `70–85 °C` 标黄、`85 °C` 及以上标红，但温度不参与整体 SMART 健康等级。
 - NVMe 累计读取量和写入量会把 macOS 原生与 `smartctl` 的 Data Units 转换为 TB，并保留原始 units 计数。
@@ -65,7 +65,7 @@ V2.1.1 的中文发布说明见 [docs/releases/v2.1.1.zh-CN.md](docs/releases/v2
 - 测速文件大小从 1 GiB 起，支持 Random 和 0 Fill 数据模式。
 - 点击测速结果矩阵左侧的绿色项目按钮，可以沿用当前引擎、文件大小和数据模式只测试该项目一次；单项测试固定关闭加量测试并保留写入确认。
 - “提高小块文件测试效率”可按 5%、10%、20%、30% 或 50% 缩减 4 KiB、16 KiB 和 64 KiB 项目的实际测试文件量，默认关闭，首次开启默认为 20%。
-- 测速目标跟随侧边栏所选硬盘，默认使用该盘第一个已挂载且可写的分区，并支持选择同盘分区或文件夹；启动前会再次校验目标归属。
+- 测速目标跟随侧边栏所选硬盘及其代表卷，并支持选择同盘分区或文件夹；启动前会再次校验目标归属。重命名与实时活动的大文件自动负载同样使用代表卷。
 - 测速页显示实时磁盘活动曲线，保存测速结果时会保存本次曲线样本。
 - 实时活动页支持 0.1s、0.2s、0.5s、1s 采样间隔、图表保留和保存到历史。
 - 实时活动页的监控磁盘完全跟随左侧侧边栏；监控或负载运行期间锁定其他磁盘，设备消失时停止任务并显示错误，停止后可切换磁盘且不同磁盘的未保存样本不会串联。
@@ -151,9 +151,9 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 
 例如：
 
-- `Version = 2.1`
+- `Version = 2.2`
 - `Build = 1`
-- `Display Name = Capricorn V2.1.1`
+- `Display Name = Capricorn V2.2.1`
 
 ### 当前限制
 
@@ -173,11 +173,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v2.1.1-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V2.1.1.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v2.2.1-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V2.2.1.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V2.1.1 are available at [docs/releases/v2.1.1.en.md](docs/releases/v2.1.1.en.md).
+English release notes for V2.2.1 are available at [docs/releases/v2.2.1.en.md](docs/releases/v2.2.1.en.md).
 
 Common use cases:
 
@@ -205,8 +205,8 @@ Common use cases:
 - The SMART page keeps an expandable External Drive SMART support section available for every local physical drive. It starts collapsed for internal drives or when both smartctl and SAT SMART Driver are detected, and starts expanded for external drives with missing or unverified support.
 - Driver Diagnostics groups the smartctl target path, device type, protocol, open errors, and explicitly labeled SAT SMART Driver paths. When the SAT driver is missing, it links to the open-source project; after detection, redundant installation and reconnect guidance stays hidden.
 - SMART attributes have an independently scrolling table, collapsible self-test history, and dismissible status messages. Common external ATA fields have clearer localized explanations, while Total LBAs Read/Written values are converted using the reported logical block size without dropping the original LBA details.
-- Includes 177 physical-drive model rules covering consumer, OEM, data-center, and enterprise families from Samsung, Intel, Solidigm, SK hynix, Micron, Crucial, KIOXIA, Toshiba, WD, Seagate, YMTC, and ZHITAI. Already concise or unconfirmed models retain their system-reported names.
-- The sidebar leads with the largest volume name, then the drive product/model and serial number. Width and row spacing are bounded to keep same-model devices distinguishable.
+- Includes physical-drive model rules covering consumer, OEM, data-center, and enterprise families from Samsung, Intel, Solidigm, SK hynix, Micron, Crucial, KIOXIA, Toshiba, WD, Seagate, YMTC, and ZHITAI. V2.2.1 adds Intel/Solidigm D5, D7, and PCIe 5.0 families plus WD Ultrastar DC SN640. Already concise or unconfirmed models retain their system-reported names.
+- The sidebar shows the active representative volume, then the drive product/model and serial number. Multi-volume external drives can switch the representative volume from Disk Actions; the largest safe volume is the default, while Settings can restore the last manual choice on the next launch. Width and row spacing are bounded to keep same-model devices distinguishable.
 - The sidebar and overview show total, used, and available capacity for physical and network drives. APFS volumes that share one container are deduplicated before capacity aggregation.
 - Formats native Kelvin temperatures with a Celsius conversion while keeping already-Celsius values in Celsius. Overview values are yellow from `70–85 °C` and red at `85 °C` or above, but temperature does not alter overall SMART health.
 - Converts native macOS and `smartctl` NVMe Data Units Read/Written values to TB while retaining the raw unit count.
@@ -218,7 +218,7 @@ Common use cases:
 - Benchmark file sizes start at 1 GiB and support Random or 0 Fill data patterns.
 - Each green result-row button can run that benchmark item once using the current engine, file size, and data pattern; single-item runs force incremental testing off and keep the write confirmation.
 - An optional small-block efficiency control scales the actual test data for 4 KiB, 16 KiB, and 64 KiB items to 5%, 10%, 20%, 30%, or 50%; it is off by default and starts at 20% when first enabled.
-- Benchmark targets follow the drive selected in the sidebar, automatically choosing its first mounted writable partition while still allowing a partition or same-drive folder override. Ownership is validated again before a run starts.
+- Benchmark targets follow the drive selected in the sidebar and its representative volume, while still allowing a partition or same-drive folder override. Ownership is validated again before a run starts. Renaming and Live Activity automatic large-file workloads use the same representative volume.
 - Benchmark results can include the live activity samples captured during the run.
 - Live Activity supports 0.1s, 0.2s, 0.5s, and 1s sampling, retained charts, and history saving.
 - Live Activity follows the physical drive selected in the sidebar. Other drive rows are locked while monitoring or workload activity runs, disappearing devices stop the active tasks with an error, and unsaved samples remain isolated by drive after switching.
@@ -304,9 +304,9 @@ The public Display Name uses a three-part version label composed from Xcode `Ver
 
 Example:
 
-- `Version = 2.1`
+- `Version = 2.2`
 - `Build = 1`
-- `Display Name = Capricorn V2.1.1`
+- `Display Name = Capricorn V2.2.1`
 
 ### Current Limitations
 
