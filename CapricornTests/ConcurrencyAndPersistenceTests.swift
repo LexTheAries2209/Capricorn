@@ -13,6 +13,7 @@ extension CapricornTests {
         let preferences = AppPreferences(defaults: defaults)
         XCTAssertTrue(preferences.usesPlainTabForFeatureSwitching)
         XCTAssertFalse(preferences.allowSystemDiskSelfTests)
+        XCTAssertFalse(preferences.showsSmartSelfTestInterface)
         XCTAssertTrue(preferences.avoidWakingSleepingDisks)
         XCTAssertFalse(preferences.redactSerialNumbers)
         XCTAssertEqual(preferences.automaticRefreshInterval, .off)
@@ -22,6 +23,7 @@ extension CapricornTests {
         preferences.smartctlPath = "/usr/bin/true"
         preferences.usesPlainTabForFeatureSwitching = false
         preferences.allowSystemDiskSelfTests = true
+        preferences.showsSmartSelfTestInterface = true
         preferences.avoidWakingSleepingDisks = false
         preferences.redactSerialNumbers = true
         preferences.automaticRefreshInterval = .every15Minutes
@@ -33,6 +35,7 @@ extension CapricornTests {
         XCTAssertEqual(reloaded.smartctlPath, "/usr/bin/true")
         XCTAssertFalse(reloaded.usesPlainTabForFeatureSwitching)
         XCTAssertTrue(reloaded.allowSystemDiskSelfTests)
+        XCTAssertTrue(reloaded.showsSmartSelfTestInterface)
         XCTAssertFalse(reloaded.avoidWakingSleepingDisks)
         XCTAssertTrue(reloaded.redactSerialNumbers)
         XCTAssertEqual(reloaded.automaticRefreshInterval, .every15Minutes)

@@ -45,6 +45,7 @@ final class AppPreferences {
         static let smartctlPath = "smartctlPath"
         static let usesPlainTabForFeatureSwitching = "usesPlainTabForFeatureSwitching"
         static let allowSystemDiskSelfTests = "allowSystemDiskSelfTests"
+        static let showsSmartSelfTestInterface = "showsSmartSelfTestInterface"
         static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
         static let redactSerialNumbers = "redactSerialNumbers"
         static let automaticRefreshIntervalMinutes = "automaticRefreshIntervalMinutes"
@@ -80,6 +81,12 @@ final class AppPreferences {
         didSet { defaults.set(allowSystemDiskSelfTests, forKey: Key.allowSystemDiskSelfTests) }
     }
 
+    /// Self-tests can put sustained load on a disk. Keep their status and
+    /// controls out of the main views until the user explicitly opts in.
+    var showsSmartSelfTestInterface: Bool {
+        didSet { defaults.set(showsSmartSelfTestInterface, forKey: Key.showsSmartSelfTestInterface) }
+    }
+
     var avoidWakingSleepingDisks: Bool {
         didSet { defaults.set(avoidWakingSleepingDisks, forKey: Key.avoidWakingSleepingDisks) }
     }
@@ -107,6 +114,7 @@ final class AppPreferences {
         smartctlPath = defaults.string(forKey: Key.smartctlPath) ?? ""
         usesPlainTabForFeatureSwitching = defaults.object(forKey: Key.usesPlainTabForFeatureSwitching) as? Bool ?? true
         allowSystemDiskSelfTests = defaults.bool(forKey: Key.allowSystemDiskSelfTests)
+        showsSmartSelfTestInterface = defaults.bool(forKey: Key.showsSmartSelfTestInterface)
         avoidWakingSleepingDisks = defaults.object(forKey: Key.avoidWakingSleepingDisks) as? Bool ?? true
         redactSerialNumbers = defaults.bool(forKey: Key.redactSerialNumbers)
         automaticRefreshInterval = DiskAutomaticRefreshInterval(
@@ -162,10 +170,17 @@ struct CapricornSettingsView: View {
             }
 
             Section(language.t("SMART Self-Tests")) {
-                Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)
-                Text(language.t("System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option."))
+                Toggle(language.t("Show SMART self-test status and controls"), isOn: $preferences.showsSmartSelfTestInterface)
+                Text(language.t("When disabled, self-test status, records, and controls are hidden in Overview and SMART."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if preferences.showsSmartSelfTestInterface {
+                    Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)
+                    Text(language.t("System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section(language.t("Disk Refresh")) {

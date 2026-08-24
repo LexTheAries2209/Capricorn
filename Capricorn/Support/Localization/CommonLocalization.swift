@@ -200,6 +200,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Redact serial numbers": "序列号脱敏",
         "When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value.": "启用后，序列号仅显示前四位，其余字符以星号替代。内部匹配和历史记录仍使用完整序列号。",
         "SMART Self-Tests": "SMART 自检",
+        "Show SMART self-test status and controls": "显示 SMART 自检状态和测试功能",
+        "When disabled, self-test status, records, and controls are hidden in Overview and SMART.": "关闭后，概览和 SMART 界面不会显示自检状态、记录或测试控制。",
         "Allow self-tests on the system disk": "允许系统盘执行自检",
         "System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option.": "系统盘自检可能降低性能并增加持续存储负载。开启前请确保已有最新备份。",
         "SMART Refresh": "SMART 刷新",

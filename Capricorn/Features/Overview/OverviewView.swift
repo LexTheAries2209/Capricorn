@@ -7,6 +7,7 @@ struct OverviewView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
     @Environment(\.appLanguage) private var language
+    @AppStorage(AppPreferences.Key.showsSmartSelfTestInterface) private var showsSmartSelfTestInterface = false
 
     var body: some View {
         ScrollView {
@@ -77,7 +78,9 @@ struct OverviewView: View {
                     }
                 }
 
-                SelfTestOverviewSummary(snapshot: snapshot)
+                if showsSmartSelfTestInterface {
+                    SelfTestOverviewSummary(snapshot: snapshot)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

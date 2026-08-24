@@ -11,6 +11,7 @@ struct SmartAttributesView: View {
     let verifyExternalSupport: () -> Void
     let saveSnapshot: (String?) -> String
     @Environment(\.appLanguage) private var language
+    @AppStorage(AppPreferences.Key.showsSmartSelfTestInterface) private var showsSmartSelfTestInterface = false
     @AppStorage("smartSnapshotExportFolder") private var snapshotExportFolderPath = ""
     @State private var saveMessage: String?
 
@@ -133,7 +134,9 @@ struct SmartAttributesView: View {
 
     @ViewBuilder
     private var supplementaryPanels: some View {
-        SmartSelfTestPanel(drive: drive, snapshot: snapshot, viewModel: viewModel)
+        if showsSmartSelfTestInterface {
+            SmartSelfTestPanel(drive: drive, snapshot: snapshot, viewModel: viewModel)
+        }
 
         if showsExternalSupportPanel {
             ExternalSupportView(
