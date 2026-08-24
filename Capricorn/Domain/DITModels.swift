@@ -122,11 +122,17 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
         DriveCapacityUsage.resolve(volumes: volumes)
     }
 
-    /// The volume name used to identify a drive in the sidebar. Prefer the
-    /// largest volume because it is usually the user-facing data volume. A
-    /// deterministic device-identifier tie-break keeps the label stable when
-    /// several APFS volumes report the same shared-container capacity.
+    /// The volume name used to identify a drive in the sidebar. System disks
+    /// use the root-mounted system volume, while other disks prefer the
+    /// largest user-facing volume. A deterministic device-identifier tie-break
+    /// keeps the label stable when APFS volumes share container capacity.
     var sidebarVolumeName: String {
+        if isSystemDisk,
+           let rootVolume = volumes.first(where: { $0.mountPoint == "/" }),
+           !rootVolume.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return rootVolume.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
         let representativeVolume = volumes
             .filter(RepresentativeVolumeResolver.isVisibleVolume)
             .filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

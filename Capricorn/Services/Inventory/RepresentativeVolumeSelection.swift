@@ -158,7 +158,7 @@ enum RepresentativeVolumeResolver {
         let identifier = volume.deviceIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let fileSystem = FileSystemFormatResolver.normalized(volume.fileSystemType)?.lowercased()
 
-        if name == "efi" || fileSystem == "efi" {
+        if name == "efi" || fileSystem == "efi" || isAPFSAuxiliaryVolume(volume) {
             return false
         }
 
@@ -173,6 +173,34 @@ enum RepresentativeVolumeResolver {
         }
 
         return true
+    }
+
+    /// APFS creates auxiliary volumes for boot, recovery, virtual memory, and
+    /// update staging. They are part of the system's topology, not user data
+    /// volumes, and can report the container's full shared capacity.
+    static func isAPFSAuxiliaryVolume(_ volume: DriveDevice.Volume) -> Bool {
+        let roles = Set(
+            (volume.apfsRole ?? "")
+                .split(separator: ",")
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        )
+        let auxiliaryRoles: Set<String> = ["preboot", "recovery", "vm", "update", "hardware", "xart"]
+        if !roles.isDisjoint(with: auxiliaryRoles) {
+            return true
+        }
+
+        guard FileSystemFormatResolver.normalized(volume.fileSystemType) == "APFS",
+              let mountPoint = volume.mountPoint?.lowercased(),
+              mountPoint.hasPrefix("/system/volumes/") else {
+            return false
+        }
+        let name = volume.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return auxiliaryRoles.contains(name)
+    }
+
+    static func systemDisplayVolume(for drive: DriveDevice) -> DriveDevice.Volume? {
+        drive.volumes.first(where: { $0.mountPoint == "/" })
+            ?? orderedVolumes(for: drive).first
     }
 
     static func isSelectable(_ volume: DriveDevice.Volume) -> Bool {
@@ -205,6 +233,9 @@ enum RepresentativeVolumeResolver {
         for drive: DriveDevice,
         preferredVolumeID: String? = nil
     ) -> DriveDevice.Volume? {
+        if drive.isSystemDisk {
+            return systemDisplayVolume(for: drive)
+        }
         guard maySwitchVolume(for: drive) else { return fallbackVolume(for: drive) }
         if let preferredVolumeID,
            let preferred = drive.volumes.first(where: { $0.deviceIdentifier == preferredVolumeID }),

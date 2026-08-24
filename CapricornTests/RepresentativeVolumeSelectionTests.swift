@@ -63,6 +63,50 @@ final class RepresentativeVolumeSelectionTests: XCTestCase {
         XCTAssertFalse(RepresentativeVolumeResolver.isVisibleVolume(apfsBacking))
     }
 
+    func testSystemDiskUsesRootVolumeAndHidesAPFSAuxiliaryVolumes() {
+        let preboot = DriveDevice.Volume(
+            deviceIdentifier: "disk3s2",
+            name: "Preboot",
+            mountPoint: "/System/Volumes/Preboot",
+            sizeBytes: 1_000,
+            isWritable: true,
+            isSystem: false,
+            fileSystemType: "APFS",
+            apfsRole: "Preboot"
+        )
+        let recovery = DriveDevice.Volume(
+            deviceIdentifier: "disk3s3",
+            name: "Recovery",
+            mountPoint: "/System/Volumes/Recovery",
+            sizeBytes: 1_000,
+            isWritable: true,
+            isSystem: false,
+            fileSystemType: "APFS",
+            apfsRole: "Recovery"
+        )
+        let macintoshHD = DriveDevice.Volume(
+            deviceIdentifier: "disk3s1",
+            name: "Macintosh HD",
+            mountPoint: "/",
+            sizeBytes: 1_000,
+            isWritable: false,
+            isSystem: true,
+            fileSystemType: "APFS",
+            apfsRole: "System"
+        )
+        var drive = CapricornTests.fixtureDrive()
+        drive.isInternal = true
+        drive.isSystemDisk = true
+        drive.volumes = [preboot, recovery, macintoshHD]
+
+        XCTAssertFalse(RepresentativeVolumeResolver.isVisibleVolume(preboot))
+        XCTAssertFalse(RepresentativeVolumeResolver.isVisibleVolume(recovery))
+        XCTAssertEqual(RepresentativeVolumeResolver.orderedVolumes(for: drive).map(\.name), ["Macintosh HD"])
+        XCTAssertEqual(RepresentativeVolumeResolver.resolve(for: drive)?.name, "Macintosh HD")
+        XCTAssertEqual(drive.sidebarVolumeName, "Macintosh HD")
+        XCTAssertEqual(drive.displayableVolumes.map(\.name), ["Macintosh HD"])
+    }
+
     func testPreferencesFollowStableSerialInsteadOfChangingBSDName() {
         var drive = CapricornTests.fixtureDrive()
         drive.isInternal = false
