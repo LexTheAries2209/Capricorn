@@ -22,6 +22,67 @@ final class RepresentativeVolumeSelectionTests: XCTestCase {
         XCTAssertTrue(RepresentativeVolumeResolver.isSelectable(drive.volumes[5]))
     }
 
+    func testTopologyAndOperabilityHideStructuralPartitionsWithoutGlobalSizeFilter() {
+        let backingStore = DriveDevice.Volume(
+            deviceIdentifier: "disk10s1",
+            name: "Container Metadata",
+            mountPoint: nil,
+            sizeBytes: 4_000_000_000_000,
+            isWritable: true,
+            isSystem: false,
+            fileSystemType: "APFS",
+            totalCapacityBytes: 4_000_000_000_000,
+            availableCapacityBytes: 3_000_000_000_000,
+            topologyKind: .containerBackingStore,
+            partitionContent: "Apple_APFS"
+        )
+        let smallRawPartition = DriveDevice.Volume(
+            deviceIdentifier: "disk10s2",
+            name: "Vendor Metadata",
+            mountPoint: nil,
+            sizeBytes: 500_000_000,
+            isWritable: true,
+            isSystem: false,
+            totalCapacityBytes: 500_000_000,
+            availableCapacityBytes: 400_000_000,
+            topologyKind: .physicalPartition
+        )
+        let smallUserVolume = DriveDevice.Volume(
+            deviceIdentifier: "disk10s3",
+            name: "Portable",
+            mountPoint: "/Volumes/Portable",
+            sizeBytes: 500_000_000,
+            isWritable: true,
+            isSystem: false,
+            fileSystemType: "FAT32",
+            totalCapacityBytes: 500_000_000,
+            availableCapacityBytes: 300_000_000,
+            volumeUUID: "SMALL-USER-VOLUME",
+            topologyKind: .physicalPartition
+        )
+        var drive = CapricornTests.fixtureDrive()
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.volumes = [backingStore, smallRawPartition, smallUserVolume]
+
+        XCTAssertFalse(RepresentativeVolumeResolver.isVisibleVolume(backingStore))
+        XCTAssertFalse(RepresentativeVolumeResolver.isVisibleVolume(smallRawPartition))
+        XCTAssertTrue(RepresentativeVolumeResolver.isVisibleVolume(smallUserVolume))
+        XCTAssertTrue(RepresentativeVolumeResolver.isSelectable(smallUserVolume))
+        XCTAssertEqual(
+            RepresentativeVolumeResolver.orderedVolumes(for: drive).map(\.deviceIdentifier),
+            ["disk10s3"]
+        )
+        XCTAssertEqual(drive.displayableVolumes.map(\.deviceIdentifier), ["disk10s3"])
+        XCTAssertEqual(DiskActivityWorkloadTargetResolver.orderedVolumes(for: drive).map(\.deviceIdentifier), ["disk10s3"])
+        XCTAssertEqual(RepresentativeVolumeResolver.fallbackVolume(for: drive)?.deviceIdentifier, "disk10s3")
+        XCTAssertEqual(drive.capacityUsage, DriveCapacityUsage(
+            totalBytes: 500_000_000,
+            usedBytes: 200_000_000,
+            availableBytes: 300_000_000
+        ))
+    }
+
     func testStructuralEFIAndAPFSBackingEntriesAreHiddenFromVolumeChoices() {
         let efi = DriveDevice.Volume(
             deviceIdentifier: "disk10s1",
@@ -34,12 +95,14 @@ final class RepresentativeVolumeSelectionTests: XCTestCase {
         )
         let apfsBacking = DriveDevice.Volume(
             deviceIdentifier: "disk10s2",
-            name: "disk10s2",
+            name: "APFS Container Partition",
             mountPoint: nil,
             sizeBytes: 4_100_000_000_000,
             isWritable: true,
             isSystem: false,
-            fileSystemType: "APFS"
+            fileSystemType: "APFS",
+            topologyKind: .containerBackingStore,
+            partitionContent: "Apple_APFS"
         )
         let data = DriveDevice.Volume(
             deviceIdentifier: "disk10s3",

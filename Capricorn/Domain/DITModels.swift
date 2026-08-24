@@ -78,6 +78,15 @@ struct ProviderStatus: Identifiable, Codable, Hashable, Sendable {
 
 struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     struct Volume: Identifiable, Codable, Hashable, Sendable {
+        /// Describes where a diskutil list entry sits in the storage topology.
+        /// Logical volumes are user filesystems, while physical partitions can
+        /// either contain a directly mountable filesystem or back a container.
+        enum TopologyKind: String, Codable, Hashable, Sendable {
+            case logicalVolume
+            case physicalPartition
+            case containerBackingStore
+        }
+
         var id: String { deviceIdentifier }
         var deviceIdentifier: String
         var name: String
@@ -94,6 +103,13 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
         /// diskutil. Backup identifies a Time Machine destination even when
         /// its user-visible volume name has been customized.
         var apfsRole: String? = nil
+        /// Optional for compatibility with DriveDevice values encoded before
+        /// topology-aware volume filtering was introduced.
+        var topologyKind: TopologyKind? = nil
+        /// diskutil's partition Content value is retained for diagnostics and
+        /// for classifying non-mountable metadata partitions without relying
+        /// on a localized or user-editable volume name.
+        var partitionContent: String? = nil
     }
 
     var id: String { bsdName }
@@ -119,7 +135,7 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     var serialNumber: String?
 
     var capacityUsage: DriveCapacityUsage? {
-        DriveCapacityUsage.resolve(volumes: volumes)
+        DriveCapacityUsage.resolve(volumes: displayableVolumes)
     }
 
     /// The volume name used to identify a drive in the sidebar. System disks
@@ -150,8 +166,8 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     }
 
     /// Real user-facing volumes used by the Overview volume list. Structural
-    /// EFI/APFS backing entries remain in `volumes` for device topology but are
-    /// intentionally omitted from this presentation collection.
+    /// partitions and container backing stores remain in `volumes` for device
+    /// topology but are intentionally omitted from this presentation list.
     var displayableVolumes: [Volume] {
         volumes.filter(RepresentativeVolumeResolver.isVisibleVolume)
     }
@@ -181,7 +197,7 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
             return protocolName.isEmpty ? nil : protocolName
         }
 
-        let formats = volumes
+        let formats = displayableVolumes
             .compactMap { FileSystemFormatResolver.normalized($0.fileSystemType) }
             .reduce(into: [String]()) { result, format in
                 if !result.contains(format) {

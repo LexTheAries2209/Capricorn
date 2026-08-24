@@ -23,8 +23,15 @@ final class CapricornTests: XCTestCase {
         let nativeData = try NativeSmartDataParser.parse(Self.disk0InfoFixture.data(using: .utf8)!)
         XCTAssertEqual(nativeData.deviceSpecificKeys["PERCENTAGE_USED"], 2)
         XCTAssertEqual(drive.benchmarkMountPoint, "/System/Volumes/Data")
-        XCTAssertEqual(drive.volumes.first?.fileSystemType, "APFS")
-        XCTAssertEqual(drive.volumes.first?.capacityGroupIdentifier, "apfs:disk3")
+        let dataVolume = try XCTUnwrap(drive.volumes.first(where: { $0.deviceIdentifier == "disk3s5" }))
+        XCTAssertEqual(dataVolume.fileSystemType, "APFS")
+        XCTAssertEqual(dataVolume.capacityGroupIdentifier, "apfs:disk3")
+        XCTAssertEqual(dataVolume.topologyKind, .logicalVolume)
+
+        let backingStore = try XCTUnwrap(drive.volumes.first(where: { $0.deviceIdentifier == "disk0s2" }))
+        XCTAssertEqual(backingStore.topologyKind, .containerBackingStore)
+        XCTAssertFalse(RepresentativeVolumeResolver.isVisibleVolume(backingStore))
+        XCTAssertFalse(DiskActivityWorkloadTargetResolver.orderedVolumes(for: drive).contains(backingStore))
         XCTAssertEqual(drive.fileSystemSummary, "APFS")
     }
 

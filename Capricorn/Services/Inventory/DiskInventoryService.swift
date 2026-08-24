@@ -116,6 +116,11 @@ enum DiskutilPlistParser {
             return (identifier, size)
         })
         var partitionToWholeDisk: [String: String] = [:]
+        let apfsPhysicalStoreIDs = Set(entries.flatMap { entry in
+            entry.arrayOfDictionaries("APFSPhysicalStores").compactMap {
+                $0.string("DeviceIdentifier")
+            }
+        })
 
         for entry in entries {
             guard let wholeDiskID = entry.string("DeviceIdentifier") else { continue }
@@ -150,7 +155,8 @@ enum DiskutilPlistParser {
                     fileSystemType: parsedFileSystemType(from: volume, fallback: "APFS"),
                     capacityGroupIdentifier: capacityGroupIdentifier,
                     volumeUUID: parsedVolumeUUID(from: volume),
-                    apfsRole: volume.stringList("APFSVolumeRole") ?? volume.stringList("Role")
+                    apfsRole: volume.stringList("APFSVolumeRole") ?? volume.stringList("Role"),
+                    topologyKind: .logicalVolume
                 )
             }
 
@@ -163,7 +169,12 @@ enum DiskutilPlistParser {
             guard let wholeDiskID = entry.string("DeviceIdentifier") else { continue }
             let mountedPartitions = entry
                 .arrayOfDictionaries("Partitions")
-                .compactMap(parseMountedPartitionVolume)
+                .compactMap { partition in
+                    parsePartitionVolume(
+                        partition,
+                        apfsPhysicalStoreIDs: apfsPhysicalStoreIDs
+                    )
+                }
             if !mountedPartitions.isEmpty {
                 volumesByDisk[wholeDiskID, default: []].append(contentsOf: mountedPartitions)
             }
@@ -176,11 +187,17 @@ enum DiskutilPlistParser {
         )
     }
 
-    private static func parseMountedPartitionVolume(_ partition: [String: Any]) -> DriveDevice.Volume? {
+    private static func parsePartitionVolume(
+        _ partition: [String: Any],
+        apfsPhysicalStoreIDs: Set<String>
+    ) -> DriveDevice.Volume? {
         guard let id = partition.string("DeviceIdentifier") else {
             return nil
         }
         let mountPoint = normalizedMountPoint(partition.string("MountPoint"))
+        let partitionContent = cleanName(partition.string("Content"))
+        let isContainerBackingStore = apfsPhysicalStoreIDs.contains(id)
+            || isStructuralPartitionContent(partitionContent)
 
         let isReadOnly = partition.bool("ReadOnly") ?? false
         let isWritable = partition.bool("Writable") ?? !isReadOnly
@@ -194,8 +211,30 @@ enum DiskutilPlistParser {
             fileSystemType: parsedFileSystemType(from: partition, fallback: nil),
             capacityGroupIdentifier: "volume:\(id)",
             volumeUUID: parsedVolumeUUID(from: partition),
-            apfsRole: partition.stringList("APFSVolumeRole") ?? partition.stringList("Role")
+            apfsRole: partition.stringList("APFSVolumeRole") ?? partition.stringList("Role"),
+            topologyKind: isContainerBackingStore ? .containerBackingStore : .physicalPartition,
+            partitionContent: partitionContent
         )
+    }
+
+    /// These are diskutil partition-content identifiers, not volume names.
+    /// They describe storage metadata or a container's physical backing store
+    /// and therefore cannot be mounted, benchmarked, or renamed as volumes.
+    private static func isStructuralPartitionContent(_ value: String?) -> Bool {
+        guard let value else { return false }
+        let normalized = value
+            .lowercased()
+            .filter(\.isLetter)
+        return [
+            "efi",
+            "appleapfs",
+            "appleapfsisc",
+            "appleapfsrecovery",
+            "appleapfsvm",
+            "applecorestorage",
+            "appleboot",
+            "microsoftreserved",
+        ].contains(normalized)
     }
 
     static func parseDevice(infoData: Data, volumes: [DriveDevice.Volume], showVirtual: Bool) throws -> DriveDevice? {

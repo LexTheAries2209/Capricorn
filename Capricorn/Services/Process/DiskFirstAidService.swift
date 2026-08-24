@@ -63,7 +63,7 @@ final class DiskFirstAidService: DiskFirstAidRunning, @unchecked Sendable {
         let driveBlock = blockReason(for: drive, health: health)
         var targets: [DiskFirstAidTarget] = []
 
-        for volume in uniqueVolumes(drive.volumes) {
+        for volume in uniqueVolumes(drive.displayableVolumes) {
             let target = await makeTarget(volume: volume, drive: drive, driveBlock: driveBlock)
             targets.append(target)
         }

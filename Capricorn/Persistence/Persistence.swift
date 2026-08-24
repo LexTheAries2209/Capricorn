@@ -455,7 +455,7 @@ enum ReportExporter {
         ]
 
         if shouldIncludeVolumeDetails(for: drive) {
-            let volumes = sortedVolumesForSnapshotMetadata(drive.volumes)
+            let volumes = sortedVolumesForSnapshotMetadata(drive.displayableVolumes)
             let volumeNames = volumes.map(\.name).joined(separator: ".")
             let volumeFormats = volumes
                 .map { FileSystemFormatResolver.normalized($0.fileSystemType) ?? "" }

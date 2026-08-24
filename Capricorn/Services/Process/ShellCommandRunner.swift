@@ -856,7 +856,7 @@ final class DiskCheckService {
             ))
         }
 
-        for volume in uniqueVolumes(drive.volumes) {
+        for volume in uniqueVolumes(drive.displayableVolumes) {
             plans.append(CommandPlan(
                 title: "Volume: \(volume.name)",
                 executable: diskutilPath,
@@ -869,7 +869,7 @@ final class DiskCheckService {
     }
 
     private func detailedPlans(for drive: DriveDevice) -> [CommandPlan] {
-        uniqueVolumes(drive.volumes).map { volume in
+        uniqueVolumes(drive.displayableVolumes).map { volume in
             guard let rawDevice = rawDevicePath(for: volume.deviceIdentifier) else {
                 return CommandPlan(
                     title: "Volume: \(volume.name)",

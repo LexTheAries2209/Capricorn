@@ -120,6 +120,11 @@ struct RepresentativeVolumePreferences: Codable, Equatable, Sendable {
 /// such as renaming and automatic file-based benchmarks. The resolver does
 /// not treat system or Time Machine backup volumes as safe operation targets.
 enum RepresentativeVolumeResolver {
+    /// Capacity is only a fallback signal for incomplete diskutil topology.
+    /// A mounted or otherwise identifiable filesystem is never hidden solely
+    /// because it is smaller than this value.
+    static let smallStructuralPartitionUpperBoundBytes: Int64 = 1_000_000_000
+
     static func preferenceKey(for drive: DriveDevice) -> String {
         if drive.isNetwork {
             return "network:\(drive.id)"
@@ -139,7 +144,11 @@ enum RepresentativeVolumeResolver {
     }
 
     static func orderedVolumes(for drive: DriveDevice) -> [DriveDevice.Volume] {
-        drive.volumes.filter(isVisibleVolume).sorted { lhs, rhs in
+        sortedByCapacity(drive.volumes.filter(isVisibleVolume))
+    }
+
+    private static func sortedByCapacity(_ volumes: [DriveDevice.Volume]) -> [DriveDevice.Volume] {
+        volumes.sorted { lhs, rhs in
             let lhsCapacity = volumeCapacity(lhs)
             let rhsCapacity = volumeCapacity(rhs)
             if lhsCapacity != rhsCapacity {
@@ -154,21 +163,23 @@ enum RepresentativeVolumeResolver {
     /// former are boot metadata and the latter are storage topology, so
     /// neither should appear as a volume the user can operate on.
     static func isVisibleVolume(_ volume: DriveDevice.Volume) -> Bool {
-        let name = volume.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let identifier = volume.deviceIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let fileSystem = FileSystemFormatResolver.normalized(volume.fileSystemType)?.lowercased()
 
-        if name == "efi" || fileSystem == "efi" || isAPFSAuxiliaryVolume(volume) {
+        if volume.topologyKind == .containerBackingStore
+            || fileSystem == "efi"
+            || isAPFSAuxiliaryVolume(volume) {
             return false
         }
 
-        // An APFS backing partition has no mount point, no user-facing name,
-        // and is represented by its BSD identifier (for example disk10s2).
-        // An unmounted real APFS volume normally retains a distinct name or
-        // UUID, so it remains visible and can be shown as unavailable.
-        if fileSystem == "apfs",
+        // Older or incomplete diskutil responses may not expose APFS physical
+        // store relationships. In that case, hide only a small raw partition
+        // that has none of the properties of a real filesystem. Capacity is a
+        // supporting clue here, never the primary criterion.
+        if volume.topologyKind == .physicalPartition,
            volume.mountPoint == nil,
-           name == identifier {
+           VolumeUUIDNormalizer.normalize(volume.volumeUUID) == nil,
+           volumeCapacity(volume) > 0,
+           volumeCapacity(volume) <= smallStructuralPartitionUpperBoundBytes {
             return false
         }
 
