@@ -123,6 +123,7 @@ final class AppPreferences {
 struct CapricornSettingsView: View {
     @Bindable var preferences: AppPreferences
     @Bindable var updateChecker: AppUpdateChecker
+    @State private var historyDatabaseLocationError: String?
 
     private var language: AppLanguage {
         preferences.language
@@ -171,6 +172,28 @@ struct CapricornSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(language.t("History Database")) {
+                LabeledContent(language.t("Location")) {
+                    Text(historyDatabaseDirectoryURL?.path ?? language.t("Unavailable"))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+
+                Button {
+                    openHistoryDatabaseLocation()
+                } label: {
+                    Label(language.t("Open History Database Location"), systemImage: "folder")
+                }
+                .disabled(historyDatabaseDirectoryURL == nil)
+
+                if let historyDatabaseLocationError {
+                    Label(historyDatabaseLocationError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+
             LabeledContent("smartctl") {
                 HStack {
                     TextField(language.t("Automatic detection"), text: $preferences.smartctlPath)
@@ -206,6 +229,24 @@ struct CapricornSettingsView: View {
         panel.message = language.t("Choose the smartctl executable.")
         if panel.runModal() == .OK, let url = panel.url {
             preferences.smartctlPath = url.path
+        }
+    }
+
+    private var historyDatabaseDirectoryURL: URL? {
+        try? ModelContainerFactory.applicationHistoryDirectoryURL()
+    }
+
+    private func openHistoryDatabaseLocation() {
+        do {
+            let directory = try ModelContainerFactory.applicationHistoryDirectoryURL()
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            historyDatabaseLocationError = nil
+            NSWorkspace.shared.open(directory)
+        } catch {
+            historyDatabaseLocationError = UserFacingError.message(
+                language.t("Unable to open the history database location."),
+                error: error
+            )
         }
     }
 }

@@ -34,16 +34,22 @@ enum ModelContainerFactory {
     static let historyStoreFileName = "CapricornHistory.store"
 
     static func makeApplication() throws -> ModelContainer {
-        let applicationSupport = try FileManager.default.url(
+        let directory = try applicationHistoryDirectoryURL()
+        let storeURL = directory.appendingPathComponent(historyStoreFileName)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return try makePersistent(at: storeURL)
+    }
+
+    static func applicationHistoryDirectoryURL(
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let applicationSupport = try fileManager.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
         )
-        let storeURL = historyStoreURL(in: applicationSupport)
-        let directory = storeURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return try makePersistent(at: storeURL)
+        return historyStoreURL(in: applicationSupport).deletingLastPathComponent()
     }
 
     static func historyStoreURL(in applicationSupportDirectory: URL) -> URL {

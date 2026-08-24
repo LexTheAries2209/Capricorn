@@ -643,4 +643,25 @@ extension CapricornTests {
         XCTAssertEqual(storeURL.deletingLastPathComponent().lastPathComponent, "CapricornHistory")
         XCTAssertEqual(storeURL.lastPathComponent, "CapricornHistory.store")
     }
+
+    @MainActor
+    func testApplicationHistoryDirectoryMatchesPersistentStoreParent() throws {
+        let directory = try ModelContainerFactory.applicationHistoryDirectoryURL()
+        let applicationSupport = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+
+        XCTAssertEqual(
+            directory,
+            ModelContainerFactory.historyStoreURL(in: applicationSupport).deletingLastPathComponent()
+        )
+        XCTAssertEqual(directory.lastPathComponent, "CapricornHistory")
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Open History Database Location"),
+            "打开历史数据库位置"
+        )
+    }
 }
