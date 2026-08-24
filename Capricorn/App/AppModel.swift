@@ -345,6 +345,27 @@ final class AppModel {
         driveSystemEventDebounceTask = nil
     }
 
+    /// Runs while the main content view is active. Changing the preference
+    /// replaces the SwiftUI task, so each new interval starts a fresh countdown.
+    /// Periodic work never cancels a refresh or First Aid operation already in progress.
+    func runAutomaticRefresh(
+        every interval: DiskAutomaticRefreshInterval,
+        intervalNanoseconds: UInt64? = nil
+    ) async {
+        guard let delay = intervalNanoseconds ?? interval.nanoseconds else { return }
+
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(nanoseconds: delay)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            guard !isRefreshing, !diskOperations.isFirstAidBlocking else { continue }
+            await refresh()
+        }
+    }
+
     private func scheduleRefresh(for event: DriveSystemEvent) {
         CapricornLog.inventory.info("Scheduling refresh after system event: \(event.rawValue, privacy: .public)")
         driveSystemEventDebounceTask?.cancel()

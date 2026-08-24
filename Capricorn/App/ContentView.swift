@@ -78,6 +78,9 @@ struct ContentView: View {
             viewModel.showVirtualDisks = preferences.showVirtualDisks
             await viewModel.refreshIfNeeded()
         }
+        .task(id: preferences.automaticRefreshInterval) {
+            await viewModel.runAutomaticRefresh(every: preferences.automaticRefreshInterval)
+        }
         .onChange(of: viewModel.showVirtualDisks) {
             preferences.showVirtualDisks = viewModel.showVirtualDisks
             Task { await viewModel.refresh() }

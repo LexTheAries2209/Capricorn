@@ -15,6 +15,7 @@ extension CapricornTests {
         XCTAssertFalse(preferences.allowSystemDiskSelfTests)
         XCTAssertTrue(preferences.avoidWakingSleepingDisks)
         XCTAssertFalse(preferences.redactSerialNumbers)
+        XCTAssertEqual(preferences.automaticRefreshInterval, .off)
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
         preferences.showVirtualDisks = true
         preferences.smartctlPath = "/usr/bin/true"
@@ -22,6 +23,7 @@ extension CapricornTests {
         preferences.allowSystemDiskSelfTests = true
         preferences.avoidWakingSleepingDisks = false
         preferences.redactSerialNumbers = true
+        preferences.automaticRefreshInterval = .every15Minutes
 
         let reloaded = AppPreferences(defaults: defaults)
         XCTAssertEqual(reloaded.languageRawValue, AppLanguage.simplifiedChinese.rawValue)
@@ -31,8 +33,18 @@ extension CapricornTests {
         XCTAssertTrue(reloaded.allowSystemDiskSelfTests)
         XCTAssertFalse(reloaded.avoidWakingSleepingDisks)
         XCTAssertTrue(reloaded.redactSerialNumbers)
+        XCTAssertEqual(reloaded.automaticRefreshInterval, .every15Minutes)
         reloaded.restoreAutomaticSmartctlDetection()
         XCTAssertNil(defaults.string(forKey: AppPreferences.Key.smartctlPath))
+    }
+
+    func testAutomaticRefreshIntervalsContainOnlySupportedChoices() {
+        XCTAssertEqual(
+            DiskAutomaticRefreshInterval.allCases.map(\.rawValue),
+            [0, 1, 3, 5, 10, 15, 30]
+        )
+        XCTAssertNil(DiskAutomaticRefreshInterval.off.nanoseconds)
+        XCTAssertEqual(DiskAutomaticRefreshInterval.every3Minutes.nanoseconds, 180_000_000_000)
     }
 
     @MainActor
@@ -330,6 +342,37 @@ extension CapricornTests {
         try? await Task.sleep(nanoseconds: 75_000_000)
         XCTAssertEqual(inventory.callCount, 1)
         model.stopDriveSystemEventMonitoring()
+    }
+
+    @MainActor
+    func testAutomaticRefreshLoopRefreshesAndStopsWhenCancelled() async {
+        let drive = Self.fixtureDrive(mountedAt: "/Volumes/Periodic")
+        let inventory = SequencedInventoryProvider(responses: [
+            .init(delayNanoseconds: 0, drives: [drive])
+        ])
+        let smartService = SmartSnapshotService(
+            nativeProvider: UnavailableSmartProvider(),
+            smartctlProvider: UnavailableSmartProvider()
+        )
+        let model = DITViewModel(
+            inventoryProvider: inventory,
+            smartService: smartService,
+            driveSystemEventMonitor: ManualDriveSystemEventMonitor()
+        )
+        let task = Task { @MainActor in
+            await model.runAutomaticRefresh(
+                every: .everyMinute,
+                intervalNanoseconds: 25_000_000
+            )
+        }
+
+        let refreshed = await AsyncTestWaiter.wait { inventory.callCount >= 1 }
+        XCTAssertTrue(refreshed)
+        task.cancel()
+        await task.value
+        let callsAfterCancellation = inventory.callCount
+        try? await Task.sleep(nanoseconds: 75_000_000)
+        XCTAssertEqual(inventory.callCount, callsAfterCancellation)
     }
 
     func testDriveRefreshServiceLoadsSmartSnapshotsForEveryDrive() async throws {

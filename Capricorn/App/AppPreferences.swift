@@ -4,6 +4,38 @@ import Foundation
 import Observation
 import SwiftUI
 
+enum DiskAutomaticRefreshInterval: Int, CaseIterable, Identifiable, Sendable {
+    case off = 0
+    case everyMinute = 1
+    case every3Minutes = 3
+    case every5Minutes = 5
+    case every10Minutes = 10
+    case every15Minutes = 15
+    case every30Minutes = 30
+
+    var id: Int { rawValue }
+
+    var nanoseconds: UInt64? {
+        guard self != .off else { return nil }
+        return UInt64(rawValue) * 60 * 1_000_000_000
+    }
+
+    func title(language: AppLanguage) -> String {
+        switch (language, self) {
+        case (_, .off):
+            language.t("Off")
+        case (.english, .everyMinute):
+            "Every minute"
+        case (.simplifiedChinese, .everyMinute):
+            "每 1 分钟"
+        case (.english, _):
+            "Every \(rawValue) minutes"
+        case (.simplifiedChinese, _):
+            "每 \(rawValue) 分钟"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class AppPreferences {
@@ -15,6 +47,7 @@ final class AppPreferences {
         static let allowSystemDiskSelfTests = "allowSystemDiskSelfTests"
         static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
         static let redactSerialNumbers = "redactSerialNumbers"
+        static let automaticRefreshIntervalMinutes = "automaticRefreshIntervalMinutes"
     }
 
     private let defaults: UserDefaults
@@ -56,6 +89,10 @@ final class AppPreferences {
         didSet { defaults.set(redactSerialNumbers, forKey: Key.redactSerialNumbers) }
     }
 
+    var automaticRefreshInterval: DiskAutomaticRefreshInterval {
+        didSet { defaults.set(automaticRefreshInterval.rawValue, forKey: Key.automaticRefreshIntervalMinutes) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
@@ -65,6 +102,9 @@ final class AppPreferences {
         allowSystemDiskSelfTests = defaults.bool(forKey: Key.allowSystemDiskSelfTests)
         avoidWakingSleepingDisks = defaults.object(forKey: Key.avoidWakingSleepingDisks) as? Bool ?? true
         redactSerialNumbers = defaults.bool(forKey: Key.redactSerialNumbers)
+        automaticRefreshInterval = DiskAutomaticRefreshInterval(
+            rawValue: defaults.integer(forKey: Key.automaticRefreshIntervalMinutes)
+        ) ?? .off
     }
 
     var language: AppLanguage {
@@ -112,7 +152,19 @@ struct CapricornSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(language.t("SMART Refresh")) {
+            Section(language.t("Disk Refresh")) {
+                Picker(
+                    language.t("Automatic disk refresh"),
+                    selection: $preferences.automaticRefreshInterval
+                ) {
+                    ForEach(DiskAutomaticRefreshInterval.allCases) { interval in
+                        Text(interval.title(language: language)).tag(interval)
+                    }
+                }
+                Text(language.t("Periodically rescans connected disks and refreshes SMART data. Disk connection and removal events always refresh automatically."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Toggle(language.t("Do not wake sleeping disks for SMART refresh"), isOn: $preferences.avoidWakingSleepingDisks)
                 Text(language.t("When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up. Active disks continue to refresh normally."))
                     .font(.caption)
