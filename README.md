@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.0.1`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.1.1`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v2.0.1.md](docs/releases/v2.0.1.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v2.1.1.md](docs/releases/v2.1.1.md)
 
 ---
 
@@ -20,11 +20,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.0.1-macOS.zip`。
-2. 解压后把 `Capricorn V2.0.1.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.1.1-macOS.zip`。
+2. 解压后把 `Capricorn V2.1.1.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V2.0.1 的中文发布说明见 [docs/releases/v2.0.1.zh-CN.md](docs/releases/v2.0.1.zh-CN.md)。
+V2.1.1 的中文发布说明见 [docs/releases/v2.1.1.zh-CN.md](docs/releases/v2.1.1.zh-CN.md)。
 
 典型用途：
 
@@ -44,10 +44,10 @@ V2.0.1 的中文发布说明见 [docs/releases/v2.0.1.zh-CN.md](docs/releases/v2
 - 右键磁盘菜单支持安全的装载、卸载、强制卸载、推出、重命名、Finder 定位、刷新和网络卷断开操作。
 - 内置系统盘保护，避免从 Capricorn 对系统内置盘执行装载、卸载或推出操作。
 - 支持查看占用所选磁盘的进程，并在卸载、推出失败时显示可能占用磁盘的程序列表。
-- 支持普通检查日志和只读详细检查，展示 `diskutil` 或 macOS 原生文件系统检查器的输出。
+- 在设置中开启“检查与修复”后，右键磁盘菜单会提供快速检查、深度检查和急救，并展示 `diskutil` 或 macOS 原生文件系统检查器的输出。
 - SMART 页面显示健康状态、温度、寿命、通电小时、介质错误、不安全关机次数和数据来源。
-- SMART 页面支持 ATA、NVMe 和 SAT 设备的快速/完整自检、自动轮询、中止操作、最近记录和原始 smartctl 输出回退；概览仅显示最近一次设备自检摘要。
-- 自检操作会根据设备能力和传输层禁用不支持的目标；系统盘自检可在设置中单独允许，macOS NVMe 不支持的 admin command 不会被强行执行。
+- 可在设置中按需显示 ATA、NVMe 和 SAT 设备的 SMART 自检状态、快速/完整自检、自动轮询、中止操作、最近记录和原始 smartctl 输出回退；该界面默认隐藏，概览仅在启用后显示最近一次设备自检摘要。
+- 启用自检界面后，操作会根据设备能力和传输层禁用不支持的目标；系统盘自检仍需在设置中单独允许，macOS NVMe 不支持的 admin command 不会被强行执行。
 - smartctl 7.5 数据兼容性得到加强，保留诊断信息；默认避免为 SMART 刷新唤醒休眠磁盘，并在无法安全识别设备类型时保留上一份数据。
 - 本地物理磁盘的 SMART 页面始终保留可折叠的“外接磁盘 SMART”支持区；内置磁盘或同时检测到 smartctl 与 SAT SMART Driver 时默认折叠，缺少依赖或尚未验证的外接磁盘默认展开。
 - “驱动诊断”集中显示 smartctl 目标路径、设备类型、协议、打开错误和明确标注的 SAT SMART Driver 路径；未检测到 SAT 驱动时提供开源项目仓库入口，检测成功后不再显示重复的安装或重连提示。
@@ -75,14 +75,17 @@ V2.0.1 的中文发布说明见 [docs/releases/v2.0.1.zh-CN.md](docs/releases/v2
 - 历史页支持 SMART、测速、实时活动记录的隐藏、管理隐藏记录和恢复；记录优先按完整硬件序列号匹配，无可用序列号时使用卷 UUID 兜底。V2.0.1 使用新的 `CapricornHistory` 数据库，不兼容旧版历史记录。
 - 历史页的旧 JSON、CSV 和纯文本复制功能已移除，等待新的统一导出设计。
 - SMART 快照导出为紧凑 CSV，在同一属性表中加入磁盘身份、设备类型、卷 UUID 和外接盘卷信息；中文界面额外包含中文名称，英文界面使用 SMART 属性的英文名称和说明。
+- SMART 页面可使用 `Command-S` 保存 CSV 快照，保存按钮提供对应快捷键提示。
 - 测速和实时负载使用明确的运行会话与取消状态，停止后会等待进程、文件句柄和临时文件完成清理，并拒绝旧任务的晚到回调。
 - 修复测速取消、重启和后台回调导致的界面卡顿问题，停止后会等待真实清理完成。
 - 磁盘发现与 Native SMART 采集分离：先发布磁盘列表，再以最多 2 路并发异步补充 Native 数据；单个外接盘超时不会阻塞其他磁盘。
 - Native SMART 探测对超时和暂时缺失执行立即、1 秒、3 秒静默重试，明确不支持的设备不重试；瞬时失败会保留同一稳定身份设备的上次有效值并标注正在刷新或上次读取。
+- 应用监听磁盘装载、卸载和设备终止事件，并在约 0.75 秒防抖后刷新列表；单个事件刷新不会阻塞其他磁盘的数据发布。
+- 设置可选择关闭（默认）或每 1、3、5、10、15、30 分钟自动刷新磁盘列表。
 - 新增磁盘“急救”流程：仅对用户确认的外接或可移除 APFS/ExFAT 卷调用 `diskutil repairVolume`，支持预检、占用文件提示、串行流式输出和完成后刷新。
 - 急救会阻断 SMART 故障、系统盘、内置盘、网络卷、虚拟盘、只读卷、锁定卷和 NTFS；NTFS 仅提供 Windows CHKDSK 指引。
 - Shell 命令取消时会终止对应子进程，并区分启动失败、非零退出和主动取消。
-- 设置页支持虚拟磁盘显示、序列号脱敏、普通 Tab 切页和自定义 `smartctl` 路径，并完整支持简体中文。序列号脱敏默认关闭；开启后只保留前四位，其余显示为 `*`，内部身份匹配仍使用完整值。
+- 设置页支持虚拟磁盘显示、序列号脱敏、普通 Tab 切页、自定义 `smartctl` 路径、历史数据库位置打开、自动刷新、检查与修复菜单和 SMART 自检界面，并完整支持简体中文。序列号脱敏默认关闭；开启后只保留前四位，其余显示为 `*`，内部身份匹配仍使用完整值。
 - 应用菜单只保留系统 `Settings…` 设置入口，并使用 `Command-P` 打开；另支持 `Command-R` 刷新、`Control-Tab` / `Control-Shift-Tab` 切换功能页，普通 `Tab` 切页可在设置中关闭。
 - 应用启动时静默检查 GitHub 最新稳定版；设置页和应用菜单提供手动检查、重试、打开 Releases 和查看发布说明入口，不会主动弹出更新提醒。
 - 界面支持较小窗口和自适应控制栏、指标卡布局，宽表格保留水平滚动。
@@ -148,9 +151,9 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 
 例如：
 
-- `Version = 2.0`
+- `Version = 2.1`
 - `Build = 1`
-- `Display Name = Capricorn V2.0.1`
+- `Display Name = Capricorn V2.1.1`
 
 ### 当前限制
 
@@ -170,11 +173,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v2.0.1-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V2.0.1.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v2.1.1-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V2.1.1.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V2.0.1 are available at [docs/releases/v2.0.1.en.md](docs/releases/v2.0.1.en.md).
+English release notes for V2.1.1 are available at [docs/releases/v2.1.1.en.md](docs/releases/v2.1.1.en.md).
 
 Common use cases:
 
@@ -194,10 +197,10 @@ Common use cases:
 - Adds a drive context menu for safe mount, unmount, force unmount, eject, rename, Finder reveal, refresh, and network disconnect actions.
 - Protects internal system disks from mount, unmount, force-unmount, and eject operations initiated from Capricorn.
 - Shows processes with open files on a selected disk, including follow-up diagnostics when unmount or eject actions fail.
-- Adds ordinary disk verification logs and read-only detailed checks using `diskutil` and native macOS filesystem checkers where available.
+- When Check and Repair is enabled in Settings, the drive context menu offers Quick Check, Deep Check, and First Aid, with output from `diskutil` or native macOS filesystem checkers where available.
 - Shows SMART health, temperature, life remaining, power-on hours, media errors, unsafe shutdowns, and provider status.
-- Adds quick/full SMART self-tests for supported ATA, NVMe, and SAT devices, automatic polling, abort, recent records, and raw smartctl fallback; Overview keeps only the latest device-reported summary.
-- Disables unsupported self-test operations based on device capability and transport; system-disk self-tests can be allowed separately in Settings, and unsupported macOS NVMe admin commands are never forced.
+- Settings can reveal SMART self-test status, quick/full tests for supported ATA, NVMe, and SAT devices, automatic polling, abort, recent records, and raw smartctl fallback. This interface is hidden by default; Overview shows the latest device-reported self-test summary only when it is enabled.
+- When the self-test interface is enabled, unsupported operations remain disabled based on device capability and transport. System-disk self-tests require a separate Settings opt-in, and unsupported macOS NVMe admin commands are never forced.
 - Improves smartctl 7.5 compatibility and diagnostics, avoids waking sleeping disks by default for SMART refresh, and retains the previous snapshot when safe device identification is unavailable.
 - The SMART page keeps an expandable External Drive SMART support section available for every local physical drive. It starts collapsed for internal drives or when both smartctl and SAT SMART Driver are detected, and starts expanded for external drives with missing or unverified support.
 - Driver Diagnostics groups the smartctl target path, device type, protocol, open errors, and explicitly labeled SAT SMART Driver paths. When the SAT driver is missing, it links to the open-source project; after detection, redundant installation and reconnect guidance stays hidden.
@@ -225,15 +228,18 @@ Common use cases:
 - History supports SMART, benchmark, and activity record hiding, hidden-record management, and restore. Records match by full hardware serial first and fall back to volume UUIDs when a serial is unavailable. V2.0.1 uses a new `CapricornHistory` database and does not import legacy history.
 - The legacy JSON, CSV, and plain-text copy controls were removed from History pending a redesigned unified exporter.
 - SMART snapshots use a compact CSV export with drive identity, device type, volume UUID, and external-drive volume metadata in the same attribute table. The Simplified Chinese UI adds a Chinese name column; the English UI uses English names and explanations.
+- The SMART page saves a CSV snapshot with `Command-S`, and the toolbar button exposes the same shortcut in its help text.
 - Benchmark and live-workload sessions use explicit run and cancellation states, wait for process/file cleanup, and reject late callbacks from superseded work.
 - Performs a quiet GitHub stable-release check at launch; Settings and the application menu provide manual check, retry, Releases, and release-notes actions without proactively interrupting the user.
 - Fixes benchmark cancellation/restart paths that could make the UI stall, while waiting for real cleanup before a new run starts.
 - Drive discovery and Native SMART collection are separated: the drive list appears first, then Native data is added asynchronously with at most two concurrent probes. One slow external drive cannot block publication for another disk.
 - Native SMART probes retry transient timeouts and missing fields immediately, after 1 second, and after 3 seconds, while explicit unsupported responses are not retried. Last-known-good Native values survive transient failures and are labeled as refreshing or previously read.
+- Disk mount, unmount, and device-termination events trigger a debounced refresh after about 0.75 seconds, without allowing a single event refresh to block other drive updates.
+- Settings can keep automatic disk refresh off by default or run it every 1, 3, 5, 10, 15, or 30 minutes.
 - Adds a guarded First Aid flow for explicitly selected external or removable APFS/ExFAT volumes using `diskutil repairVolume`, with preflight checks, open-file warnings, serial streaming output, and post-run refresh.
 - Blocks First Aid for failing SMART health, system/internal disks, network or virtual volumes, read-only/locked volumes, and NTFS; NTFS shows Windows CHKDSK guidance only.
 - Cancelling a shell command terminates its child process and distinguishes launch failures, non-zero exits, and user cancellation.
-- Settings cover virtual-drive visibility, serial-number redaction, plain-Tab navigation, and a custom `smartctl` path, with complete Simplified Chinese content. Redaction is off by default; when enabled, only the first four characters remain visible while internal identity matching still uses the complete serial.
+- Settings cover virtual-drive visibility, serial-number redaction, plain-Tab navigation, a custom `smartctl` path, history-database reveal, automatic refresh, the Check and Repair menu, and the SMART self-test interface, with complete Simplified Chinese content. Redaction is off by default; when enabled, only the first four characters remain visible while internal identity matching still uses the complete serial.
 - The application menu keeps only the system `Settings…` command and maps it to `Command-P`. Capricorn also supports `Command-R` to refresh and `Control-Tab` / `Control-Shift-Tab` to switch feature pages; plain-Tab switching can be disabled.
 - Responsive controls and metric grids support smaller windows while wide tables keep horizontal scrolling.
 - SwiftData history uses a versioned schema, a dedicated `CapricornHistory` storage directory, and a repository boundary with explicit save errors.
@@ -298,9 +304,9 @@ The public Display Name uses a three-part version label composed from Xcode `Ver
 
 Example:
 
-- `Version = 2.0`
+- `Version = 2.1`
 - `Build = 1`
-- `Display Name = Capricorn V2.0.1`
+- `Display Name = Capricorn V2.1.1`
 
 ### Current Limitations
 
