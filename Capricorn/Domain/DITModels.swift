@@ -332,8 +332,8 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
         case .forceUnmount: "Force Unmount"
         case .eject: "Eject"
         case .inspectOpenFiles: "View Open Files"
-        case .checkLog: "Check Log"
-        case .detailedCheck: "Detailed Check"
+        case .checkLog: "Quick Check"
+        case .detailedCheck: "Deep Check"
         case .firstAid: "First Aid…"
         case .rename: "Rename Volume"
         case .revealInFinder: "Reveal in Finder"
@@ -366,6 +366,31 @@ enum DiskSidebarActionPolicy {
             return [.mount, .unmount, .disconnect, .inspectOpenFiles]
         }
         return [.checkLog, .detailedCheck, .firstAid, .mount, .unmount, .forceUnmount, .eject, .inspectOpenFiles, .rename, .revealInFinder, .refresh]
+    }
+
+    /// Actions that can inspect or repair a local filesystem. Keeping this
+    /// grouping in the policy layer gives the sidebar a stable submenu order
+    /// and keeps unsupported drive types out of the submenu altogether.
+    static func checkAndRepairActions(for drive: DriveDevice) -> [DiskSidebarAction] {
+        actions(for: drive).filter {
+            switch $0 {
+            case .checkLog, .detailedCheck, .firstAid:
+                true
+            default:
+                false
+            }
+        }
+    }
+
+    static func actionsOutsideCheckAndRepair(for drive: DriveDevice) -> [DiskSidebarAction] {
+        actions(for: drive).filter {
+            switch $0 {
+            case .checkLog, .detailedCheck, .firstAid:
+                false
+            default:
+                true
+            }
+        }
     }
 
     static func isEnabled(_ action: DiskSidebarAction, for drive: DriveDevice) -> Bool {
@@ -488,8 +513,8 @@ enum DiskCheckMode: String, CaseIterable, Codable, Hashable, Sendable {
 
     var titleKey: String {
         switch self {
-        case .ordinary: "Check Log"
-        case .detailed: "Detailed Check"
+        case .ordinary: "Quick Check"
+        case .detailed: "Deep Check"
         }
     }
 

@@ -274,17 +274,35 @@ struct ContentView: View {
     @ViewBuilder
     private func driveContextMenu(for drive: DriveDevice) -> some View {
         Menu {
-            ForEach(DiskSidebarActionPolicy.actions(for: drive)) { action in
-                Button {
-                    handleSidebarAction(action, for: drive)
+            let checkAndRepairActions = DiskSidebarActionPolicy.checkAndRepairActions(for: drive)
+            if !checkAndRepairActions.isEmpty {
+                Menu {
+                    ForEach(checkAndRepairActions) { action in
+                        sidebarActionButton(action, for: drive)
+                    }
                 } label: {
-                    Label(language.t(action.titleKey), systemImage: action.systemImage)
+                    Label(language.t("Check and Repair"), systemImage: "wrench.and.screwdriver")
                 }
-                .disabled(sidebarActionIsDisabled(action, for: drive))
+
+                Divider()
+            }
+
+            ForEach(DiskSidebarActionPolicy.actionsOutsideCheckAndRepair(for: drive)) { action in
+                sidebarActionButton(action, for: drive)
             }
         } label: {
             Label(language.t("Disk Actions"), systemImage: "externaldrive.badge.gearshape")
         }
+    }
+
+    @ViewBuilder
+    private func sidebarActionButton(_ action: DiskSidebarAction, for drive: DriveDevice) -> some View {
+        Button {
+            handleSidebarAction(action, for: drive)
+        } label: {
+            Label(language.t(action.titleKey), systemImage: action.systemImage)
+        }
+        .disabled(sidebarActionIsDisabled(action, for: drive))
     }
 
     private func handleSidebarAction(_ action: DiskSidebarAction, for drive: DriveDevice) {

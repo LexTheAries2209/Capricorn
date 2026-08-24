@@ -817,6 +817,9 @@ final class CapricornTests: XCTestCase {
 
     func testFirstAidContentIsLocalized() {
         let expectedTranslations = [
+            "Check and Repair": "检查与修复",
+            "Quick Check": "快速检查",
+            "Deep Check": "深度检查",
             "First Aid…": "急救…",
             "Disk First Aid": "磁盘急救",
             "Required Confirmations": "必要确认",
@@ -911,6 +914,29 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(DiskSidebarActionPolicy.actions(for: drive).contains(.detailedCheck))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
+    }
+
+    func testDiskSidebarActionPolicyGroupsCheckAndRepairActions() {
+        var physicalDrive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        physicalDrive.isInternal = false
+        physicalDrive.isSystemDisk = false
+
+        XCTAssertEqual(
+            DiskSidebarActionPolicy.checkAndRepairActions(for: physicalDrive),
+            [.checkLog, .detailedCheck, .firstAid]
+        )
+        XCTAssertFalse(
+            DiskSidebarActionPolicy.actionsOutsideCheckAndRepair(for: physicalDrive)
+                .contains(where: { [.checkLog, .detailedCheck, .firstAid].contains($0) })
+        )
+
+        var networkDrive = physicalDrive
+        networkDrive.isNetwork = true
+        XCTAssertTrue(DiskSidebarActionPolicy.checkAndRepairActions(for: networkDrive).isEmpty)
+        XCTAssertEqual(
+            DiskSidebarActionPolicy.actionsOutsideCheckAndRepair(for: networkDrive),
+            DiskSidebarActionPolicy.actions(for: networkDrive)
+        )
     }
 
     func testDiskActionServiceUsesDiskutilForPhysicalSafeActions() async throws {
