@@ -275,7 +275,7 @@ struct ContentView: View {
     private func driveContextMenu(for drive: DriveDevice) -> some View {
         Menu {
             let checkAndRepairActions = DiskSidebarActionPolicy.checkAndRepairActions(for: drive)
-            if !checkAndRepairActions.isEmpty {
+            if preferences.showsCheckAndRepairActions, !checkAndRepairActions.isEmpty {
                 Menu {
                     ForEach(checkAndRepairActions) { action in
                         sidebarActionButton(action, for: drive)

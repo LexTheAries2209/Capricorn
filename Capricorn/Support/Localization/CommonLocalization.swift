@@ -246,6 +246,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Network volume": "网络卷",
         "SD Card": "SD 卡",
         "Disk Actions": "磁盘操作",
+        "Show Check and Repair in Disk Actions": "在磁盘操作中显示“检查与修复”",
+        "When disabled, Check and Repair is hidden from the disk action menu.": "关闭后，“检查与修复”不会显示在磁盘操作菜单中。",
         "Mount": "装载",
         "Unmount": "卸载",
         "Force Unmount": "强制卸载",

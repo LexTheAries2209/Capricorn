@@ -16,6 +16,7 @@ extension CapricornTests {
         XCTAssertTrue(preferences.avoidWakingSleepingDisks)
         XCTAssertFalse(preferences.redactSerialNumbers)
         XCTAssertEqual(preferences.automaticRefreshInterval, .off)
+        XCTAssertFalse(preferences.showsCheckAndRepairActions)
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
         preferences.showVirtualDisks = true
         preferences.smartctlPath = "/usr/bin/true"
@@ -24,6 +25,7 @@ extension CapricornTests {
         preferences.avoidWakingSleepingDisks = false
         preferences.redactSerialNumbers = true
         preferences.automaticRefreshInterval = .every15Minutes
+        preferences.showsCheckAndRepairActions = true
 
         let reloaded = AppPreferences(defaults: defaults)
         XCTAssertEqual(reloaded.languageRawValue, AppLanguage.simplifiedChinese.rawValue)
@@ -34,6 +36,7 @@ extension CapricornTests {
         XCTAssertFalse(reloaded.avoidWakingSleepingDisks)
         XCTAssertTrue(reloaded.redactSerialNumbers)
         XCTAssertEqual(reloaded.automaticRefreshInterval, .every15Minutes)
+        XCTAssertTrue(reloaded.showsCheckAndRepairActions)
         reloaded.restoreAutomaticSmartctlDetection()
         XCTAssertNil(defaults.string(forKey: AppPreferences.Key.smartctlPath))
     }

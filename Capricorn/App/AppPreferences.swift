@@ -48,6 +48,7 @@ final class AppPreferences {
         static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
         static let redactSerialNumbers = "redactSerialNumbers"
         static let automaticRefreshIntervalMinutes = "automaticRefreshIntervalMinutes"
+        static let showsCheckAndRepairActions = "showsCheckAndRepairActions"
     }
 
     private let defaults: UserDefaults
@@ -93,6 +94,12 @@ final class AppPreferences {
         didSet { defaults.set(automaticRefreshInterval.rawValue, forKey: Key.automaticRefreshIntervalMinutes) }
     }
 
+    /// Check and repair commands can modify filesystem metadata, so their
+    /// sidebar entry is opt-in rather than exposed in every disk menu by default.
+    var showsCheckAndRepairActions: Bool {
+        didSet { defaults.set(showsCheckAndRepairActions, forKey: Key.showsCheckAndRepairActions) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
@@ -105,6 +112,7 @@ final class AppPreferences {
         automaticRefreshInterval = DiskAutomaticRefreshInterval(
             rawValue: defaults.integer(forKey: Key.automaticRefreshIntervalMinutes)
         ) ?? .off
+        showsCheckAndRepairActions = defaults.bool(forKey: Key.showsCheckAndRepairActions)
     }
 
     var language: AppLanguage {
@@ -145,6 +153,13 @@ struct CapricornSettingsView: View {
             Text(language.t("When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Section(language.t("Disk Actions")) {
+                Toggle(language.t("Show Check and Repair in Disk Actions"), isOn: $preferences.showsCheckAndRepairActions)
+                Text(language.t("When disabled, Check and Repair is hidden from the disk action menu."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Section(language.t("SMART Self-Tests")) {
                 Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)
