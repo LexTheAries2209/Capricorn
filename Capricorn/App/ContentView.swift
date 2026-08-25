@@ -152,7 +152,9 @@ struct ContentView: View {
     }
 
     private var sidebar: some View {
-        List(selection: sidebarDriveSelection) {
+        let isDriveSelectionLocked = viewModel.isLiveActivityDriveSelectionLocked
+
+        return List(selection: sidebarDriveSelection) {
             Section(language.t("Drives")) {
                 ForEach(viewModel.drives) { drive in
                     DriveSidebarRow(
@@ -164,10 +166,13 @@ struct ContentView: View {
                             driveContextMenu(for: drive)
                         }
                         .tag(drive.id as String?)
-                        .disabled(viewModel.isLiveActivityDriveSelectionLocked && drive.id != viewModel.selectedDriveID)
+                        .opacity(isDriveSelectionLocked && drive.id != viewModel.selectedDriveID ? 0.45 : 1)
                 }
             }
         }
+        // List owns both pointer and keyboard selection. Disabling it is required
+        // in addition to AppModel's binding guard to prevent switching drives mid-run.
+        .disabled(isDriveSelectionLocked)
         .safeAreaInset(edge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
