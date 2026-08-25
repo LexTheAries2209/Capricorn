@@ -65,11 +65,11 @@ struct HistoryReportView: View {
                     Spacer()
                 }
 
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                HStack(alignment: .center, spacing: 12) {
                     Text(language.t("History & Reports"))
                         .font(.title2.bold())
                     Spacer(minLength: 12)
-                    VStack(alignment: .trailing, spacing: 4) {
+                    HStack(alignment: .center, spacing: 10) {
                         Text(historyCountSummary)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -150,10 +150,10 @@ struct HistoryReportView: View {
             Text("\(language.t("This permanently removes all history for the selected drive."))\n\(historyCountSummary)")
         }
         .confirmationDialog(
-            language.t("Clear Hidden History?"),
+            language.t("Clear Hidden Data?"),
             isPresented: $showClearHiddenHistoryConfirmation
         ) {
-            Button(language.t("Clear Hidden History"), role: .destructive) {
+            Button(language.t("Clear Hidden Data"), role: .destructive) {
                 clearHiddenDriveHistory()
             }
             Button(language.t("Cancel"), role: .cancel) {}
@@ -244,12 +244,12 @@ struct HistoryReportView: View {
                     Button {
                         showClearHiddenHistoryConfirmation = true
                     } label: {
-                        Label(language.t("Clear Hidden History"), systemImage: "trash")
+                        Label(language.t("Clear Hidden Data"), systemImage: "trash")
                     }
                     .controlSize(.small)
                     .tint(.red)
                     .disabled(hiddenHistoryCount == 0)
-                    .help(language.t("Clear Hidden History"))
+                    .help(language.t("Clear Hidden Data"))
                 }
 
                 if !hiddenSmartHistory.isEmpty {
