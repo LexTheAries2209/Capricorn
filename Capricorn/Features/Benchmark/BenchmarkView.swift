@@ -225,7 +225,7 @@ struct BenchmarkView: View {
     }
 
     private var resolvedTarget: DiskActivityWorkloadResolvedTarget {
-        DiskActivityWorkloadTargetResolver.resolve(
+        DiskBenchmarkTargetResolver.resolve(
             targetSelection,
             for: drive,
             preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
@@ -747,11 +747,17 @@ struct BenchmarkView: View {
     }
 
     private var automaticTargetTitle: String {
-        guard let volume = DiskActivityWorkloadTargetResolver.defaultVolume(
+        let resolved = DiskBenchmarkTargetResolver.resolve(
+            .automatic,
             for: drive,
             preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
-        ) else {
+        )
+        guard let volume = resolved.volume else {
             return language.t("Automatic")
+        }
+        if case let .folder(path) = resolved.selection,
+           URL(fileURLWithPath: path, isDirectory: true).lastPathComponent == "Desktop" {
+            return language.t("Automatic") + " · Desktop"
         }
         return "\(language.t("Automatic")) · \(volume.name)"
     }
@@ -805,7 +811,7 @@ struct BenchmarkView: View {
         }
 
         let requestedSelection = preferences.selection(for: drive)
-        let resolved = DiskActivityWorkloadTargetResolver.resolve(
+        let resolved = DiskBenchmarkTargetResolver.resolve(
             requestedSelection,
             for: drive,
             preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier

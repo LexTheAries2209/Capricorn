@@ -158,3 +158,46 @@ enum DiskActivityWorkloadTargetResolver {
         )
     }
 }
+
+/// Resolves benchmark destinations without changing the live activity
+/// workload policy. System-disk benchmarks are safer and more useful when
+/// their automatic destination is the user's Desktop instead of the volume
+/// root, while explicit volume and folder selections retain the shared rules.
+enum DiskBenchmarkTargetResolver {
+    static func resolve(
+        _ selection: DiskActivityWorkloadTargetSelection,
+        for drive: DriveDevice,
+        preferredVolumeID: String? = nil,
+        fileManager: FileManager = .default,
+        desktopURL: URL? = nil
+    ) -> DiskActivityWorkloadResolvedTarget {
+        let fallback = {
+            DiskActivityWorkloadTargetResolver.resolve(
+                selection,
+                for: drive,
+                preferredVolumeID: preferredVolumeID,
+                fileManager: fileManager
+            )
+        }
+
+        guard drive.isSystemDisk, selection == .automatic else {
+            return fallback()
+        }
+
+        let candidate = (desktopURL ?? fileManager.urls(for: .desktopDirectory, in: .userDomainMask).first)?
+            .standardizedFileURL
+        guard let candidate,
+              DiskActivityWorkloadTargetResolver.isUsableFolder(candidate.path, fileManager: fileManager),
+              let volume = BenchmarkTargetFolderMatcher.matchingVolume(for: candidate.path, drive: drive),
+              volume.isWritable else {
+            return fallback()
+        }
+
+        return DiskActivityWorkloadResolvedTarget(
+            selection: .folder(path: candidate.path),
+            volume: volume,
+            folderURL: candidate,
+            didFallBackToAutomatic: false
+        )
+    }
+}

@@ -2655,6 +2655,58 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(resolved.didFallBackToAutomatic)
     }
 
+    func testBenchmarkAutomaticTargetPrefersDesktopForSystemDrive() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        let desktop = root.appendingPathComponent("Users/Test/Desktop")
+        try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(
+                deviceIdentifier: "disk0s1",
+                name: "Macintosh HD - Data",
+                mountPoint: root.path,
+                sizeBytes: 1_000_000,
+                isWritable: true,
+                isSystem: false
+            )
+        ]
+
+        let resolved = DiskBenchmarkTargetResolver.resolve(.automatic, for: drive, desktopURL: desktop)
+
+        XCTAssertEqual(resolved.folderURL?.path, desktop.path)
+        XCTAssertEqual(resolved.volume?.deviceIdentifier, "disk0s1")
+        XCTAssertEqual(resolved.selection, .folder(path: desktop.path))
+        XCTAssertFalse(resolved.didFallBackToAutomatic)
+    }
+
+    func testBenchmarkExplicitTargetDoesNotChangeToDesktopForSystemDrive() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        let desktop = root.appendingPathComponent("Users/Test/Desktop")
+        let selected = root.appendingPathComponent("Benchmarks")
+        try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: selected, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(
+                deviceIdentifier: "disk0s1",
+                name: "Macintosh HD - Data",
+                mountPoint: root.path,
+                sizeBytes: 1_000_000,
+                isWritable: true,
+                isSystem: false
+            )
+        ]
+
+        let resolved = DiskBenchmarkTargetResolver.resolve(.folder(path: selected.path), for: drive, desktopURL: desktop)
+
+        XCTAssertEqual(resolved.folderURL?.path, selected.path)
+        XCTAssertEqual(resolved.selection, .folder(path: selected.path))
+    }
+
     func testActivityWorkloadTargetResolvesVolumeAndFolderAndRejectsOtherDrive() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         let firstVolume = root.appendingPathComponent("First")
