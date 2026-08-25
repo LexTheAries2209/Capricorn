@@ -151,10 +151,15 @@ struct CapricornSettingsView: View {
     @Bindable var preferences: AppPreferences
     @Bindable var updateChecker: AppUpdateChecker
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistoryRecords: [SmartHistoryRecord]
+    @Query(sort: \BenchmarkHistoryRecord.measuredAt, order: .reverse) private var benchmarkHistoryRecords: [BenchmarkHistoryRecord]
+    @Query(sort: \DiskActivityHistoryRecord.endedAt, order: .reverse) private var activityHistoryRecords: [DiskActivityHistoryRecord]
     @State private var historyDatabaseLocationError: String?
     @State private var historyDatabaseClearError: String?
     @State private var historyDatabaseClearResult: String?
     @State private var isConfirmingHistoryDatabaseClear = false
+    @State private var historyDatabaseSizeBytes: Int64?
+    @State private var pendingHistoryDatabaseStatistics: HistoryDatabaseStatistics?
 
     private var language: AppLanguage {
         preferences.language
@@ -237,19 +242,30 @@ struct CapricornSettingsView: View {
                         .textSelection(.enabled)
                 }
 
-                Button {
-                    openHistoryDatabaseLocation()
-                } label: {
-                    Label(language.t("Open History Database Location"), systemImage: "folder")
+                LabeledContent(language.t("Database Usage")) {
+                    Text("\(historyDatabaseSizeText) · \(historyRecordCount) \(language.t("Records"))")
+                        .monospacedDigit()
                 }
-                .disabled(historyDatabaseDirectoryURL == nil)
 
-                Button(role: .destructive) {
-                    historyDatabaseClearResult = nil
-                    historyDatabaseClearError = nil
-                    isConfirmingHistoryDatabaseClear = true
-                } label: {
-                    Label(language.t("Clear History Database"), systemImage: "trash")
+                HStack {
+                    Button {
+                        openHistoryDatabaseLocation()
+                    } label: {
+                        Label(language.t("Open History Database Location"), systemImage: "folder")
+                    }
+                    .disabled(historyDatabaseDirectoryURL == nil)
+
+                    Spacer(minLength: 12)
+
+                    Button(role: .destructive) {
+                        historyDatabaseClearResult = nil
+                        historyDatabaseClearError = nil
+                        pendingHistoryDatabaseStatistics = currentHistoryDatabaseStatistics
+                        isConfirmingHistoryDatabaseClear = true
+                    } label: {
+                        Label(language.t("Clear History Database"), systemImage: "trash")
+                    }
+                    .foregroundStyle(.red)
                 }
 
                 if let historyDatabaseLocationError {
@@ -295,13 +311,21 @@ struct CapricornSettingsView: View {
         .padding(20)
         .frame(width: 620)
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
+        .task {
+            refreshHistoryDatabaseSize()
+        }
         .alert(language.t("Clear History Database"), isPresented: $isConfirmingHistoryDatabaseClear) {
             Button(language.t("Clear History Database"), role: .destructive) {
                 clearHistoryDatabase()
             }
             Button(language.t("Cancel"), role: .cancel) {}
         } message: {
-            Text(language.t("This permanently removes all SMART, benchmark, and live-activity history from the current database. It cannot be undone."))
+            let statistics = pendingHistoryDatabaseStatistics ?? currentHistoryDatabaseStatistics
+            Text(
+                "\(language.t("Database Size")): \(formattedByteCount(statistics.sizeBytes))\n" +
+                "\(language.t("History Record Count")): \(statistics.recordCount)\n\n" +
+                language.t("This permanently removes all SMART, benchmark, and live-activity history from the current database. It cannot be undone.")
+            )
         }
     }
 
@@ -319,6 +343,50 @@ struct CapricornSettingsView: View {
 
     private var historyDatabaseDirectoryURL: URL? {
         try? ModelContainerFactory.applicationHistoryDirectoryURL()
+    }
+
+    private var historyRecordCount: Int {
+        smartHistoryRecords.count + benchmarkHistoryRecords.count + activityHistoryRecords.count
+    }
+
+    private var historyDatabaseSizeText: String {
+        guard let historyDatabaseSizeBytes else { return language.t("Unavailable") }
+        return formattedByteCount(historyDatabaseSizeBytes)
+    }
+
+    private var currentHistoryDatabaseStatistics: HistoryDatabaseStatistics {
+        HistoryDatabaseStatistics(
+            sizeBytes: historyDatabaseSizeBytes ?? 0,
+            recordCount: historyRecordCount
+        )
+    }
+
+    private func formattedByteCount(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useAll]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: max(0, bytes))
+    }
+
+    private func refreshHistoryDatabaseSize() {
+        guard let directory = historyDatabaseDirectoryURL else {
+            historyDatabaseSizeBytes = nil
+            return
+        }
+
+        let fileManager = FileManager.default
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey]
+        let size = fileManager.enumerator(
+            at: directory,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles]
+        )?.reduce(into: Int64(0)) { total, item in
+            guard let url = item as? URL,
+                  let values = try? url.resourceValues(forKeys: keys),
+                  values.isRegularFile == true else { return }
+            total += Int64(values.fileSize ?? 0)
+        }
+        historyDatabaseSizeBytes = size ?? 0
     }
 
     private func openHistoryDatabaseLocation() {
@@ -340,6 +408,8 @@ struct CapricornSettingsView: View {
             let removedCount = try HistoryRepository(modelContext: modelContext).clearAllHistory()
             historyDatabaseClearError = nil
             historyDatabaseClearResult = "\(language.t("History database cleared.")) \(removedCount) \(language.t("records removed."))"
+            pendingHistoryDatabaseStatistics = nil
+            refreshHistoryDatabaseSize()
         } catch {
             historyDatabaseClearResult = nil
             historyDatabaseClearError = UserFacingError.message(
@@ -348,4 +418,9 @@ struct CapricornSettingsView: View {
             )
         }
     }
+}
+
+private struct HistoryDatabaseStatistics {
+    let sizeBytes: Int64
+    let recordCount: Int
 }
