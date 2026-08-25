@@ -47,7 +47,7 @@ struct ContentView: View {
                     viewModel: viewModel,
                     smartHistory: smartHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     benchmarkHistory: benchmarkHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
-                    activityHistory: activityHistory,
+                    activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     saveSnapshot: { exportFolderPath in saveSnapshot(drive: drive, exportFolderPath: exportFolderPath) },
                     saveBenchmarkResults: { results, activitySamples in saveBenchmarkResults(drive: drive, results: results, activitySamples: activitySamples) }
                 )

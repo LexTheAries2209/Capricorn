@@ -676,6 +676,42 @@ extension CapricornTests {
     }
 
     @MainActor
+    func testHistoryRepositoryClearsOnlySelectedDriveAndCanClearHiddenOnly() throws {
+        let container = try ModelContainerFactory.makeInMemory()
+        let repository = HistoryRepository(modelContext: container.mainContext)
+        let selectedDrive = Self.fixtureDrive()
+        var otherDrive = Self.fixtureDrive()
+        otherDrive.bsdName = "disk1"
+        otherDrive.serialNumber = "OTHER"
+
+        let selectedSnapshot = try repository.saveSmart(
+            drive: selectedDrive,
+            snapshot: Self.fixtureSnapshot(for: selectedDrive)
+        )
+        _ = try repository.saveSmart(
+            drive: otherDrive,
+            snapshot: Self.fixtureSnapshot(for: otherDrive)
+        )
+        _ = try repository.saveBenchmarks(
+            drive: selectedDrive,
+            results: [Self.fixtureBenchmarkResult(for: selectedDrive)],
+            activitySamples: []
+        )
+        try repository.hide(selectedSnapshot)
+
+        let hiddenCounts = try repository.clearHiddenHistory(for: selectedDrive)
+        XCTAssertEqual(hiddenCounts.visible, 0)
+        XCTAssertEqual(hiddenCounts.hidden, 1)
+        XCTAssertEqual(try container.mainContext.fetch(FetchDescriptor<SmartHistoryRecord>()).count, 1)
+
+        let driveCounts = try repository.clearHistory(for: selectedDrive)
+        XCTAssertEqual(driveCounts.visible, 1)
+        XCTAssertEqual(driveCounts.hidden, 0)
+        XCTAssertEqual(try container.mainContext.fetch(FetchDescriptor<SmartHistoryRecord>()).count, 1)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>()).isEmpty)
+    }
+
+    @MainActor
     func testHistoryStoreUsesDedicatedCapricornDirectory() {
         let applicationSupport = URL(fileURLWithPath: "/tmp/Application Support", isDirectory: true)
         let storeURL = ModelContainerFactory.historyStoreURL(in: applicationSupport)

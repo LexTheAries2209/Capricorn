@@ -187,4 +187,53 @@ final class HistoryRepository {
         CapricornLog.persistence.info("History cache cleared: \(count) records")
         return count
     }
+
+    /// Removes every history type belonging to the selected physical drive.
+    /// The matcher is applied again inside the repository so a stale view or
+    /// an accidentally unfiltered query cannot delete another drive's data.
+    @discardableResult
+    func clearHistory(for drive: DriveDevice) throws -> HistoryClearCounts {
+        let smartRecords = try modelContext.fetch(FetchDescriptor<SmartHistoryRecord>())
+            .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
+        let benchmarkRecords = try modelContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>())
+            .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
+        let activityRecords = try modelContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>())
+            .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
+
+        let visibleCount = smartRecords.filter { $0.hiddenAt == nil }.count
+            + benchmarkRecords.filter { $0.hiddenAt == nil }.count
+            + activityRecords.filter { $0.hiddenAt == nil }.count
+        let hiddenCount = smartRecords.filter { $0.hiddenAt != nil }.count
+            + benchmarkRecords.filter { $0.hiddenAt != nil }.count
+            + activityRecords.filter { $0.hiddenAt != nil }.count
+        let counts = HistoryClearCounts(visible: visibleCount, hidden: hiddenCount)
+
+        smartRecords.forEach(modelContext.delete)
+        benchmarkRecords.forEach(modelContext.delete)
+        activityRecords.forEach(modelContext.delete)
+        try modelContext.save()
+        CapricornLog.persistence.info("Drive history cleared: \(counts.total) records")
+        return counts
+    }
+
+    /// Removes only hidden records for the selected drive. Visible records
+    /// remain untouched so this action is safe to use from the hidden-records
+    /// management section.
+    @discardableResult
+    func clearHiddenHistory(for drive: DriveDevice) throws -> HistoryClearCounts {
+        let smartRecords = try modelContext.fetch(FetchDescriptor<SmartHistoryRecord>())
+            .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
+        let benchmarkRecords = try modelContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>())
+            .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
+        let activityRecords = try modelContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>())
+            .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
+
+        let count = smartRecords.count + benchmarkRecords.count + activityRecords.count
+        smartRecords.forEach(modelContext.delete)
+        benchmarkRecords.forEach(modelContext.delete)
+        activityRecords.forEach(modelContext.delete)
+        try modelContext.save()
+        CapricornLog.persistence.info("Hidden drive history cleared: \(count) records")
+        return HistoryClearCounts(visible: 0, hidden: count)
+    }
 }

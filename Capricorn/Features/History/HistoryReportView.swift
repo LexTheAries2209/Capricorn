@@ -11,6 +11,8 @@ struct HistoryReportView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @State private var showHiddenHistory = false
+    @State private var showClearCurrentDriveConfirmation = false
+    @State private var showClearHiddenHistoryConfirmation = false
     @State private var reportError: String?
     private let historyScrollThreshold = 10
     private let historyRowHeight: CGFloat = 58
@@ -43,6 +45,18 @@ struct HistoryReportView: View {
         !hiddenSmartHistory.isEmpty || !hiddenBenchmarkHistory.isEmpty || !hiddenActivityHistory.isEmpty
     }
 
+    private var visibleHistoryCount: Int {
+        visibleSmartHistory.count + visibleBenchmarkHistory.count + visibleActivityHistory.count
+    }
+
+    private var hiddenHistoryCount: Int {
+        hiddenSmartHistory.count + hiddenBenchmarkHistory.count + hiddenActivityHistory.count
+    }
+
+    private var historyCountSummary: String {
+        "\(language.t("Visible records")): \(visibleHistoryCount) · \(language.t("Hidden records")): \(hiddenHistoryCount)"
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -51,8 +65,26 @@ struct HistoryReportView: View {
                     Spacer()
                 }
 
-                Text(language.t("History & Reports"))
-                    .font(.title2.bold())
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(language.t("History & Reports"))
+                        .font(.title2.bold())
+                    Spacer(minLength: 12)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(historyCountSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Button {
+                            showClearCurrentDriveConfirmation = true
+                        } label: {
+                            Label(language.t("Clear Drive History"), systemImage: "trash")
+                        }
+                        .controlSize(.small)
+                        .tint(.red)
+                        .disabled(visibleHistoryCount + hiddenHistoryCount == 0)
+                        .help(language.t("Clear Drive History"))
+                    }
+                }
 
                 if let reportError {
                     Label(reportError, systemImage: "exclamationmark.triangle.fill")
@@ -106,6 +138,28 @@ struct HistoryReportView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .confirmationDialog(
+            language.t("Clear Drive History?"),
+            isPresented: $showClearCurrentDriveConfirmation
+        ) {
+            Button(language.t("Clear Drive History"), role: .destructive) {
+                clearCurrentDriveHistory()
+            }
+            Button(language.t("Cancel"), role: .cancel) {}
+        } message: {
+            Text("\(language.t("This permanently removes all history for the selected drive."))\n\(historyCountSummary)")
+        }
+        .confirmationDialog(
+            language.t("Clear Hidden History?"),
+            isPresented: $showClearHiddenHistoryConfirmation
+        ) {
+            Button(language.t("Clear Hidden History"), role: .destructive) {
+                clearHiddenDriveHistory()
+            }
+            Button(language.t("Cancel"), role: .cancel) {}
+        } message: {
+            Text("\(language.t("This permanently removes hidden history for the selected drive."))\n\(language.t("Hidden records")): \(hiddenHistoryCount)")
+        }
     }
 
     private var historyScrollHeight: CGFloat {
@@ -187,6 +241,15 @@ struct HistoryReportView: View {
                         Label(language.t("Restore All"), systemImage: "arrow.counterclockwise")
                     }
                     .controlSize(.small)
+                    Button {
+                        showClearHiddenHistoryConfirmation = true
+                    } label: {
+                        Label(language.t("Clear Hidden History"), systemImage: "trash")
+                    }
+                    .controlSize(.small)
+                    .tint(.red)
+                    .disabled(hiddenHistoryCount == 0)
+                    .help(language.t("Clear Hidden History"))
                 }
 
                 if !hiddenSmartHistory.isEmpty {
@@ -351,6 +414,24 @@ struct HistoryReportView: View {
             try repository.restoreAll(hiddenActivityHistory)
         } catch {
             reportError = language.t("Could not update history.")
+        }
+    }
+
+    private func clearCurrentDriveHistory() {
+        do {
+            _ = try HistoryRepository(modelContext: modelContext).clearHistory(for: drive)
+            reportError = nil
+        } catch {
+            reportError = language.t("Could not clear history.")
+        }
+    }
+
+    private func clearHiddenDriveHistory() {
+        do {
+            _ = try HistoryRepository(modelContext: modelContext).clearHiddenHistory(for: drive)
+            reportError = nil
+        } catch {
+            reportError = language.t("Could not clear history.")
         }
     }
 

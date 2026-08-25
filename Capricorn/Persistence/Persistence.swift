@@ -169,6 +169,13 @@ protocol HistoryDisplayRecord: AnyObject {
     var hiddenAt: Date? { get set }
 }
 
+struct HistoryClearCounts: Equatable, Sendable {
+    let visible: Int
+    let hidden: Int
+
+    var total: Int { visible + hidden }
+}
+
 extension SmartHistoryRecord: HistoryDisplayRecord {}
 extension BenchmarkHistoryRecord: HistoryDisplayRecord {}
 extension DiskActivityHistoryRecord: HistoryDisplayRecord {}
