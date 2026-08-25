@@ -2,6 +2,7 @@
 import AppKit
 import Foundation
 import Observation
+import SwiftData
 import SwiftUI
 
 enum DiskAutomaticRefreshInterval: Int, CaseIterable, Identifiable, Sendable {
@@ -149,7 +150,11 @@ final class AppPreferences {
 struct CapricornSettingsView: View {
     @Bindable var preferences: AppPreferences
     @Bindable var updateChecker: AppUpdateChecker
+    @Environment(\.modelContext) private var modelContext
     @State private var historyDatabaseLocationError: String?
+    @State private var historyDatabaseClearError: String?
+    @State private var historyDatabaseClearResult: String?
+    @State private var isConfirmingHistoryDatabaseClear = false
 
     private var language: AppLanguage {
         preferences.language
@@ -239,10 +244,30 @@ struct CapricornSettingsView: View {
                 }
                 .disabled(historyDatabaseDirectoryURL == nil)
 
+                Button(role: .destructive) {
+                    historyDatabaseClearResult = nil
+                    historyDatabaseClearError = nil
+                    isConfirmingHistoryDatabaseClear = true
+                } label: {
+                    Label(language.t("Clear History Database"), systemImage: "trash")
+                }
+
                 if let historyDatabaseLocationError {
                     Label(historyDatabaseLocationError, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(.orange)
+                }
+
+                if let historyDatabaseClearError {
+                    Label(historyDatabaseClearError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                if let historyDatabaseClearResult {
+                    Label(historyDatabaseClearResult, systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -270,6 +295,14 @@ struct CapricornSettingsView: View {
         .padding(20)
         .frame(width: 620)
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
+        .alert(language.t("Clear History Database"), isPresented: $isConfirmingHistoryDatabaseClear) {
+            Button(language.t("Clear History Database"), role: .destructive) {
+                clearHistoryDatabase()
+            }
+            Button(language.t("Cancel"), role: .cancel) {}
+        } message: {
+            Text(language.t("This permanently removes all SMART, benchmark, and live-activity history from the current database. It cannot be undone."))
+        }
     }
 
     private func chooseSmartctl() {
@@ -297,6 +330,20 @@ struct CapricornSettingsView: View {
         } catch {
             historyDatabaseLocationError = UserFacingError.message(
                 language.t("Unable to open the history database location."),
+                error: error
+            )
+        }
+    }
+
+    private func clearHistoryDatabase() {
+        do {
+            let removedCount = try HistoryRepository(modelContext: modelContext).clearAllHistory()
+            historyDatabaseClearError = nil
+            historyDatabaseClearResult = "\(language.t("History database cleared.")) \(removedCount) \(language.t("records removed."))"
+        } catch {
+            historyDatabaseClearResult = nil
+            historyDatabaseClearError = UserFacingError.message(
+                language.t("Unable to clear the history database."),
                 error: error
             )
         }

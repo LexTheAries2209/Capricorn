@@ -167,4 +167,24 @@ final class HistoryRepository {
         HistoryVisibility.restoreAll(records, matching: drive)
         try modelContext.save()
     }
+
+    /// Removes every user-facing history record from the current SwiftData
+    /// store while leaving the store itself, application settings, and schema
+    /// metadata intact. This is intentionally a cache operation: the next
+    /// SMART, benchmark, or live-activity save can use the same container.
+    @discardableResult
+    func clearAllHistory() throws -> Int {
+        let smartRecords = try modelContext.fetch(FetchDescriptor<SmartHistoryRecord>())
+        let benchmarkRecords = try modelContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>())
+        let activityRecords = try modelContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>())
+
+        smartRecords.forEach(modelContext.delete)
+        benchmarkRecords.forEach(modelContext.delete)
+        activityRecords.forEach(modelContext.delete)
+        try modelContext.save()
+
+        let count = smartRecords.count + benchmarkRecords.count + activityRecords.count
+        CapricornLog.persistence.info("History cache cleared: \(count) records")
+        return count
+    }
 }

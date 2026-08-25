@@ -645,6 +645,37 @@ extension CapricornTests {
     }
 
     @MainActor
+    func testHistoryRepositoryClearsHistoryRecordsWithoutRemovingTheContainer() throws {
+        let container = try ModelContainerFactory.makeInMemory()
+        let repository = HistoryRepository(modelContext: container.mainContext)
+        let drive = Self.fixtureDrive()
+        let snapshot = Self.fixtureSnapshot(for: drive)
+        let benchmark = Self.fixtureBenchmarkResult(for: drive)
+        let sample = DiskActivitySample(timestamp: Date(), readMegabytesPerSecond: 1, writeMegabytesPerSecond: 2)
+
+        try repository.saveSmart(drive: drive, snapshot: snapshot)
+        try repository.saveBenchmarks(drive: drive, results: [benchmark], activitySamples: [sample])
+        try repository.saveActivity(
+            drive: drive,
+            samples: [sample],
+            sampleInterval: DiskActivitySampleInterval.default,
+            startedAt: sample.timestamp,
+            endedAt: sample.timestamp.addingTimeInterval(1)
+        )
+
+        let removedCount = try repository.clearAllHistory()
+
+        XCTAssertEqual(removedCount, 3)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<SmartHistoryRecord>()).isEmpty)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>()).isEmpty)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>()).isEmpty)
+
+        // The same context remains usable after clearing the cache.
+        _ = try repository.saveSmart(drive: drive, snapshot: snapshot)
+        XCTAssertEqual(try container.mainContext.fetch(FetchDescriptor<SmartHistoryRecord>()).count, 1)
+    }
+
+    @MainActor
     func testHistoryStoreUsesDedicatedCapricornDirectory() {
         let applicationSupport = URL(fileURLWithPath: "/tmp/Application Support", isDirectory: true)
         let storeURL = ModelContainerFactory.historyStoreURL(in: applicationSupport)
@@ -671,6 +702,14 @@ extension CapricornTests {
         XCTAssertEqual(
             AppLanguage.simplifiedChinese.t("Open History Database Location"),
             "打开历史数据库位置"
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Clear History Database"),
+            "清理历史数据库"
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("This permanently removes all SMART, benchmark, and live-activity history from the current database. It cannot be undone."),
+            "这会永久删除当前数据库中的所有 SMART、测速和实时活动历史记录，且无法撤销。"
         )
     }
 }
