@@ -4,8 +4,9 @@
   "records": [
     {
       "id": "arri-codex-compact-drive",
-      "manufacturer": "ARRI Codex",
+      "manufacturer": "Codex",
       "family": "Compact Drive",
+      "prefersMarketingNameOnly": true,
       "mediaKind": "SSD",
       "interfaces": ["NVMe", "PCIe", "USB"],
       "introduced": 2019,
@@ -27,20 +28,22 @@
     },
     {
       "id": "arri-codex-compact-drive-express",
-      "manufacturer": "ARRI Codex",
+      "manufacturer": "Codex",
       "family": "Compact Drive Express",
+      "prefersMarketingNameOnly": true,
       "mediaKind": "SSD",
       "interfaces": ["NVMe", "PCIe", "USB"],
       "introduced": 2025,
-      "modelPatterns": ["^(?:CODEX[ _])?(?<model>CX\\.(?<capacity>0001090))(?:[-/ ].*)?$"]
+      "modelPatterns": ["^(?:CODEX[ _])?(?<model>CX\\.(?<capacity>0001090))(?:[-/ ].*)?$"],
       "capacityLabels": {"0001090": "1TB"},
       "sourceURL": "https://help.codex.online/content/recording-media/compact-drive",
       "examples": [{"reportedModel": "CX.0001090", "canonicalModel": "CX.0001090", "capacityToken": "0001090"}]
     },
     {
       "id": "arri-codex-sxr-capture-drive",
-      "manufacturer": "ARRI Codex",
+      "manufacturer": "Codex",
       "family": "SXR Capture Drive",
+      "prefersMarketingNameOnly": true,
       "mediaKind": "SSD",
       "interfaces": ["NVMe", "PCIe", "USB"],
       "introduced": 2016,
