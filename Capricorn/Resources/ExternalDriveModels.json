@@ -3,6 +3,59 @@
   "scope": "Common physical HDD/SSD families introduced or commonly deployed since 2016, including internal, portable, OEM client, data-center, and enterprise storage visible to macOS.",
   "records": [
     {
+      "id": "arri-codex-compact-drive",
+      "manufacturer": "ARRI Codex",
+      "family": "Compact Drive",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe", "USB"],
+      "introduced": 2019,
+      "modelPatterns": [
+        "^(?:ARRI[ _])?(?<model>CDXCDC(?<capacity>0096|0192)[A-Z0-9]+)(?:[-/ ].*)?$",
+        "^(?:CODEX[ _])?(?<model>CX\\.(?<capacity>0001002))(?:[-/ ].*)?$",
+        "^(?:CODEX[ _])?(?<model>CA08-(?<capacity>1024))(?:[-/ ].*)?$",
+        "^(?:CODEX[ _])?(?<model>CX\\.(?<capacity>0001073))(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"0096": "1TB", "0192": "2TB", "0001002": "1TB", "1024": "1TB", "0001073": "2TB"},
+      "sourceURL": "https://www.arri.com/en/camera-systems/camera-components/recording-media/codex-compact-drive/K0.0043661",
+      "examples": [
+        {"reportedModel": "CDXCDC0096M300N40A", "canonicalModel": "CDXCDC0096M300N40A", "capacityToken": "0096"},
+        {"reportedModel": "CDXCDC0192M300N40A", "canonicalModel": "CDXCDC0192M300N40A", "capacityToken": "0192"},
+        {"reportedModel": "CX.0001002", "canonicalModel": "CX.0001002", "capacityToken": "0096"},
+        {"reportedModel": "CA08-1024", "canonicalModel": "CA08-1024", "capacityToken": "0096"},
+        {"reportedModel": "CX.0001073", "canonicalModel": "CX.0001073", "capacityToken": "0192"}
+      ]
+    },
+    {
+      "id": "arri-codex-compact-drive-express",
+      "manufacturer": "ARRI Codex",
+      "family": "Compact Drive Express",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe", "USB"],
+      "introduced": 2025,
+      "modelPatterns": ["^(?:CODEX[ _])?(?<model>CX\\.(?<capacity>0001090))(?:[-/ ].*)?$"]
+      "capacityLabels": {"0001090": "1TB"},
+      "sourceURL": "https://help.codex.online/content/recording-media/compact-drive",
+      "examples": [{"reportedModel": "CX.0001090", "canonicalModel": "CX.0001090", "capacityToken": "0001090"}]
+    },
+    {
+      "id": "arri-codex-sxr-capture-drive",
+      "manufacturer": "ARRI Codex",
+      "family": "SXR Capture Drive",
+      "mediaKind": "SSD",
+      "interfaces": ["NVMe", "PCIe", "USB"],
+      "introduced": 2016,
+      "modelPatterns": [
+        "^(?:CODEX[ _])?(?<model>CDX-(?<capacity>37019)/18)(?:[-/ ].*)?$",
+        "^(?:CODEX[ _])?(?<model>CDX-(?<capacity>37021)/20)(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"37019": "1TB", "37021": "2TB"},
+      "sourceURL": "https://www.arri.com/resource/blob/73098/ee8b61a35a222880b39e34e7b0f505b2/configuration-overview-catalogue-complete-data.pdf",
+      "examples": [
+        {"reportedModel": "CDX-37019/18", "canonicalModel": "CDX-37019/18", "capacityToken": "37019"},
+        {"reportedModel": "CDX-37021/20", "canonicalModel": "CDX-37021/20", "capacityToken": "37021"}
+      ]
+    },
+    {
       "id": "seagate-exos-7e8",
       "manufacturer": "Seagate",
       "family": "Exos 7E8",

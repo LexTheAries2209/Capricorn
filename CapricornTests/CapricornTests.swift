@@ -156,6 +156,27 @@ final class CapricornTests: XCTestCase {
         }
     }
 
+    func testExternalDriveModelCatalogIdentifiesARRICodexRecordingMedia() throws {
+        let cases: [(reportedModel: String, recordID: String, marketingName: String)] = [
+            ("CDXCDC0192M300N40A", "arri-codex-compact-drive", "ARRI Codex Compact Drive 2TB"),
+            ("CDXCDC0096M300N40A", "arri-codex-compact-drive", "ARRI Codex Compact Drive 1TB"),
+            ("CX.0001090", "arri-codex-compact-drive-express", "ARRI Codex Compact Drive Express 1TB"),
+            ("CDX-37019/18", "arri-codex-sxr-capture-drive", "ARRI Codex SXR Capture Drive 1TB"),
+            ("CDX-37021/20", "arri-codex-sxr-capture-drive", "ARRI Codex SXR Capture Drive 2TB")
+        ]
+
+        for testCase in cases {
+            let match = try XCTUnwrap(
+                ExternalDriveModelCatalog.bundled.match(
+                    for: Self.externalCatalogDrive(model: testCase.reportedModel, protocolName: "PCI-Express")
+                ),
+                testCase.reportedModel
+            )
+            XCTAssertEqual(match.recordID, testCase.recordID, testCase.reportedModel)
+            XCTAssertEqual(match.marketingName, testCase.marketingName, testCase.reportedModel)
+        }
+    }
+
     func testExternalDriveModelCatalogFormatsKnownHDDModels() throws {
         let catalog = ExternalDriveModelCatalog.bundled
         let seagate = try XCTUnwrap(catalog.match(for: Self.externalCatalogDrive(model: "ST8000NM000A-2KE101")))
