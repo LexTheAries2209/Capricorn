@@ -143,7 +143,18 @@ final class CapricornTests: XCTestCase {
             XCTAssertTrue(record.sourceURL.hasPrefix("https://"), record.id)
             XCTAssertFalse(record.examples.isEmpty, record.id)
             for example in record.examples {
-                let drive = Self.externalCatalogDrive(model: example.reportedModel)
+                var drive = Self.externalCatalogDrive(model: example.reportedModel)
+                if let usbIdentity = record.usbIdentity {
+                    drive.usbDevice = DriveUSBDeviceIdentity(
+                        vendorName: usbIdentity.vendorName,
+                        productName: usbIdentity.productName,
+                        vendorID: usbIdentity.vendorID,
+                        productID: usbIdentity.productID
+                    )
+                }
+                if let sizeRange = record.sizeRange {
+                    drive.sizeBytes = (sizeRange.minimumBytes + sizeRange.maximumBytes) / 2
+                }
                 let match = try XCTUnwrap(catalog.match(for: drive), record.id)
                 XCTAssertEqual(match.recordID, record.id, example.reportedModel)
                 XCTAssertEqual(match.canonicalModel, example.canonicalModel, example.reportedModel)
@@ -154,6 +165,52 @@ final class CapricornTests: XCTestCase {
                 )
             }
         }
+    }
+
+    func testExternalDriveModelCatalogIdentifiesWDElementsPortableByUSBIdentityAndCapacity() throws {
+        let catalog = ExternalDriveModelCatalog.bundled
+        let expected: [(Int64, String, String)] = [
+            (1_000_000_000_000, "wd-elements-portable-hdd", "WD Elements Portable HDD 1TB"),
+            (2_000_000_000_000, "wd-elements-portable-hdd-2tb", "WD Elements Portable HDD 2TB"),
+            (4_000_000_000_000, "wd-elements-portable-hdd-4tb", "WD Elements Portable HDD 4TB"),
+            (5_000_947_302_400, "wd-elements-portable-hdd-5tb", "WD Elements Portable HDD 5TB"),
+            (6_000_000_000_000, "wd-elements-portable-hdd-6tb", "WD Elements Portable HDD 6TB")
+        ]
+
+        for (sizeBytes, recordID, marketingName) in expected {
+            var drive = Self.externalCatalogDrive(model: "WDC WD50NDZW-11BCSS0")
+            drive.sizeBytes = sizeBytes
+            drive.usbDevice = DriveUSBDeviceIdentity(
+                vendorName: "Western Digital",
+                productName: "Elements 2621",
+                vendorID: 4184,
+                productID: 9761
+            )
+            let match = try XCTUnwrap(catalog.match(for: drive), marketingName)
+            XCTAssertEqual(match.recordID, recordID)
+            XCTAssertEqual(match.marketingName, marketingName)
+            XCTAssertEqual(drive.catalogSidebarDisplayName, marketingName)
+        }
+
+        var wrongVendor = Self.externalCatalogDrive(model: "WDC WD50NDZW-11BCSS0")
+        wrongVendor.sizeBytes = 5_000_947_302_400
+        wrongVendor.usbDevice = DriveUSBDeviceIdentity(
+            vendorName: "Other Vendor",
+            productName: "Elements 2621",
+            vendorID: 4184,
+            productID: 9761
+        )
+        XCTAssertNil(catalog.match(for: wrongVendor))
+
+        var wrongCapacity = Self.externalCatalogDrive(model: "WDC WD50NDZW-11BCSS0")
+        wrongCapacity.sizeBytes = 3_000_000_000_000
+        wrongCapacity.usbDevice = DriveUSBDeviceIdentity(
+            vendorName: "Western Digital",
+            productName: "Elements 2621",
+            vendorID: 4184,
+            productID: 9761
+        )
+        XCTAssertNil(catalog.match(for: wrongCapacity))
     }
 
     func testExternalDriveModelCatalogIdentifiesARRICodexRecordingMedia() throws {

@@ -82,6 +82,10 @@ protocol DriveSerialNumberProviding: Sendable {
     func serialNumbers(for drives: [DriveDevice]) async -> [String: String]
 }
 
+protocol DriveUSBDeviceIdentityProviding: Sendable {
+    func deviceIdentities(for drives: [DriveDevice]) async -> [String: DriveUSBDeviceIdentity]
+}
+
 enum DriveSerialNumberNormalizer {
     static func normalize(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -566,6 +570,90 @@ struct IOKitDriveSerialProvider: DriveSerialNumberProviding {
     }
 }
 
+struct IOKitDriveUSBDeviceIdentityProvider: DriveUSBDeviceIdentityProviding {
+    func deviceIdentities(for drives: [DriveDevice]) async -> [String: DriveUSBDeviceIdentity] {
+        var identities: [String: DriveUSBDeviceIdentity] = [:]
+        for drive in drives where !drive.isNetwork {
+            if let identity = deviceIdentity(forBSDName: drive.bsdName) {
+                identities[drive.bsdName] = identity
+            }
+        }
+        return identities
+    }
+
+    private func deviceIdentity(forBSDName bsdName: String) -> DriveUSBDeviceIdentity? {
+        guard let media = copyWholeMedia(bsdName: bsdName) else { return nil }
+        defer { IOObjectRelease(media) }
+
+        // Walk to the USB device ancestor so an enclosure identity remains
+        // paired with the backing IOMedia even when the disk model is generic.
+        var current = media
+        var ownsCurrent = false
+        defer {
+            if ownsCurrent {
+                IOObjectRelease(current)
+            }
+        }
+
+        while true {
+            let identity = DriveUSBDeviceIdentity(
+                vendorName: stringProperty(from: current, key: "USB Vendor Name"),
+                productName: stringProperty(from: current, key: "USB Product Name"),
+                vendorID: integerProperty(from: current, key: "idVendor"),
+                productID: integerProperty(from: current, key: "idProduct")
+            )
+            if identity.vendorName != nil || identity.productName != nil || identity.vendorID != nil || identity.productID != nil {
+                return identity
+            }
+
+            var parent: io_registry_entry_t = 0
+            guard IORegistryEntryGetParentEntry(current, kIOServicePlane, &parent) == KERN_SUCCESS else {
+                return nil
+            }
+            if ownsCurrent {
+                IOObjectRelease(current)
+            }
+            current = parent
+            ownsCurrent = true
+        }
+    }
+
+    private func copyWholeMedia(bsdName: String) -> io_registry_entry_t? {
+        guard let matching = IOServiceMatching(kIOMediaClass) else { return nil }
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else {
+            return nil
+        }
+        defer { IOObjectRelease(iterator) }
+
+        while true {
+            let media = IOIteratorNext(iterator)
+            guard media != 0 else { return nil }
+            let name = copyProperty(media, key: kIOBSDNameKey) as? String
+            let whole = copyProperty(media, key: kIOMediaWholeKey) as? Bool
+            if name == bsdName, whole == true {
+                return media
+            }
+            IOObjectRelease(media)
+        }
+    }
+
+    private func stringProperty(from entry: io_registry_entry_t, key: String) -> String? {
+        guard let value = copyProperty(entry, key: key) as? String else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func integerProperty(from entry: io_registry_entry_t, key: String) -> Int? {
+        (copyProperty(entry, key: key) as? NSNumber)?.intValue
+    }
+
+    private func copyProperty(_ entry: io_registry_entry_t, key: String) -> Any? {
+        IORegistryEntryCreateCFProperty(entry, key as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue()
+    }
+}
+
 final class FallbackDriveSerialProvider: DriveSerialNumberProviding, @unchecked Sendable {
     private let primary: DriveSerialNumberProviding
     private let fallback: DriveSerialNumberProviding
@@ -766,6 +854,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
     private let diskutilPath: String
     private let networkProvider: NetworkVolumeInventoryProviding?
     private let serialNumberProvider: DriveSerialNumberProviding
+    private let usbDeviceIdentityProvider: DriveUSBDeviceIdentityProviding
     private let maximumConcurrentInfoCalls: Int
     private let infoTimeout: TimeInterval
 
@@ -774,6 +863,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
         diskutilPath: String = "/usr/sbin/diskutil",
         networkProvider: NetworkVolumeInventoryProviding? = NetworkMountInventoryProvider(),
         serialNumberProvider: DriveSerialNumberProviding? = nil,
+        usbDeviceIdentityProvider: DriveUSBDeviceIdentityProviding? = nil,
         maximumConcurrentInfoCalls: Int = 2,
         infoTimeout: TimeInterval = 5
     ) {
@@ -784,6 +874,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
             primary: SystemProfilerDriveSerialProvider(runner: runner),
             fallback: IOKitDriveSerialProvider()
         )
+        self.usbDeviceIdentityProvider = usbDeviceIdentityProvider ?? IOKitDriveUSBDeviceIdentityProvider()
         self.maximumConcurrentInfoCalls = max(1, maximumConcurrentInfoCalls)
         self.infoTimeout = infoTimeout
     }
@@ -807,6 +898,15 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
                 guard let serialNumber = serialNumbers[drive.bsdName] else { return drive }
                 var enriched = drive
                 enriched.serialNumber = serialNumber
+                return enriched
+            }
+        }
+        let usbDeviceIdentities = await usbDeviceIdentityProvider.deviceIdentities(for: devices)
+        if !usbDeviceIdentities.isEmpty {
+            devices = devices.map { drive in
+                guard let usbDevice = usbDeviceIdentities[drive.bsdName] else { return drive }
+                var enriched = drive
+                enriched.usbDevice = usbDevice
                 return enriched
             }
         }

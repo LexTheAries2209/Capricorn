@@ -76,6 +76,13 @@ struct ProviderStatus: Identifiable, Codable, Hashable, Sendable {
     var message: String
 }
 
+struct DriveUSBDeviceIdentity: Codable, Hashable, Sendable {
+    var vendorName: String?
+    var productName: String?
+    var vendorID: Int?
+    var productID: Int?
+}
+
 struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     struct Volume: Identifiable, Codable, Hashable, Sendable {
         /// Describes where a diskutil list entry sits in the storage topology.
@@ -133,6 +140,10 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     var volumes: [Volume]
     var model: String?
     var serialNumber: String?
+    /// Optional USB enclosure identity, populated from the IORegistry.
+    /// It is kept separate from the drive model because bridge product names
+    /// such as "Elements 2621" identify the enclosure rather than the disk.
+    var usbDevice: DriveUSBDeviceIdentity? = nil
 
     var capacityUsage: DriveCapacityUsage? {
         DriveCapacityUsage.resolve(volumes: displayableVolumes)
@@ -932,6 +943,7 @@ extension DriveDevice {
         case volumes
         case model
         case serialNumber
+        case usbDevice
     }
 
     init(from decoder: Decoder) throws {
@@ -956,6 +968,7 @@ extension DriveDevice {
         volumes = try container.decode([Volume].self, forKey: .volumes)
         model = try container.decodeIfPresent(String.self, forKey: .model)
         serialNumber = try container.decodeIfPresent(String.self, forKey: .serialNumber)
+        usbDevice = try container.decodeIfPresent(DriveUSBDeviceIdentity.self, forKey: .usbDevice)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -980,6 +993,7 @@ extension DriveDevice {
         try container.encode(volumes, forKey: .volumes)
         try container.encodeIfPresent(model, forKey: .model)
         try container.encodeIfPresent(serialNumber, forKey: .serialNumber)
+        try container.encodeIfPresent(usbDevice, forKey: .usbDevice)
     }
 }
 
