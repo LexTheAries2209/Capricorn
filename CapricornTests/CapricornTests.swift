@@ -694,6 +694,49 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(drive.fileSystemSummary, "NTFS")
     }
 
+    func testDiskutilParserRecoversMountedUDFVolumeFromDeviceInfo() throws {
+        let list = try DiskutilPlistParser.parseList(Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+          <key>WholeDisks</key><array><string>disk12</string></array>
+          <key>AllDisksAndPartitions</key><array><dict>
+            <key>DeviceIdentifier</key><string>disk12</string>
+            <key>Size</key><integer>1920383410176</integer>
+            <key>Partitions</key><array/>
+          </dict></array>
+        </dict></plist>
+        """.utf8))
+        let drive = try XCTUnwrap(DiskutilPlistParser.parseDevice(
+            infoData: Data("""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0"><dict>
+              <key>BusProtocol</key><string>PCI-Express</string>
+              <key>DeviceIdentifier</key><string>disk12</string>
+              <key>DeviceNode</key><string>/dev/disk12</string>
+              <key>FilesystemName</key><string>UDF</string>
+              <key>IOKitSize</key><integer>1920383410176</integer>
+              <key>MediaName</key><string>CDXCDC0192M300N40A</string>
+              <key>MountPoint</key><string>/Volumes/B_0005_1CHZ</string>
+              <key>ReadOnly</key><true/>
+              <key>RemovableMediaOrExternalDevice</key><true/>
+              <key>SolidState</key><true/>
+              <key>VirtualOrPhysical</key><string>Physical</string>
+              <key>WholeDisk</key><true/>
+              <key>WritableMedia</key><false/>
+            </dict></plist>
+            """.utf8),
+            volumes: list.volumesByPhysicalDisk["disk12"] ?? [],
+            showVirtual: false
+        ))
+
+        XCTAssertEqual(drive.sidebarVolumeName, "B_0005_1CHZ")
+        XCTAssertEqual(drive.fileSystemSummary, "UDF")
+        XCTAssertEqual(drive.displayableVolumes.map(\.name), ["B_0005_1CHZ"])
+        XCTAssertFalse(drive.displayableVolumes[0].isWritable)
+    }
+
     func testDiskutilParserDoesNotTreatMountedPartitionTypeAsFilesystem() throws {
         let list = try DiskutilPlistParser.parseList(Self.sdCardPartitionListFixture.data(using: .utf8)!)
         let volume = try XCTUnwrap(list.volumesByPhysicalDisk["disk14"]?.first)

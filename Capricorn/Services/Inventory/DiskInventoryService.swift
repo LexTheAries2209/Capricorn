@@ -261,6 +261,20 @@ enum DiskutilPlistParser {
             return nil
         }
 
+        // Some filesystems (notably UDF media from camera/recording devices)
+        // are omitted from `diskutil list -plist` even while `diskutil info`
+        // reports a mounted volume. Recover that user-facing volume here so
+        // the sidebar and volume-aware actions do not fall back to the model.
+        var deviceVolumes = volumes
+        if let infoVolume = volumeFromDeviceInfo(info, deviceIdentifier: bsdName) {
+            if let index = deviceVolumes.firstIndex(where: { $0.deviceIdentifier == bsdName }) {
+                deviceVolumes[index] = infoVolume
+            } else if !deviceVolumes.contains(where: { $0.mountPoint == infoVolume.mountPoint }) {
+                deviceVolumes.append(infoVolume)
+            }
+        }
+        deviceVolumes = deduplicatedVolumes(deviceVolumes)
+
         let mediaName = cleanName(info.string("MediaName"))
         let registryName = cleanName(info.string("IORegistryEntryName"))
         let displayName = mediaName ?? registryName ?? bsdName
@@ -283,16 +297,48 @@ enum DiskutilPlistParser {
             isSolidState: info.bool("SolidState") ?? false,
             isWritable: info.bool("WritableMedia") ?? info.bool("Writable") ?? false,
             isVirtual: isVirtual,
-            isSystemDisk: volumes.contains(where: { $0.mountPoint == "/" }),
+            isSystemDisk: deviceVolumes.contains(where: { $0.mountPoint == "/" }),
             isMemoryCard: isMemoryCard,
             // Native SMART is intentionally collected by NativeSmartProbe after
             // inventory has been published. Keeping it out of DriveDevice avoids
             // treating a transient first diskutil response as permanent state.
             smartStatusRaw: nil,
             nativeSmartKeys: [:],
-            volumes: deduplicatedVolumes(volumes),
+            volumes: deviceVolumes,
             model: registryName,
             serialNumber: cleanName(info.string("DeviceSerial"))
+        )
+    }
+
+    private static func volumeFromDeviceInfo(
+        _ info: [String: Any],
+        deviceIdentifier: String
+    ) -> DriveDevice.Volume? {
+        let mountPoint = normalizedMountPoint(info.string("MountPoint"))
+        guard let mountPoint else { return nil }
+
+        let name = cleanName(info.string("VolumeName"))
+            ?? cleanName(info.string("Name"))
+            ?? URL(fileURLWithPath: mountPoint).lastPathComponent
+        guard !name.isEmpty else { return nil }
+
+        let isReadOnly = info.bool("ReadOnly") ?? !(info.bool("Writable") ?? true)
+        let isWritable = info.bool("WritableMedia") ?? !isReadOnly
+        return DriveDevice.Volume(
+            deviceIdentifier: deviceIdentifier,
+            name: name,
+            mountPoint: mountPoint,
+            sizeBytes: info.int64("VolumeSize")
+                ?? info.int64("TotalSize")
+                ?? info.int64("Size")
+                ?? info.int64("IOKitSize")
+                ?? 0,
+            isWritable: isWritable && !isReadOnly,
+            isSystem: mountPoint == "/" || info.bool("OSInternal") == true,
+            fileSystemType: parsedFileSystemType(from: info, fallback: nil),
+            capacityGroupIdentifier: "volume:\(deviceIdentifier)",
+            volumeUUID: parsedVolumeUUID(from: info),
+            topologyKind: .physicalPartition
         )
     }
 
