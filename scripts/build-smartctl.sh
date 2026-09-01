@@ -32,7 +32,7 @@ done
 tar -xzf "$SOURCE_ARCHIVE" -C "$WORK_ROOT"
 SOURCE_ROOT="$WORK_ROOT/smartmontools-RELEASE_7_5/smartmontools"
 cd "$SOURCE_ROOT"
-./autogen.sh
+AUTOMAKE=${AUTOMAKE:-automake-1.18} ./autogen.sh
 
 mkdir -p "$OUTPUT_ROOT"
 for architecture in arm64 x86_64; do
