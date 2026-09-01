@@ -9,6 +9,18 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
     }
 
     struct Record: Decodable, Equatable, Sendable {
+        struct USBIdentity: Decodable, Equatable, Sendable {
+            var vendorName: String?
+            var productName: String?
+            var vendorID: Int?
+            var productID: Int?
+        }
+
+        struct SizeRange: Decodable, Equatable, Sendable {
+            var minimumBytes: Int64
+            var maximumBytes: Int64
+        }
+
         struct Example: Decodable, Equatable, Sendable {
             var reportedModel: String
             var canonicalModel: String
@@ -24,6 +36,9 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
         var modelPatterns: [String]
         var capacityLabels: [String: String]
         var prefersMarketingNameOnly: Bool?
+        var usbIdentity: USBIdentity?
+        var sizeRange: SizeRange?
+        var fixedCapacityToken: String?
         var sourceURL: String
         var examples: [Example]
 
@@ -176,13 +191,16 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
             let normalized = Self.normalized(candidate)
             let range = NSRange(normalized.startIndex..<normalized.endIndex, in: normalized)
             for compiled in compiledRecords {
-                guard Self.transportIsCompatible(drive: drive, record: compiled.record) else {
+                guard Self.transportIsCompatible(drive: drive, record: compiled.record),
+                      Self.matchesUSBIdentity(drive.usbDevice, requirement: compiled.record.usbIdentity),
+                      Self.matchesSize(drive.sizeBytes, range: compiled.record.sizeRange) else {
                     continue
                 }
                 for expression in compiled.expressions {
                     guard let result = expression.firstMatch(in: normalized, range: range),
                           let model = Self.capture(named: "model", from: result, in: normalized),
-                          let capacityToken = Self.capture(named: "capacity", from: result, in: normalized),
+                          let capacityToken = Self.capture(named: "capacity", from: result, in: normalized)
+                              ?? compiled.record.fixedCapacityToken,
                           let marketingName = compiled.record.marketingName(capacityToken: capacityToken) else {
                         continue
                     }
@@ -222,6 +240,34 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
         return declaredInterfaces.contains("nvme")
             || declaredInterfaces.contains("pcie")
             || declaredInterfaces.contains("m.2")
+    }
+
+    private static func matchesUSBIdentity(
+        _ actual: DriveUSBDeviceIdentity?,
+        requirement: Record.USBIdentity?
+    ) -> Bool {
+        guard let requirement else { return true }
+        guard let actual else { return false }
+        if let expected = requirement.vendorName,
+           normalized(actual.vendorName ?? "") != normalized(expected) {
+            return false
+        }
+        if let expected = requirement.productName,
+           normalized(actual.productName ?? "") != normalized(expected) {
+            return false
+        }
+        if let expected = requirement.vendorID, actual.vendorID != expected {
+            return false
+        }
+        if let expected = requirement.productID, actual.productID != expected {
+            return false
+        }
+        return true
+    }
+
+    private static func matchesSize(_ sizeBytes: Int64, range: Record.SizeRange?) -> Bool {
+        guard let range else { return true }
+        return (range.minimumBytes...range.maximumBytes).contains(sizeBytes)
     }
 
     private static func normalized(_ value: String) -> String {

@@ -439,11 +439,77 @@ func formatSmartLogicalBlocks(_ logicalBlocks: Int64, blockSizeBytes: Int64) -> 
     return "\(byteCount) (\(logicalBlocks) LBA, \(blockSizeBytes) B/LBA)"
 }
 
+enum SmartctlExecutableOrigin: String, Codable, Hashable, Sendable {
+    case bundled
+    case external
+}
+
+struct SmartctlExecutableDescriptor: Hashable, Sendable {
+    var path: String
+    var origin: SmartctlExecutableOrigin
+    var driveDatabasePath: String?
+}
+
+struct SmartctlExecutableInfo: Hashable, Sendable {
+    var path: String?
+    var origin: SmartctlExecutableOrigin?
+    var version: String?
+    var driveDatabaseVersion: String?
+    var isCompatible: Bool?
+    var error: String?
+}
+
+enum BundledSmartctlMetadata {
+    static let version = "7.5"
+    static let driveDatabaseVersion = "7.5"
+    static let minimumCompatibleMajorVersion = 7
+}
+
+/// Keeps smartctl scans, reads, and self-tests from overlapping at the process level.
+/// The stronger global ordering is intentional because macOS bridges can expose one
+/// physical disk through multiple device nodes at the same time.
+actor SmartctlCommandCoordinator {
+    static let shared = SmartctlCommandCoordinator()
+
+    private var running = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func run<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        await acquire()
+        defer { release() }
+        return try await operation()
+    }
+
+    private func acquire() async {
+        guard running else {
+            running = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    private func release() {
+        if let continuation = waiters.first {
+            waiters.removeFirst()
+            continuation.resume()
+        } else {
+            running = false
+        }
+    }
+}
+
 final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable {
     let providerName = "smartctl"
     private let runner: CommandRunning
     private let fileManager: FileManager
     private let configuredPath: String?
+    private let defaults: UserDefaults
+    private let bundle: Bundle
+    private let bundledExecutableURL: URL?
+    private let bundledDriveDatabaseURL: URL?
+    private let commandCoordinator: SmartctlCommandCoordinator
     private let ioServiceTargetResolver: any SmartctlIOServiceTargetResolving
     private let avoidsWakingSleepingDisks: @Sendable () -> Bool
 
@@ -451,6 +517,11 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         runner: CommandRunning = ShellCommandRunner(),
         fileManager: FileManager = .default,
         configuredPath: String? = nil,
+        defaults: UserDefaults = .standard,
+        bundle: Bundle = .main,
+        bundledExecutableURL: URL? = nil,
+        bundledDriveDatabaseURL: URL? = nil,
+        commandCoordinator: SmartctlCommandCoordinator = .shared,
         ioServiceTargetResolver: any SmartctlIOServiceTargetResolving = IOKitSmartctlTargetResolver(),
         avoidsWakingSleepingDisks: @escaping @Sendable () -> Bool = {
             UserDefaults.standard.object(forKey: AppPreferences.Key.avoidWakingSleepingDisks) as? Bool ?? true
@@ -459,6 +530,11 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         self.runner = runner
         self.fileManager = fileManager
         self.configuredPath = configuredPath
+        self.defaults = defaults
+        self.bundle = bundle
+        self.bundledExecutableURL = bundledExecutableURL
+        self.bundledDriveDatabaseURL = bundledDriveDatabaseURL
+        self.commandCoordinator = commandCoordinator
         self.ioServiceTargetResolver = ioServiceTargetResolver
         self.avoidsWakingSleepingDisks = avoidsWakingSleepingDisks
     }
@@ -483,13 +559,13 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             return SmartSnapshot.unavailable(for: drive, reason: "SD cards do not expose standard SMART health data on macOS.")
         }
 
-        guard let executable = findExecutable() else {
+        guard let executable = resolvedExecutable() else {
             return SmartSnapshot(
                 driveID: drive.id,
                 capturedAt: Date(),
                 health: .unavailable,
-                summary: "smartctl was not found. Install smartmontools to enable deep SMART details.",
-                providerStatuses: [ProviderStatus(name: providerName, state: .unavailable, message: "smartctl not installed.")],
+                summary: "The bundled smartctl executable is unavailable.",
+                providerStatuses: [ProviderStatus(name: providerName, state: .unavailable, message: "Bundled smartctl is unavailable.")],
                 attributes: [],
                 temperatureCelsius: nil,
                 lifeRemainingPercent: nil,
@@ -520,22 +596,28 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             snapshot.smartctlDiagnostics = SmartctlDiagnostics(
                 targetPath: target,
                 protocolName: resolvedTargetDescriptor?.protocolName ?? drive.protocolName,
-                readSkippedToAvoidWake: true
+                readSkippedToAvoidWake: true,
+                executablePath: executable.path,
+                executableOrigin: executable.origin.rawValue
             )
             return snapshot
         }
         do {
-            let result = try await runner.run(
-                executable,
-                arguments: smartReadArguments(for: drive, target: resolvedTargetDescriptor, fallback: target)
-            )
-            return SmartctlParser.parseSnapshot(
+            let result = try await commandCoordinator.run { [self] in
+                try await self.runner.run(
+                    executable.path,
+                    arguments: self.smartReadArguments(for: drive, target: resolvedTargetDescriptor, fallback: target, executable: executable)
+                )
+            }
+            return annotate(
+                SmartctlParser.parseSnapshot(
                 result.stdout,
                 drive: drive,
                 providerName: providerName,
                 exitStatus: result.terminationStatus,
                 stderr: result.stderr,
                 targetDescriptor: resolvedTargetDescriptor
+                ), with: executable
             )
         } catch {
             var snapshot = SmartSnapshot(
@@ -559,7 +641,9 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
                 deviceType: resolvedTargetDescriptor?.type,
                 protocolName: resolvedTargetDescriptor?.protocolName ?? drive.protocolName,
                 readSkippedToAvoidWake: false,
-                openError: error.localizedDescription
+                openError: error.localizedDescription,
+                executablePath: executable.path,
+                executableOrigin: executable.origin.rawValue
             )
             return snapshot
         }
@@ -571,11 +655,16 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
 
     func resolvedTargetDescriptors(for drives: [DriveDevice]) async -> [String: SmartctlTargetDescriptor] {
         guard !drives.isEmpty,
-              let executable = findExecutable(),
-              let result = try? await runner.run(
-                  executable,
-                  arguments: [avoidsWakingSleepingDisks() ? "--scan" : "--scan-open", "--json"]
-              ),
+              let executable = resolvedExecutable(),
+              let result = try? await commandCoordinator.run({ [self] in
+                  try await self.runner.run(
+                      executable.path,
+                      arguments: self.argumentsAddingDriveDatabase(
+                          [self.avoidsWakingSleepingDisks() ? "--scan" : "--scan-open", "--json"],
+                          executable: executable
+                      )
+                  )
+              }),
               let devices = SmartctlParser.parseScan(result.stdout) else {
             return [:]
         }
@@ -610,13 +699,14 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     func smartReadArguments(
         for drive: DriveDevice,
         target: SmartctlTargetDescriptor?,
-        fallback: String
+        fallback: String,
+        executable: SmartctlExecutableDescriptor? = nil
     ) -> [String] {
         var arguments = ["-a", "--json"]
         if avoidsWakingSleepingDisks(), Self.supportsPowerModeCheck(target: target, drive: drive) {
             arguments.insert(contentsOf: ["-n", "standby,0"], at: 0)
         }
-        return commandArguments(arguments, target: target, fallback: fallback)
+        return commandArguments(arguments, target: target, fallback: fallback, executable: executable)
     }
 
     private static func supportsPowerModeCheck(target: SmartctlTargetDescriptor?, drive: DriveDevice) -> Bool {
@@ -631,26 +721,115 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     func commandArguments(
         _ base: [String],
         target: SmartctlTargetDescriptor?,
-        fallback: String
+        fallback: String,
+        executable: SmartctlExecutableDescriptor? = nil
     ) -> [String] {
         var arguments = base
         if let type = target?.type, !type.isEmpty, type.lowercased() != "auto" {
             arguments += ["-d", type]
         }
         arguments.append(target?.path ?? fallback)
-        return arguments
+        guard let executable = executable ?? resolvedExecutable() else { return arguments }
+        return argumentsAddingDriveDatabase(arguments, executable: executable)
+    }
+
+    func resolvedExecutable() -> SmartctlExecutableDescriptor? {
+        let explicitPath = (configuredPath ?? defaults.string(forKey: AppPreferences.Key.smartctlPath))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let explicitPath, !explicitPath.isEmpty,
+           fileManager.isExecutableFile(atPath: explicitPath) {
+            return SmartctlExecutableDescriptor(path: explicitPath, origin: .external, driveDatabasePath: nil)
+        }
+
+        let bundledURL = bundledExecutableURL ?? bundle.url(
+            forResource: "smartctl",
+            withExtension: nil
+        )
+        let driveDatabaseURL = bundledDriveDatabaseURL ?? bundle.url(
+            forResource: "drivedb",
+            withExtension: "h"
+        )
+        guard let bundledURL,
+              let driveDatabaseURL,
+              fileManager.isExecutableFile(atPath: bundledURL.path),
+              fileManager.isReadableFile(atPath: driveDatabaseURL.path) else { return nil }
+        return SmartctlExecutableDescriptor(
+            path: bundledURL.path,
+            origin: .bundled,
+            driveDatabasePath: driveDatabaseURL.path
+        )
     }
 
     func findExecutable() -> String? {
-        let candidates = [
-            configuredPath,
-            UserDefaults.standard.string(forKey: "smartctlPath"),
-            "/opt/homebrew/bin/smartctl",
-            "/usr/local/bin/smartctl",
-            "/usr/sbin/smartctl"
-        ].compactMap { $0 }.filter { !$0.isEmpty }
+        resolvedExecutable()?.path
+    }
 
-        return candidates.first { fileManager.isExecutableFile(atPath: $0) }
+    func executableInfo() async -> SmartctlExecutableInfo {
+        guard let executable = resolvedExecutable() else {
+            return SmartctlExecutableInfo(path: nil, origin: nil, version: nil, driveDatabaseVersion: nil, isCompatible: nil, error: "Bundled smartctl is unavailable.")
+        }
+        do {
+            let result = try await commandCoordinator.run { [self] in
+                try await self.runner.run(executable.path, arguments: ["--version"])
+            }
+            let output = [result.stdoutString, result.stderrString].joined(separator: "\n")
+            let version = Self.smartctlVersion(in: output)
+            return SmartctlExecutableInfo(
+                path: executable.path,
+                origin: executable.origin,
+                version: version,
+                driveDatabaseVersion: executable.origin == .bundled ? BundledSmartctlMetadata.driveDatabaseVersion : nil,
+                isCompatible: result.terminationStatus == 0 ? version.map(Self.isCompatibleVersion) : nil,
+                error: result.terminationStatus == 0 ? nil : SmartctlParser.commandFailureMessage(result)
+            )
+        } catch {
+            return SmartctlExecutableInfo(path: executable.path, origin: executable.origin, version: nil, driveDatabaseVersion: nil, isCompatible: nil, error: error.localizedDescription)
+        }
+    }
+
+    private func annotate(_ snapshot: SmartSnapshot, with executable: SmartctlExecutableDescriptor) -> SmartSnapshot {
+        var snapshot = snapshot
+        var diagnostics = snapshot.smartctlDiagnostics ?? SmartctlDiagnostics(
+            version: nil,
+            driveDatabaseVersion: nil,
+            targetPath: nil,
+            deviceType: nil,
+            protocolName: nil,
+            powerMode: nil,
+            readSkippedToAvoidWake: nil,
+            openError: nil,
+            executablePath: nil,
+            executableOrigin: nil
+        )
+        diagnostics.executablePath = executable.path
+        diagnostics.executableOrigin = executable.origin.rawValue
+        if executable.origin == .bundled {
+            diagnostics.version = diagnostics.version ?? BundledSmartctlMetadata.version
+            diagnostics.driveDatabaseVersion = diagnostics.driveDatabaseVersion ?? BundledSmartctlMetadata.driveDatabaseVersion
+        }
+        snapshot.smartctlDiagnostics = diagnostics
+        return snapshot
+    }
+
+    private static func smartctlVersion(in output: String) -> String? {
+        guard let expression = try? NSRegularExpression(pattern: #"smartctl\s+([0-9]+(?:\.[0-9]+)+)"#, options: [.caseInsensitive]) else { return nil }
+        let range = NSRange(output.startIndex..., in: output)
+        guard let match = expression.firstMatch(in: output, range: range),
+              let versionRange = Range(match.range(at: 1), in: output) else { return nil }
+        return String(output[versionRange])
+    }
+
+    private static func isCompatibleVersion(_ version: String) -> Bool {
+        guard let majorVersion = Int(version.split(separator: ".", maxSplits: 1).first ?? "") else { return false }
+        return majorVersion >= BundledSmartctlMetadata.minimumCompatibleMajorVersion
+    }
+
+    private func argumentsAddingDriveDatabase(
+        _ arguments: [String],
+        executable: SmartctlExecutableDescriptor
+    ) -> [String] {
+        guard let driveDatabasePath = executable.driveDatabasePath else { return arguments }
+        return ["--drivedb=\(driveDatabasePath)"] + arguments
     }
 
 }
@@ -676,13 +855,16 @@ final class SmartSelfTestService: @unchecked Sendable {
 
     private let smartctlProvider: SmartctlSmartProvider
     private let administratorRunner: CommandRunning
+    private let commandCoordinator: SmartctlCommandCoordinator
 
     init(
         smartctlProvider: SmartctlSmartProvider = SmartctlSmartProvider(),
-        administratorRunner: CommandRunning = AdministratorCommandRunner()
+        administratorRunner: CommandRunning = AdministratorCommandRunner(),
+        commandCoordinator: SmartctlCommandCoordinator = .shared
     ) {
         self.smartctlProvider = smartctlProvider
         self.administratorRunner = administratorRunner
+        self.commandCoordinator = commandCoordinator
     }
 
     func start(kind: SmartSelfTestKind, drive: DriveDevice) async throws -> SmartSelfTestStartResult {
@@ -701,9 +883,12 @@ final class SmartSelfTestService: @unchecked Sendable {
         let arguments = smartctlProvider.commandArguments(
             ["-t", kind == .short ? "short" : "long", "--json"],
             target: target,
-            fallback: drive.deviceNode
+            fallback: drive.deviceNode,
+            executable: executable
         )
-        let result = try await administratorRunner.run(executable, arguments: arguments)
+        let result = try await commandCoordinator.run { [self] in
+            try await self.administratorRunner.run(executable.path, arguments: arguments)
+        }
         guard result.terminationStatus == 0 else {
             throw SmartSelfTestServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
         }
@@ -719,8 +904,15 @@ final class SmartSelfTestService: @unchecked Sendable {
         if Self.usesMacOSNativeNVMeTransport(target: target, drive: drive) {
             throw SmartSelfTestServiceError.unsupported(Self.macOSNativeNVMeUnavailableMessage)
         }
-        let arguments = smartctlProvider.commandArguments(["-X"], target: target, fallback: drive.deviceNode)
-        let result = try await administratorRunner.run(executable, arguments: arguments)
+        let arguments = smartctlProvider.commandArguments(
+            ["-X"],
+            target: target,
+            fallback: drive.deviceNode,
+            executable: executable
+        )
+        let result = try await commandCoordinator.run { [self] in
+            try await self.administratorRunner.run(executable.path, arguments: arguments)
+        }
         guard result.terminationStatus == 0 else {
             throw SmartSelfTestServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
         }
@@ -732,9 +924,12 @@ final class SmartSelfTestService: @unchecked Sendable {
         let arguments = smartctlProvider.commandArguments(
             ["-c", "--json"],
             target: target,
-            fallback: drive.deviceNode
+            fallback: drive.deviceNode,
+            executable: executable
         )
-        let result = try await administratorRunner.run(executable, arguments: arguments)
+        let result = try await commandCoordinator.run { [self] in
+            try await self.administratorRunner.run(executable.path, arguments: arguments)
+        }
         guard let capability = SmartctlParser.parseSelfTestCapability(result) else {
             throw SmartSelfTestServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
         }
@@ -751,15 +946,15 @@ final class SmartSelfTestService: @unchecked Sendable {
         await smartctlProvider.resolvedTargetDescriptors(for: [drive])[drive.id]
     }
 
-    private func executable(for drive: DriveDevice) throws -> String {
+    private func executable(for drive: DriveDevice) throws -> SmartctlExecutableDescriptor {
         if drive.isNetwork {
             throw SmartSelfTestServiceError.unsupported("Network drives do not support hardware SMART self-tests.")
         }
         if drive.isMemoryCard {
             throw SmartSelfTestServiceError.unsupported("Memory cards do not support hardware SMART self-tests.")
         }
-        guard let executable = smartctlProvider.findExecutable() else {
-            throw SmartSelfTestServiceError.unsupported("smartctl was not found. Install smartmontools first.")
+        guard let executable = smartctlProvider.resolvedExecutable() else {
+            throw SmartSelfTestServiceError.unsupported("Bundled smartctl is unavailable.")
         }
         return executable
     }

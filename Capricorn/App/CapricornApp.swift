@@ -94,8 +94,14 @@ struct CapricornApp: App {
         }
 
         Settings {
-            CapricornSettingsView(preferences: preferences, updateChecker: updateChecker)
+            CapricornSettingsView(
+                preferences: preferences,
+                updateChecker: updateChecker,
+                viewModel: viewModel
+            )
         }
+        .defaultSize(width: 620, height: 680)
+        .windowResizability(.contentSize)
         .modelContainer(modelContainer)
         .commandsRemoved()
     }

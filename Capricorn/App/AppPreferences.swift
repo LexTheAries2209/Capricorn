@@ -142,14 +142,19 @@ final class AppPreferences {
         smartctlPath.isEmpty || FileManager.default.isExecutableFile(atPath: smartctlPath)
     }
 
-    func restoreAutomaticSmartctlDetection() {
+    func useBundledSmartctl() {
         smartctlPath = ""
+    }
+
+    func restoreAutomaticSmartctlDetection() {
+        useBundledSmartctl()
     }
 }
 
 struct CapricornSettingsView: View {
     @Bindable var preferences: AppPreferences
     @Bindable var updateChecker: AppUpdateChecker
+    @Bindable var viewModel: AppModel
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistoryRecords: [SmartHistoryRecord]
     @Query(sort: \BenchmarkHistoryRecord.measuredAt, order: .reverse) private var benchmarkHistoryRecords: [BenchmarkHistoryRecord]
@@ -160,6 +165,7 @@ struct CapricornSettingsView: View {
     @State private var isConfirmingHistoryDatabaseClear = false
     @State private var historyDatabaseSizeBytes: Int64?
     @State private var pendingHistoryDatabaseStatistics: HistoryDatabaseStatistics?
+    @State private var smartctlExecutableInfo: SmartctlExecutableInfo?
 
     private var language: AppLanguage {
         preferences.language
@@ -290,29 +296,131 @@ struct CapricornSettingsView: View {
                 }
             }
 
-            LabeledContent("smartctl") {
-                HStack {
-                    TextField(language.t("Automatic detection"), text: $preferences.smartctlPath)
+            Section(language.t("SMART Driver Support")) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text("smartctl")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 0)
+                        Label(smartctlSupportStatus, systemImage: smartctlSupportSymbol)
+                            .foregroundStyle(smartctlSupportTint)
+                            .font(.subheadline.weight(.semibold))
+                        Button(action: refreshExternalSmartSupport) {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(.borderless)
+                        .help(language.t("Refresh SMART Support"))
+                        .accessibilityLabel(language.t("Refresh SMART Support"))
+                    }
+
+                    Text(language.t("External USB bridge support depends on the enclosure and its macOS driver."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(language.t("External Tool Override"))
+                        .font(.subheadline.weight(.semibold))
+                    TextField(language.t("External smartctl path (optional)"), text: $preferences.smartctlPath)
                         .textFieldStyle(.roundedBorder)
-                    Button(language.t("Choose…"), action: chooseSmartctl)
-                    Button(language.t("Automatic")) {
-                        preferences.restoreAutomaticSmartctlDetection()
+                        .frame(maxWidth: .infinity)
+                    HStack(spacing: 8) {
+                        Button(action: chooseSmartctl) {
+                            Label(language.t("Choose…"), systemImage: "folder")
+                        }
+                        Button {
+                            preferences.useBundledSmartctl()
+                        } label: {
+                            Label(language.t("Use Bundled"), systemImage: "shippingbox")
+                        }
+                        .disabled(preferences.smartctlPath.isEmpty)
+                    }
+                    .controlSize(.small)
+                    Text(language.t("Capricorn uses its bundled smartctl unless you select an executable here."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !preferences.smartctlPathIsValid {
+                    Label(language.t("The selected smartctl path is not executable."), systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(language.t("smartctl Diagnostics"))
+                        .font(.subheadline.weight(.semibold))
+                    if let smartctlExecutableInfo {
+                        smartctlDiagnosticRow(
+                            language.t("Tool Source"),
+                            language.t(smartctlExecutableInfo.origin == .external ? "External override" : "Bundled")
+                        )
+                        smartctlDiagnosticRow(language.t("smartctl Version"), smartctlExecutableInfo.version)
+                        smartctlDiagnosticRow(language.t("Drive Database"), smartctlExecutableInfo.driveDatabaseVersion)
+                        if let isCompatible = smartctlExecutableInfo.isCompatible {
+                            smartctlDiagnosticRow(
+                                language.t("Compatibility"),
+                                language.t(isCompatible ? "Compatible" : "Incompatible"),
+                                tint: isCompatible ? .secondary : .orange
+                            )
+                        } else {
+                            smartctlDiagnosticRow(
+                                language.t("Compatibility"),
+                                language.t("Compatibility could not be verified."),
+                                tint: .orange
+                            )
+                        }
+
+                        if let error = smartctlExecutableInfo.error {
+                            Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    } else {
+                        ProgressView(language.t("Checking SMART tool…"))
+                            .controlSize(.small)
                     }
                 }
-            }
 
-            if !preferences.smartctlPathIsValid {
-                Label(language.t("The selected smartctl path is not executable."), systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(language.t("SAT SMART Driver"))
+                            .font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 0)
+                        Label(satSmartDriverSupportStatus, systemImage: satSmartDriverSupportSymbol)
+                            .foregroundStyle(satSmartDriverSupportTint)
+                            .font(.subheadline.weight(.semibold))
+                    }
+
+                    Text(language.t(satSmartDriverSupportDescription))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Link(destination: Self.satSmartDriverRepositoryURL) {
+                        Label(language.t("Open SAT SMART Driver Project"), systemImage: "safari")
+                    }
+                    .font(.caption)
+                }
             }
 
         }
         .formStyle(.grouped)
         .padding(20)
-        .frame(width: 620)
+        .frame(
+            minWidth: 620,
+            idealWidth: 620,
+            maxWidth: 620,
+            minHeight: 520,
+            idealHeight: 680,
+            maxHeight: .infinity,
+            alignment: .topLeading
+        )
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
         .task {
             refreshHistoryDatabaseSize()
+        }
+        .task(id: preferences.smartctlPath) {
+            smartctlExecutableInfo = await SmartctlSmartProvider().executableInfo()
         }
         .alert(language.t("Clear History Database"), isPresented: $isConfirmingHistoryDatabaseClear) {
             Button(language.t("Clear History Database"), role: .destructive) {
@@ -338,6 +446,65 @@ struct CapricornSettingsView: View {
         panel.message = language.t("Choose the smartctl executable.")
         if panel.runModal() == .OK, let url = panel.url {
             preferences.smartctlPath = url.path
+        }
+    }
+
+    private var smartctlSupportStatus: String {
+        guard let smartctlExecutableInfo else { return language.t("Checking SMART tool…") }
+        guard smartctlExecutableInfo.path != nil else { return language.t("Unavailable") }
+        return language.t(smartctlExecutableInfo.isCompatible == false ? "Needs Attention" : "Available")
+    }
+
+    private var smartctlSupportSymbol: String {
+        guard let smartctlExecutableInfo else { return "clock" }
+        guard smartctlExecutableInfo.path != nil else { return "exclamationmark.triangle.fill" }
+        return smartctlExecutableInfo.isCompatible == false ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+    }
+
+    private var smartctlSupportTint: Color {
+        guard let smartctlExecutableInfo else { return .secondary }
+        guard smartctlExecutableInfo.path != nil else { return .orange }
+        return smartctlExecutableInfo.isCompatible == false ? .orange : .green
+    }
+
+    private static let satSmartDriverRepositoryURL = URL(string: "https://github.com/kasbert/OS-X-SAT-SMART-Driver")!
+
+    private var satSmartDriverSupportStatus: String {
+        language.t(viewModel.externalSupport.satDriverInstalled ? "Detected" : "Not detected")
+    }
+
+    private var satSmartDriverSupportSymbol: String {
+        viewModel.externalSupport.satDriverInstalled ? "checkmark.circle.fill" : "questionmark.circle"
+    }
+
+    private var satSmartDriverSupportTint: Color {
+        viewModel.externalSupport.satDriverInstalled ? .green : .secondary
+    }
+
+    private var satSmartDriverSupportDescription: String {
+        viewModel.externalSupport.satDriverInstalled
+            ? "SAT SMART Driver is detected in a standard extension location."
+            : "SAT SMART Driver is not detected. Some compatible external USB-SATA bridges may need it to expose SMART data to macOS."
+    }
+
+    private func smartctlDiagnosticRow(_ title: String, _ value: String?, tint: Color = .primary) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .frame(width: 112, alignment: .leading)
+            Text(value ?? language.t("Unavailable"))
+                .foregroundStyle(value == nil ? .secondary : tint)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+    }
+
+    private func refreshExternalSmartSupport() {
+        viewModel.refreshExternalSupport()
+        Task {
+            smartctlExecutableInfo = await SmartctlSmartProvider().executableInfo()
         }
     }
 

@@ -7,8 +7,6 @@ struct SmartAttributesView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
     let viewModel: AppModel
-    let externalSupport: ExternalSupportStatus
-    let verifyExternalSupport: () -> Void
     let saveSnapshot: (String?) -> String
     @Environment(\.appLanguage) private var language
     @AppStorage(AppPreferences.Key.showsSmartSelfTestInterface) private var showsSmartSelfTestInterface = false
@@ -31,17 +29,6 @@ struct SmartAttributesView: View {
     private var saveMessageIsWarning: Bool {
         guard let saveMessage else { return false }
         return saveMessage.contains("failed") || saveMessage.contains("unavailable") || saveMessage.hasPrefix("Could not")
-    }
-
-    private var showsExternalSupportPanel: Bool {
-        ExternalSmartDisclosurePolicy.showsPanel(for: drive)
-    }
-
-    private var externalSmartIsVerified: Bool {
-        ExternalSmartDisclosurePolicy.isVerified(
-            providerStatuses: snapshot?.providerStatuses ?? [],
-            diagnostics: snapshot?.smartctlDiagnostics
-        )
     }
 
     var body: some View {
@@ -103,55 +90,71 @@ struct SmartAttributesView: View {
                 }
             }
 
-            ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 12) {
-                    if !attributes.isEmpty {
-                        attributesTable
-                            .frame(height: attributesTableHeight)
-
-                        if showsNormalizedColumns {
-                            Label(language.t(normalizedValueHelp), systemImage: "info.circle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        ContentUnavailableView(
-                            language.t("No SMART Attributes"),
-                            systemImage: "questionmark.folder",
-                            description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-                    }
-
-                    supplementaryPanels
+            if showsSmartSelfTestInterface {
+                ScrollView(.vertical) {
+                    scrollableSmartContent
                 }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .scrollIndicators(.visible)
+            } else {
+                primarySmartContent
             }
-            .scrollIndicators(.visible)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private var primarySmartContent: some View {
+        if !attributes.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                attributesTable
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if showsNormalizedColumns {
+                    Label(language.t(normalizedValueHelp), systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            ContentUnavailableView(
+                language.t("No SMART Attributes"),
+                systemImage: "questionmark.folder",
+                description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+    }
+
+    private var scrollableSmartContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !attributes.isEmpty {
+                attributesTable
+                    .frame(height: attributesTableHeight)
+
+                if showsNormalizedColumns {
+                    Label(language.t(normalizedValueHelp), systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ContentUnavailableView(
+                    language.t("No SMART Attributes"),
+                    systemImage: "questionmark.folder",
+                    description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
+                )
+                .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+            }
+
+            supplementaryPanels
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     @ViewBuilder
     private var supplementaryPanels: some View {
         if showsSmartSelfTestInterface {
             SmartSelfTestPanel(drive: drive, snapshot: snapshot, viewModel: viewModel)
-        }
-
-        if showsExternalSupportPanel {
-            ExternalSupportView(
-                status: externalSupport,
-                diagnostics: snapshot?.smartctlDiagnostics,
-                isVerified: externalSmartIsVerified,
-                initiallyExpanded: ExternalSmartDisclosurePolicy.startsExpanded(
-                    for: drive,
-                    status: externalSupport,
-                    isVerified: externalSmartIsVerified
-                ),
-                refresh: verifyExternalSupport
-            )
-                .id(drive.id)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -228,36 +231,6 @@ struct SmartAttributesView: View {
 
     private var normalizedValueHelp: String {
         "Current, worst, and threshold are ATA normalized health values. NVMe and native macOS SMART usually do not provide them."
-    }
-}
-
-enum ExternalSmartDisclosurePolicy {
-    static func showsPanel(for drive: DriveDevice) -> Bool {
-        !drive.isNetwork && !drive.isMemoryCard
-    }
-
-    static func startsExpanded(
-        for drive: DriveDevice,
-        status: ExternalSupportStatus,
-        isVerified: Bool
-    ) -> Bool {
-        guard showsPanel(for: drive) else { return false }
-        if drive.isInternal || (status.smartctlInstalled && status.satDriverInstalled) {
-            return false
-        }
-        return !isVerified
-    }
-
-    static func isVerified(
-        providerStatuses: [ProviderStatus],
-        diagnostics: SmartctlDiagnostics?
-    ) -> Bool {
-        let smartctlIsAvailable = providerStatuses.contains { status in
-            status.name.caseInsensitiveCompare("smartctl") == .orderedSame
-                && status.state == .available
-        }
-        let hasOpenError = diagnostics?.openError?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-        return smartctlIsAvailable && !hasOpenError
     }
 }
 

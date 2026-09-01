@@ -143,7 +143,18 @@ final class CapricornTests: XCTestCase {
             XCTAssertTrue(record.sourceURL.hasPrefix("https://"), record.id)
             XCTAssertFalse(record.examples.isEmpty, record.id)
             for example in record.examples {
-                let drive = Self.externalCatalogDrive(model: example.reportedModel)
+                var drive = Self.externalCatalogDrive(model: example.reportedModel)
+                if let usbIdentity = record.usbIdentity {
+                    drive.usbDevice = DriveUSBDeviceIdentity(
+                        vendorName: usbIdentity.vendorName,
+                        productName: usbIdentity.productName,
+                        vendorID: usbIdentity.vendorID,
+                        productID: usbIdentity.productID
+                    )
+                }
+                if let sizeRange = record.sizeRange {
+                    drive.sizeBytes = (sizeRange.minimumBytes + sizeRange.maximumBytes) / 2
+                }
                 let match = try XCTUnwrap(catalog.match(for: drive), record.id)
                 XCTAssertEqual(match.recordID, record.id, example.reportedModel)
                 XCTAssertEqual(match.canonicalModel, example.canonicalModel, example.reportedModel)
@@ -154,6 +165,52 @@ final class CapricornTests: XCTestCase {
                 )
             }
         }
+    }
+
+    func testExternalDriveModelCatalogIdentifiesWDElementsPortableByUSBIdentityAndCapacity() throws {
+        let catalog = ExternalDriveModelCatalog.bundled
+        let expected: [(Int64, String, String)] = [
+            (1_000_000_000_000, "wd-elements-portable-hdd", "WD Elements Portable HDD 1TB"),
+            (2_000_000_000_000, "wd-elements-portable-hdd-2tb", "WD Elements Portable HDD 2TB"),
+            (4_000_000_000_000, "wd-elements-portable-hdd-4tb", "WD Elements Portable HDD 4TB"),
+            (5_000_947_302_400, "wd-elements-portable-hdd-5tb", "WD Elements Portable HDD 5TB"),
+            (6_000_000_000_000, "wd-elements-portable-hdd-6tb", "WD Elements Portable HDD 6TB")
+        ]
+
+        for (sizeBytes, recordID, marketingName) in expected {
+            var drive = Self.externalCatalogDrive(model: "WDC WD50NDZW-11BCSS0")
+            drive.sizeBytes = sizeBytes
+            drive.usbDevice = DriveUSBDeviceIdentity(
+                vendorName: "Western Digital",
+                productName: "Elements 2621",
+                vendorID: 4184,
+                productID: 9761
+            )
+            let match = try XCTUnwrap(catalog.match(for: drive), marketingName)
+            XCTAssertEqual(match.recordID, recordID)
+            XCTAssertEqual(match.marketingName, marketingName)
+            XCTAssertEqual(drive.catalogSidebarDisplayName, marketingName)
+        }
+
+        var wrongVendor = Self.externalCatalogDrive(model: "WDC WD50NDZW-11BCSS0")
+        wrongVendor.sizeBytes = 5_000_947_302_400
+        wrongVendor.usbDevice = DriveUSBDeviceIdentity(
+            vendorName: "Other Vendor",
+            productName: "Elements 2621",
+            vendorID: 4184,
+            productID: 9761
+        )
+        XCTAssertNil(catalog.match(for: wrongVendor))
+
+        var wrongCapacity = Self.externalCatalogDrive(model: "WDC WD50NDZW-11BCSS0")
+        wrongCapacity.sizeBytes = 3_000_000_000_000
+        wrongCapacity.usbDevice = DriveUSBDeviceIdentity(
+            vendorName: "Western Digital",
+            productName: "Elements 2621",
+            vendorID: 4184,
+            productID: 9761
+        )
+        XCTAssertNil(catalog.match(for: wrongCapacity))
     }
 
     func testExternalDriveModelCatalogIdentifiesARRICodexRecordingMedia() throws {
@@ -828,6 +885,15 @@ final class CapricornTests: XCTestCase {
             "Automatic detection": "自动检测",
             "Choose…": "选择…",
             "Automatic": "自动",
+            "SMART Driver Support": "SMART 驱动支持",
+            "External Tool Override": "外部工具覆盖",
+            "smartctl Diagnostics": "smartctl 诊断",
+            "Compatibility": "兼容性",
+            "Refresh SMART Support": "刷新 SMART 支持状态",
+            "Checking SMART tool…": "正在检查 SMART 工具…",
+            "SAT SMART Driver is detected in a standard extension location.": "已在标准扩展位置检测到 SAT SMART Driver。",
+            "SAT SMART Driver is not detected. Some compatible external USB-SATA bridges may need it to expose SMART data to macOS.": "未检测到 SAT SMART Driver。部分兼容的外接 USB-SATA 桥接器可能需要它才能向 macOS 暴露 SMART 数据。",
+            "Open SAT SMART Driver Project": "打开 SAT SMART Driver 项目",
             "The selected smartctl path is not executable.": "所选 smartctl 路径不可执行。",
             "Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal.": "Control-Tab 和 Control-Shift-Tab 始终用于切换功能页面。关闭普通 Tab 切换后，可恢复标准键盘焦点遍历。",
             "Choose": "选择",
@@ -847,72 +913,6 @@ final class CapricornTests: XCTestCase {
 
     func testContinueMonitoringIsLocalized() {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Continue Monitoring"), "继续监控")
-    }
-
-    func testExternalSmartDisclosureVerificationRequiresAvailableSmartctlWithoutOpenError() {
-        let verified = [ProviderStatus(name: "smartctl", state: .available, message: "Available")]
-        let nativeOnly = [ProviderStatus(name: "Native macOS", state: .available, message: "Available")]
-
-        XCTAssertTrue(ExternalSmartDisclosurePolicy.isVerified(providerStatuses: verified, diagnostics: nil))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.isVerified(providerStatuses: nativeOnly, diagnostics: nil))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.isVerified(
-            providerStatuses: verified,
-            diagnostics: SmartctlDiagnostics(openError: "Device open failed")
-        ))
-    }
-
-    func testSATSmartDriverPathTitleIsExplicitlyLocalized() {
-        XCTAssertEqual(AppLanguage.english.t("SAT SMART Driver Paths"), "SAT SMART Driver Paths")
-        XCTAssertEqual(AppLanguage.simplifiedChinese.t("SAT SMART Driver Paths"), "SAT SMART Driver 路径")
-    }
-
-    func testExternalSmartDisclosureVisibilityAndInitialExpansionPolicy() {
-        let missingSupport = ExternalSupportStatus(
-            satDriverInstalled: false,
-            smartctlInstalled: false,
-            driverPaths: [],
-            message: "Missing"
-        )
-        let installedSupport = ExternalSupportStatus(
-            satDriverInstalled: true,
-            smartctlInstalled: true,
-            driverPaths: ["/Library/Extensions/SATSMARTDriver.kext"],
-            message: "Installed"
-        )
-        let internalDrive = Self.fixtureDrive()
-        var externalDrive = internalDrive
-        externalDrive.isInternal = false
-        externalDrive.isRemovable = true
-        var networkDrive = externalDrive
-        networkDrive.isNetwork = true
-        var memoryCard = externalDrive
-        memoryCard.isMemoryCard = true
-
-        XCTAssertTrue(ExternalSmartDisclosurePolicy.showsPanel(for: internalDrive))
-        XCTAssertTrue(ExternalSmartDisclosurePolicy.showsPanel(for: externalDrive))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.showsPanel(for: networkDrive))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.showsPanel(for: memoryCard))
-
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.startsExpanded(
-            for: internalDrive,
-            status: missingSupport,
-            isVerified: false
-        ))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.startsExpanded(
-            for: externalDrive,
-            status: installedSupport,
-            isVerified: false
-        ))
-        XCTAssertTrue(ExternalSmartDisclosurePolicy.startsExpanded(
-            for: externalDrive,
-            status: missingSupport,
-            isVerified: false
-        ))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.startsExpanded(
-            for: externalDrive,
-            status: missingSupport,
-            isVerified: true
-        ))
     }
 
     func testSingleBenchmarkActionsAreLocalized() {
@@ -1612,6 +1612,104 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(target[Self.fixtureDrive().id]?.type, "nvme")
     }
 
+    func testSmartctlUsesBundledExecutableByDefault() async throws {
+        let provider = SmartctlSmartProvider(
+            runner: StaticCommandRunner(stdout: Self.smartctlNVMeFixture),
+            bundledExecutableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            bundledDriveDatabaseURL: URL(fileURLWithPath: #filePath)
+        )
+
+        XCTAssertEqual(provider.resolvedExecutable()?.path, "/usr/bin/true")
+        XCTAssertEqual(provider.resolvedExecutable()?.origin, .bundled)
+        let executable = try XCTUnwrap(provider.resolvedExecutable())
+        let arguments = provider.smartReadArguments(
+            for: Self.fixtureDrive(),
+            target: SmartctlTargetDescriptor(path: "/dev/disk0", type: "sat"),
+            fallback: "/dev/disk0",
+            executable: executable
+        )
+        XCTAssertEqual(arguments.first, "--drivedb=\(#filePath)")
+
+        let snapshotValue = await provider.snapshot(for: Self.fixtureDrive(), resolvedTarget: "/dev/disk0")
+        let snapshot = try XCTUnwrap(snapshotValue)
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.executablePath, "/usr/bin/true")
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.executableOrigin, SmartctlExecutableOrigin.bundled.rawValue)
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.version, BundledSmartctlMetadata.version)
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.driveDatabaseVersion, BundledSmartctlMetadata.driveDatabaseVersion)
+    }
+
+    func testSmartctlMigratesStoredPathToExplicitExternalOverride() {
+        let defaults = UserDefaults(suiteName: "CapricornTests.\(UUID().uuidString)")!
+        defaults.set("/usr/bin/true", forKey: AppPreferences.Key.smartctlPath)
+        let provider = SmartctlSmartProvider(
+            defaults: defaults,
+            bundledExecutableURL: URL(fileURLWithPath: "/usr/bin/false")
+        )
+
+        XCTAssertEqual(provider.resolvedExecutable()?.path, "/usr/bin/true")
+        XCTAssertEqual(provider.resolvedExecutable()?.origin, .external)
+    }
+
+    func testSmartctlFallsBackToBundledExecutableForInvalidExternalPath() {
+        let defaults = UserDefaults(suiteName: "CapricornTests.\(UUID().uuidString)")!
+        defaults.set("/not/a/smartctl", forKey: AppPreferences.Key.smartctlPath)
+        let provider = SmartctlSmartProvider(
+            defaults: defaults,
+            bundledExecutableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            bundledDriveDatabaseURL: URL(fileURLWithPath: #filePath)
+        )
+
+        XCTAssertEqual(provider.resolvedExecutable()?.path, "/usr/bin/true")
+        XCTAssertEqual(provider.resolvedExecutable()?.origin, .bundled)
+    }
+
+    func testSmartctlDoesNotSearchPATHOrHomebrewLocations() {
+        let defaults = UserDefaults(suiteName: "CapricornTests.\(UUID().uuidString)")!
+        let provider = SmartctlSmartProvider(
+            defaults: defaults,
+            bundledExecutableURL: URL(fileURLWithPath: "/not/a/bundled/smartctl")
+        )
+
+        XCTAssertNil(provider.findExecutable())
+    }
+
+    func testSmartctlValidatesManualExternalToolVersion() async {
+        let provider = SmartctlSmartProvider(
+            runner: StaticCommandRunner(stdout: "smartctl 6.6 2016-05-31 r4324"),
+            configuredPath: "/usr/bin/true"
+        )
+
+        let info = await provider.executableInfo()
+        XCTAssertEqual(info.origin, .external)
+        XCTAssertEqual(info.version, "6.6")
+        XCTAssertEqual(info.isCompatible, false)
+        XCTAssertNil(info.driveDatabaseVersion)
+    }
+
+    func testSmartctlCommandCoordinatorSerializesConcurrentCommands() async throws {
+        let coordinator = SmartctlCommandCoordinator()
+        let probe = SmartctlCommandConcurrencyProbe()
+        let first = Task {
+            try await coordinator.run {
+                await probe.begin()
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                await probe.end()
+            }
+        }
+        let second = Task {
+            try await coordinator.run {
+                await probe.begin()
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                await probe.end()
+            }
+        }
+
+        _ = try await first.value
+        _ = try await second.value
+        let maximumActiveCommands = await probe.maximumActiveCommands()
+        XCTAssertEqual(maximumActiveCommands, 1)
+    }
+
     func testSmartctlNVMeCapabilityParserRequiresSelfTestFlag() throws {
         let supported = CommandResult(
             stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8),
@@ -2276,6 +2374,13 @@ final class CapricornTests: XCTestCase {
         let status = ExternalDriveSupportDetector(driverPaths: [driver.path]).detect()
         XCTAssertTrue(status.satDriverInstalled)
         XCTAssertEqual(status.driverPaths, [driver.path])
+    }
+
+    func testExternalDetectorReportsNoSATDriverWhenLocationsAreAbsent() {
+        let status = ExternalDriveSupportDetector(driverPaths: []).detect()
+
+        XCTAssertFalse(status.satDriverInstalled)
+        XCTAssertTrue(status.driverPaths.isEmpty)
     }
 
     func testBenchmarkProfileConfigurationAppliesRunSizeAndDataPattern() {
@@ -4682,6 +4787,24 @@ private final class LockedArray<Element>: @unchecked Sendable {
         lock.lock()
         values.append(value)
         lock.unlock()
+    }
+}
+
+private actor SmartctlCommandConcurrencyProbe {
+    private var activeCommands = 0
+    private var maximumActive = 0
+
+    func begin() {
+        activeCommands += 1
+        maximumActive = max(maximumActive, activeCommands)
+    }
+
+    func end() {
+        activeCommands -= 1
+    }
+
+    func maximumActiveCommands() -> Int {
+        maximumActive
     }
 }
 
