@@ -1171,6 +1171,8 @@ struct SmartctlDiagnostics: Codable, Hashable, Sendable {
     var powerMode: String?
     var readSkippedToAvoidWake: Bool?
     var openError: String?
+    var executablePath: String? = nil
+    var executableOrigin: String? = nil
 }
 
 struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
