@@ -101,7 +101,7 @@ struct CapricornApp: App {
             )
         }
         .defaultSize(width: 620, height: 680)
-        .windowResizability(.contentSize)
+        .windowResizability(.contentMinSize)
         .modelContainer(modelContainer)
         .commandsRemoved()
     }

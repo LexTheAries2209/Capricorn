@@ -406,10 +406,11 @@ struct CapricornSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(20)
+        .background(SettingsWindowResizabilityConfigurator())
         .frame(
             minWidth: 620,
             idealWidth: 620,
-            maxWidth: 620,
+            maxWidth: .infinity,
             minHeight: 520,
             idealHeight: 680,
             maxHeight: .infinity,
@@ -583,6 +584,37 @@ struct CapricornSettingsView: View {
                 language.t("Unable to clear the history database."),
                 error: error
             )
+        }
+    }
+}
+
+private struct SettingsWindowResizabilityConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> SettingsWindowConfigurationView {
+        SettingsWindowConfigurationView()
+    }
+
+    func updateNSView(_ nsView: SettingsWindowConfigurationView, context: Context) {
+        nsView.configureWindow()
+    }
+}
+
+private final class SettingsWindowConfigurationView: NSView {
+    private static let minimumContentSize = NSSize(width: 620, height: 520)
+    private static let maximumContentSize = NSSize(width: 10_000, height: 10_000)
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        configureWindow()
+    }
+
+    func configureWindow() {
+        // Settings applies its default constraints after embedding the SwiftUI hierarchy.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let window = self?.window else { return }
+            window.styleMask.insert(.resizable)
+            window.contentMinSize = Self.minimumContentSize
+            window.contentMaxSize = Self.maximumContentSize
+            window.standardWindowButton(.zoomButton)?.isEnabled = true
         }
     }
 }
