@@ -589,6 +589,7 @@ struct IOKitDriveUSBDeviceIdentityProvider: DriveUSBDeviceIdentityProviding {
         // paired with the backing IOMedia even when the disk model is generic.
         var current = media
         var ownsCurrent = false
+        var partialIdentity: DriveUSBDeviceIdentity?
         defer {
             if ownsCurrent {
                 IOObjectRelease(current)
@@ -596,19 +597,20 @@ struct IOKitDriveUSBDeviceIdentityProvider: DriveUSBDeviceIdentityProviding {
         }
 
         while true {
-            let identity = DriveUSBDeviceIdentity(
-                vendorName: stringProperty(from: current, key: "USB Vendor Name"),
-                productName: stringProperty(from: current, key: "USB Product Name"),
-                vendorID: integerProperty(from: current, key: "idVendor"),
-                productID: integerProperty(from: current, key: "idProduct")
-            )
-            if identity.vendorName != nil || identity.productName != nil || identity.vendorID != nil || identity.productID != nil {
-                return identity
+            let identityAtNode = identity(from: current)
+            // SAT/storage stacks can split USB identity across several ancestors:
+            // the mass-storage node may expose product + VID/PID while the USB
+            // host node exposes the vendor. Keep walking until the fields merge.
+            if identityAtNode.hasAnyValue {
+                partialIdentity = Self.merge(partialIdentity, with: identityAtNode)
+                if partialIdentity?.isComplete == true {
+                    return partialIdentity
+                }
             }
 
             var parent: io_registry_entry_t = 0
             guard IORegistryEntryGetParentEntry(current, kIOServicePlane, &parent) == KERN_SUCCESS else {
-                return nil
+                return partialIdentity
             }
             if ownsCurrent {
                 IOObjectRelease(current)
@@ -616,6 +618,34 @@ struct IOKitDriveUSBDeviceIdentityProvider: DriveUSBDeviceIdentityProviding {
             current = parent
             ownsCurrent = true
         }
+    }
+
+    private static func merge(
+        _ existing: DriveUSBDeviceIdentity?,
+        with incoming: DriveUSBDeviceIdentity
+    ) -> DriveUSBDeviceIdentity {
+        DriveUSBDeviceIdentity(
+            vendorName: existing?.vendorName ?? incoming.vendorName,
+            productName: existing?.productName ?? incoming.productName,
+            vendorID: existing?.vendorID ?? incoming.vendorID,
+            productID: existing?.productID ?? incoming.productID
+        )
+    }
+
+    private func identity(from entry: io_registry_entry_t) -> DriveUSBDeviceIdentity {
+        let usbInfo = copyProperty(entry, key: "USB Device Info") as? [String: Any]
+        let deviceCharacteristics = copyProperty(entry, key: "Device Characteristics") as? [String: Any]
+        return DriveUSBDeviceIdentity(
+            vendorName: stringProperty(from: entry, key: "USB Vendor Name")
+                ?? stringProperty(in: usbInfo, keys: ["USB Vendor Name", "kUSBVendorString"]),
+            productName: stringProperty(from: entry, key: "USB Product Name")
+                ?? stringProperty(in: usbInfo, keys: ["USB Product Name", "kUSBProductString"])
+                ?? stringProperty(in: deviceCharacteristics, keys: ["Product Name"]),
+            vendorID: integerProperty(from: entry, key: "idVendor")
+                ?? integerProperty(in: usbInfo, keys: ["idVendor", "USBVendorID"]),
+            productID: integerProperty(from: entry, key: "idProduct")
+                ?? integerProperty(in: usbInfo, keys: ["idProduct", "USBProductID"])
+        )
     }
 
     private func copyWholeMedia(bsdName: String) -> io_registry_entry_t? {
@@ -648,9 +678,40 @@ struct IOKitDriveUSBDeviceIdentityProvider: DriveUSBDeviceIdentityProviding {
         (copyProperty(entry, key: key) as? NSNumber)?.intValue
     }
 
+    private func stringProperty(in dictionary: [String: Any]?, keys: [String]) -> String? {
+        guard let dictionary else { return nil }
+        for key in keys {
+            if let value = dictionary[key] as? String {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return nil
+    }
+
+    private func integerProperty(in dictionary: [String: Any]?, keys: [String]) -> Int? {
+        guard let dictionary else { return nil }
+        for key in keys {
+            if let value = dictionary[key] as? NSNumber {
+                return value.intValue
+            }
+        }
+        return nil
+    }
+
     private func copyProperty(_ entry: io_registry_entry_t, key: String) -> Any? {
         IORegistryEntryCreateCFProperty(entry, key as CFString, kCFAllocatorDefault, 0)?
             .takeRetainedValue()
+    }
+}
+
+private extension DriveUSBDeviceIdentity {
+    var hasAnyValue: Bool {
+        vendorName != nil || productName != nil || vendorID != nil || productID != nil
+    }
+
+    var isComplete: Bool {
+        vendorName != nil && productName != nil && vendorID != nil && productID != nil
     }
 }
 
