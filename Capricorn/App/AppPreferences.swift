@@ -154,6 +154,7 @@ final class AppPreferences {
 struct CapricornSettingsView: View {
     @Bindable var preferences: AppPreferences
     @Bindable var updateChecker: AppUpdateChecker
+    @Bindable var viewModel: AppModel
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistoryRecords: [SmartHistoryRecord]
     @Query(sort: \BenchmarkHistoryRecord.measuredAt, order: .reverse) private var benchmarkHistoryRecords: [BenchmarkHistoryRecord]
@@ -295,58 +296,86 @@ struct CapricornSettingsView: View {
                 }
             }
 
-            Section(language.t("SMART Tool")) {
-                LabeledContent("smartctl") {
-                    HStack {
-                        TextField(language.t("External smartctl path (optional)"), text: $preferences.smartctlPath)
-                            .textFieldStyle(.roundedBorder)
-                        Button(language.t("Choose…"), action: chooseSmartctl)
-                        Button(language.t("Use Bundled")) {
-                            preferences.useBundledSmartctl()
-                        }
+            Section(language.t("External Drive SMART")) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Label(smartctlSupportStatus, systemImage: smartctlSupportSymbol)
+                        .foregroundStyle(smartctlSupportTint)
+                        .font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 0)
+                    Button(action: refreshExternalSmartSupport) {
+                        Image(systemName: "arrow.clockwise")
                     }
+                    .buttonStyle(.borderless)
+                    .help(language.t("Refresh SMART Support"))
+                    .accessibilityLabel(language.t("Refresh SMART Support"))
                 }
 
-                Text(language.t("Capricorn uses its bundled smartctl unless you select an executable here."))
+                Text(language.t("External USB bridge support depends on the enclosure and its macOS driver."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if let smartctlExecutableInfo {
-                    LabeledContent(language.t("Effective smartctl")) {
-                        VStack(alignment: .trailing, spacing: 3) {
-                            Text(language.t(smartctlExecutableInfo.origin == .external ? "External override" : "Bundled"))
-                            Text(smartctlExecutableInfo.path ?? language.t("Unavailable"))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .textSelection(.enabled)
-                            if let version = smartctlExecutableInfo.version {
-                                Text("\(language.t("smartctl Version")): \(version)")
-                            }
-                            if let driveDatabaseVersion = smartctlExecutableInfo.driveDatabaseVersion {
-                                Text("\(language.t("Drive Database")): \(driveDatabaseVersion)")
-                            }
-                            if let isCompatible = smartctlExecutableInfo.isCompatible {
-                                Text(language.t(isCompatible ? "Compatible" : "Incompatible"))
-                                    .foregroundStyle(isCompatible ? Color.secondary : Color.orange)
-                            }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(language.t("External Tool Override"))
+                        .font(.subheadline.weight(.semibold))
+                    TextField(language.t("External smartctl path (optional)"), text: $preferences.smartctlPath)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                    HStack(spacing: 8) {
+                        Button(action: chooseSmartctl) {
+                            Label(language.t("Choose…"), systemImage: "folder")
                         }
+                        Button {
+                            preferences.useBundledSmartctl()
+                        } label: {
+                            Label(language.t("Use Bundled"), systemImage: "shippingbox")
+                        }
+                        .disabled(preferences.smartctlPath.isEmpty)
+                    }
+                    .controlSize(.small)
+                    Text(language.t("Capricorn uses its bundled smartctl unless you select an executable here."))
                         .font(.caption)
-                        .multilineTextAlignment(.trailing)
-                    }
-                    if let error = smartctlExecutableInfo.error {
-                        Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    } else if smartctlExecutableInfo.isCompatible == nil {
-                        Label(language.t("Compatibility could not be verified."), systemImage: "questionmark.circle")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
+                        .foregroundStyle(.secondary)
                 }
 
                 if !preferences.smartctlPathIsValid {
                     Label(language.t("The selected smartctl path is not executable."), systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
                         .foregroundStyle(.orange)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(language.t("SMART Diagnostics"))
+                        .font(.subheadline.weight(.semibold))
+                    if let smartctlExecutableInfo {
+                        smartctlDiagnosticRow(
+                            language.t("Tool Source"),
+                            language.t(smartctlExecutableInfo.origin == .external ? "External override" : "Bundled")
+                        )
+                        smartctlDiagnosticRow(language.t("smartctl Version"), smartctlExecutableInfo.version)
+                        smartctlDiagnosticRow(language.t("Drive Database"), smartctlExecutableInfo.driveDatabaseVersion)
+                        if let isCompatible = smartctlExecutableInfo.isCompatible {
+                            smartctlDiagnosticRow(
+                                language.t("Compatibility"),
+                                language.t(isCompatible ? "Compatible" : "Incompatible"),
+                                tint: isCompatible ? .secondary : .orange
+                            )
+                        } else {
+                            smartctlDiagnosticRow(
+                                language.t("Compatibility"),
+                                language.t("Compatibility could not be verified."),
+                                tint: .orange
+                            )
+                        }
+
+                        if let error = smartctlExecutableInfo.error {
+                            Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    } else {
+                        ProgressView(language.t("Checking SMART tool…"))
+                            .controlSize(.small)
+                    }
                 }
             }
 
@@ -385,6 +414,45 @@ struct CapricornSettingsView: View {
         panel.message = language.t("Choose the smartctl executable.")
         if panel.runModal() == .OK, let url = panel.url {
             preferences.smartctlPath = url.path
+        }
+    }
+
+    private var smartctlSupportStatus: String {
+        guard let smartctlExecutableInfo else { return language.t("Checking SMART tool…") }
+        guard smartctlExecutableInfo.path != nil else { return language.t("Unavailable") }
+        return language.t(smartctlExecutableInfo.isCompatible == false ? "Needs Attention" : "Available")
+    }
+
+    private var smartctlSupportSymbol: String {
+        guard let smartctlExecutableInfo else { return "clock" }
+        guard smartctlExecutableInfo.path != nil else { return "exclamationmark.triangle.fill" }
+        return smartctlExecutableInfo.isCompatible == false ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+    }
+
+    private var smartctlSupportTint: Color {
+        guard let smartctlExecutableInfo else { return .secondary }
+        guard smartctlExecutableInfo.path != nil else { return .orange }
+        return smartctlExecutableInfo.isCompatible == false ? .orange : .green
+    }
+
+    private func smartctlDiagnosticRow(_ title: String, _ value: String?, tint: Color = .primary) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .frame(width: 112, alignment: .leading)
+            Text(value ?? language.t("Unavailable"))
+                .foregroundStyle(value == nil ? .secondary : tint)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+    }
+
+    private func refreshExternalSmartSupport() {
+        viewModel.refreshExternalSupport()
+        Task {
+            smartctlExecutableInfo = await SmartctlSmartProvider().executableInfo()
         }
     }
 

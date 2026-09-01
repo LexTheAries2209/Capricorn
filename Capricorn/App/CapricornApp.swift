@@ -94,7 +94,11 @@ struct CapricornApp: App {
         }
 
         Settings {
-            CapricornSettingsView(preferences: preferences, updateChecker: updateChecker)
+            CapricornSettingsView(
+                preferences: preferences,
+                updateChecker: updateChecker,
+                viewModel: viewModel
+            )
         }
         .modelContainer(modelContainer)
         .commandsRemoved()

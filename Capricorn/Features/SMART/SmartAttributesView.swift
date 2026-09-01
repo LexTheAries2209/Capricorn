@@ -7,8 +7,6 @@ struct SmartAttributesView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
     let viewModel: AppModel
-    let externalSupport: ExternalSupportStatus
-    let verifyExternalSupport: () -> Void
     let saveSnapshot: (String?) -> String
     @Environment(\.appLanguage) private var language
     @AppStorage(AppPreferences.Key.showsSmartSelfTestInterface) private var showsSmartSelfTestInterface = false
@@ -31,17 +29,6 @@ struct SmartAttributesView: View {
     private var saveMessageIsWarning: Bool {
         guard let saveMessage else { return false }
         return saveMessage.contains("failed") || saveMessage.contains("unavailable") || saveMessage.hasPrefix("Could not")
-    }
-
-    private var showsExternalSupportPanel: Bool {
-        ExternalSmartDisclosurePolicy.showsPanel(for: drive)
-    }
-
-    private var externalSmartIsVerified: Bool {
-        ExternalSmartDisclosurePolicy.isVerified(
-            providerStatuses: snapshot?.providerStatuses ?? [],
-            diagnostics: snapshot?.smartctlDiagnostics
-        )
     }
 
     var body: some View {
@@ -137,22 +124,6 @@ struct SmartAttributesView: View {
         if showsSmartSelfTestInterface {
             SmartSelfTestPanel(drive: drive, snapshot: snapshot, viewModel: viewModel)
         }
-
-        if showsExternalSupportPanel {
-            ExternalSupportView(
-                status: externalSupport,
-                diagnostics: snapshot?.smartctlDiagnostics,
-                isVerified: externalSmartIsVerified,
-                initiallyExpanded: ExternalSmartDisclosurePolicy.startsExpanded(
-                    for: drive,
-                    status: externalSupport,
-                    isVerified: externalSmartIsVerified
-                ),
-                refresh: verifyExternalSupport
-            )
-                .id(drive.id)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
     }
 
     private var snapshotStorageSummary: some View {
@@ -228,36 +199,6 @@ struct SmartAttributesView: View {
 
     private var normalizedValueHelp: String {
         "Current, worst, and threshold are ATA normalized health values. NVMe and native macOS SMART usually do not provide them."
-    }
-}
-
-enum ExternalSmartDisclosurePolicy {
-    static func showsPanel(for drive: DriveDevice) -> Bool {
-        !drive.isNetwork && !drive.isMemoryCard
-    }
-
-    static func startsExpanded(
-        for drive: DriveDevice,
-        status: ExternalSupportStatus,
-        isVerified: Bool
-    ) -> Bool {
-        guard showsPanel(for: drive) else { return false }
-        if drive.isInternal || (status.smartctlInstalled && status.satDriverInstalled) {
-            return false
-        }
-        return !isVerified
-    }
-
-    static func isVerified(
-        providerStatuses: [ProviderStatus],
-        diagnostics: SmartctlDiagnostics?
-    ) -> Bool {
-        let smartctlIsAvailable = providerStatuses.contains { status in
-            status.name.caseInsensitiveCompare("smartctl") == .orderedSame
-                && status.state == .available
-        }
-        let hasOpenError = diagnostics?.openError?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-        return smartctlIsAvailable && !hasOpenError
     }
 }
 

@@ -917,8 +917,6 @@ private struct DriveDetailView: View {
                 drive: drive,
                 snapshot: snapshot,
                 viewModel: viewModel,
-                externalSupport: viewModel.externalSupport,
-                verifyExternalSupport: viewModel.refreshExternalSupport,
                 saveSnapshot: saveSnapshot
             )
                 .tabItem { Label("SMART", systemImage: "list.bullet.rectangle") }

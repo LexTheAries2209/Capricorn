@@ -49,8 +49,7 @@ V2.3.2 的中文发布说明见 [docs/releases/v2.3.2.zh-CN.md](docs/releases/v2
 - 可在设置中按需显示 ATA、NVMe 和 SAT 设备的 SMART 自检状态、快速/完整自检、自动轮询、中止操作、最近记录和原始 smartctl 输出回退；该界面默认隐藏，概览仅在启用后显示最近一次设备自检摘要。
 - 启用自检界面后，操作会根据设备能力和传输层禁用不支持的目标；系统盘自检仍需在设置中单独允许，macOS NVMe 不支持的 admin command 不会被强行执行。
 - smartctl 7.5 数据兼容性得到加强，保留诊断信息；默认避免为 SMART 刷新唤醒休眠磁盘，并在无法安全识别设备类型时保留上一份数据。
-- 本地物理磁盘的 SMART 页面始终保留可折叠的“外接磁盘 SMART”支持区；内置磁盘或同时检测到 smartctl 与 SAT SMART Driver 时默认折叠，缺少依赖或尚未验证的外接磁盘默认展开。
-- “驱动诊断”集中显示 smartctl 目标路径、设备类型、协议、打开错误和明确标注的 SAT SMART Driver 路径；未检测到 SAT 驱动时提供开源项目仓库入口，检测成功后不再显示重复的安装或重连提示。
+- 外接磁盘 SMART 支持与精简的工具诊断集中在设置中；仅显示 smartctl 来源、版本、硬盘数据库和兼容性，外部工具路径使用独立输入行，避免影响 SMART 属性阅读。
 - SMART 属性页支持独立纵向滚动、折叠历史自检记录和清除状态消息；常见外接 ATA 字段提供中文解释，Total LBAs Read/Written 会按逻辑块大小换算为可读容量，同时保留原始 LBA 信息。
 - 内置物理硬盘型号规则，覆盖 Samsung、Intel、Solidigm、SK hynix、Micron、Crucial、KIOXIA、Toshiba、WD、Seagate、YMTC 和致钛的消费级、OEM、数据中心及企业系列；V2.2.1 补充 Intel/Solidigm D5、D7 和 PCIe 5.0 系列，以及 WD Ultrastar DC SN640。已足够精简或无法确认的型号继续显示系统原始名称。
 - 侧边栏显示当前代表卷名称、硬盘商品名/型号和序列号；多卷外接盘可从右键菜单切换代表卷，默认使用容量最大的可操作卷，也可在设置中选择下次启动恢复上次手动选择。宽度与行距受到约束，便于区分多块同型号硬盘。
@@ -196,8 +195,7 @@ Common use cases:
 - Settings can reveal SMART self-test status, quick/full tests for supported ATA, NVMe, and SAT devices, automatic polling, abort, recent records, and raw smartctl fallback. This interface is hidden by default; Overview shows the latest device-reported self-test summary only when it is enabled.
 - When the self-test interface is enabled, unsupported operations remain disabled based on device capability and transport. System-disk self-tests require a separate Settings opt-in, and unsupported macOS NVMe admin commands are never forced.
 - Improves smartctl 7.5 compatibility and diagnostics, avoids waking sleeping disks by default for SMART refresh, and retains the previous snapshot when safe device identification is unavailable.
-- The SMART page keeps an expandable External Drive SMART support section available for every local physical drive. It starts collapsed for internal drives or when both smartctl and SAT SMART Driver are detected, and starts expanded for external drives with missing or unverified support.
-- Driver Diagnostics groups the smartctl target path, device type, protocol, open errors, and explicitly labeled SAT SMART Driver paths. When the SAT driver is missing, it links to the open-source project; after detection, redundant installation and reconnect guidance stays hidden.
+- External Drive SMART support and concise tool diagnostics live in Settings. The view shows smartctl source, version, drive database, and compatibility; the optional external path uses its own full-width input.
 - SMART attributes have an independently scrolling table, collapsible self-test history, and dismissible status messages. Common external ATA fields have clearer localized explanations, while Total LBAs Read/Written values are converted using the reported logical block size without dropping the original LBA details.
 - Includes physical-drive model rules covering consumer, OEM, data-center, and enterprise families from Samsung, Intel, Solidigm, SK hynix, Micron, Crucial, KIOXIA, Toshiba, WD, Seagate, YMTC, and ZHITAI. V2.2.1 adds Intel/Solidigm D5, D7, and PCIe 5.0 families plus WD Ultrastar DC SN640. Already concise or unconfirmed models retain their system-reported names.
 - The sidebar shows the active representative volume, then the drive product/model and serial number. Multi-volume external drives can switch the representative volume from Disk Actions; the largest safe volume is the default, while Settings can restore the last manual choice on the next launch. Width and row spacing are bounded to keep same-model devices distinguishable.
@@ -234,7 +232,7 @@ Common use cases:
 - Adds a guarded First Aid flow for explicitly selected external or removable APFS/ExFAT volumes using `diskutil repairVolume`, with preflight checks, open-file warnings, serial streaming output, and post-run refresh.
 - Blocks First Aid for failing SMART health, system/internal disks, network or virtual volumes, read-only/locked volumes, and NTFS; NTFS shows Windows CHKDSK guidance only.
 - Cancelling a shell command terminates its child process and distinguishes launch failures, non-zero exits, and user cancellation.
-- Settings cover virtual-drive visibility, serial-number redaction, plain-Tab navigation, bundled `smartctl` status with an optional external override path, history-database reveal, automatic refresh, the Check and Repair menu, and the SMART self-test interface, with complete Simplified Chinese content. Redaction is off by default; when enabled, only the first four characters remain visible while internal identity matching still uses the complete serial.
+- Settings cover virtual-drive visibility, serial-number redaction, plain-Tab navigation, external-drive SMART support with bundled `smartctl` diagnostics and an optional external override path, history-database reveal, automatic refresh, the Check and Repair menu, and the SMART self-test interface, with complete Simplified Chinese content. Redaction is off by default; when enabled, only the first four characters remain visible while internal identity matching still uses the complete serial.
 - The application menu keeps only the system `Settings…` command and maps it to `Command-P`. Capricorn also supports `Command-R` to refresh and `Control-Tab` / `Control-Shift-Tab` to switch feature pages; plain-Tab switching can be disabled.
 - Responsive controls and metric grids support smaller windows while wide tables keep horizontal scrolling.
 - SwiftData history uses a versioned schema, a dedicated `CapricornHistory` storage directory, and a repository boundary with explicit save errors.
@@ -246,7 +244,6 @@ macOS exposes different SMART data depending on NVMe, SATA, USB, SD card, bridge
 
 - Internal Apple NVMe drives usually expose a native SMART summary.
 - Some external USB-SATA devices can be read through bundled `smartctl`; bridge support still depends on the device and macOS.
-- When SAT SMART Driver is not detected, the SMART support section links directly to the [OS-X-SAT-SMART-Driver open-source repository](https://github.com/kasbert/OS-X-SAT-SMART-Driver). Capricorn provides the link but does not download or install the driver.
 - USB NVMe, SD/SDXC cards, and network volumes often do not expose standard SMART health attributes.
 - Capricorn bundles smartmontools 7.5 `smartctl` and `drivedb.h`, does not install or remove kernel extensions, and does not automatically search PATH or Homebrew. A non-empty Settings path is an explicit external override; the external tool's version and compatibility are displayed before it is used.
 - `smartctl` and its corresponding source are available under GPL-2.0-or-later. The complete corresponding source, license, pinned hash, and reproducible build script are in [ThirdParty/smartmontools](ThirdParty/smartmontools) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

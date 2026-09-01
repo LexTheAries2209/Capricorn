@@ -885,6 +885,12 @@ final class CapricornTests: XCTestCase {
             "Automatic detection": "自动检测",
             "Choose…": "选择…",
             "Automatic": "自动",
+            "External Drive SMART": "外接磁盘 SMART",
+            "External Tool Override": "外部工具覆盖",
+            "SMART Diagnostics": "SMART 诊断",
+            "Compatibility": "兼容性",
+            "Refresh SMART Support": "刷新 SMART 支持状态",
+            "Checking SMART tool…": "正在检查 SMART 工具…",
             "The selected smartctl path is not executable.": "所选 smartctl 路径不可执行。",
             "Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal.": "Control-Tab 和 Control-Shift-Tab 始终用于切换功能页面。关闭普通 Tab 切换后，可恢复标准键盘焦点遍历。",
             "Choose": "选择",
@@ -904,72 +910,6 @@ final class CapricornTests: XCTestCase {
 
     func testContinueMonitoringIsLocalized() {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Continue Monitoring"), "继续监控")
-    }
-
-    func testExternalSmartDisclosureVerificationRequiresAvailableSmartctlWithoutOpenError() {
-        let verified = [ProviderStatus(name: "smartctl", state: .available, message: "Available")]
-        let nativeOnly = [ProviderStatus(name: "Native macOS", state: .available, message: "Available")]
-
-        XCTAssertTrue(ExternalSmartDisclosurePolicy.isVerified(providerStatuses: verified, diagnostics: nil))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.isVerified(providerStatuses: nativeOnly, diagnostics: nil))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.isVerified(
-            providerStatuses: verified,
-            diagnostics: SmartctlDiagnostics(openError: "Device open failed")
-        ))
-    }
-
-    func testSATSmartDriverPathTitleIsExplicitlyLocalized() {
-        XCTAssertEqual(AppLanguage.english.t("SAT SMART Driver Paths"), "SAT SMART Driver Paths")
-        XCTAssertEqual(AppLanguage.simplifiedChinese.t("SAT SMART Driver Paths"), "SAT SMART Driver 路径")
-    }
-
-    func testExternalSmartDisclosureVisibilityAndInitialExpansionPolicy() {
-        let missingSupport = ExternalSupportStatus(
-            satDriverInstalled: false,
-            smartctlInstalled: false,
-            driverPaths: [],
-            message: "Missing"
-        )
-        let installedSupport = ExternalSupportStatus(
-            satDriverInstalled: true,
-            smartctlInstalled: true,
-            driverPaths: ["/Library/Extensions/SATSMARTDriver.kext"],
-            message: "Installed"
-        )
-        let internalDrive = Self.fixtureDrive()
-        var externalDrive = internalDrive
-        externalDrive.isInternal = false
-        externalDrive.isRemovable = true
-        var networkDrive = externalDrive
-        networkDrive.isNetwork = true
-        var memoryCard = externalDrive
-        memoryCard.isMemoryCard = true
-
-        XCTAssertTrue(ExternalSmartDisclosurePolicy.showsPanel(for: internalDrive))
-        XCTAssertTrue(ExternalSmartDisclosurePolicy.showsPanel(for: externalDrive))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.showsPanel(for: networkDrive))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.showsPanel(for: memoryCard))
-
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.startsExpanded(
-            for: internalDrive,
-            status: missingSupport,
-            isVerified: false
-        ))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.startsExpanded(
-            for: externalDrive,
-            status: installedSupport,
-            isVerified: false
-        ))
-        XCTAssertTrue(ExternalSmartDisclosurePolicy.startsExpanded(
-            for: externalDrive,
-            status: missingSupport,
-            isVerified: false
-        ))
-        XCTAssertFalse(ExternalSmartDisclosurePolicy.startsExpanded(
-            for: externalDrive,
-            status: missingSupport,
-            isVerified: true
-        ))
     }
 
     func testSingleBenchmarkActionsAreLocalized() {
