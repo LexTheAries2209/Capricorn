@@ -90,33 +90,65 @@ struct SmartAttributesView: View {
                 }
             }
 
-            ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 12) {
-                    if !attributes.isEmpty {
-                        attributesTable
-                            .frame(height: attributesTableHeight)
-
-                        if showsNormalizedColumns {
-                            Label(language.t(normalizedValueHelp), systemImage: "info.circle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        ContentUnavailableView(
-                            language.t("No SMART Attributes"),
-                            systemImage: "questionmark.folder",
-                            description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
-                    }
-
-                    supplementaryPanels
+            if showsSmartSelfTestInterface {
+                ScrollView(.vertical) {
+                    scrollableSmartContent
                 }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .scrollIndicators(.visible)
+            } else {
+                primarySmartContent
             }
-            .scrollIndicators(.visible)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private var primarySmartContent: some View {
+        if !attributes.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                attributesTable
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if showsNormalizedColumns {
+                    Label(language.t(normalizedValueHelp), systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else {
+            ContentUnavailableView(
+                language.t("No SMART Attributes"),
+                systemImage: "questionmark.folder",
+                description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+    }
+
+    private var scrollableSmartContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !attributes.isEmpty {
+                attributesTable
+                    .frame(height: attributesTableHeight)
+
+                if showsNormalizedColumns {
+                    Label(language.t(normalizedValueHelp), systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ContentUnavailableView(
+                    language.t("No SMART Attributes"),
+                    systemImage: "questionmark.folder",
+                    description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
+                )
+                .frame(maxWidth: .infinity, minHeight: 120, alignment: .center)
+            }
+
+            supplementaryPanels
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     @ViewBuilder
