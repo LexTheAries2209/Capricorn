@@ -885,12 +885,15 @@ final class CapricornTests: XCTestCase {
             "Automatic detection": "自动检测",
             "Choose…": "选择…",
             "Automatic": "自动",
-            "External Drive SMART": "外接磁盘 SMART",
+            "SMART Driver Support": "SMART 驱动支持",
             "External Tool Override": "外部工具覆盖",
-            "SMART Diagnostics": "SMART 诊断",
+            "smartctl Diagnostics": "smartctl 诊断",
             "Compatibility": "兼容性",
             "Refresh SMART Support": "刷新 SMART 支持状态",
             "Checking SMART tool…": "正在检查 SMART 工具…",
+            "SAT SMART Driver is detected in a standard extension location.": "已在标准扩展位置检测到 SAT SMART Driver。",
+            "SAT SMART Driver is not detected. Some compatible external USB-SATA bridges may need it to expose SMART data to macOS.": "未检测到 SAT SMART Driver。部分兼容的外接 USB-SATA 桥接器可能需要它才能向 macOS 暴露 SMART 数据。",
+            "Open SAT SMART Driver Project": "打开 SAT SMART Driver 项目",
             "The selected smartctl path is not executable.": "所选 smartctl 路径不可执行。",
             "Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal.": "Control-Tab 和 Control-Shift-Tab 始终用于切换功能页面。关闭普通 Tab 切换后，可恢复标准键盘焦点遍历。",
             "Choose": "选择",
@@ -2371,6 +2374,13 @@ final class CapricornTests: XCTestCase {
         let status = ExternalDriveSupportDetector(driverPaths: [driver.path]).detect()
         XCTAssertTrue(status.satDriverInstalled)
         XCTAssertEqual(status.driverPaths, [driver.path])
+    }
+
+    func testExternalDetectorReportsNoSATDriverWhenLocationsAreAbsent() {
+        let status = ExternalDriveSupportDetector(driverPaths: []).detect()
+
+        XCTAssertFalse(status.satDriverInstalled)
+        XCTAssertTrue(status.driverPaths.isEmpty)
     }
 
     func testBenchmarkProfileConfigurationAppliesRunSizeAndDataPattern() {

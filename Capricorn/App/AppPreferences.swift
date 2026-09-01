@@ -296,23 +296,27 @@ struct CapricornSettingsView: View {
                 }
             }
 
-            Section(language.t("External Drive SMART")) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Label(smartctlSupportStatus, systemImage: smartctlSupportSymbol)
-                        .foregroundStyle(smartctlSupportTint)
-                        .font(.subheadline.weight(.semibold))
-                    Spacer(minLength: 0)
-                    Button(action: refreshExternalSmartSupport) {
-                        Image(systemName: "arrow.clockwise")
+            Section(language.t("SMART Driver Support")) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text("smartctl")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 0)
+                        Label(smartctlSupportStatus, systemImage: smartctlSupportSymbol)
+                            .foregroundStyle(smartctlSupportTint)
+                            .font(.subheadline.weight(.semibold))
+                        Button(action: refreshExternalSmartSupport) {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(.borderless)
+                        .help(language.t("Refresh SMART Support"))
+                        .accessibilityLabel(language.t("Refresh SMART Support"))
                     }
-                    .buttonStyle(.borderless)
-                    .help(language.t("Refresh SMART Support"))
-                    .accessibilityLabel(language.t("Refresh SMART Support"))
-                }
 
-                Text(language.t("External USB bridge support depends on the enclosure and its macOS driver."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Text(language.t("External USB bridge support depends on the enclosure and its macOS driver."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(language.t("External Tool Override"))
@@ -344,7 +348,7 @@ struct CapricornSettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(language.t("SMART Diagnostics"))
+                    Text(language.t("smartctl Diagnostics"))
                         .font(.subheadline.weight(.semibold))
                     if let smartctlExecutableInfo {
                         smartctlDiagnosticRow(
@@ -377,12 +381,40 @@ struct CapricornSettingsView: View {
                             .controlSize(.small)
                     }
                 }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(language.t("SAT SMART Driver"))
+                            .font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 0)
+                        Label(satSmartDriverSupportStatus, systemImage: satSmartDriverSupportSymbol)
+                            .foregroundStyle(satSmartDriverSupportTint)
+                            .font(.subheadline.weight(.semibold))
+                    }
+
+                    Text(language.t(satSmartDriverSupportDescription))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Link(destination: Self.satSmartDriverRepositoryURL) {
+                        Label(language.t("Open SAT SMART Driver Project"), systemImage: "safari")
+                    }
+                    .font(.caption)
+                }
             }
 
         }
         .formStyle(.grouped)
         .padding(20)
-        .frame(width: 620)
+        .frame(
+            minWidth: 620,
+            idealWidth: 620,
+            maxWidth: 620,
+            minHeight: 520,
+            idealHeight: 680,
+            maxHeight: .infinity,
+            alignment: .topLeading
+        )
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
         .task {
             refreshHistoryDatabaseSize()
@@ -433,6 +465,26 @@ struct CapricornSettingsView: View {
         guard let smartctlExecutableInfo else { return .secondary }
         guard smartctlExecutableInfo.path != nil else { return .orange }
         return smartctlExecutableInfo.isCompatible == false ? .orange : .green
+    }
+
+    private static let satSmartDriverRepositoryURL = URL(string: "https://github.com/kasbert/OS-X-SAT-SMART-Driver")!
+
+    private var satSmartDriverSupportStatus: String {
+        language.t(viewModel.externalSupport.satDriverInstalled ? "Detected" : "Not detected")
+    }
+
+    private var satSmartDriverSupportSymbol: String {
+        viewModel.externalSupport.satDriverInstalled ? "checkmark.circle.fill" : "questionmark.circle"
+    }
+
+    private var satSmartDriverSupportTint: Color {
+        viewModel.externalSupport.satDriverInstalled ? .green : .secondary
+    }
+
+    private var satSmartDriverSupportDescription: String {
+        viewModel.externalSupport.satDriverInstalled
+            ? "SAT SMART Driver is detected in a standard extension location."
+            : "SAT SMART Driver is not detected. Some compatible external USB-SATA bridges may need it to expose SMART data to macOS."
     }
 
     private func smartctlDiagnosticRow(_ title: String, _ value: String?, tint: Color = .primary) -> some View {
