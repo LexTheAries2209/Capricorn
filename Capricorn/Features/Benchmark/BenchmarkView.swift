@@ -1623,6 +1623,8 @@ struct ExternalSupportView: View {
                     }
                     InfoPanel(title: language.t("Driver Diagnostics"), symbol: "waveform.path.ecg.rectangle") {
                         if let diagnostics {
+                            diagnosticRow(language.t("Tool Source"), localizedExecutableOrigin(diagnostics.executableOrigin))
+                            diagnosticRow(language.t("Executable Path"), diagnostics.executablePath, monospaced: true)
                             diagnosticRow(language.t("smartctl Version"), diagnostics.version)
                             diagnosticRow(language.t("Drive Database"), diagnostics.driveDatabaseVersion)
                             diagnosticRow(language.t("Target Path"), diagnostics.targetPath, monospaced: true)
@@ -1725,6 +1727,17 @@ struct ExternalSupportView: View {
                 .lineLimit(2)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
+        }
+    }
+
+    private func localizedExecutableOrigin(_ origin: String?) -> String? {
+        switch origin {
+        case SmartctlExecutableOrigin.bundled.rawValue:
+            language.t("Bundled")
+        case SmartctlExecutableOrigin.external.rawValue:
+            language.t("External override")
+        default:
+            origin
         }
     }
 }

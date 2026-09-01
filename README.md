@@ -58,7 +58,7 @@ V2.3.2 的中文发布说明见 [docs/releases/v2.3.2.zh-CN.md](docs/releases/v2
 - 侧边栏和概览显示物理磁盘或网络卷的总容量、已用和可用空间；APFS 共享容器只统计一次可用空间，避免重复汇总。
 - SMART 温度会按数据源区分单位：原生 Kelvin 数值同时显示换算后的摄氏度，已是摄氏度的数值保持摄氏度显示。概览中 `70–85 °C` 标黄、`85 °C` 及以上标红，但温度不参与整体 SMART 健康等级。
 - NVMe 累计读取量和写入量会把 macOS 原生与 `smartctl` 的 Data Units 转换为 TB，并保留原始 units 计数。
-- macOS 原生 SMART 优先，可选使用用户已安装的 `smartctl` 获取更完整的 ATA/NVMe 数据。
+- macOS 原生 SMART 优先，内置 `smartctl` 获取更完整的 ATA/NVMe 数据；仅在设置中明确选择时才会使用外部工具。
 - 对 SD/SDXC 读卡器和网络卷显示有限支持说明，避免把无 SMART 数据误判为硬盘故障。
 - 支持默认、峰值/NVMe、真实场景、演示和自定义测速配置。
 - 自定义测速最多 4 个测试项目组，可选择 SEQ/RND、块大小、Q、T 和混合测试。
@@ -86,7 +86,7 @@ V2.3.2 的中文发布说明见 [docs/releases/v2.3.2.zh-CN.md](docs/releases/v2
 - 新增磁盘“急救”流程：仅对用户确认的外接或可移除 APFS/ExFAT 卷调用 `diskutil repairVolume`，支持预检、占用文件提示、串行流式输出和完成后刷新。
 - 急救会阻断 SMART 故障、系统盘、内置盘、网络卷、虚拟盘、只读卷、锁定卷和 NTFS；NTFS 仅提供 Windows CHKDSK 指引。
 - Shell 命令取消时会终止对应子进程，并区分启动失败、非零退出和主动取消。
-- 设置页支持虚拟磁盘显示、序列号脱敏、普通 Tab 切页、自定义 `smartctl` 路径、历史数据库位置打开、自动刷新、检查与修复菜单和 SMART 自检界面，并完整支持简体中文。序列号脱敏默认关闭；开启后只保留前四位，其余显示为 `*`，内部身份匹配仍使用完整值。
+- 设置页支持虚拟磁盘显示、序列号脱敏、普通 Tab 切页、内置 `smartctl` 状态和可选外部覆盖路径、历史数据库位置打开、自动刷新、检查与修复菜单和 SMART 自检界面，并完整支持简体中文。序列号脱敏默认关闭；开启后只保留前四位，其余显示为 `*`，内部身份匹配仍使用完整值。
 - 应用菜单只保留系统 `Settings…` 设置入口，并使用 `Command-P` 打开；另支持 `Command-R` 刷新、`Control-Tab` / `Control-Shift-Tab` 切换功能页，普通 `Tab` 切页可在设置中关闭。
 - 应用启动时静默检查 GitHub 最新稳定版；设置页和应用菜单提供手动检查、重试、打开 Releases 和查看发布说明入口，不会主动弹出更新提醒。
 - 界面支持较小窗口和自适应控制栏、指标卡布局，宽表格保留水平滚动。
@@ -98,18 +98,11 @@ V2.3.2 的中文发布说明见 [docs/releases/v2.3.2.zh-CN.md](docs/releases/v2
 macOS 原生 SMART 对 NVMe、SATA、USB、SD 卡和网络卷的支持程度不同。Capricorn 会尽量读取系统提供的数据，但不会伪造 `当前 / 最差 / 阈值` 等 ATA SMART 归一化字段。
 
 - 内置 Apple NVMe 通常可以显示 macOS 原生 SMART 摘要。
-- 部分外接 USB-SATA 设备需要用户自行安装 SAT SMART Driver 或通过 `smartctl` 读取。
+- 部分外接 USB-SATA 设备可由内置 `smartctl` 读取；桥接器支持仍取决于设备和 macOS。
 - 未检测到 SAT SMART Driver 时，SMART 支持区可直接打开 [OS-X-SAT-SMART-Driver 开源项目仓库](https://github.com/kasbert/OS-X-SAT-SMART-Driver)；Capricorn 只提供入口，不会自动下载或安装驱动。
 - USB NVMe、SD/SDXC 卡和网络卷通常不会暴露标准 SMART 健康属性。
-- Capricorn 不会安装或卸载内核扩展，也不会捆绑 GPL `smartctl` 二进制文件。
-
-安装可选 smartmontools：
-
-```sh
-brew install smartmontools
-```
-
-Apple Silicon Homebrew 通常安装到 `/opt/homebrew/bin/smartctl`；Intel Mac 通常安装到 `/usr/local/bin/smartctl`。安装后请重启或刷新 Capricorn。
+- Capricorn 内置 smartmontools 7.5 的 `smartctl` 和 `drivedb.h`，不会安装或卸载内核扩展，也不会自动探测 PATH 或 Homebrew。设置中的非空路径是用户明确选择的外部覆盖；外部工具会显示版本和兼容性检查结果。
+- `smartctl` 及对应源代码按 GPL-2.0-or-later 提供。完整对应源代码、许可证、固定哈希和可复现构建脚本见 [ThirdParty/smartmontools](ThirdParty/smartmontools) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ### 测速和实时活动
 
@@ -126,7 +119,7 @@ Capricorn 只在你选择的文件夹内创建临时测试文件，不做裸设�
 
 - 使用发布版：macOS `14.0` 或更新版本，不需要 Xcode。
 - 从源码构建：需要 Xcode，当前工程使用 SwiftUI、SwiftData、IOKit 和 DiskArbitration。
-- 可选依赖：smartmontools (`smartctl`)。
+- 运行时不需要安装 smartmontools；`smartctl` 7.5 已随 App 内置。
 
 ### 构建和测试
 
@@ -212,7 +205,7 @@ Common use cases:
 - The sidebar and overview show total, used, and available capacity for physical and network drives. APFS volumes that share one container are deduplicated before capacity aggregation.
 - Formats native Kelvin temperatures with a Celsius conversion while keeping already-Celsius values in Celsius. Overview values are yellow from `70–85 °C` and red at `85 °C` or above, but temperature does not alter overall SMART health.
 - Converts native macOS and `smartctl` NVMe Data Units Read/Written values to TB while retaining the raw unit count.
-- Uses native macOS SMART first, with optional user-installed `smartctl` for deeper ATA/NVMe data.
+- Uses native macOS SMART first, with bundled `smartctl` for deeper ATA/NVMe data; an external tool is used only when explicitly selected in Settings.
 - Displays limited-support messages for SD/SDXC readers and network volumes instead of treating missing SMART as a drive failure.
 - Includes Default, Peak/NVMe, RealWorld, Demo, and Custom benchmark profiles.
 - Custom benchmarks support up to 4 test groups with SEQ/RND, block size, Q, T, and mixed-test choices.
@@ -241,7 +234,7 @@ Common use cases:
 - Adds a guarded First Aid flow for explicitly selected external or removable APFS/ExFAT volumes using `diskutil repairVolume`, with preflight checks, open-file warnings, serial streaming output, and post-run refresh.
 - Blocks First Aid for failing SMART health, system/internal disks, network or virtual volumes, read-only/locked volumes, and NTFS; NTFS shows Windows CHKDSK guidance only.
 - Cancelling a shell command terminates its child process and distinguishes launch failures, non-zero exits, and user cancellation.
-- Settings cover virtual-drive visibility, serial-number redaction, plain-Tab navigation, a custom `smartctl` path, history-database reveal, automatic refresh, the Check and Repair menu, and the SMART self-test interface, with complete Simplified Chinese content. Redaction is off by default; when enabled, only the first four characters remain visible while internal identity matching still uses the complete serial.
+- Settings cover virtual-drive visibility, serial-number redaction, plain-Tab navigation, bundled `smartctl` status with an optional external override path, history-database reveal, automatic refresh, the Check and Repair menu, and the SMART self-test interface, with complete Simplified Chinese content. Redaction is off by default; when enabled, only the first four characters remain visible while internal identity matching still uses the complete serial.
 - The application menu keeps only the system `Settings…` command and maps it to `Command-P`. Capricorn also supports `Command-R` to refresh and `Control-Tab` / `Control-Shift-Tab` to switch feature pages; plain-Tab switching can be disabled.
 - Responsive controls and metric grids support smaller windows while wide tables keep horizontal scrolling.
 - SwiftData history uses a versioned schema, a dedicated `CapricornHistory` storage directory, and a repository boundary with explicit save errors.
@@ -252,18 +245,11 @@ Common use cases:
 macOS exposes different SMART data depending on NVMe, SATA, USB, SD card, bridge chipset, and network volume behavior. Capricorn reports available data without fabricating ATA normalized fields such as `Current / Worst / Threshold`.
 
 - Internal Apple NVMe drives usually expose a native SMART summary.
-- Some external USB-SATA devices require a user-installed SAT SMART Driver or `smartctl`.
+- Some external USB-SATA devices can be read through bundled `smartctl`; bridge support still depends on the device and macOS.
 - When SAT SMART Driver is not detected, the SMART support section links directly to the [OS-X-SAT-SMART-Driver open-source repository](https://github.com/kasbert/OS-X-SAT-SMART-Driver). Capricorn provides the link but does not download or install the driver.
 - USB NVMe, SD/SDXC cards, and network volumes often do not expose standard SMART health attributes.
-- Capricorn does not install or remove kernel extensions and does not bundle the GPL `smartctl` binary.
-
-Install optional smartmontools:
-
-```sh
-brew install smartmontools
-```
-
-Apple Silicon Homebrew usually installs `smartctl` at `/opt/homebrew/bin/smartctl`; Intel Homebrew usually uses `/usr/local/bin/smartctl`. Restart or refresh Capricorn after installation.
+- Capricorn bundles smartmontools 7.5 `smartctl` and `drivedb.h`, does not install or remove kernel extensions, and does not automatically search PATH or Homebrew. A non-empty Settings path is an explicit external override; the external tool's version and compatibility are displayed before it is used.
+- `smartctl` and its corresponding source are available under GPL-2.0-or-later. The complete corresponding source, license, pinned hash, and reproducible build script are in [ThirdParty/smartmontools](ThirdParty/smartmontools) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ### Benchmark And Live Activity
 
@@ -280,7 +266,7 @@ Important notes:
 
 - Release build: macOS `14.0` or later; Xcode is not required.
 - Source build: Xcode with SwiftUI, SwiftData, IOKit, and DiskArbitration support.
-- Optional dependency: smartmontools (`smartctl`).
+- No runtime smartmontools installation is required; smartctl 7.5 is bundled with the App.
 
 ### Build And Test
 

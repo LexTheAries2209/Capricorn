@@ -142,8 +142,12 @@ final class AppPreferences {
         smartctlPath.isEmpty || FileManager.default.isExecutableFile(atPath: smartctlPath)
     }
 
-    func restoreAutomaticSmartctlDetection() {
+    func useBundledSmartctl() {
         smartctlPath = ""
+    }
+
+    func restoreAutomaticSmartctlDetection() {
+        useBundledSmartctl()
     }
 }
 
@@ -160,6 +164,7 @@ struct CapricornSettingsView: View {
     @State private var isConfirmingHistoryDatabaseClear = false
     @State private var historyDatabaseSizeBytes: Int64?
     @State private var pendingHistoryDatabaseStatistics: HistoryDatabaseStatistics?
+    @State private var smartctlExecutableInfo: SmartctlExecutableInfo?
 
     private var language: AppLanguage {
         preferences.language
@@ -290,20 +295,59 @@ struct CapricornSettingsView: View {
                 }
             }
 
-            LabeledContent("smartctl") {
-                HStack {
-                    TextField(language.t("Automatic detection"), text: $preferences.smartctlPath)
-                        .textFieldStyle(.roundedBorder)
-                    Button(language.t("Choose…"), action: chooseSmartctl)
-                    Button(language.t("Automatic")) {
-                        preferences.restoreAutomaticSmartctlDetection()
+            Section(language.t("SMART Tool")) {
+                LabeledContent("smartctl") {
+                    HStack {
+                        TextField(language.t("External smartctl path (optional)"), text: $preferences.smartctlPath)
+                            .textFieldStyle(.roundedBorder)
+                        Button(language.t("Choose…"), action: chooseSmartctl)
+                        Button(language.t("Use Bundled")) {
+                            preferences.useBundledSmartctl()
+                        }
                     }
                 }
-            }
 
-            if !preferences.smartctlPathIsValid {
-                Label(language.t("The selected smartctl path is not executable."), systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                Text(language.t("Capricorn uses its bundled smartctl unless you select an executable here."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let smartctlExecutableInfo {
+                    LabeledContent(language.t("Effective smartctl")) {
+                        VStack(alignment: .trailing, spacing: 3) {
+                            Text(language.t(smartctlExecutableInfo.origin == .external ? "External override" : "Bundled"))
+                            Text(smartctlExecutableInfo.path ?? language.t("Unavailable"))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                            if let version = smartctlExecutableInfo.version {
+                                Text("\(language.t("smartctl Version")): \(version)")
+                            }
+                            if let driveDatabaseVersion = smartctlExecutableInfo.driveDatabaseVersion {
+                                Text("\(language.t("Drive Database")): \(driveDatabaseVersion)")
+                            }
+                            if let isCompatible = smartctlExecutableInfo.isCompatible {
+                                Text(language.t(isCompatible ? "Compatible" : "Incompatible"))
+                                    .foregroundStyle(isCompatible ? Color.secondary : Color.orange)
+                            }
+                        }
+                        .font(.caption)
+                        .multilineTextAlignment(.trailing)
+                    }
+                    if let error = smartctlExecutableInfo.error {
+                        Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    } else if smartctlExecutableInfo.isCompatible == nil {
+                        Label(language.t("Compatibility could not be verified."), systemImage: "questionmark.circle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                if !preferences.smartctlPathIsValid {
+                    Label(language.t("The selected smartctl path is not executable."), systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
             }
 
         }
@@ -313,6 +357,9 @@ struct CapricornSettingsView: View {
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
         .task {
             refreshHistoryDatabaseSize()
+        }
+        .task(id: preferences.smartctlPath) {
+            smartctlExecutableInfo = await SmartctlSmartProvider().executableInfo()
         }
         .alert(language.t("Clear History Database"), isPresented: $isConfirmingHistoryDatabaseClear) {
             Button(language.t("Clear History Database"), role: .destructive) {

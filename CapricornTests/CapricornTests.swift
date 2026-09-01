@@ -1669,6 +1669,104 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(target[Self.fixtureDrive().id]?.type, "nvme")
     }
 
+    func testSmartctlUsesBundledExecutableByDefault() async throws {
+        let provider = SmartctlSmartProvider(
+            runner: StaticCommandRunner(stdout: Self.smartctlNVMeFixture),
+            bundledExecutableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            bundledDriveDatabaseURL: URL(fileURLWithPath: #filePath)
+        )
+
+        XCTAssertEqual(provider.resolvedExecutable()?.path, "/usr/bin/true")
+        XCTAssertEqual(provider.resolvedExecutable()?.origin, .bundled)
+        let executable = try XCTUnwrap(provider.resolvedExecutable())
+        let arguments = provider.smartReadArguments(
+            for: Self.fixtureDrive(),
+            target: SmartctlTargetDescriptor(path: "/dev/disk0", type: "sat"),
+            fallback: "/dev/disk0",
+            executable: executable
+        )
+        XCTAssertEqual(arguments.first, "--drivedb=\(#filePath)")
+
+        let snapshotValue = await provider.snapshot(for: Self.fixtureDrive(), resolvedTarget: "/dev/disk0")
+        let snapshot = try XCTUnwrap(snapshotValue)
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.executablePath, "/usr/bin/true")
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.executableOrigin, SmartctlExecutableOrigin.bundled.rawValue)
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.version, BundledSmartctlMetadata.version)
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.driveDatabaseVersion, BundledSmartctlMetadata.driveDatabaseVersion)
+    }
+
+    func testSmartctlMigratesStoredPathToExplicitExternalOverride() {
+        let defaults = UserDefaults(suiteName: "CapricornTests.\(UUID().uuidString)")!
+        defaults.set("/usr/bin/true", forKey: AppPreferences.Key.smartctlPath)
+        let provider = SmartctlSmartProvider(
+            defaults: defaults,
+            bundledExecutableURL: URL(fileURLWithPath: "/usr/bin/false")
+        )
+
+        XCTAssertEqual(provider.resolvedExecutable()?.path, "/usr/bin/true")
+        XCTAssertEqual(provider.resolvedExecutable()?.origin, .external)
+    }
+
+    func testSmartctlFallsBackToBundledExecutableForInvalidExternalPath() {
+        let defaults = UserDefaults(suiteName: "CapricornTests.\(UUID().uuidString)")!
+        defaults.set("/not/a/smartctl", forKey: AppPreferences.Key.smartctlPath)
+        let provider = SmartctlSmartProvider(
+            defaults: defaults,
+            bundledExecutableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            bundledDriveDatabaseURL: URL(fileURLWithPath: #filePath)
+        )
+
+        XCTAssertEqual(provider.resolvedExecutable()?.path, "/usr/bin/true")
+        XCTAssertEqual(provider.resolvedExecutable()?.origin, .bundled)
+    }
+
+    func testSmartctlDoesNotSearchPATHOrHomebrewLocations() {
+        let defaults = UserDefaults(suiteName: "CapricornTests.\(UUID().uuidString)")!
+        let provider = SmartctlSmartProvider(
+            defaults: defaults,
+            bundledExecutableURL: URL(fileURLWithPath: "/not/a/bundled/smartctl")
+        )
+
+        XCTAssertNil(provider.findExecutable())
+    }
+
+    func testSmartctlValidatesManualExternalToolVersion() async {
+        let provider = SmartctlSmartProvider(
+            runner: StaticCommandRunner(stdout: "smartctl 6.6 2016-05-31 r4324"),
+            configuredPath: "/usr/bin/true"
+        )
+
+        let info = await provider.executableInfo()
+        XCTAssertEqual(info.origin, .external)
+        XCTAssertEqual(info.version, "6.6")
+        XCTAssertEqual(info.isCompatible, false)
+        XCTAssertNil(info.driveDatabaseVersion)
+    }
+
+    func testSmartctlCommandCoordinatorSerializesConcurrentCommands() async throws {
+        let coordinator = SmartctlCommandCoordinator()
+        let probe = SmartctlCommandConcurrencyProbe()
+        let first = Task {
+            try await coordinator.run {
+                await probe.begin()
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                await probe.end()
+            }
+        }
+        let second = Task {
+            try await coordinator.run {
+                await probe.begin()
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                await probe.end()
+            }
+        }
+
+        _ = try await first.value
+        _ = try await second.value
+        let maximumActiveCommands = await probe.maximumActiveCommands()
+        XCTAssertEqual(maximumActiveCommands, 1)
+    }
+
     func testSmartctlNVMeCapabilityParserRequiresSelfTestFlag() throws {
         let supported = CommandResult(
             stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8),
@@ -4739,6 +4837,24 @@ private final class LockedArray<Element>: @unchecked Sendable {
         lock.lock()
         values.append(value)
         lock.unlock()
+    }
+}
+
+private actor SmartctlCommandConcurrencyProbe {
+    private var activeCommands = 0
+    private var maximumActive = 0
+
+    func begin() {
+        activeCommands += 1
+        maximumActive = max(maximumActive, activeCommands)
+    }
+
+    func end() {
+        activeCommands -= 1
+    }
+
+    func maximumActiveCommands() -> Int {
+        maximumActive
     }
 }
 
