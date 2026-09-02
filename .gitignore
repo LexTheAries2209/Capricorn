@@ -4,3 +4,4 @@ output/
 ThirdParty/smartmontools/build/
 *.xcuserdatad/
 Capricorn旧版软件/
+.codex/environments/
