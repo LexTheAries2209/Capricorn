@@ -593,7 +593,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Not detected": "未检测",
         "Refresh": "刷新",
         "SSD": "SSD",
-        "HDD/Media": "HDD/介质"
+        "HDD": "HDD"
     ]
 
     private static let zhHansMessages: [String: String] = [

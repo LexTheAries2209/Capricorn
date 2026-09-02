@@ -1412,6 +1412,11 @@ final class CapricornTests: XCTestCase {
         drive.isMemoryCard = true
         drive.protocolName = "Secure Digital"
         XCTAssertEqual(DrivePageHeaderText.subtitle(for: drive, language: .english), "disk0 · Secure Digital · SD Card")
+
+        drive.isMemoryCard = false
+        drive.protocolName = "USB"
+        drive.isSolidState = false
+        XCTAssertEqual(DrivePageHeaderText.subtitle(for: drive, language: .simplifiedChinese), "disk0 · USB · HDD")
     }
 
     func testDrivePageHeaderTextShowsFullSerialOrNil() {

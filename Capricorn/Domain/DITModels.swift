@@ -877,7 +877,9 @@ enum DrivePageHeaderText {
         if drive.isMemoryCard {
             return language.t("SD Card")
         }
-        return drive.isSolidState ? language.t("SSD") : language.t("HDD/Media")
+        // The presentation model intentionally exposes only four states:
+        // network volume, SD card, SSD, and HDD as the catch-all physical media.
+        return drive.isSolidState ? language.t("SSD") : language.t("HDD")
     }
 
     static func subtitle(for drive: DriveDevice, language: AppLanguage) -> String {
