@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.4.1`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.4.2`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v2.4.1.md](docs/releases/v2.4.1.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v2.4.2.md](docs/releases/v2.4.2.md)
 
 ---
 
@@ -20,11 +20,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.4.1-macOS.zip`。
-2. 解压后把 `Capricorn V2.4.1.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.4.2-macOS.zip`。
+2. 解压后把 `Capricorn V2.4.2.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V2.4.1 的中文发布说明见 [docs/releases/v2.4.1.zh-CN.md](docs/releases/v2.4.1.zh-CN.md)。
+V2.4.2 的中文发布说明见 [docs/releases/v2.4.2.zh-CN.md](docs/releases/v2.4.2.zh-CN.md)。
 
 典型用途：
 
@@ -145,8 +145,8 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 例如：
 
 - `Version = 2.4`
-- `Build = 1`
-- `Display Name = Capricorn V2.4.1`
+- `Build = 2`
+- `Display Name = Capricorn V2.4.2`
 
 ### 当前限制
 
@@ -166,11 +166,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v2.4.1-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V2.4.1.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v2.4.2-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V2.4.2.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V2.4.1 are available at [docs/releases/v2.4.1.en.md](docs/releases/v2.4.1.en.md).
+English release notes for V2.4.2 are available at [docs/releases/v2.4.2.en.md](docs/releases/v2.4.2.en.md).
 
 Common use cases:
 
@@ -291,8 +291,8 @@ The public Display Name uses a three-part version label composed from Xcode `Ver
 Example:
 
 - `Version = 2.4`
-- `Build = 1`
-- `Display Name = Capricorn V2.4.1`
+- `Build = 2`
+- `Display Name = Capricorn V2.4.2`
 
 ### Current Limitations
 
