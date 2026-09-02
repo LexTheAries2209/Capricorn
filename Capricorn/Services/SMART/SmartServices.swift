@@ -1118,6 +1118,41 @@ enum SmartctlParser {
             return snapshot
         }
 
+        // smartctl can identify a bridge and return model information even
+        // when the SMART command itself failed (for example, an NVMe device
+        // exposed through an IOSAT/SAT-looking bridge).  Identification is
+        // not SMART data, so never report this response as available.
+        guard hasSMARTPayload(root) else {
+            let message = smartctlMessages(root).first
+                ?? (embeddedExitStatus == 0
+                    ? "smartctl did not return SMART data."
+                    : "smartctl did not return SMART data (exit status \(embeddedExitStatus)).")
+            var snapshot = SmartSnapshot(
+                driveID: drive.id,
+                capturedAt: Date(),
+                health: .unavailable,
+                summary: message,
+                providerStatuses: [
+                    ProviderStatus(
+                        name: providerName,
+                        state: embeddedExitStatus == 0 ? .unavailable : .failed,
+                        message: message
+                    )
+                ],
+                attributes: [],
+                temperatureCelsius: nil,
+                lifeRemainingPercent: nil,
+                powerOnHours: nil,
+                powerCycleCount: nil,
+                mediaErrors: nil,
+                unsafeShutdowns: nil,
+                smartStatusRaw: nil,
+                selfTestStatus: nil
+            )
+            snapshot.smartctlDiagnostics = smartctlDiagnostics
+            return snapshot
+        }
+
         var attributes: [SmartAttribute] = []
         let smartStatusRaw = parseSmartStatus(root)
         let temperature = root.dictionary("temperature").double("current")
@@ -1149,7 +1184,7 @@ enum SmartctlParser {
         let selfTestReport = parseSelfTestReport(root, rawOutput: rawOutput)
         let selfTest = selfTestReport.map(Self.selfTestSummary)
 
-        let providerState: ProviderState = embeddedExitStatus & 0x03 == 0 ? .available : .failed
+        let providerState: ProviderState = embeddedExitStatus == 0 ? .available : .limited
         var snapshot = SmartSnapshot(
             driveID: drive.id,
             capturedAt: Date(),
@@ -1436,6 +1471,20 @@ enum SmartctlParser {
             return passed ? "Passed" : "Failed"
         }
         return status.string("string")
+    }
+
+    private static func hasSMARTPayload(_ root: [String: Any]) -> Bool {
+        if root["smart_status"] != nil || root["ata_smart_data"] != nil {
+            return true
+        }
+        if !root.dictionary("ata_smart_attributes").arrayOfDictionaries("table").isEmpty {
+            return true
+        }
+        if !root.dictionary("nvme_smart_health_information_log").isEmpty {
+            return true
+        }
+        return !root.dictionary("ata_smart_error_log").isEmpty
+            || !root.dictionary("ata_smart_self_test_log").isEmpty
     }
 
     private static func appendNVMeAttributes(_ nvme: [String: Any], providerName: String, to attributes: inout [SmartAttribute]) {

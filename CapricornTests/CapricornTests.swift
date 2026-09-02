@@ -1629,6 +1629,61 @@ final class CapricornTests: XCTestCase {
         XCTAssertNil(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
     }
 
+    func testUSBSmartCommandPassthroughDoesNotVerifyBridgeWithoutSMARTPayload() throws {
+        let drive = Self.externalCatalogDrive(model: "USB-NVMe Bridge")
+        var snapshot = Self.fixtureSnapshot(for: drive)
+        snapshot.providerStatuses = [
+            ProviderStatus(name: "smartctl", state: .available, message: "Detailed SMART data available.")
+        ]
+        snapshot.attributes = []
+        snapshot.smartStatusRaw = nil
+        snapshot.temperatureCelsius = nil
+        snapshot.lifeRemainingPercent = nil
+        snapshot.powerOnHours = nil
+        snapshot.powerCycleCount = nil
+        snapshot.mediaErrors = nil
+        snapshot.unsafeShutdowns = nil
+        snapshot.smartctlDiagnostics = SmartctlDiagnostics(
+            targetPath: "IOService:/fi_dungeon_driver_IOSATDriver/IOSATServices",
+            deviceType: "ata",
+            protocolName: "ATA"
+        )
+
+        let status = try XCTUnwrap(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
+
+        XCTAssertEqual(status.kind, .sata)
+        XCTAssertEqual(status.state, .unavailable)
+    }
+
+    func testSmartctlParserRejectsDeviceIdentificationWithoutSMARTPayload() throws {
+        let fixture = """
+        {
+          "smartctl": {"version": [7, 5], "exit_status": 4},
+          "device": {
+            "name": "IOService:/fi_dungeon_driver_IOSATDriver/IOSATServices",
+            "type": "ata",
+            "protocol": "ATA"
+          },
+          "model_name": "SAMSUNG MZVL21T0HCLR-00B00",
+          "serial_number": "S676NL0W435642"
+        }
+        """
+
+        let snapshot = SmartctlParser.parseSnapshot(
+            Data(fixture.utf8),
+            drive: Self.externalCatalogDrive(model: "SAMSUNG MZVL21T0HCLR-00B00"),
+            providerName: "smartctl",
+            exitStatus: 4
+        )
+
+        XCTAssertEqual(snapshot.health, .unavailable)
+        XCTAssertEqual(snapshot.providerStatuses.first?.state, .failed)
+        XCTAssertTrue(snapshot.attributes.isEmpty)
+        XCTAssertNil(snapshot.smartStatusRaw)
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.deviceType, "ata")
+        XCTAssertEqual(snapshot.smartctlDiagnostics?.protocolName, "ATA")
+    }
+
     func testSmartctlTargetDescriptorsPreserveSATDeviceType() async {
         let scan = """
         {"devices":[{"name":"/dev/disk0","type":"sat","protocol":"ATA","open_error":"permission denied"}]}

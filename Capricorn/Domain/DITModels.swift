@@ -1378,7 +1378,23 @@ struct USBSmartCommandPassthroughStatus: Hashable, Sendable {
         let smartctlState = snapshot?.providerStatuses.first {
             $0.name.caseInsensitiveCompare("smartctl") == .orderedSame
         }?.state ?? .unavailable
-        return Self(kind: kind, state: smartctlState)
+        // A transport descriptor alone is not proof that SMART was read.
+        // Keep the row visible for diagnostics, but never show a green
+        // passthrough result when the snapshot contains no SMART payload.
+        let hasSmartPayload = snapshot.map {
+            $0.smartStatusRaw != nil
+                || !$0.attributes.isEmpty
+                || $0.temperatureCelsius != nil
+                || $0.lifeRemainingPercent != nil
+                || $0.powerOnHours != nil
+                || $0.powerCycleCount != nil
+                || $0.mediaErrors != nil
+                || $0.unsafeShutdowns != nil
+        } ?? false
+        let effectiveState: ProviderState = smartctlState == .available && !hasSmartPayload
+            ? .unavailable
+            : smartctlState
+        return Self(kind: kind, state: effectiveState)
     }
 
     private static func kind(for diagnostics: SmartctlDiagnostics) -> USBSmartCommandPassthroughKind? {
