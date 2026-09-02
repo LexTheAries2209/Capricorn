@@ -5,7 +5,6 @@ import OSLog
 struct DriveRefreshSnapshot: Sendable {
     var drives: [DriveDevice]
     var snapshots: [String: SmartSnapshot]
-    var externalSupport: ExternalSupportStatus
 }
 
 enum DriveSnapshotUpdatePhase: Sendable, Equatable {
@@ -38,18 +37,15 @@ extension DriveRefreshing {
 actor DriveRefreshService: DriveRefreshing {
     private let inventoryProvider: DiskInventoryProviding
     private let smartService: SmartSnapshotService
-    private let externalDetector: ExternalDriveSupportDetector
     private let maximumConcurrentSnapshots: Int
 
     init(
         inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(),
         smartService: SmartSnapshotService = SmartSnapshotService(),
-        externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
         maximumConcurrentSnapshots: Int = 2
     ) {
         self.inventoryProvider = inventoryProvider
         self.smartService = smartService
-        self.externalDetector = externalDetector
         self.maximumConcurrentSnapshots = max(1, maximumConcurrentSnapshots)
     }
 
@@ -60,8 +56,7 @@ actor DriveRefreshService: DriveRefreshing {
         let drives = try await inventoryProvider.loadDrives(showVirtual: showVirtual)
         let snapshot = DriveRefreshSnapshot(
             drives: drives,
-            snapshots: Dictionary(uniqueKeysWithValues: drives.map { ($0.id, SmartSnapshot.refreshingNative(for: $0)) }),
-            externalSupport: externalDetector.detect()
+            snapshots: Dictionary(uniqueKeysWithValues: drives.map { ($0.id, SmartSnapshot.refreshingNative(for: $0)) })
         )
         CapricornLog.inventory.info("Drive discovery completed with \(drives.count) drives")
         return snapshot

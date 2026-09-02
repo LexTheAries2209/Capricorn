@@ -19,7 +19,6 @@ final class AppModel {
     let benchmarkSession = BenchmarkSessionModel()
     let liveActivitySession = LiveActivitySessionModel()
     let diskOperations = DiskOperationsModel()
-    var externalSupport: ExternalSupportStatus
     var showVirtualDisks = false
     var selectedFeatureTab: DriveFeatureTab = .overview
     var smartSelfTestSession: SmartSelfTestSessionState = .idle
@@ -223,7 +222,6 @@ final class AppModel {
     private let openFileService: DiskOpenFileService
     private let diskCheckService: DiskCheckService
     private let diskFirstAidService: DiskFirstAidRunning
-    private let externalDetector: ExternalDriveSupportDetector
     private let notificationCoordinator: NotificationCoordinator
     private let driveSystemEventMonitor: DriveSystemEventMonitoring
     private let driveSystemEventDebounceNanoseconds: UInt64
@@ -262,7 +260,6 @@ final class AppModel {
         openFileService: DiskOpenFileService = DiskOpenFileService(),
         diskCheckService: DiskCheckService = DiskCheckService(),
         diskFirstAidService: DiskFirstAidRunning = DiskFirstAidService(),
-        externalDetector: ExternalDriveSupportDetector = ExternalDriveSupportDetector(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator(),
         smartSelfTestService: SmartSelfTestService = SmartSelfTestService(),
         allowsSystemDiskSelfTests: @escaping @Sendable () -> Bool = {
@@ -274,8 +271,7 @@ final class AppModel {
         self.allowsSystemDiskSelfTests = allowsSystemDiskSelfTests
         self.refreshService = refreshService ?? DriveRefreshService(
             inventoryProvider: inventoryProvider,
-            smartService: smartService,
-            externalDetector: externalDetector
+            smartService: smartService
         )
         self.benchmarkRunner = benchmarkRunner
         self.diskActivityProvider = diskActivityProvider
@@ -284,11 +280,9 @@ final class AppModel {
         self.openFileService = openFileService
         self.diskCheckService = diskCheckService
         self.diskFirstAidService = diskFirstAidService
-        self.externalDetector = externalDetector
         self.notificationCoordinator = notificationCoordinator
         self.driveSystemEventMonitor = driveSystemEventMonitor
         self.driveSystemEventDebounceNanoseconds = driveSystemEventDebounceNanoseconds
-        self.externalSupport = externalDetector.detect()
     }
 
     var selectedDrive: DriveDevice? {
@@ -486,7 +480,6 @@ final class AppModel {
         if !isSmartSelfTestActive {
             smartSelfTestCapabilities = [:]
         }
-        externalSupport = discovery.externalSupport
         if selectedDriveID == nil || !loadedDrives.contains(where: { $0.id == selectedDriveID }) {
             selectedDriveID = loadedDrives.first?.id
         }
@@ -1170,13 +1163,6 @@ final class AppModel {
         liveActivityWorkloadTask?.cancel()
     }
 
-    func refreshExternalSupport() {
-        externalSupport = externalDetector.detect()
-        Task { [weak self] in
-            await self?.refresh()
-        }
-    }
-
     var isSmartSelfTestActive: Bool {
         smartSelfTestSession.isActive
     }
@@ -1458,8 +1444,7 @@ final class AppModel {
         let model = DITViewModel(
             inventoryProvider: PreviewInventoryProvider(),
             smartService: SmartSnapshotService(nativeProvider: PreviewSmartProvider(), smartctlProvider: PreviewSmartProvider()),
-            benchmarkRunner: PreviewBenchmarkRunner(),
-            externalDetector: ExternalDriveSupportDetector()
+            benchmarkRunner: PreviewBenchmarkRunner()
         )
         model.drives = PreviewInventoryProvider.previewDrives
         model.selectedDriveID = model.drives.first?.id

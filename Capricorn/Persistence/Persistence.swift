@@ -242,6 +242,8 @@ enum HistoryDriveMatcher {
 @Model
 final class AppSettingsRecord {
     @Attribute(.unique) var id: String
+    // Retained for SwiftData store compatibility. The bundled-only smartctl
+    // policy ignores this legacy value and AppPreferences clears its old key.
     var smartctlPath: String?
     var includeSerialsInReports: Bool
     var showVirtualDisks: Bool

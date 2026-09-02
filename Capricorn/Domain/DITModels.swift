@@ -1349,6 +1349,50 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+enum USBSmartCommandPassthroughKind: Hashable, Sendable {
+    case sata
+    case nvme
+}
+
+/// Describes a USB bridge only after smartctl has identified its transport.
+/// Interface names alone are insufficient because USB storage can conceal the
+/// device protocol or reject SMART commands entirely.
+struct USBSmartCommandPassthroughStatus: Hashable, Sendable {
+    var kind: USBSmartCommandPassthroughKind
+    var state: ProviderState
+
+    static func resolve(for drive: DriveDevice, snapshot: SmartSnapshot?) -> Self? {
+        guard !drive.isInternal,
+              !drive.isSystemDisk,
+              !drive.isNetwork,
+              !drive.isVirtual,
+              !drive.isMemoryCard,
+              drive.protocolName.localizedCaseInsensitiveContains("USB"),
+              let diagnostics = snapshot?.smartctlDiagnostics,
+              let kind = kind(for: diagnostics) else {
+            return nil
+        }
+
+        let smartctlState = snapshot?.providerStatuses.first {
+            $0.name.caseInsensitiveCompare("smartctl") == .orderedSame
+        }?.state ?? .unavailable
+        return Self(kind: kind, state: smartctlState)
+    }
+
+    private static func kind(for diagnostics: SmartctlDiagnostics) -> USBSmartCommandPassthroughKind? {
+        let protocolName = diagnostics.protocolName?.lowercased() ?? ""
+        let deviceType = diagnostics.deviceType?.lowercased() ?? ""
+
+        if protocolName.contains("nvme") || deviceType == "nvme" || deviceType.hasPrefix("snt") {
+            return .nvme
+        }
+        if protocolName.contains("ata") || deviceType == "sat" || deviceType.hasSuffix("/sat") {
+            return .sata
+        }
+        return nil
+    }
+}
+
 enum BenchmarkAccessPattern: String, Codable, CaseIterable, Identifiable, Sendable {
     case sequential
     case random

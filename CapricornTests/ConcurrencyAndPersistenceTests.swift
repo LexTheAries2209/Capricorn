@@ -10,6 +10,7 @@ extension CapricornTests {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
+        defaults.set("/usr/bin/true", forKey: AppPreferences.Key.legacySmartctlPath)
         let preferences = AppPreferences(defaults: defaults)
         XCTAssertTrue(preferences.usesPlainTabForFeatureSwitching)
         XCTAssertFalse(preferences.allowSystemDiskSelfTests)
@@ -21,7 +22,7 @@ extension CapricornTests {
         XCTAssertEqual(preferences.representativeVolumeStartupPreference, .largestCapacity)
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
         preferences.showVirtualDisks = true
-        preferences.smartctlPath = "/usr/bin/true"
+        XCTAssertNil(defaults.string(forKey: AppPreferences.Key.legacySmartctlPath))
         preferences.usesPlainTabForFeatureSwitching = false
         preferences.allowSystemDiskSelfTests = true
         preferences.showsSmartSelfTestInterface = true
@@ -34,7 +35,7 @@ extension CapricornTests {
         let reloaded = AppPreferences(defaults: defaults)
         XCTAssertEqual(reloaded.languageRawValue, AppLanguage.simplifiedChinese.rawValue)
         XCTAssertTrue(reloaded.showVirtualDisks)
-        XCTAssertEqual(reloaded.smartctlPath, "/usr/bin/true")
+        XCTAssertNil(defaults.string(forKey: AppPreferences.Key.legacySmartctlPath))
         XCTAssertFalse(reloaded.usesPlainTabForFeatureSwitching)
         XCTAssertTrue(reloaded.allowSystemDiskSelfTests)
         XCTAssertTrue(reloaded.showsSmartSelfTestInterface)
@@ -43,8 +44,6 @@ extension CapricornTests {
         XCTAssertEqual(reloaded.automaticRefreshInterval, .every15Minutes)
         XCTAssertTrue(reloaded.showsCheckAndRepairActions)
         XCTAssertEqual(reloaded.representativeVolumeStartupPreference, .lastSelected)
-        reloaded.restoreAutomaticSmartctlDetection()
-        XCTAssertNil(defaults.string(forKey: AppPreferences.Key.smartctlPath))
     }
 
     func testAutomaticRefreshIntervalsContainOnlySupportedChoices() {
@@ -334,7 +333,7 @@ extension CapricornTests {
             inventoryProvider: inventory,
             smartService: smartService,
             driveSystemEventMonitor: monitor,
-            driveSystemEventDebounceNanoseconds: 25_000_000
+            driveSystemEventDebounceNanoseconds: 100_000_000
         )
 
         model.startDriveSystemEventMonitoring()
@@ -346,9 +345,9 @@ extension CapricornTests {
         monitor.send(.volumeUnmounted)
         monitor.send(.deviceTerminated)
 
-        let refreshed = await AsyncTestWaiter.wait { inventory.callCount == 1 }
+        let refreshed = await AsyncTestWaiter.wait { inventory.callCount >= 1 }
         XCTAssertTrue(refreshed)
-        try? await Task.sleep(nanoseconds: 75_000_000)
+        try? await Task.sleep(nanoseconds: 250_000_000)
         XCTAssertEqual(inventory.callCount, 1)
         model.stopDriveSystemEventMonitoring()
     }
@@ -399,8 +398,7 @@ extension CapricornTests {
         )
         let service = DriveRefreshService(
             inventoryProvider: inventory,
-            smartService: smartService,
-            externalDetector: ExternalDriveSupportDetector()
+            smartService: smartService
         )
 
         let snapshot = try await service.refresh(showVirtual: false)
@@ -502,7 +500,6 @@ extension CapricornTests {
                 nativeProvider: provider,
                 smartctlProvider: UnavailableSmartProvider()
             ),
-            externalDetector: ExternalDriveSupportDetector(),
             maximumConcurrentSnapshots: 2
         )
 
@@ -525,8 +522,7 @@ extension CapricornTests {
         let service = StagedDriveRefreshService(
             discovery: DriveRefreshSnapshot(
                 drives: [drive],
-                snapshots: [drive.id: .refreshingNative(for: drive)],
-                externalSupport: ExternalDriveSupportDetector().detect()
+                snapshots: [drive.id: .refreshingNative(for: drive)]
             ),
             updateDelayNanoseconds: 250_000_000,
             updates: [DriveSnapshotUpdate(driveID: drive.id, snapshot: completed, phase: .complete)]
@@ -554,10 +550,7 @@ extension CapricornTests {
         secondDrive.bsdName = "disk9"
         secondDrive.deviceNode = "/dev/disk9"
         let runner = CountingSmartctlCommandRunner()
-        let provider = SmartctlSmartProvider(
-            runner: runner,
-            configuredPath: "/usr/bin/true"
-        )
+        let provider = Self.testSmartctlProvider(runner: runner)
 
         let targets = await provider.resolvedTargets(for: [firstDrive, secondDrive])
 

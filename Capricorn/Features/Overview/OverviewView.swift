@@ -76,6 +76,27 @@ struct OverviewView: View {
                             Spacer()
                         }
                     }
+
+                    if let passthrough = USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot) {
+                        if !(snapshot?.providerStatuses ?? []).isEmpty {
+                            Divider()
+                        }
+                        HStack(alignment: .top) {
+                            Image(systemName: passthrough.state.symbolName)
+                                .foregroundStyle(passthrough.state.tint)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(language.t(passthrough.kind.titleKey))
+                                    .font(.headline)
+                                Text(language.statusMessage(passthrough.state.messageKey))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(language.t(passthrough.state.titleKey))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(passthrough.state.tint)
+                        }
+                    }
                 }
 
                 if showsSmartSelfTestInterface {
@@ -105,6 +126,33 @@ struct OverviewView: View {
     private var temperatureValueTint: Color? {
         guard let celsius = snapshot?.temperatureCelsius else { return nil }
         return temperatureTint(for: celsius)
+    }
+}
+
+private extension USBSmartCommandPassthroughKind {
+    var titleKey: String {
+        switch self {
+        case .sata: "USB-SATA SMART Command Passthrough"
+        case .nvme: "USB-NVMe SMART Command Passthrough"
+        }
+    }
+}
+
+private extension ProviderState {
+    var titleKey: String {
+        switch self {
+        case .available: "Verified"
+        case .limited: "Limited"
+        case .unavailable, .failed: "Unavailable"
+        }
+    }
+
+    var messageKey: String {
+        switch self {
+        case .available: "SMART data was successfully read through this USB bridge."
+        case .limited: "The USB bridge was identified, but SMART data is currently limited."
+        case .unavailable, .failed: "The USB bridge was identified, but SMART commands could not be read."
+        }
     }
 }
 

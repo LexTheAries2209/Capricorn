@@ -885,16 +885,11 @@ final class CapricornTests: XCTestCase {
             "Automatic detection": "自动检测",
             "Choose…": "选择…",
             "Automatic": "自动",
-            "SMART Driver Support": "SMART 驱动支持",
-            "External Tool Override": "外部工具覆盖",
-            "smartctl Diagnostics": "smartctl 诊断",
-            "Compatibility": "兼容性",
-            "Refresh SMART Support": "刷新 SMART 支持状态",
-            "Checking SMART tool…": "正在检查 SMART 工具…",
-            "SAT SMART Driver is detected in a standard extension location.": "已在标准扩展位置检测到 SAT SMART Driver。",
-            "SAT SMART Driver is not detected. Some compatible external USB-SATA bridges may need it to expose SMART data to macOS.": "未检测到 SAT SMART Driver。部分兼容的外接 USB-SATA 桥接器可能需要它才能向 macOS 暴露 SMART 数据。",
-            "Open SAT SMART Driver Project": "打开 SAT SMART Driver 项目",
-            "The selected smartctl path is not executable.": "所选 smartctl 路径不可执行。",
+            "Open smartmontools Project": "打开 smartmontools 项目",
+            "USB-SATA SMART Command Passthrough": "USB-SATA SMART 命令透传",
+            "USB-NVMe SMART Command Passthrough": "USB-NVMe SMART 命令透传",
+            "Verified": "已验证",
+            "Limited": "有限支持",
             "Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal.": "Control-Tab 和 Control-Shift-Tab 始终用于切换功能页面。关闭普通 Tab 切换后，可恢复标准键盘焦点遍历。",
             "Choose": "选择",
             "Choose the smartctl executable.": "选择 smartctl 可执行文件。",
@@ -1577,14 +1572,63 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(snapshot.selfTestReport?.entries.first?.lifetimeHours, 456)
     }
 
+    func testUSBSmartCommandPassthroughReportsVerifiedSATA() throws {
+        let drive = Self.externalCatalogDrive(model: "USB-SATA Test Drive")
+        var snapshot = Self.fixtureSnapshot(for: drive)
+        snapshot.providerStatuses = [
+            ProviderStatus(name: "smartctl", state: .available, message: "Detailed SMART data available.")
+        ]
+        snapshot.smartctlDiagnostics = SmartctlDiagnostics(
+            version: "7.5",
+            driveDatabaseVersion: "7.5",
+            targetPath: "/dev/disk99",
+            deviceType: "sat",
+            protocolName: "ATA",
+            powerMode: nil,
+            readSkippedToAvoidWake: false,
+            openError: nil
+        )
+
+        let status = try XCTUnwrap(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
+
+        XCTAssertEqual(status.kind, .sata)
+        XCTAssertEqual(status.state, .available)
+    }
+
+    func testUSBSmartCommandPassthroughReportsNVMeAndHidesIneligibleDrives() throws {
+        var drive = Self.externalCatalogDrive(model: "USB-NVMe Test Drive")
+        drive.isSolidState = true
+        var snapshot = Self.fixtureSnapshot(for: drive)
+        snapshot.providerStatuses = [
+            ProviderStatus(name: "smartctl", state: .failed, message: "SMART unavailable.")
+        ]
+        snapshot.smartctlDiagnostics = SmartctlDiagnostics(
+            version: "7.5",
+            driveDatabaseVersion: "7.5",
+            targetPath: "/dev/disk99",
+            deviceType: "sntrealtek",
+            protocolName: "NVMe",
+            powerMode: nil,
+            readSkippedToAvoidWake: false,
+            openError: "Unsupported command"
+        )
+
+        let status = try XCTUnwrap(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
+        XCTAssertEqual(status.kind, .nvme)
+        XCTAssertEqual(status.state, .failed)
+
+        drive.isSystemDisk = true
+        XCTAssertNil(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
+        drive.isSystemDisk = false
+        drive.isNetwork = true
+        XCTAssertNil(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
+    }
+
     func testSmartctlTargetDescriptorsPreserveSATDeviceType() async {
         let scan = """
         {"devices":[{"name":"/dev/disk0","type":"sat","protocol":"ATA","open_error":"permission denied"}]}
         """
-        let provider = SmartctlSmartProvider(
-            runner: StaticCommandRunner(stdout: scan),
-            configuredPath: "/usr/bin/true"
-        )
+        let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: scan))
         let target = await provider.resolvedTargetDescriptors(for: [Self.fixtureDrive()])
 
         XCTAssertEqual(target[Self.fixtureDrive().id]?.path, "/dev/disk0")
@@ -1598,9 +1642,8 @@ final class CapricornTests: XCTestCase {
         let scan = """
         {"devices":[{"name":"\(path)","type":"nvme","protocol":"NVMe"}]}
         """
-        let provider = SmartctlSmartProvider(
+        let provider = Self.testSmartctlProvider(
             runner: StaticCommandRunner(stdout: scan),
-            configuredPath: "/usr/bin/true",
             ioServiceTargetResolver: StaticSmartctlTargetResolver(
                 descriptor: SmartctlTargetDescriptor(path: path, type: "nvme")
             )
@@ -1638,23 +1681,8 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(snapshot.smartctlDiagnostics?.driveDatabaseVersion, BundledSmartctlMetadata.driveDatabaseVersion)
     }
 
-    func testSmartctlMigratesStoredPathToExplicitExternalOverride() {
-        let defaults = UserDefaults(suiteName: "CapricornTests.\(UUID().uuidString)")!
-        defaults.set("/usr/bin/true", forKey: AppPreferences.Key.smartctlPath)
+    func testSmartctlUsesOnlyBundledExecutable() {
         let provider = SmartctlSmartProvider(
-            defaults: defaults,
-            bundledExecutableURL: URL(fileURLWithPath: "/usr/bin/false")
-        )
-
-        XCTAssertEqual(provider.resolvedExecutable()?.path, "/usr/bin/true")
-        XCTAssertEqual(provider.resolvedExecutable()?.origin, .external)
-    }
-
-    func testSmartctlFallsBackToBundledExecutableForInvalidExternalPath() {
-        let defaults = UserDefaults(suiteName: "CapricornTests.\(UUID().uuidString)")!
-        defaults.set("/not/a/smartctl", forKey: AppPreferences.Key.smartctlPath)
-        let provider = SmartctlSmartProvider(
-            defaults: defaults,
             bundledExecutableURL: URL(fileURLWithPath: "/usr/bin/true"),
             bundledDriveDatabaseURL: URL(fileURLWithPath: #filePath)
         )
@@ -1664,26 +1692,23 @@ final class CapricornTests: XCTestCase {
     }
 
     func testSmartctlDoesNotSearchPATHOrHomebrewLocations() {
-        let defaults = UserDefaults(suiteName: "CapricornTests.\(UUID().uuidString)")!
         let provider = SmartctlSmartProvider(
-            defaults: defaults,
             bundledExecutableURL: URL(fileURLWithPath: "/not/a/bundled/smartctl")
         )
 
         XCTAssertNil(provider.findExecutable())
     }
 
-    func testSmartctlValidatesManualExternalToolVersion() async {
-        let provider = SmartctlSmartProvider(
-            runner: StaticCommandRunner(stdout: "smartctl 6.6 2016-05-31 r4324"),
-            configuredPath: "/usr/bin/true"
+    func testSmartctlReportsBundledToolVersion() async {
+        let provider = Self.testSmartctlProvider(
+            runner: StaticCommandRunner(stdout: "smartctl 7.5 2025-05-20 r9999")
         )
 
         let info = await provider.executableInfo()
-        XCTAssertEqual(info.origin, .external)
-        XCTAssertEqual(info.version, "6.6")
-        XCTAssertEqual(info.isCompatible, false)
-        XCTAssertNil(info.driveDatabaseVersion)
+        XCTAssertEqual(info.origin, .bundled)
+        XCTAssertEqual(info.version, "7.5")
+        XCTAssertEqual(info.isCompatible, true)
+        XCTAssertEqual(info.driveDatabaseVersion, BundledSmartctlMetadata.driveDatabaseVersion)
     }
 
     func testSmartctlCommandCoordinatorSerializesConcurrentCommands() async throws {
@@ -1777,9 +1802,8 @@ final class CapricornTests: XCTestCase {
         let adminRunner = SequencedCommandRunner(results: [
             CommandResult(stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8), stderr: Data(), terminationStatus: 0)
         ])
-        let provider = SmartctlSmartProvider(
+        let provider = Self.testSmartctlProvider(
             runner: StaticCommandRunner(stdout: scan),
-            configuredPath: "/usr/bin/true",
             ioServiceTargetResolver: StaticSmartctlTargetResolver(
                 descriptor: SmartctlTargetDescriptor(path: path, type: "nvme")
             )
@@ -1810,9 +1834,8 @@ final class CapricornTests: XCTestCase {
             CommandResult(stdout: Data(scan.utf8), stderr: Data(), terminationStatus: 0),
             CommandResult(stdout: Data(Self.smartctlNVMeFixture.utf8), stderr: Data(), terminationStatus: 0)
         ])
-        let provider = SmartctlSmartProvider(
+        let provider = Self.testSmartctlProvider(
             runner: runner,
-            configuredPath: "/usr/bin/true",
             ioServiceTargetResolver: StaticSmartctlTargetResolver(
                 descriptor: SmartctlTargetDescriptor(path: path, type: "nvme")
             ),
@@ -1824,7 +1847,7 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(snapshot.health, .good)
         XCTAssertEqual(runner.calls.count, 2)
-        XCTAssertEqual(runner.calls[0].arguments, ["--scan", "--json"])
+        XCTAssertEqual(Array(runner.calls[0].arguments.suffix(2)), ["--scan", "--json"])
         XCTAssertTrue(runner.calls[1].arguments.contains("-a"))
         XCTAssertTrue(runner.calls[1].arguments.contains("--json"))
         XCTAssertTrue(runner.calls[1].arguments.contains("nvme"))
@@ -1837,9 +1860,8 @@ final class CapricornTests: XCTestCase {
             CommandResult(stdout: Data(Self.smartctlATACapabilityFixture.utf8), stderr: Data(), terminationStatus: 0),
             CommandResult(stdout: Data("Please wait 2 minutes for test to complete.".utf8), stderr: Data(), terminationStatus: 0)
         ])
-        let provider = SmartctlSmartProvider(
-            runner: StaticCommandRunner(stdout: #"{"devices":[{"name":"/dev/disk0","type":"sat","protocol":"ATA"}]}"#),
-            configuredPath: "/usr/bin/true"
+        let provider = Self.testSmartctlProvider(
+            runner: StaticCommandRunner(stdout: #"{"devices":[{"name":"/dev/disk0","type":"sat","protocol":"ATA"}]}"#)
         )
         let service = SmartSelfTestService(
             smartctlProvider: provider,
@@ -1858,10 +1880,7 @@ final class CapricornTests: XCTestCase {
     @MainActor
     func testSystemDiskSelfTestIsBlockedWhenPreferenceIsDisabled() {
         let adminRunner = SequencedCommandRunner(results: [])
-        let provider = SmartctlSmartProvider(
-            runner: StaticCommandRunner(stdout: ""),
-            configuredPath: "/usr/bin/true"
-        )
+        let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: ""))
         let service = SmartSelfTestService(
             smartctlProvider: provider,
             administratorRunner: adminRunner
@@ -2157,12 +2176,10 @@ final class CapricornTests: XCTestCase {
         var ataDrive = Self.fixtureDrive()
         ataDrive.protocolName = "ATA"
         ataDrive.isSolidState = false
-        let enabled = SmartctlSmartProvider(
-            configuredPath: "/usr/bin/true",
+        let enabled = Self.testSmartctlProvider(
             avoidsWakingSleepingDisks: { true }
         )
-        let disabled = SmartctlSmartProvider(
-            configuredPath: "/usr/bin/true",
+        let disabled = Self.testSmartctlProvider(
             avoidsWakingSleepingDisks: { false }
         )
 
@@ -2182,7 +2199,10 @@ final class CapricornTests: XCTestCase {
             fallback: "/dev/disk8"
         )
 
-        XCTAssertEqual(Array(ataArguments.prefix(4)), ["-n", "standby,0", "-a", "--json"])
+        XCTAssertTrue(ataArguments.contains("-n"))
+        XCTAssertTrue(ataArguments.contains("standby,0"))
+        XCTAssertTrue(ataArguments.contains("-a"))
+        XCTAssertTrue(ataArguments.contains("--json"))
         XCTAssertFalse(nvmeArguments.contains("-n"))
         XCTAssertFalse(disabledArguments.contains("-n"))
     }
@@ -2192,9 +2212,8 @@ final class CapricornTests: XCTestCase {
         drive.protocolName = "SATA"
         drive.isSolidState = false
         let runner = SequencedCommandRunner(results: [])
-        let provider = SmartctlSmartProvider(
+        let provider = Self.testSmartctlProvider(
             runner: runner,
-            configuredPath: "/usr/bin/true",
             avoidsWakingSleepingDisks: { true }
         )
 
@@ -2362,25 +2381,6 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(DriveTemperatureLevel(celsius: 70), .elevated)
         XCTAssertEqual(DriveTemperatureLevel(celsius: 84.9), .elevated)
         XCTAssertEqual(DriveTemperatureLevel(celsius: 85), .critical)
-    }
-
-    func testExternalDetectorFindsSATDriverPath() throws {
-        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let driver = root.appendingPathComponent("SATSMARTDriver.kext")
-        try FileManager.default.createDirectory(at: driver, withIntermediateDirectories: true)
-
-        let status = ExternalDriveSupportDetector(driverPaths: [driver.path]).detect()
-        XCTAssertTrue(status.satDriverInstalled)
-        XCTAssertEqual(status.driverPaths, [driver.path])
-    }
-
-    func testExternalDetectorReportsNoSATDriverWhenLocationsAreAbsent() {
-        let status = ExternalDriveSupportDetector(driverPaths: []).detect()
-
-        XCTAssertFalse(status.satDriverInstalled)
-        XCTAssertTrue(status.driverPaths.isEmpty)
     }
 
     func testBenchmarkProfileConfigurationAppliesRunSizeAndDataPattern() {
@@ -4444,6 +4444,20 @@ final class CapricornTests: XCTestCase {
             volumes: [],
             model: "APPLE SSD AP1024Z",
             serialNumber: "SN"
+        )
+    }
+
+    static func testSmartctlProvider(
+        runner: any CommandRunning = StaticCommandRunner(stdout: ""),
+        ioServiceTargetResolver: any SmartctlIOServiceTargetResolving = StaticSmartctlTargetResolver(descriptor: nil),
+        avoidsWakingSleepingDisks: @escaping @Sendable () -> Bool = { true }
+    ) -> SmartctlSmartProvider {
+        SmartctlSmartProvider(
+            runner: runner,
+            bundledExecutableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            bundledDriveDatabaseURL: URL(fileURLWithPath: #filePath),
+            ioServiceTargetResolver: ioServiceTargetResolver,
+            avoidsWakingSleepingDisks: avoidsWakingSleepingDisks
         )
     }
 

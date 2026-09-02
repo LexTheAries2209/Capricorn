@@ -441,7 +441,6 @@ func formatSmartLogicalBlocks(_ logicalBlocks: Int64, blockSizeBytes: Int64) -> 
 
 enum SmartctlExecutableOrigin: String, Codable, Hashable, Sendable {
     case bundled
-    case external
 }
 
 struct SmartctlExecutableDescriptor: Hashable, Sendable {
@@ -504,8 +503,6 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     let providerName = "smartctl"
     private let runner: CommandRunning
     private let fileManager: FileManager
-    private let configuredPath: String?
-    private let defaults: UserDefaults
     private let bundle: Bundle
     private let bundledExecutableURL: URL?
     private let bundledDriveDatabaseURL: URL?
@@ -516,8 +513,6 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     init(
         runner: CommandRunning = ShellCommandRunner(),
         fileManager: FileManager = .default,
-        configuredPath: String? = nil,
-        defaults: UserDefaults = .standard,
         bundle: Bundle = .main,
         bundledExecutableURL: URL? = nil,
         bundledDriveDatabaseURL: URL? = nil,
@@ -529,8 +524,6 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     ) {
         self.runner = runner
         self.fileManager = fileManager
-        self.configuredPath = configuredPath
-        self.defaults = defaults
         self.bundle = bundle
         self.bundledExecutableURL = bundledExecutableURL
         self.bundledDriveDatabaseURL = bundledDriveDatabaseURL
@@ -734,13 +727,6 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     }
 
     func resolvedExecutable() -> SmartctlExecutableDescriptor? {
-        let explicitPath = (configuredPath ?? defaults.string(forKey: AppPreferences.Key.smartctlPath))?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if let explicitPath, !explicitPath.isEmpty,
-           fileManager.isExecutableFile(atPath: explicitPath) {
-            return SmartctlExecutableDescriptor(path: explicitPath, origin: .external, driveDatabasePath: nil)
-        }
-
         let bundledURL = bundledExecutableURL ?? bundle.url(
             forResource: "smartctl",
             withExtension: nil
@@ -1804,52 +1790,6 @@ final class DriveHealthEvaluator {
         case .unavailable:
             return snapshot.providerStatuses.first?.message ?? "SMART data is unavailable for this drive."
         }
-    }
-}
-
-struct ExternalSupportStatus: Codable, Hashable, Sendable {
-    var satDriverInstalled: Bool
-    var smartctlInstalled: Bool
-    var driverPaths: [String]
-    var message: String
-}
-
-final class ExternalDriveSupportDetector: @unchecked Sendable {
-    private let fileManager: FileManager
-    private let smartctlProvider: SmartctlSmartProvider
-    private let driverPaths: [String]
-
-    init(
-        fileManager: FileManager = .default,
-        smartctlProvider: SmartctlSmartProvider = SmartctlSmartProvider(),
-        driverPaths: [String] = [
-            "/Library/Extensions/SATSMARTDriver.kext",
-            "/System/Library/Extensions/SATSMARTDriver.kext"
-        ]
-    ) {
-        self.fileManager = fileManager
-        self.smartctlProvider = smartctlProvider
-        self.driverPaths = driverPaths
-    }
-
-    func detect() -> ExternalSupportStatus {
-        let installedPaths = driverPaths.filter { fileManager.fileExists(atPath: $0) }
-        let smartctlInstalled = smartctlProvider.findExecutable() != nil
-        let message: String
-        if !installedPaths.isEmpty {
-            message = "SAT SMART Driver appears installed. Reconnect external USB-SATA drives after installation or reboot."
-        } else if smartctlInstalled {
-            message = "smartctl is installed. Some USB/SAT bridges may still require SAT SMART Driver on macOS."
-        } else {
-            message = "External USB SMART often needs smartmontools and SAT SMART Driver; Thunderbolt/NVMe devices may expose data natively."
-        }
-
-        return ExternalSupportStatus(
-            satDriverInstalled: !installedPaths.isEmpty,
-            smartctlInstalled: smartctlInstalled,
-            driverPaths: installedPaths,
-            message: message
-        )
     }
 }
 
