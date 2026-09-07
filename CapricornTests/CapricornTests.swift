@@ -935,7 +935,6 @@ final class CapricornTests: XCTestCase {
             "Check and Repair": "检查与修复",
             "Disk Self-Test": "硬盘自检",
             "Self-Check": "自检",
-            "Run Disk Check": "运行硬盘检查",
             "Disk Check In Progress": "硬盘检查进行中",
             "First Aid…": "急救…",
             "Disk First Aid": "磁盘急救",
@@ -2376,6 +2375,35 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(model.smartSelfTestCapability(for: drive), .unknown)
         XCTAssertEqual(model.smartErrorLogCapability(for: drive), .unknown)
         XCTAssertTrue(adminRunner.calls.isEmpty)
+    }
+
+    func testDiskCheckResultRemainsAvailableAfterReportSheetIsClosed() {
+        let expectation = expectation(description: "disk check report is retained")
+        Task { @MainActor in
+            let runner = RecordingDiskCheckRunner(stdout: "Verified\n")
+            let model = AppModel(
+                diskCheckService: DiskCheckService(
+                    runner: runner,
+                    updateIntervalNanoseconds: 0
+                )
+            )
+            var drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+            drive.isInternal = false
+            drive.isSystemDisk = false
+
+            await model.runDiskCheck(.ordinary, on: drive)
+
+            let storedReport = model.diskCheckReport(for: drive)
+            XCTAssertNotNil(storedReport)
+            XCTAssertEqual(storedReport?.mode, .ordinary)
+            XCTAssertFalse(storedReport?.entries.isEmpty ?? true)
+
+            model.diskCheckReport = nil
+
+            XCTAssertEqual(model.diskCheckReport(for: drive), storedReport)
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 5)
     }
 
     @MainActor

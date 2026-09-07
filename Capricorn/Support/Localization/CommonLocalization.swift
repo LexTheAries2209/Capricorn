@@ -298,8 +298,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Self-Check": "自检",
         "Runs the same filesystem check as Check and Repair.": "运行与“检查与修复”菜单相同的文件系统检查。",
         "checks completed": "项已完成",
-        "Checking": "检查中",
-        "Run Disk Check": "运行硬盘检查",
         "Disk Check In Progress": "硬盘检查进行中",
         "No Disk Check Record": "尚无硬盘检查记录",
         "Disk Check Reported Issues": "硬盘检查报告了问题",

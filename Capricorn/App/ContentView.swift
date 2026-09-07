@@ -1033,11 +1033,8 @@ private struct DriveDetailView: View {
             OverviewView(
                 drive: drive,
                 snapshot: snapshot,
-                diskCheckReport: viewModel.diskCheckReport,
-                isDiskChecking: viewModel.isDiskChecking,
-                runDiskCheck: {
-                    Task { await viewModel.runDiskCheck(.ordinary, on: drive) }
-                }
+                diskCheckReport: viewModel.diskCheckReport(for: drive),
+                isDiskChecking: viewModel.isDiskChecking
             )
                 .tabItem { Label(language.t("Overview"), systemImage: "gauge.with.dots.needle.bottom.50percent") }
                 .tag(DriveFeatureTab.overview)

@@ -35,6 +35,7 @@ final class AppModel {
     var smartErrorLogReports: [String: SmartErrorLogReport] = [:]
     var smartErrorLogMessage: String?
     var completedSmartSelfTest: SmartSelfTestCompletion?
+    private(set) var diskCheckReportsByDrive: [String: DiskCheckReport] = [:]
     private var representativeVolumePreferences = RepresentativeVolumePreferences()
     private var activeRepresentativeVolumeIDsByDrive: [String: String] = [:]
     private var manuallySelectedRepresentativeVolumeKeys: Set<String> = []
@@ -143,6 +144,10 @@ final class AppModel {
     var diskCheckReport: DiskCheckReport? {
         get { diskOperations.checkReport }
         set { diskOperations.checkReport = newValue }
+    }
+
+    func diskCheckReport(for drive: DriveDevice) -> DiskCheckReport? {
+        diskCheckReportsByDrive[drive.id]
     }
 
     var isDiskChecking: Bool {
@@ -716,21 +721,26 @@ final class AppModel {
         guard !isDiskChecking, !diskOperations.isFirstAidBlocking else { return }
         selectedDriveID = drive.id
         refreshMessage = "Checking disk..."
-        diskCheckReport = DiskCheckReport(
+        publishDiskCheckReport(DiskCheckReport(
             mode: mode,
             driveID: drive.id,
             driveName: drive.displayName,
             entries: []
-        )
+        ))
         isDiskChecking = true
         let finalReport = await diskCheckService.check(mode, drive: drive) { [weak self] report in
             await MainActor.run {
-                self?.diskCheckReport = report
+                self?.publishDiskCheckReport(report)
             }
         }
-        diskCheckReport = finalReport
+        publishDiskCheckReport(finalReport)
         isDiskChecking = false
         refreshMessage = "Disk check completed."
+    }
+
+    private func publishDiskCheckReport(_ report: DiskCheckReport) {
+        diskCheckReportsByDrive[report.driveID] = report
+        diskCheckReport = report
     }
 
     func cancelDiskCheck() {

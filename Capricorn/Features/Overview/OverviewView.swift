@@ -8,7 +8,6 @@ struct OverviewView: View {
     let snapshot: SmartSnapshot?
     let diskCheckReport: DiskCheckReport?
     let isDiskChecking: Bool
-    let runDiskCheck: () -> Void
     @Environment(\.appLanguage) private var language
 
     var body: some View {
@@ -97,8 +96,7 @@ struct OverviewView: View {
 
                 DiskCheckOverviewSummary(
                     report: diskCheckReport,
-                    isRunning: isDiskChecking,
-                    run: runDiskCheck
+                    isRunning: isDiskChecking
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -149,7 +147,6 @@ private extension ProviderState {
 private struct DiskCheckOverviewSummary: View {
     let report: DiskCheckReport?
     let isRunning: Bool
-    let run: () -> Void
     @Environment(\.appLanguage) private var language
 
     var body: some View {
@@ -170,14 +167,6 @@ private struct DiskCheckOverviewSummary: View {
                     }
                 }
                 Spacer()
-                Button(action: run) {
-                    Label(
-                        language.t(isRunning ? "Checking" : "Run Disk Check"),
-                        systemImage: isRunning ? "hourglass" : "play.fill"
-                    )
-                }
-                .buttonStyle(.bordered)
-                .disabled(isRunning)
             }
         }
     }
