@@ -47,6 +47,80 @@ final class SmartHistoryRecord {
 }
 
 @Model
+final class SmartSelfTestHistoryRecord {
+    @Attribute(.unique) var id: UUID
+    var serialNumber: String?
+    var driveName: String
+    var capturedAt: Date
+    var testKindRaw: String
+    var stateRaw: String
+    var statusDetails: String
+    var powerOnHours: Int?
+    var failingLBA: String?
+    var fingerprint: String
+    var encodedReport: Data?
+    var hiddenAt: Date?
+
+    init(drive: DriveDevice, report: SmartSelfTestReport) {
+        let latest = report.latestEntry
+        self.id = UUID()
+        self.serialNumber = HistoryDriveMatcher.normalize(drive.serialNumber)
+        self.driveName = drive.displayName
+        self.capturedAt = report.capturedAt
+        self.testKindRaw = (latest?.kind ?? report.currentKind ?? .unknown).rawValue
+        self.stateRaw = (latest?.state ?? report.state).rawValue
+        self.statusDetails = latest?.status ?? report.state.rawValue
+        self.powerOnHours = latest?.lifetimeHours
+        self.failingLBA = latest?.failingLBA.map(String.init)
+        self.fingerprint = Self.fingerprint(for: report)
+        self.encodedReport = try? HistoryPayloadCoders.encode(
+            report,
+            volumeUUIDs: drive.volumeUUIDs,
+            encoder: .dit
+        )
+        self.hiddenAt = nil
+    }
+
+    var testKind: SmartSelfTestKind {
+        SmartSelfTestKind(rawValue: testKindRaw) ?? .unknown
+    }
+
+    var state: SmartSelfTestState {
+        SmartSelfTestState(rawValue: stateRaw) ?? .unknown
+    }
+
+    var report: SmartSelfTestReport? {
+        guard let encodedReport else { return nil }
+        return HistoryPayloadCoders.decode(
+            SmartSelfTestReport.self,
+            from: encodedReport,
+            decoder: .dit
+        )?.value
+    }
+
+    var volumeUUIDs: [String] {
+        guard let encodedReport else { return [] }
+        return HistoryPayloadCoders.decode(
+            SmartSelfTestReport.self,
+            from: encodedReport,
+            decoder: .dit
+        )?.volumeUUIDs ?? []
+    }
+
+    static func fingerprint(for report: SmartSelfTestReport) -> String {
+        let latest = report.latestEntry
+        let kind = (latest?.kind ?? report.currentKind ?? .unknown).rawValue
+        let state = (latest?.state ?? report.state).rawValue
+        let status = latest?.status ?? ""
+        let remaining = latest?.remainingPercent.map { String($0) } ?? ""
+        let powerOnHours = latest?.lifetimeHours.map { String($0) } ?? ""
+        let failingLBA = latest?.failingLBA.map { String($0) } ?? ""
+        return [kind, state, status, remaining, powerOnHours, failingLBA]
+            .joined(separator: "|")
+    }
+}
+
+@Model
 final class BenchmarkHistoryRecord {
     @Attribute(.unique) var id: UUID
     var serialNumber: String?
@@ -177,6 +251,7 @@ struct HistoryClearCounts: Equatable, Sendable {
 }
 
 extension SmartHistoryRecord: HistoryDisplayRecord {}
+extension SmartSelfTestHistoryRecord: HistoryDisplayRecord {}
 extension BenchmarkHistoryRecord: HistoryDisplayRecord {}
 extension DiskActivityHistoryRecord: HistoryDisplayRecord {}
 
@@ -339,6 +414,13 @@ enum DiskActivitySampleCoders {
         }
         return HistoryPayloadCoders.decode([DiskActivitySample].self, from: data, decoder: .dit)
     }
+}
+
+enum SmartDiagnosticsExportFormat: String, CaseIterable, Sendable {
+    case csv
+    case json
+
+    var fileExtension: String { rawValue }
 }
 
 enum ReportExporter {
@@ -512,6 +594,132 @@ enum ReportExporter {
     }
 
     static func smartSnapshotFileName(drive: DriveDevice, date: Date, language: AppLanguage) -> String {
+        "\(exportFileStem(drive: drive, date: date, language: language)).csv"
+    }
+
+    static func smartSelfTestHistoryCSVReport(_ records: [SmartSelfTestHistoryRecord]) -> String {
+        let header = [
+            "drive_name", "serial_number", "completed_at", "test_type",
+            "state", "status_details", "power_on_hours", "failing_lba"
+        ]
+        let formatter = ISO8601DateFormatter()
+        var lines = [header.map(escapeCSV).joined(separator: ",")]
+        lines += records
+            .sorted { $0.capturedAt > $1.capturedAt }
+            .map { record in
+                [
+                    record.driveName,
+                    record.serialNumber ?? "",
+                    formatter.string(from: record.capturedAt),
+                    record.testKind.rawValue,
+                    record.state.rawValue,
+                    record.statusDetails,
+                    record.powerOnHours.map(String.init) ?? "",
+                    record.failingLBA ?? ""
+                ].map(escapeCSV).joined(separator: ",")
+            }
+        return lines.joined(separator: "\n")
+    }
+
+    static func smartSelfTestHistoryJSONReport(_ records: [SmartSelfTestHistoryRecord]) -> Data? {
+        let exportRecords = records
+            .sorted { $0.capturedAt > $1.capturedAt }
+            .map(SelfTestHistoryExportRecord.init)
+        return try? JSONEncoder.dit.encode(exportRecords)
+    }
+
+    static func smartErrorLogCSVReport(
+        drive: DriveDevice,
+        report: SmartErrorLogReport
+    ) -> String {
+        let header = [
+            "drive_name", "serial_number", "captured_at", "error_number",
+            "status", "message", "power_on_hours", "failing_lba",
+            "namespace_id", "details"
+        ]
+        let formatter = ISO8601DateFormatter()
+        var lines = [header.map(escapeCSV).joined(separator: ",")]
+        lines += report.entries.map { entry in
+            let detailText = errorLogDetailsText(entry.details)
+            let errorNumber = entry.errorNumber.map(String.init) ?? ""
+            let powerOnHours = entry.lifetimeHours.map(String.init) ?? ""
+            let failingLBA = entry.failingLBA.map(String.init) ?? ""
+            let namespaceID = entry.namespaceID.map(String.init) ?? ""
+            let fields: [String] = [
+                drive.displayName,
+                drive.serialNumber ?? "",
+                formatter.string(from: report.capturedAt),
+                errorNumber,
+                entry.status,
+                entry.message,
+                powerOnHours,
+                failingLBA,
+                namespaceID,
+                detailText
+            ]
+            return fields.map(escapeCSV).joined(separator: ",")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    static func smartErrorLogJSONReport(
+        drive: DriveDevice,
+        report: SmartErrorLogReport
+    ) -> Data? {
+        try? JSONEncoder.dit.encode(
+            SmartErrorLogExportRecord(
+                driveName: drive.displayName,
+                serialNumber: drive.serialNumber,
+                report: report
+            )
+        )
+    }
+
+    static func smartDiagnosticsFileName(
+        drive: DriveDevice,
+        date: Date,
+        language: AppLanguage,
+        kind: String,
+        format: SmartDiagnosticsExportFormat
+    ) -> String {
+        "\(exportFileStem(drive: drive, date: date, language: language))-\(kind).\(format.fileExtension)"
+    }
+
+    private struct SelfTestHistoryExportRecord: Codable {
+        var driveName: String
+        var serialNumber: String?
+        var completedAt: Date
+        var testKind: String
+        var state: String
+        var statusDetails: String
+        var powerOnHours: Int?
+        var failingLBA: String?
+        var report: SmartSelfTestReport?
+
+        init(_ record: SmartSelfTestHistoryRecord) {
+            driveName = record.driveName
+            serialNumber = record.serialNumber
+            completedAt = record.capturedAt
+            testKind = record.testKind.rawValue
+            state = record.state.rawValue
+            statusDetails = record.statusDetails
+            powerOnHours = record.powerOnHours
+            failingLBA = record.failingLBA
+            report = record.report
+        }
+    }
+
+    private struct SmartErrorLogExportRecord: Codable {
+        var driveName: String
+        var serialNumber: String?
+        var report: SmartErrorLogReport
+    }
+
+    private static func exportFileStem(
+        drive: DriveDevice,
+        date: Date,
+        language: AppLanguage
+    ) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -525,7 +733,7 @@ enum ReportExporter {
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
             .joined(separator: "-")
-        return "Capricorn-\(safeName.isEmpty ? drive.bsdName : safeName)-\(formatter.string(from: date))\(timeZoneLabel).csv"
+        return "Capricorn-\(safeName.isEmpty ? drive.bsdName : safeName)-\(formatter.string(from: date))\(timeZoneLabel)"
     }
 
     private static func escapeCSV(_ value: String) -> String {
@@ -534,5 +742,12 @@ enum ReportExporter {
             return "\"\(escaped)\""
         }
         return escaped
+    }
+
+    private static func errorLogDetailsText(_ details: [String: String]) -> String {
+        details
+            .sorted { lhs, rhs in lhs.key < rhs.key }
+            .map { pair in "\(pair.key)=\(pair.value)" }
+            .joined(separator: "; ")
     }
 }

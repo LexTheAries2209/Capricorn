@@ -680,7 +680,6 @@ final class DiskCheckService {
 
     private let runner: DiskCheckCommandRunning
     private let diskutilPath: String
-    private let fsckAPFSPath: String
     private let fsckHFSPath: String
     private let fsckExFATPath: String
     private let fsckMSDOSPath: String
@@ -690,7 +689,6 @@ final class DiskCheckService {
     init(
         runner: DiskCheckCommandRunning = StreamingDiskCheckCommandRunner(),
         diskutilPath: String = "/usr/sbin/diskutil",
-        fsckAPFSPath: String = "/sbin/fsck_apfs",
         fsckHFSPath: String = "/sbin/fsck_hfs",
         fsckExFATPath: String = "/sbin/fsck_exfat",
         fsckMSDOSPath: String = "/sbin/fsck_msdos",
@@ -699,7 +697,6 @@ final class DiskCheckService {
     ) {
         self.runner = runner
         self.diskutilPath = diskutilPath
-        self.fsckAPFSPath = fsckAPFSPath
         self.fsckHFSPath = fsckHFSPath
         self.fsckExFATPath = fsckExFATPath
         self.fsckMSDOSPath = fsckMSDOSPath
@@ -971,6 +968,25 @@ final class DiskCheckService {
 
     private func detailedPlans(for drive: DriveDevice) -> [CommandPlan] {
         uniqueVolumes(drive.displayableVolumes).map { volume in
+            guard let format = FileSystemFormatResolver.normalized(volume.fileSystemType) else {
+                return CommandPlan(
+                    title: "Volume: \(volume.name)",
+                    executable: nil,
+                    arguments: [volume.deviceIdentifier],
+                    unsupportedMessage: "No filesystem type is available for selecting a detailed checker."
+                )
+            }
+
+            if format == "APFS" {
+                // diskutil delegates APFS verification to Disk Management, which owns raw-device access.
+                return CommandPlan(
+                    title: "APFS Volume: \(volume.name)",
+                    executable: diskutilPath,
+                    arguments: ["verifyVolume", volume.deviceIdentifier],
+                    unsupportedMessage: nil
+                )
+            }
+
             guard let rawDevice = rawDevicePath(for: volume.deviceIdentifier) else {
                 return CommandPlan(
                     title: "Volume: \(volume.name)",
@@ -980,18 +996,7 @@ final class DiskCheckService {
                 )
             }
 
-            guard let format = FileSystemFormatResolver.normalized(volume.fileSystemType) else {
-                return CommandPlan(
-                    title: "Volume: \(volume.name)",
-                    executable: nil,
-                    arguments: [rawDevice],
-                    unsupportedMessage: "No filesystem type is available for selecting a detailed checker."
-                )
-            }
-
             switch format {
-            case "APFS":
-                return CommandPlan(title: "APFS Volume: \(volume.name)", executable: fsckAPFSPath, arguments: ["-n", "-x", rawDevice], unsupportedMessage: nil, volumeIdentifier: volume.deviceIdentifier)
             case "HFS+":
                 return CommandPlan(title: "HFS+ Volume: \(volume.name)", executable: fsckHFSPath, arguments: ["-n", "-x", rawDevice], unsupportedMessage: nil, volumeIdentifier: volume.deviceIdentifier)
             case "ExFAT":
@@ -1152,8 +1157,7 @@ final class DiskCheckService {
     }
 
     private func requiresAdministrator(_ executable: String) -> Bool {
-        executable == fsckAPFSPath
-            || executable == fsckHFSPath
+        executable == fsckHFSPath
             || executable == fsckExFATPath
             || executable == fsckMSDOSPath
     }

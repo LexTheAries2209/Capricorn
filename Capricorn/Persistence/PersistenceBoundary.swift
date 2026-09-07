@@ -18,13 +18,34 @@ enum CapricornSchemaV2: VersionedSchema {
     }
 }
 
+enum CapricornSchemaV3: VersionedSchema {
+    static var versionIdentifier: Schema.Version {
+        Schema.Version(3, 0, 0)
+    }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            SmartHistoryRecord.self,
+            SmartSelfTestHistoryRecord.self,
+            BenchmarkHistoryRecord.self,
+            DiskActivityHistoryRecord.self,
+            AppSettingsRecord.self
+        ]
+    }
+}
+
 enum CapricornMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CapricornSchemaV2.self]
+        [CapricornSchemaV2.self, CapricornSchemaV3.self]
     }
 
     static var stages: [MigrationStage] {
-        []
+        [
+            .lightweight(
+                fromVersion: CapricornSchemaV2.self,
+                toVersion: CapricornSchemaV3.self
+            )
+        ]
     }
 }
 
@@ -67,7 +88,7 @@ enum ModelContainerFactory {
     }
 
     static func makePersistent(at url: URL) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CapricornSchemaV2.self)
+        let schema = Schema(versionedSchema: CapricornSchemaV3.self)
         let configuration = ModelConfiguration(
             "Capricorn",
             schema: schema,
@@ -82,7 +103,7 @@ enum ModelContainerFactory {
     }
 
     private static func make(isStoredInMemoryOnly: Bool) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CapricornSchemaV2.self)
+        let schema = Schema(versionedSchema: CapricornSchemaV3.self)
         let configuration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: isStoredInMemoryOnly
@@ -109,6 +130,25 @@ final class HistoryRepository {
         modelContext.insert(record)
         try modelContext.save()
         CapricornLog.persistence.info("SMART history saved")
+        return record
+    }
+
+    @discardableResult
+    func saveSelfTestReport(
+        drive: DriveDevice,
+        report: SmartSelfTestReport
+    ) throws -> SmartSelfTestHistoryRecord {
+        let existing = try modelContext.fetch(FetchDescriptor<SmartSelfTestHistoryRecord>())
+        let fingerprint = SmartSelfTestHistoryRecord.fingerprint(for: report)
+        if let duplicate = existing.first(where: {
+            HistoryDriveMatcher.matches(record: $0, drive: drive) && $0.fingerprint == fingerprint
+        }) {
+            return duplicate
+        }
+        let record = SmartSelfTestHistoryRecord(drive: drive, report: report)
+        modelContext.insert(record)
+        try modelContext.save()
+        CapricornLog.persistence.info("SMART self-test history saved")
         return record
     }
 
@@ -175,15 +215,17 @@ final class HistoryRepository {
     @discardableResult
     func clearAllHistory() throws -> Int {
         let smartRecords = try modelContext.fetch(FetchDescriptor<SmartHistoryRecord>())
+        let selfTestRecords = try modelContext.fetch(FetchDescriptor<SmartSelfTestHistoryRecord>())
         let benchmarkRecords = try modelContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>())
         let activityRecords = try modelContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>())
 
         smartRecords.forEach(modelContext.delete)
+        selfTestRecords.forEach(modelContext.delete)
         benchmarkRecords.forEach(modelContext.delete)
         activityRecords.forEach(modelContext.delete)
         try modelContext.save()
 
-        let count = smartRecords.count + benchmarkRecords.count + activityRecords.count
+        let count = smartRecords.count + selfTestRecords.count + benchmarkRecords.count + activityRecords.count
         CapricornLog.persistence.info("History cache cleared: \(count) records")
         return count
     }
@@ -195,20 +237,25 @@ final class HistoryRepository {
     func clearHistory(for drive: DriveDevice) throws -> HistoryClearCounts {
         let smartRecords = try modelContext.fetch(FetchDescriptor<SmartHistoryRecord>())
             .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
+        let selfTestRecords = try modelContext.fetch(FetchDescriptor<SmartSelfTestHistoryRecord>())
+            .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
         let benchmarkRecords = try modelContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>())
             .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
         let activityRecords = try modelContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>())
             .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
 
         let visibleCount = smartRecords.filter { $0.hiddenAt == nil }.count
+            + selfTestRecords.filter { $0.hiddenAt == nil }.count
             + benchmarkRecords.filter { $0.hiddenAt == nil }.count
             + activityRecords.filter { $0.hiddenAt == nil }.count
         let hiddenCount = smartRecords.filter { $0.hiddenAt != nil }.count
+            + selfTestRecords.filter { $0.hiddenAt != nil }.count
             + benchmarkRecords.filter { $0.hiddenAt != nil }.count
             + activityRecords.filter { $0.hiddenAt != nil }.count
         let counts = HistoryClearCounts(visible: visibleCount, hidden: hiddenCount)
 
         smartRecords.forEach(modelContext.delete)
+        selfTestRecords.forEach(modelContext.delete)
         benchmarkRecords.forEach(modelContext.delete)
         activityRecords.forEach(modelContext.delete)
         try modelContext.save()
@@ -223,13 +270,16 @@ final class HistoryRepository {
     func clearHiddenHistory(for drive: DriveDevice) throws -> HistoryClearCounts {
         let smartRecords = try modelContext.fetch(FetchDescriptor<SmartHistoryRecord>())
             .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
+        let selfTestRecords = try modelContext.fetch(FetchDescriptor<SmartSelfTestHistoryRecord>())
+            .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
         let benchmarkRecords = try modelContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>())
             .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
         let activityRecords = try modelContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>())
             .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
 
-        let count = smartRecords.count + benchmarkRecords.count + activityRecords.count
+        let count = smartRecords.count + selfTestRecords.count + benchmarkRecords.count + activityRecords.count
         smartRecords.forEach(modelContext.delete)
+        selfTestRecords.forEach(modelContext.delete)
         benchmarkRecords.forEach(modelContext.delete)
         activityRecords.forEach(modelContext.delete)
         try modelContext.save()

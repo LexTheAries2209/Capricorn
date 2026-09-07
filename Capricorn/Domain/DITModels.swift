@@ -563,7 +563,7 @@ enum DiskCheckMode: String, CaseIterable, Codable, Hashable, Sendable {
     var descriptionKey: String {
         switch self {
         case .ordinary: "Runs diskutil verification and shows the complete system log."
-        case .detailed: "Checks filesystem integrity with read-only fsck after safely handling mounted volumes."
+        case .detailed: "Uses macOS system verification to check filesystem integrity safely."
         }
     }
 }
@@ -1115,7 +1115,7 @@ enum SmartSelfTestSessionState: Equatable, Sendable {
     }
 }
 
-struct SmartSelfTestCapability: Equatable, Sendable {
+struct SmartSelfTestCapability: Codable, Equatable, Sendable {
     var shortSupported: Bool
     var longSupported: Bool
     var message: String
@@ -1132,6 +1132,7 @@ struct SmartSelfTestCapability: Equatable, Sendable {
 enum SmartSelfTestCapabilityState: Equatable, Sendable {
     case unknown
     case checking
+    case retrying(message: String, attempt: Int)
     case supported(SmartSelfTestCapability)
     case unavailable(String)
 }
@@ -1154,7 +1155,6 @@ struct SmartSelfTestReport: Codable, Hashable, Sendable {
     var entries: [SmartSelfTestEntry]
     var shortSupported: Bool?
     var longSupported: Bool?
-    var rawOutput: String?
     var capturedAt: Date
 
     var latestEntry: SmartSelfTestEntry? {
@@ -1162,6 +1162,33 @@ struct SmartSelfTestReport: Codable, Hashable, Sendable {
             (lhs.lifetimeHours ?? -1) < (rhs.lifetimeHours ?? -1)
         } ?? entries.first
     }
+}
+
+enum SmartErrorLogCapabilityState: Equatable, Sendable {
+    case unknown
+    case checking
+    case retrying(message: String, attempt: Int)
+    case supported
+    case unavailable(String)
+}
+
+struct SmartErrorLogEntry: Identifiable, Codable, Hashable, Sendable {
+    var id: String
+    var errorNumber: Int?
+    var status: String
+    var message: String
+    var lifetimeHours: Int?
+    var failingLBA: UInt64?
+    var namespaceID: Int?
+    var details: [String: String]
+}
+
+struct SmartErrorLogReport: Codable, Hashable, Sendable {
+    var isSupported: Bool
+    var message: String
+    var entries: [SmartErrorLogEntry]
+    var totalEntryCount: Int?
+    var capturedAt: Date
 }
 
 struct SmartctlDiagnostics: Codable, Hashable, Sendable {

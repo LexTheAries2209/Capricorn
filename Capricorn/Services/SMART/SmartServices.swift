@@ -979,6 +979,74 @@ final class SmartSelfTestService: @unchecked Sendable {
     }
 }
 
+enum SmartErrorLogServiceError: Error, LocalizedError, Sendable {
+    case unsupported(String)
+    case commandFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .unsupported(message), let .commandFailed(message): message
+        }
+    }
+}
+
+/// Reads the controller-maintained SMART error log. This intentionally has no
+/// write operation and shares the global smartctl coordinator with scans and
+/// self-tests so a bridge is never queried concurrently through two nodes.
+final class SmartErrorLogService: @unchecked Sendable {
+    private let smartctlProvider: SmartctlSmartProvider
+    private let administratorRunner: CommandRunning
+    private let commandCoordinator: SmartctlCommandCoordinator
+
+    init(
+        smartctlProvider: SmartctlSmartProvider = SmartctlSmartProvider(),
+        administratorRunner: CommandRunning = AdministratorCommandRunner(),
+        commandCoordinator: SmartctlCommandCoordinator = .shared
+    ) {
+        self.smartctlProvider = smartctlProvider
+        self.administratorRunner = administratorRunner
+        self.commandCoordinator = commandCoordinator
+    }
+
+    func capability(for drive: DriveDevice) async throws {
+        let report = try await read(for: drive)
+        guard report.isSupported else {
+            throw SmartErrorLogServiceError.unsupported(report.message)
+        }
+    }
+
+    func read(for drive: DriveDevice) async throws -> SmartErrorLogReport {
+        let executable = try executable(for: drive)
+        let target = await smartctlProvider.resolvedTargetDescriptors(for: [drive])[drive.id]
+        let arguments = smartctlProvider.commandArguments(
+            ["-l", "error", "--json"],
+            target: target,
+            fallback: drive.deviceNode,
+            executable: executable
+        )
+        let result = try await commandCoordinator.run { [self] in
+            try await self.administratorRunner.run(executable.path, arguments: arguments)
+        }
+        guard let report = SmartctlParser.parseErrorLog(result) else {
+            throw SmartErrorLogServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
+        }
+        return report
+    }
+
+    private func executable(for drive: DriveDevice) throws -> SmartctlExecutableDescriptor {
+        if drive.isNetwork {
+            throw SmartErrorLogServiceError.unsupported("Network drives do not expose a local SMART error log.")
+        }
+        if drive.isMemoryCard {
+            throw SmartErrorLogServiceError.unsupported("Memory cards do not expose a standard SMART error log.")
+        }
+        guard let executable = smartctlProvider.resolvedExecutable() else {
+            throw SmartErrorLogServiceError.unsupported("Bundled smartctl is unavailable.")
+        }
+        return executable
+    }
+}
+
 enum SmartctlParser {
     struct ScanDevice: Hashable {
         var name: String
@@ -1021,6 +1089,49 @@ enum SmartctlParser {
             message: shortSupported || longSupported
                 ? "Self-test capability confirmed."
                 : "SMART self-test capability could not be confirmed."
+        )
+    }
+
+    static func parseErrorLog(_ result: CommandResult) -> SmartErrorLogReport? {
+        guard let root = commandJSONRoot(result) else { return nil }
+        let output = combinedOutput(result).lowercased()
+        if output.contains("error log not supported")
+            || output.contains("error logging not supported")
+            || output.contains("unsupported log page")
+            || output.contains("not supported") && output.contains("error log") {
+            return SmartErrorLogReport(
+                isSupported: false,
+                message: "This drive or bridge does not support reading the SMART error log.",
+                entries: [],
+                totalEntryCount: nil,
+                capturedAt: Date()
+            )
+        }
+
+        let exitStatus = root.dictionary("smartctl").int("exit_status") ?? Int(result.terminationStatus)
+        guard exitStatus & 0x03 == 0 else { return nil }
+
+        let ataLog = root.dictionary("ata_smart_error_log")
+        let extendedATAlog = root.dictionary("ata_smart_extended_comprehensive_error_log")
+        let nvmeLog = root["nvme_error_information_log"] ?? root["nvme_error_log"]
+        let items = errorLogItems(in: ataLog)
+            + errorLogItems(in: extendedATAlog)
+            + errorLogItems(in: nvmeLog)
+        let entries = items.enumerated().compactMap { index, item in
+            parseErrorLogEntry(item, index: index)
+        }
+        let reportedCount = ataLog.dictionary("summary").int("count")
+            ?? extendedATAlog.dictionary("summary").int("count")
+            ?? root.dictionary("nvme_smart_health_information_log").int("num_err_log_entries")
+        let totalCount = reportedCount ?? entries.count
+        return SmartErrorLogReport(
+            isSupported: true,
+            message: entries.isEmpty
+                ? "No SMART error log entries were reported."
+                : "\(entries.count) SMART error log entr\(entries.count == 1 ? "y" : "ies") read.",
+            entries: entries,
+            totalEntryCount: totalCount,
+            capturedAt: Date()
         )
     }
 
@@ -1180,8 +1291,7 @@ enum SmartctlParser {
             to: &attributes
         )
 
-        let rawOutput = cappedRawOutput(stdout: data, stderr: stderr)
-        let selfTestReport = parseSelfTestReport(root, rawOutput: rawOutput)
+        let selfTestReport = parseSelfTestReport(root)
         let selfTest = selfTestReport.map(Self.selfTestSummary)
 
         let providerState: ProviderState = embeddedExitStatus == 0 ? .available : .limited
@@ -1251,7 +1361,7 @@ enum SmartctlParser {
             && root["nvme_smart_health_information_log"] == nil
     }
 
-    private static func parseSelfTestReport(_ root: [String: Any], rawOutput: String?) -> SmartSelfTestReport? {
+    private static func parseSelfTestReport(_ root: [String: Any]) -> SmartSelfTestReport? {
         var entries: [SmartSelfTestEntry] = []
         var currentKind: SmartSelfTestKind?
         var currentRemaining: Int?
@@ -1354,7 +1464,6 @@ enum SmartctlParser {
             entries: entries,
             shortSupported: shortSupported,
             longSupported: longSupported,
-            rawOutput: rawOutput,
             capturedAt: Date()
         )
     }
@@ -1423,15 +1532,6 @@ enum SmartctlParser {
         }
     }
 
-    private static func cappedRawOutput(stdout: Data, stderr: Data) -> String? {
-        let stdoutText = String(data: stdout, encoding: .utf8) ?? ""
-        let stderrText = String(data: stderr, encoding: .utf8) ?? ""
-        let combined = [stdoutText, stderrText].filter { !$0.isEmpty }.joined(separator: "\n")
-        guard !combined.isEmpty else { return nil }
-        let cap = 256 * 1024
-        return combined.count > cap ? String(combined.prefix(cap)) + "\n[output truncated]" : combined
-    }
-
     private static func commandJSONRoot(_ result: CommandResult) -> [String: Any]? {
         if let root = try? JSONSerialization.jsonObject(with: result.stdout) as? [String: Any] {
             return root
@@ -1447,6 +1547,86 @@ enum SmartctlParser {
         [result.stdoutString, result.stderrString]
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .joined(separator: "\n")
+    }
+
+    private static func errorLogItems(in value: Any?) -> [[String: Any]] {
+        if let items = value as? [[String: Any]] {
+            return items
+        }
+        guard let dictionary = value as? [String: Any] else { return [] }
+        for key in ["table", "entries", "error_log", "errors"] {
+            if let items = dictionary[key] as? [[String: Any]] {
+                return items
+            }
+        }
+        // ATA smartctl JSON commonly nests the actual table under
+        // `standard`; accept that wrapper while keeping the parser strict
+        // about the known error-log collection keys.
+        if let standard = dictionary["standard"] {
+            return errorLogItems(in: standard)
+        }
+        return []
+    }
+
+    private static func parseErrorLogEntry(_ item: [String: Any], index: Int) -> SmartErrorLogEntry? {
+        let errorNumber = item.int("error_number")
+            ?? item.int("error_count")
+            ?? item.int("count")
+        let lifetimeHours = item.int("lifetime_hours")
+            ?? item.int("power_on_hours")
+            ?? item.dictionary("power_on_time").int("hours")
+        let failingLBA = item.int64("lba")
+            ?? item.int64("lba_of_first_error")
+            ?? item.int64("failing_lba")
+        let namespaceID = item.int("namespace_id") ?? item.int("nsid")
+        let status = selfTestStatusValue(item)
+            ?? item.valueDescription("error_description")
+            ?? item.valueDescription("error")
+            ?? item.valueDescription("message")
+            ?? "SMART error log entry"
+
+        // NVMe returns an all-zero slot when its fixed-size log has no errors.
+        // Do not turn that transport padding into a user-visible disk error.
+        if errorNumber == 0,
+           (lifetimeHours == nil || lifetimeHours == 0),
+           (failingLBA == nil || failingLBA == 0),
+           (namespaceID == nil || namespaceID == 0),
+           status == "SMART error log entry" {
+            return nil
+        }
+
+        var details: [String: String] = [:]
+        for (key, value) in item {
+            guard ![
+                "error_number", "error_count", "count", "lifetime_hours",
+                "power_on_hours", "lba", "lba_of_first_error", "failing_lba",
+                "namespace_id", "nsid", "status", "error_description",
+                "error", "message"
+            ].contains(key) else {
+                continue
+            }
+            if let string = value as? String {
+                details[key] = string
+            } else if let number = value as? NSNumber {
+                details[key] = number.stringValue
+            }
+        }
+        let identifier = [
+            String(index),
+            errorNumber.map(String.init) ?? "",
+            lifetimeHours.map(String.init) ?? "",
+            failingLBA.map(String.init) ?? ""
+        ].joined(separator: "-")
+        return SmartErrorLogEntry(
+            id: identifier,
+            errorNumber: errorNumber,
+            status: status,
+            message: status,
+            lifetimeHours: lifetimeHours,
+            failingLBA: failingLBA.map(UInt64.init),
+            namespaceID: namespaceID,
+            details: details
+        )
     }
 
     private static func smartctlMessages(_ root: [String: Any]) -> [String] {

@@ -8,6 +8,12 @@ enum BenchmarkResultUpdatePolicy: Sendable, Equatable {
     case mergeTests
 }
 
+struct SmartSelfTestCompletion: Identifiable, Sendable {
+    let id: UUID
+    let drive: DriveDevice
+    let report: SmartSelfTestReport
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -25,6 +31,10 @@ final class AppModel {
     var smartSelfTestDriveID: String?
     var smartSelfTestMessage: String?
     var smartSelfTestCapabilities: [String: SmartSelfTestCapabilityState] = [:]
+    var smartErrorLogCapabilities: [String: SmartErrorLogCapabilityState] = [:]
+    var smartErrorLogReports: [String: SmartErrorLogReport] = [:]
+    var smartErrorLogMessage: String?
+    var completedSmartSelfTest: SmartSelfTestCompletion?
     private var representativeVolumePreferences = RepresentativeVolumePreferences()
     private var activeRepresentativeVolumeIDsByDrive: [String: String] = [:]
     private var manuallySelectedRepresentativeVolumeKeys: Set<String> = []
@@ -118,6 +128,9 @@ final class AppModel {
     func selectDriveFromSidebar(_ driveID: String?) {
         guard !isLiveActivityDriveSelectionLocked || driveID == selectedDriveID else { return }
         selectedDriveID = driveID
+        if let drive = selectedDrive {
+            ensureSmartDiagnosticsCapabilities(for: drive)
+        }
     }
 
     var diskOpenFileInspection: DiskOpenFileInspection? {
@@ -214,6 +227,8 @@ final class AppModel {
     private let refreshService: DriveRefreshing
     private let smartSnapshotService: SmartSnapshotService
     private let smartSelfTestService: SmartSelfTestService
+    private let smartErrorLogService: SmartErrorLogService
+    private let smartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching
     private let allowsSystemDiskSelfTests: @Sendable () -> Bool
     private let benchmarkRunner: BenchmarkRunning
     private let diskActivityProvider: DiskActivityProviding
@@ -244,7 +259,10 @@ final class AppModel {
     private var hasRequestedNotificationAuthorization = false
     private var lastBenchmarkProgressPublishedAt: Date?
     private var smartSelfTestTask: Task<Void, Never>?
-    private var smartSelfTestCapabilityTask: Task<Void, Never>?
+    private var smartSelfTestCapabilityTasks: [String: Task<Void, Never>] = [:]
+    private var smartErrorLogCapabilityTasks: [String: Task<Void, Never>] = [:]
+    private var smartErrorLogReadTasks: [String: Task<Void, Never>] = [:]
+    private var smartDiagnosticsWarmupTask: Task<Void, Never>?
     private var smartSelfTestRunID: UUID?
 
     init(
@@ -262,12 +280,16 @@ final class AppModel {
         diskFirstAidService: DiskFirstAidRunning = DiskFirstAidService(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator(),
         smartSelfTestService: SmartSelfTestService = SmartSelfTestService(),
+        smartErrorLogService: SmartErrorLogService = SmartErrorLogService(),
+        smartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching = SmartDiagnosticsCapabilityCache(),
         allowsSystemDiskSelfTests: @escaping @Sendable () -> Bool = {
             UserDefaults.standard.bool(forKey: AppPreferences.Key.allowSystemDiskSelfTests)
         }
     ) {
         self.smartSnapshotService = smartService
         self.smartSelfTestService = smartSelfTestService
+        self.smartErrorLogService = smartErrorLogService
+        self.smartDiagnosticsCapabilityCache = smartDiagnosticsCapabilityCache
         self.allowsSystemDiskSelfTests = allowsSystemDiskSelfTests
         self.refreshService = refreshService ?? DriveRefreshService(
             inventoryProvider: inventoryProvider,
@@ -477,12 +499,13 @@ final class AppModel {
             }
             return (drive.id, discovery.snapshots[drive.id] ?? SmartSnapshot.refreshingNative(for: drive))
         })
-        if !isSmartSelfTestActive {
-            smartSelfTestCapabilities = [:]
-        }
         if selectedDriveID == nil || !loadedDrives.contains(where: { $0.id == selectedDriveID }) {
             selectedDriveID = loadedDrives.first?.id
         }
+        for drive in loadedDrives {
+            restoreCachedSmartDiagnosticsCapabilities(for: drive)
+        }
+        warmSmartDiagnosticsCapabilities(for: loadedDrives)
         if let liveActivityDriveID,
            !loadedDrives.contains(where: { $0.id == liveActivityDriveID }),
            isLiveActivityMonitoring || isLiveActivityWorkloadRunning {
@@ -1175,38 +1198,338 @@ final class AppModel {
         smartSelfTestCapabilities[drive.id] ?? .unknown
     }
 
+    func smartErrorLogCapability(for drive: DriveDevice) -> SmartErrorLogCapabilityState {
+        smartErrorLogCapabilities[drive.id] ?? .unknown
+    }
+
     func checkSmartSelfTestCapability(for drive: DriveDevice) {
         guard !isSmartSelfTestActive else { return }
-        guard !drive.isSystemDisk || allowsSystemDiskSelfTests() else {
-            let message = "System-disk self-tests are disabled in Settings."
-            smartSelfTestCapabilities[drive.id] = .unavailable(message)
-            smartSelfTestMessage = message
+        probeSmartSelfTestCapability(for: drive, force: true)
+    }
+
+    func checkSmartErrorLogCapability(for drive: DriveDevice) {
+        probeSmartErrorLogCapability(for: drive, force: true)
+    }
+
+    func readSmartErrorLog(for drive: DriveDevice) {
+        smartErrorLogReadTasks[drive.id]?.cancel()
+        smartErrorLogCapabilities[drive.id] = .checking
+        smartErrorLogMessage = nil
+        let service = smartErrorLogService
+        smartErrorLogReadTasks[drive.id] = Task { [weak self] in
+            for attempt in 1...3 {
+                do {
+                    let report = try await service.read(for: drive)
+                    await MainActor.run { [weak self] in
+                        guard let self else { return }
+                        self.smartErrorLogReports[drive.id] = report
+                        self.smartErrorLogCapabilities[drive.id] = report.isSupported
+                            ? .supported
+                            : .unavailable(report.message)
+                        self.smartErrorLogMessage = report.message
+                        if report.isSupported {
+                            self.storeErrorLogCapability(
+                                status: .supported,
+                                message: report.message,
+                                for: drive
+                            )
+                        } else {
+                            self.storeErrorLogCapability(
+                                status: .unavailable,
+                                message: report.message,
+                                for: drive
+                            )
+                        }
+                        self.smartErrorLogReadTasks[drive.id] = nil
+                    }
+                    return
+                } catch is CancellationError {
+                    await MainActor.run { [weak self] in
+                        self?.smartErrorLogReadTasks[drive.id] = nil
+                    }
+                    return
+                } catch {
+                    let message = error.localizedDescription
+                    if attempt < 3 {
+                        await MainActor.run { [weak self] in
+                            self?.smartErrorLogCapabilities[drive.id] = .retrying(
+                                message: message,
+                                attempt: attempt + 1
+                            )
+                        }
+                        try? await Task.sleep(nanoseconds: Self.retryDelayNanoseconds(after: attempt))
+                        continue
+                    }
+                    await MainActor.run { [weak self] in
+                        self?.finishErrorLogCapabilityFailure(
+                            error,
+                            drive: drive,
+                            message: message
+                        )
+                        self?.smartErrorLogReadTasks[drive.id] = nil
+                    }
+                }
+            }
+        }
+    }
+
+    private func ensureSmartDiagnosticsCapabilities(for drive: DriveDevice) {
+        if drive.isNetwork {
+            smartSelfTestCapabilities[drive.id] = .unavailable("Network volumes do not expose local SMART self-tests.")
+            smartErrorLogCapabilities[drive.id] = .unavailable("Network volumes do not expose local SMART error logs.")
             return
         }
+        if drive.isMemoryCard {
+            smartSelfTestCapabilities[drive.id] = .unavailable("SD cards do not expose standard SMART self-tests on macOS.")
+            smartErrorLogCapabilities[drive.id] = .unavailable("SD cards do not expose standard SMART error logs on macOS.")
+            return
+        }
+        restoreCachedSmartDiagnosticsCapabilities(for: drive)
+        if case .unknown = smartSelfTestCapability(for: drive) {
+            probeSmartSelfTestCapability(for: drive, force: false)
+        }
+        if case .unknown = smartErrorLogCapability(for: drive) {
+            probeSmartErrorLogCapability(for: drive, force: false)
+        }
+    }
 
-        smartSelfTestCapabilityTask?.cancel()
+    private func warmSmartDiagnosticsCapabilities(for drives: [DriveDevice]) {
+        smartDiagnosticsWarmupTask?.cancel()
+        smartDiagnosticsWarmupTask = Task { [weak self] in
+            for drive in drives {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.ensureSmartDiagnosticsCapabilities(for: drive)
+                }
+                try? await Task.sleep(nanoseconds: 150_000_000)
+            }
+            await MainActor.run { [weak self] in
+                self?.smartDiagnosticsWarmupTask = nil
+            }
+        }
+    }
+
+    private func restoreCachedSmartDiagnosticsCapabilities(for drive: DriveDevice) {
+        let version = smartctlVersion(for: drive)
+        guard let entry = smartDiagnosticsCapabilityCache.cachedEntry(
+            for: drive,
+            smartctlVersion: version
+        ) else {
+            return
+        }
+        let shouldRestoreSelfTest: Bool = {
+            guard let state = smartSelfTestCapabilities[drive.id] else { return true }
+            if case .unknown = state { return true }
+            return false
+        }()
+        if shouldRestoreSelfTest, let record = entry.selfTest {
+            switch record.status {
+            case .supported:
+                if let capability = record.selfTestCapability {
+                    smartSelfTestCapabilities[drive.id] = .supported(capability)
+                }
+            case .unavailable:
+                smartSelfTestCapabilities[drive.id] = .unavailable(record.message)
+            }
+        }
+        let shouldRestoreErrorLog: Bool = {
+            guard let state = smartErrorLogCapabilities[drive.id] else { return true }
+            if case .unknown = state { return true }
+            return false
+        }()
+        if shouldRestoreErrorLog, let record = entry.errorLog {
+            smartErrorLogCapabilities[drive.id] = record.status == .supported
+                ? .supported
+                : .unavailable(record.message)
+        }
+    }
+
+    private func probeSmartSelfTestCapability(for drive: DriveDevice, force: Bool) {
+        if !force, smartSelfTestCapabilities[drive.id] != nil { return }
+        smartSelfTestCapabilityTasks[drive.id]?.cancel()
         smartSelfTestCapabilities[drive.id] = .checking
         smartSelfTestMessage = nil
         let service = smartSelfTestService
-        smartSelfTestCapabilityTask = Task { [weak self] in
-            do {
-                let capability = try await service.capability(for: drive)
-                await MainActor.run { [weak self] in
-                    self?.smartSelfTestCapabilities[drive.id] = .supported(capability)
-                    self?.smartSelfTestCapabilityTask = nil
-                }
-            } catch is CancellationError {
-                await MainActor.run { [weak self] in
-                    self?.smartSelfTestCapabilities[drive.id] = .unknown
-                    self?.smartSelfTestCapabilityTask = nil
-                }
-            } catch {
-                await MainActor.run { [weak self] in
-                    self?.smartSelfTestCapabilities[drive.id] = .unavailable(error.localizedDescription)
-                    self?.smartSelfTestMessage = error.localizedDescription
-                    self?.smartSelfTestCapabilityTask = nil
+        smartSelfTestCapabilityTasks[drive.id] = Task { [weak self] in
+            for attempt in 1...3 {
+                do {
+                    let capability = try await service.capability(for: drive)
+                    await MainActor.run { [weak self] in
+                        guard let self else { return }
+                        self.smartSelfTestCapabilities[drive.id] = .supported(capability)
+                        self.storeSelfTestCapability(
+                            capability,
+                            status: .supported,
+                            message: capability.message,
+                            for: drive
+                        )
+                        self.smartSelfTestCapabilityTasks[drive.id] = nil
+                    }
+                    return
+                } catch is CancellationError {
+                    await MainActor.run { [weak self] in
+                        self?.smartSelfTestCapabilityTasks[drive.id] = nil
+                    }
+                    return
+                } catch {
+                    let message = error.localizedDescription
+                    if attempt < 3 {
+                        await MainActor.run { [weak self] in
+                            self?.smartSelfTestCapabilities[drive.id] = .retrying(
+                                message: message,
+                                attempt: attempt + 1
+                            )
+                        }
+                        try? await Task.sleep(nanoseconds: Self.retryDelayNanoseconds(after: attempt))
+                        continue
+                    }
+                    await MainActor.run { [weak self] in
+                        self?.finishSelfTestCapabilityFailure(error, drive: drive, message: message)
+                        self?.smartSelfTestCapabilityTasks[drive.id] = nil
+                    }
                 }
             }
+        }
+    }
+
+    private func probeSmartErrorLogCapability(for drive: DriveDevice, force: Bool) {
+        if !force, smartErrorLogCapabilities[drive.id] != nil { return }
+        smartErrorLogCapabilityTasks[drive.id]?.cancel()
+        smartErrorLogCapabilities[drive.id] = .checking
+        let service = smartErrorLogService
+        smartErrorLogCapabilityTasks[drive.id] = Task { [weak self] in
+            for attempt in 1...3 {
+                do {
+                    try await service.capability(for: drive)
+                    await MainActor.run { [weak self] in
+                        guard let self else { return }
+                        self.smartErrorLogCapabilities[drive.id] = .supported
+                        self.storeErrorLogCapability(
+                            status: .supported,
+                            message: "SMART error log capability confirmed.",
+                            for: drive
+                        )
+                        self.smartErrorLogCapabilityTasks[drive.id] = nil
+                    }
+                    return
+                } catch is CancellationError {
+                    await MainActor.run { [weak self] in
+                        self?.smartErrorLogCapabilityTasks[drive.id] = nil
+                    }
+                    return
+                } catch {
+                    let message = error.localizedDescription
+                    if attempt < 3 {
+                        await MainActor.run { [weak self] in
+                            self?.smartErrorLogCapabilities[drive.id] = .retrying(
+                                message: message,
+                                attempt: attempt + 1
+                            )
+                        }
+                        try? await Task.sleep(nanoseconds: Self.retryDelayNanoseconds(after: attempt))
+                        continue
+                    }
+                    await MainActor.run { [weak self] in
+                        self?.finishErrorLogCapabilityFailure(error, drive: drive, message: message)
+                        self?.smartErrorLogCapabilityTasks[drive.id] = nil
+                    }
+                }
+            }
+        }
+    }
+
+    private func finishSelfTestCapabilityFailure(
+        _ error: Error,
+        drive: DriveDevice,
+        message: String
+    ) {
+        if isDefinitiveSelfTestUnsupported(error) {
+            smartSelfTestCapabilities[drive.id] = .unavailable(message)
+            smartSelfTestMessage = message
+            storeSelfTestCapability(nil, status: .unavailable, message: message, for: drive)
+        } else {
+            smartSelfTestCapabilities[drive.id] = .unknown
+            smartSelfTestMessage = "Self-test support could not be verified. It will be retried when this drive is selected again."
+        }
+    }
+
+    private func finishErrorLogCapabilityFailure(
+        _ error: Error,
+        drive: DriveDevice,
+        message: String
+    ) {
+        if isDefinitiveErrorLogUnsupported(error) {
+            smartErrorLogCapabilities[drive.id] = .unavailable(message)
+            smartErrorLogMessage = message
+            storeErrorLogCapability(status: .unavailable, message: message, for: drive)
+        } else {
+            smartErrorLogCapabilities[drive.id] = .unknown
+            smartErrorLogMessage = "SMART error log support could not be verified. It will be retried when this drive is selected again."
+        }
+    }
+
+    private func storeSelfTestCapability(
+        _ capability: SmartSelfTestCapability?,
+        status: SmartDiagnosticsCachedStatus,
+        message: String,
+        for drive: DriveDevice
+    ) {
+        smartDiagnosticsCapabilityCache.store(
+            SmartDiagnosticsFeatureCacheRecord(
+                status: status,
+                message: message,
+                selfTestCapability: capability,
+                checkedAt: Date()
+            ),
+            feature: .selfTest,
+            for: drive,
+            smartctlVersion: smartctlVersion(for: drive)
+        )
+    }
+
+    private func storeErrorLogCapability(
+        status: SmartDiagnosticsCachedStatus,
+        message: String,
+        for drive: DriveDevice
+    ) {
+        smartDiagnosticsCapabilityCache.store(
+            SmartDiagnosticsFeatureCacheRecord(
+                status: status,
+                message: message,
+                selfTestCapability: nil,
+                checkedAt: Date()
+            ),
+            feature: .errorLog,
+            for: drive,
+            smartctlVersion: smartctlVersion(for: drive)
+        )
+    }
+
+    private func smartctlVersion(for drive: DriveDevice) -> String? {
+        snapshots[drive.id]?.smartctlDiagnostics?.version
+    }
+
+    private func isDefinitiveSelfTestUnsupported(_ error: Error) -> Bool {
+        guard let serviceError = error as? SmartSelfTestServiceError else { return false }
+        if case .unsupported = serviceError {
+            return true
+        }
+        return false
+    }
+
+    private func isDefinitiveErrorLogUnsupported(_ error: Error) -> Bool {
+        guard let serviceError = error as? SmartErrorLogServiceError else { return false }
+        if case .unsupported = serviceError {
+            return true
+        }
+        return false
+    }
+
+    nonisolated private static func retryDelayNanoseconds(after failedAttempt: Int) -> UInt64 {
+        switch failedAttempt {
+        case 1: 250_000_000
+        case 2: 750_000_000
+        default: 1_500_000_000
         }
     }
 
@@ -1258,6 +1581,11 @@ final class AppModel {
                                   self.selfTestReportChanged(report, from: baselineReport) {
                             self.smartSelfTestSession = .idle
                             self.smartSelfTestMessage = nil
+                            self.completedSmartSelfTest = SmartSelfTestCompletion(
+                                id: UUID(),
+                                drive: drive,
+                                report: report
+                            )
                         }
                     }
                     let finished = await MainActor.run { [weak self] in
@@ -1285,7 +1613,6 @@ final class AppModel {
                     guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
                     self.smartSelfTestSession = .failed(error.localizedDescription)
                     self.smartSelfTestMessage = error.localizedDescription
-                    self.smartSelfTestCapabilities[drive.id] = .unavailable(error.localizedDescription)
                     self.smartSelfTestTask = nil
                 }
             }
@@ -1301,6 +1628,7 @@ final class AppModel {
         let runID = UUID()
         smartSelfTestRunID = runID
         let snapshotService = smartSnapshotService
+        let baselineReport = snapshots[drive.id]?.selfTestReport
         smartSelfTestTask = Task { [weak self] in
             do {
                 try await service.abort(drive: drive)
@@ -1309,6 +1637,15 @@ final class AppModel {
                 await MainActor.run { [weak self] in
                     guard let self, self.smartSelfTestRunID == runID else { return }
                     self.snapshots[drive.id] = snapshot
+                    if let report = snapshot.selfTestReport,
+                       report.state.isTerminal,
+                       self.selfTestReportChanged(report, from: baselineReport) {
+                        self.completedSmartSelfTest = SmartSelfTestCompletion(
+                            id: UUID(),
+                            drive: drive,
+                            report: report
+                        )
+                    }
                     self.smartSelfTestSession = .idle
                     self.smartSelfTestMessage = nil
                     self.smartSelfTestTask = nil
