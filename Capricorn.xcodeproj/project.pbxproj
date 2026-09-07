@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A11CE001BADD1E0000000001 /* drivedb.h in Resources */ = {isa = PBXBuildFile; fileRef = A11CE001BADD1E0000000002 /* drivedb.h */; };
+		A11CE001BADD1E0000000001 /* Capricorn/Resources/Smartmontools/drivedb.h in Resources */ = {isa = PBXBuildFile; fileRef = A11CE001BADD1E0000000002 /* Capricorn/Resources/Smartmontools/drivedb.h */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -23,7 +23,7 @@
 /* Begin PBXFileReference section */
 		0BC08D39966F483D907890D0 /* CapricornTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CapricornTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		587A84672FE6BDAA0045BA20 /* Capricorn.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Capricorn.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A11CE001BADD1E0000000002 /* drivedb.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Capricorn/Resources/Smartmontools/drivedb.h; sourceTree = SOURCE_ROOT; };
+		A11CE001BADD1E0000000002 /* Capricorn/Resources/Smartmontools/drivedb.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Capricorn/Resources/Smartmontools/drivedb.h; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -57,12 +57,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		5867E0AC304ED54E006FD81D /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				A11CE001BADD1E0000000002 /* Capricorn/Resources/Smartmontools/drivedb.h */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		587A845E2FE6BDAA0045BA20 = {
 			isa = PBXGroup;
 			children = (
 				587A84692FE6BDAA0045BA20 /* Capricorn */,
 				09B48EF062434AE09FD8BCEE /* CapricornTests */,
 				587A84682FE6BDAA0045BA20 /* Products */,
+				5867E0AC304ED54E006FD81D /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -167,7 +176,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A11CE001BADD1E0000000001 /* drivedb.h in Resources */,
+				A11CE001BADD1E0000000001 /* Capricorn/Resources/Smartmontools/drivedb.h in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

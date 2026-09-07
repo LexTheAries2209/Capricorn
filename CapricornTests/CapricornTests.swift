@@ -1180,14 +1180,13 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(report.mode, .detailed)
         XCTAssertEqual(runner.calls.map(\.executable), [
-            "/usr/sbin/diskutil", "/sbin/fsck_apfs",
+            "/usr/sbin/diskutil",
             "/usr/sbin/diskutil", "/sbin/fsck_exfat",
             "/usr/sbin/diskutil", "/sbin/fsck_hfs",
             "/usr/sbin/diskutil", "/sbin/fsck_msdos"
         ])
         XCTAssertEqual(runner.calls.map(\.arguments), [
-            ["info", "-plist", "disk9s1"],
-            ["-n", "-x", "/dev/rdisk9s1"],
+            ["verifyVolume", "disk9s1"],
             ["info", "-plist", "disk9s2"],
             ["-n", "-x", "/dev/rdisk9s2"],
             ["info", "-plist", "disk9s3"],
@@ -1199,12 +1198,9 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(report.entries.contains(where: \.hasIssue))
     }
 
-    func testDiskCheckServiceUnmountsMountedVolumeAndRestoresWritableMount() async throws {
+    func testDiskCheckServiceDelegatesAPFSSystemCheckToDiskutil() async throws {
         let runner = RecordingDiskCheckRunner(
-            stdout: "APFS volume is consistent\n",
-            infoPlists: [
-                "disk9s1": Self.diskInfoPlist(mounted: true, readOnly: false)
-            ]
+            stdout: "APFS volume is consistent\n"
         )
         let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
         var drive = Self.fixtureDrive(mountedAt: "/Volumes/APFS")
@@ -1223,17 +1219,13 @@ final class CapricornTests: XCTestCase {
         let report = await service.check(.detailed, drive: drive)
 
         XCTAssertEqual(runner.calls.map(\.arguments), [
-            ["info", "-plist", "disk9s1"],
-            ["unmount", "disk9s1"],
-            ["-n", "-x", "/dev/rdisk9s1"],
-            ["mount", "disk9s1"]
+            ["verifyVolume", "disk9s1"]
         ])
         XCTAssertFalse(report.entries[0].hasIssue)
-        XCTAssertTrue(report.entries[0].stderr.contains("Preflight: mounted=true, read-only=false."))
-        XCTAssertTrue(report.entries[0].stderr.contains("Restoring volume mount (read-only=false)."))
+        XCTAssertFalse(report.entries[0].stderr.contains("Preflight:"))
     }
 
-    func testDiskCheckServiceRestoresReadOnlyMountAfterDetailedCheck() async throws {
+    func testDiskCheckServiceRestoresReadOnlyMountAfterRawDetailedCheck() async throws {
         let runner = RecordingDiskCheckRunner(
             infoPlists: [
                 "disk9s1": Self.diskInfoPlist(mounted: true, readOnly: true)
@@ -1245,12 +1237,12 @@ final class CapricornTests: XCTestCase {
         drive.isSystemDisk = false
         drive.volumes[0] = DriveDevice.Volume(
             deviceIdentifier: "disk9s1",
-            name: "APFS",
-            mountPoint: "/Volumes/APFS",
+            name: "ExFAT",
+            mountPoint: "/Volumes/ExFAT",
             sizeBytes: 1_000,
             isWritable: false,
             isSystem: false,
-            fileSystemType: "APFS"
+            fileSystemType: "ExFAT"
         )
 
         let report = await service.check(.detailed, drive: drive)
@@ -1265,7 +1257,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(report.entries[0].stderr.contains("Preflight: mounted=true, read-only=true."))
     }
 
-    func testDiskCheckServiceUsesAdministratorRunnerOnlyForFilesystemChecks() async throws {
+    func testDiskCheckServiceUsesAdministratorRunnerOnlyForRawFilesystemChecks() async throws {
         let diskutilRunner = RecordingDiskCheckRunner(
             infoPlists: [
                 "disk9s1": Self.diskInfoPlist(mounted: false, readOnly: false)
@@ -1282,8 +1274,37 @@ final class CapricornTests: XCTestCase {
         drive.isSystemDisk = false
         drive.volumes[0] = DriveDevice.Volume(
             deviceIdentifier: "disk9s1",
-            name: "APFS",
+            name: "ExFAT",
             mountPoint: nil,
+            sizeBytes: 1_000,
+            isWritable: true,
+            isSystem: false,
+            fileSystemType: "ExFAT"
+        )
+
+        let report = await service.check(.detailed, drive: drive)
+
+        XCTAssertEqual(diskutilRunner.calls.map(\.arguments), [["info", "-plist", "disk9s1"]])
+        XCTAssertEqual(privilegedRunner.calls.map(\.executable), ["/sbin/fsck_exfat"])
+        XCTAssertEqual(privilegedRunner.calls.map(\.arguments), [["-n", "-x", "/dev/rdisk9s1"]])
+        XCTAssertFalse(report.entries[0].hasIssue)
+    }
+
+    func testDiskCheckServiceDoesNotUseAdministratorRunnerForAPFSSystemChecks() async throws {
+        let diskutilRunner = RecordingDiskCheckRunner(stdout: "APFS volume is consistent\n")
+        let privilegedRunner = RecordingDiskCheckRunner()
+        let service = DiskCheckService(
+            runner: diskutilRunner,
+            privilegedRunner: privilegedRunner,
+            updateIntervalNanoseconds: 1_000_000
+        )
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/APFS")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.volumes[0] = DriveDevice.Volume(
+            deviceIdentifier: "disk9s1",
+            name: "APFS",
+            mountPoint: "/Volumes/APFS",
             sizeBytes: 1_000,
             isWritable: true,
             isSystem: false,
@@ -1292,9 +1313,8 @@ final class CapricornTests: XCTestCase {
 
         let report = await service.check(.detailed, drive: drive)
 
-        XCTAssertEqual(diskutilRunner.calls.map(\.arguments), [["info", "-plist", "disk9s1"]])
-        XCTAssertEqual(privilegedRunner.calls.map(\.executable), ["/sbin/fsck_apfs"])
-        XCTAssertEqual(privilegedRunner.calls.map(\.arguments), [["-n", "-x", "/dev/rdisk9s1"]])
+        XCTAssertEqual(diskutilRunner.calls.map(\.arguments), [["verifyVolume", "disk9s1"]])
+        XCTAssertTrue(privilegedRunner.calls.isEmpty)
         XCTAssertFalse(report.entries[0].hasIssue)
     }
 
@@ -1662,7 +1682,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(written?.rawValue.contains("TB") == true)
     }
 
-    func testSmartctlATAParserExtractsStructuredSelfTestLogAndRawOutput() {
+    func testSmartctlATAParserExtractsStructuredSelfTestLog() {
         let drive = Self.fixtureDrive()
         let snapshot = SmartctlParser.parseSnapshot(
             Self.smartctlATASelfTestFixture.data(using: .utf8)!,
@@ -1677,7 +1697,6 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(snapshot.selfTestReport?.entries.first?.kind, .short)
         XCTAssertEqual(snapshot.selfTestReport?.entries.first?.lifetimeHours, 123)
         XCTAssertEqual(snapshot.selfTestReport?.entries.first?.failingLBA, 0)
-        XCTAssertTrue(snapshot.selfTestReport?.rawOutput?.contains("smartctl diagnostic note") == true)
         XCTAssertTrue(snapshot.selfTestStatus?.contains("Short") == true)
     }
 
@@ -1693,6 +1712,180 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(snapshot.selfTestReport?.state, .passed)
         XCTAssertEqual(snapshot.selfTestReport?.entries.first?.kind, .long)
         XCTAssertEqual(snapshot.selfTestReport?.entries.first?.lifetimeHours, 456)
+    }
+
+    func testSmartctlATAAndNVMeErrorLogsParseStructuredEntries() throws {
+        let ataResult = CommandResult(
+            stdout: Data(Self.smartctlATAErrorLogFixture.utf8),
+            stderr: Data(),
+            terminationStatus: 0
+        )
+        let ata = try XCTUnwrap(SmartctlParser.parseErrorLog(ataResult))
+        XCTAssertTrue(ata.isSupported)
+        XCTAssertEqual(ata.totalEntryCount, 1)
+        XCTAssertEqual(ata.entries.first?.errorNumber, 1)
+        XCTAssertEqual(ata.entries.first?.lifetimeHours, 321)
+        XCTAssertEqual(ata.entries.first?.failingLBA, 123456)
+
+        let nvmeResult = CommandResult(
+            stdout: Data(Self.smartctlNVMeErrorLogFixture.utf8),
+            stderr: Data(),
+            terminationStatus: 0
+        )
+        let nvme = try XCTUnwrap(SmartctlParser.parseErrorLog(nvmeResult))
+        XCTAssertTrue(nvme.isSupported)
+        XCTAssertEqual(nvme.totalEntryCount, 2)
+        XCTAssertEqual(nvme.entries.count, 1)
+        XCTAssertEqual(nvme.entries.first?.errorNumber, 7)
+        XCTAssertEqual(nvme.entries.first?.namespaceID, 1)
+        XCTAssertEqual(nvme.entries.first?.failingLBA, 987654)
+    }
+
+    func testSmartctlErrorLogParserDistinguishesUnsupportedFromEmptyLog() throws {
+        let unsupported = CommandResult(
+            stdout: Data(#"{"smartctl":{"exit_status":0}}"#.utf8),
+            stderr: Data("Error Log not supported".utf8),
+            terminationStatus: 0
+        )
+        let unsupportedReport = try XCTUnwrap(SmartctlParser.parseErrorLog(unsupported))
+        XCTAssertFalse(unsupportedReport.isSupported)
+        XCTAssertTrue(unsupportedReport.entries.isEmpty)
+
+        let empty = CommandResult(
+            stdout: Data(Self.smartctlEmptyErrorLogFixture.utf8),
+            stderr: Data(),
+            terminationStatus: 0
+        )
+        let emptyReport = try XCTUnwrap(SmartctlParser.parseErrorLog(empty))
+        XCTAssertTrue(emptyReport.isSupported)
+        XCTAssertEqual(emptyReport.totalEntryCount, 0)
+        XCTAssertTrue(emptyReport.entries.isEmpty)
+    }
+
+    func testSmartErrorLogServiceUsesErrorLogJSONCommand() async throws {
+        let runner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(Self.smartctlEmptyErrorLogFixture.utf8),
+                stderr: Data(),
+                terminationStatus: 0
+            )
+        ])
+        let service = SmartErrorLogService(
+            smartctlProvider: Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: "")),
+            administratorRunner: runner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+
+        let report = try await service.read(for: Self.fixtureDrive())
+        XCTAssertTrue(report.isSupported)
+        XCTAssertEqual(report.totalEntryCount, 0)
+        let call = try XCTUnwrap(runner.calls.first)
+        XCTAssertTrue(call.arguments.contains("-l"))
+        XCTAssertTrue(call.arguments.contains("error"))
+        XCTAssertTrue(call.arguments.contains("--json"))
+    }
+
+    func testSmartErrorLogExportsCSVAndJSON() throws {
+        let drive = Self.fixtureDrive()
+        let report = SmartErrorLogReport(
+            isSupported: true,
+            message: "One controller error entry.",
+            entries: [
+                SmartErrorLogEntry(
+                    id: "error-7",
+                    errorNumber: 7,
+                    status: "Invalid Field",
+                    message: "NVMe controller reported an error.",
+                    lifetimeHours: 88,
+                    failingLBA: 987654,
+                    namespaceID: 1,
+                    details: ["status_field": "1"]
+                )
+            ],
+            totalEntryCount: 1,
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+
+        let csv = ReportExporter.smartErrorLogCSVReport(drive: drive, report: report)
+        XCTAssertTrue(csv.contains("error_number"))
+        XCTAssertTrue(csv.contains("987654"))
+        XCTAssertTrue(csv.contains("status_field=1"))
+
+        let json = try XCTUnwrap(ReportExporter.smartErrorLogJSONReport(drive: drive, report: report))
+        let object = try JSONSerialization.jsonObject(with: json) as? [String: Any]
+        XCTAssertEqual(object?["driveName"] as? String, drive.displayName)
+        XCTAssertEqual((object?["report"] as? [String: Any])?["isSupported"] as? Bool, true)
+    }
+
+    func testSmartDiagnosticsCapabilityCacheInvalidatesTransportAndVersion() throws {
+        let suiteName = "CapricornTests.smartDiagnosticsCapabilityCache.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let cache = SmartDiagnosticsCapabilityCache(defaults: defaults)
+        var drive = Self.fixtureDrive()
+        drive.serialNumber = "CACHE-SERIAL"
+        let record = SmartDiagnosticsFeatureCacheRecord(
+            status: .supported,
+            message: "confirmed",
+            selfTestCapability: SmartSelfTestCapability(
+                shortSupported: true,
+                longSupported: false,
+                message: "confirmed"
+            ),
+            checkedAt: Date(timeIntervalSince1970: 100)
+        )
+
+        cache.store(record, feature: .selfTest, for: drive, smartctlVersion: "7.5")
+        XCTAssertEqual(
+            cache.cachedEntry(for: drive, smartctlVersion: "7.5")?.selfTest?.status,
+            .supported
+        )
+        XCTAssertNil(cache.cachedEntry(for: drive, smartctlVersion: "7.6"))
+
+        var changedTransport = drive
+        changedTransport.protocolName = "USB"
+        XCTAssertNil(cache.cachedEntry(for: changedTransport, smartctlVersion: "7.5"))
+    }
+
+    @MainActor
+    func testSelfTestHistoryDeduplicatesAndExportsStructuredReports() throws {
+        let container = try ModelContainerFactory.makeInMemory()
+        let repository = HistoryRepository(modelContext: ModelContext(container))
+        var drive = Self.fixtureDrive()
+        drive.serialNumber = "HISTORY-SERIAL"
+        let capturedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let report = SmartSelfTestReport(
+            state: .passed,
+            currentKind: nil,
+            currentRemainingPercent: nil,
+            entries: [
+                SmartSelfTestEntry(
+                    id: "entry-1",
+                    kind: .short,
+                    state: .passed,
+                    status: "Completed without error",
+                    remainingPercent: nil,
+                    lifetimeHours: 42,
+                    failingLBA: 0,
+                    rawStatus: nil
+                )
+            ],
+            shortSupported: true,
+            longSupported: false,
+            capturedAt: capturedAt
+        )
+
+        let first = try repository.saveSelfTestReport(drive: drive, report: report)
+        let duplicate = try repository.saveSelfTestReport(drive: drive, report: report)
+        XCTAssertEqual(first.id, duplicate.id)
+        let records = try ModelContext(container).fetch(FetchDescriptor<SmartSelfTestHistoryRecord>())
+        XCTAssertEqual(records.count, 1)
+
+        let csv = ReportExporter.smartSelfTestHistoryCSVReport(records)
+        XCTAssertTrue(csv.contains("completed_at"))
+        XCTAssertTrue(csv.contains("Completed without error"))
+        let json = try XCTUnwrap(ReportExporter.smartSelfTestHistoryJSONReport(records))
+        XCTAssertNotNil(try JSONSerialization.jsonObject(with: json))
     }
 
     func testUSBSmartCommandPassthroughReportsVerifiedSATA() throws {
@@ -4924,6 +5117,62 @@ final class CapricornTests: XCTestCase {
             }
           ]
         }
+      }
+    }
+    """
+
+    private static let smartctlATAErrorLogFixture = """
+    {
+      "smartctl": {"exit_status": 0},
+      "ata_smart_error_log": {
+        "summary": {"count": 1},
+        "standard": {
+          "table": [
+            {
+              "error_number": 1,
+              "status": {"string": "UNC at LBA", "passed": false},
+              "lifetime_hours": 321,
+              "lba": 123456,
+              "registers": {"status": "0x51"}
+            }
+          ]
+        }
+      }
+    }
+    """
+
+    private static let smartctlNVMeErrorLogFixture = """
+    {
+      "smartctl": {"exit_status": 0},
+      "nvme_error_information_log": {
+        "entries": [
+          {
+            "error_count": 7,
+            "status_field": 1,
+            "namespace_id": 1,
+            "lba": 987654,
+            "status": "Invalid Field"
+          },
+          {
+            "error_count": 0,
+            "status_field": 0,
+            "namespace_id": 0,
+            "lba": 0
+          }
+        ]
+      },
+      "nvme_smart_health_information_log": {
+        "num_err_log_entries": 2
+      }
+    }
+    """
+
+    private static let smartctlEmptyErrorLogFixture = """
+    {
+      "smartctl": {"exit_status": 0},
+      "ata_smart_error_log": {
+        "summary": {"count": 0},
+        "standard": {"table": []}
       }
     }
     """
