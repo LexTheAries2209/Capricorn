@@ -74,8 +74,8 @@ final class AppPreferences {
         didSet { defaults.set(allowSystemDiskSelfTests, forKey: Key.allowSystemDiskSelfTests) }
     }
 
-    /// Self-tests can put sustained load on a disk. Keep their status and
-    /// controls out of the main views until the user explicitly opts in.
+    /// SMART diagnostics include active self-tests and controller error logs.
+    /// Keep the bottom diagnostics panel out of the main views until opted in.
     var showsSmartSelfTestInterface: Bool {
         didSet { defaults.set(showsSmartSelfTestInterface, forKey: Key.showsSmartSelfTestInterface) }
     }
@@ -136,6 +136,7 @@ struct CapricornSettingsView: View {
     @Bindable var updateChecker: AppUpdateChecker
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistoryRecords: [SmartHistoryRecord]
+    @Query(sort: \SmartSelfTestHistoryRecord.capturedAt, order: .reverse) private var selfTestHistoryRecords: [SmartSelfTestHistoryRecord]
     @Query(sort: \BenchmarkHistoryRecord.measuredAt, order: .reverse) private var benchmarkHistoryRecords: [BenchmarkHistoryRecord]
     @Query(sort: \DiskActivityHistoryRecord.endedAt, order: .reverse) private var activityHistoryRecords: [DiskActivityHistoryRecord]
     @State private var historyDatabaseLocationError: String?
@@ -189,9 +190,9 @@ struct CapricornSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(language.t("SMART Self-Tests")) {
-                Toggle(language.t("Show SMART self-test status and controls"), isOn: $preferences.showsSmartSelfTestInterface)
-                Text(language.t("When disabled, self-test status, records, and controls are hidden in Overview and SMART."))
+            Section(language.t("SMART Diagnostics")) {
+                Toggle(language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
+                Text(language.t("When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -326,7 +327,7 @@ struct CapricornSettingsView: View {
             Text(
                 "\(language.t("Database Size")): \(formattedByteCount(statistics.sizeBytes))\n" +
                 "\(language.t("History Record Count")): \(statistics.recordCount)\n\n" +
-                language.t("This permanently removes all SMART, benchmark, and live-activity history from the current database. It cannot be undone.")
+                language.t("This permanently removes all SMART, self-test, benchmark, and live-activity history from the current database. It cannot be undone.")
             )
         }
     }
@@ -338,7 +339,10 @@ struct CapricornSettingsView: View {
     }
 
     private var historyRecordCount: Int {
-        smartHistoryRecords.count + benchmarkHistoryRecords.count + activityHistoryRecords.count
+        smartHistoryRecords.count
+            + selfTestHistoryRecords.count
+            + benchmarkHistoryRecords.count
+            + activityHistoryRecords.count
     }
 
     private var historyDatabaseSizeText: String {

@@ -6,6 +6,7 @@ struct HistoryReportView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
     let smartHistory: [SmartHistoryRecord]
+    let selfTestHistory: [SmartSelfTestHistoryRecord]
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
     @Environment(\.modelContext) private var modelContext
@@ -25,6 +26,14 @@ struct HistoryReportView: View {
         HistoryVisibility.hidden(smartHistory)
     }
 
+    private var visibleSelfTestHistory: [SmartSelfTestHistoryRecord] {
+        HistoryVisibility.visible(selfTestHistory)
+    }
+
+    private var hiddenSelfTestHistory: [SmartSelfTestHistoryRecord] {
+        HistoryVisibility.hidden(selfTestHistory)
+    }
+
     private var visibleBenchmarkHistory: [BenchmarkHistoryRecord] {
         HistoryVisibility.visible(benchmarkHistory)
     }
@@ -42,15 +51,24 @@ struct HistoryReportView: View {
     }
 
     private var hasHiddenHistory: Bool {
-        !hiddenSmartHistory.isEmpty || !hiddenBenchmarkHistory.isEmpty || !hiddenActivityHistory.isEmpty
+        !hiddenSmartHistory.isEmpty
+            || !hiddenSelfTestHistory.isEmpty
+            || !hiddenBenchmarkHistory.isEmpty
+            || !hiddenActivityHistory.isEmpty
     }
 
     private var visibleHistoryCount: Int {
-        visibleSmartHistory.count + visibleBenchmarkHistory.count + visibleActivityHistory.count
+        visibleSmartHistory.count
+            + visibleSelfTestHistory.count
+            + visibleBenchmarkHistory.count
+            + visibleActivityHistory.count
     }
 
     private var hiddenHistoryCount: Int {
-        hiddenSmartHistory.count + hiddenBenchmarkHistory.count + hiddenActivityHistory.count
+        hiddenSmartHistory.count
+            + hiddenSelfTestHistory.count
+            + hiddenBenchmarkHistory.count
+            + hiddenActivityHistory.count
     }
 
     private var historyCountSummary: String {
@@ -130,6 +148,18 @@ struct HistoryReportView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                historyPanel(
+                    title: language.t("Self-Test Reports"),
+                    symbol: "stethoscope",
+                    count: visibleSelfTestHistory.count,
+                    emptyText: hiddenSelfTestHistory.isEmpty ? language.t("No saved self-test reports yet.") : language.t("No visible self-test reports. Hidden reports can be restored below."),
+                    hideAll: { hideAllHistory(visibleSelfTestHistory) }
+                ) {
+                    historyRows(visibleSelfTestHistory) { item in
+                        selfTestHistoryRow(item, isHidden: false)
+                    }
+                }
 
                 if hasHiddenHistory {
                     hiddenHistoryDisclosure
@@ -261,6 +291,15 @@ struct HistoryReportView: View {
                     }
                 }
 
+                if !hiddenSelfTestHistory.isEmpty {
+                    Text(language.t("Self-Test Reports"))
+                        .font(.subheadline.bold())
+                    ForEach(hiddenSelfTestHistory) { item in
+                        selfTestHistoryRow(item, isHidden: true)
+                        Divider()
+                    }
+                }
+
                 if !hiddenBenchmarkHistory.isEmpty {
                     Text(language.t("Benchmark Runs"))
                         .font(.subheadline.bold())
@@ -346,6 +385,28 @@ struct HistoryReportView: View {
         }
     }
 
+    private func selfTestHistoryRow(_ item: SmartSelfTestHistoryRecord, isHidden: Bool) -> some View {
+        HStack {
+            Image(systemName: item.state == .passed ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(item.state == .passed ? .green : .orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.capturedAt.formatted(date: .abbreviated, time: .standard))
+                Text("\(item.testKind.rawValue.capitalized) · \(language.statusMessage(item.statusDetails))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            historyVisibilityButton(isHidden: isHidden) {
+                if isHidden {
+                    restoreHistory(item)
+                } else {
+                    hideHistory(item)
+                }
+            }
+        }
+    }
+
     private func activityHistoryRow(_ item: DiskActivityHistoryRecord, isHidden: Bool) -> some View {
         HStack {
             VStack(alignment: .leading) {
@@ -410,6 +471,7 @@ struct HistoryReportView: View {
         let repository = HistoryRepository(modelContext: modelContext)
         do {
             try repository.restoreAll(hiddenSmartHistory)
+            try repository.restoreAll(hiddenSelfTestHistory)
             try repository.restoreAll(hiddenBenchmarkHistory)
             try repository.restoreAll(hiddenActivityHistory)
         } catch {

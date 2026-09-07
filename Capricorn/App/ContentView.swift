@@ -12,6 +12,7 @@ struct ContentView: View {
     @AppStorage("representativeVolumeSelectionsByDrive") private var representativeVolumePreferencesJSON = ""
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistory: [SmartHistoryRecord]
+    @Query(sort: \SmartSelfTestHistoryRecord.capturedAt, order: .reverse) private var selfTestHistory: [SmartSelfTestHistoryRecord]
     @Query(sort: \BenchmarkHistoryRecord.measuredAt, order: .reverse) private var benchmarkHistory: [BenchmarkHistoryRecord]
     @Query(sort: \DiskActivityHistoryRecord.endedAt, order: .reverse) private var activityHistory: [DiskActivityHistoryRecord]
     @MainActor
@@ -46,9 +47,26 @@ struct ContentView: View {
                     snapshot: viewModel.snapshots[drive.id],
                     viewModel: viewModel,
                     smartHistory: smartHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
+                    selfTestHistory: selfTestHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     benchmarkHistory: benchmarkHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     saveSnapshot: { exportFolderPath in saveSnapshot(drive: drive, exportFolderPath: exportFolderPath) },
+                    exportSelfTestHistory: { records, exportFolderPath, format in
+                        exportSelfTestHistory(
+                            drive: drive,
+                            records: records,
+                            exportFolderPath: exportFolderPath,
+                            format: format
+                        )
+                    },
+                    exportErrorLog: { report, exportFolderPath, format in
+                        exportErrorLog(
+                            drive: drive,
+                            report: report,
+                            exportFolderPath: exportFolderPath,
+                            format: format
+                        )
+                    },
                     saveBenchmarkResults: { results, activitySamples in saveBenchmarkResults(drive: drive, results: results, activitySamples: activitySamples) }
                 )
             } else {
@@ -93,6 +111,20 @@ struct ContentView: View {
         .onChange(of: preferences.showVirtualDisks) {
             guard viewModel.showVirtualDisks != preferences.showVirtualDisks else { return }
             viewModel.showVirtualDisks = preferences.showVirtualDisks
+        }
+        .onChange(of: viewModel.completedSmartSelfTest?.id) {
+            guard let completion = viewModel.completedSmartSelfTest else { return }
+            do {
+                try HistoryRepository(modelContext: modelContext).saveSelfTestReport(
+                    drive: completion.drive,
+                    report: completion.report
+                )
+            } catch {
+                viewModel.smartSelfTestMessage = UserFacingError.message(
+                    "Could not save self-test history.",
+                    error: error
+                )
+            }
         }
         .sheet(item: $viewModel.diskOpenFileInspection) { inspection in
             DiskOpenFileInspectionSheet(
@@ -472,6 +504,91 @@ struct ContentView: View {
         } catch {
             viewModel.benchmarkError = UserFacingError.message("Could not save benchmark history.", error: error)
         }
+    }
+
+    private func exportSelfTestHistory(
+        drive: DriveDevice,
+        records: [SmartSelfTestHistoryRecord],
+        exportFolderPath: String?,
+        format: SmartDiagnosticsExportFormat
+    ) -> String {
+        guard !records.isEmpty else {
+            return "No self-test history is available to export."
+        }
+        guard let folderURL = validatedExportFolder(exportFolderPath) else {
+            return "Choose a storage folder before exporting."
+        }
+
+        let fileURL = folderURL.appendingPathComponent(
+            ReportExporter.smartDiagnosticsFileName(
+                drive: drive,
+                date: Date(),
+                language: language,
+                kind: "self-test-history",
+                format: format
+            )
+        )
+        do {
+            switch format {
+            case .csv:
+                try ReportExporter.smartSelfTestHistoryCSVReport(records)
+                    .write(to: fileURL, atomically: true, encoding: .utf8)
+            case .json:
+                guard let data = ReportExporter.smartSelfTestHistoryJSONReport(records) else {
+                    return "Could not prepare self-test history export."
+                }
+                try data.write(to: fileURL, options: .atomic)
+            }
+            return "Self-test history exported to \(fileURL.lastPathComponent)."
+        } catch {
+            return UserFacingError.message("Could not export self-test history.", error: error)
+        }
+    }
+
+    private func exportErrorLog(
+        drive: DriveDevice,
+        report: SmartErrorLogReport,
+        exportFolderPath: String?,
+        format: SmartDiagnosticsExportFormat
+    ) -> String {
+        guard let folderURL = validatedExportFolder(exportFolderPath) else {
+            return "Choose a storage folder before exporting."
+        }
+
+        let fileURL = folderURL.appendingPathComponent(
+            ReportExporter.smartDiagnosticsFileName(
+                drive: drive,
+                date: report.capturedAt,
+                language: language,
+                kind: "smart-error-log",
+                format: format
+            )
+        )
+        do {
+            switch format {
+            case .csv:
+                try ReportExporter.smartErrorLogCSVReport(drive: drive, report: report)
+                    .write(to: fileURL, atomically: true, encoding: .utf8)
+            case .json:
+                guard let data = ReportExporter.smartErrorLogJSONReport(drive: drive, report: report) else {
+                    return "Could not prepare SMART error-log export."
+                }
+                try data.write(to: fileURL, options: .atomic)
+            }
+            return "SMART error entries exported to \(fileURL.lastPathComponent)."
+        } catch {
+            return UserFacingError.message("Could not export SMART error entries.", error: error)
+        }
+    }
+
+    private func validatedExportFolder(_ exportFolderPath: String?) -> URL? {
+        guard let exportFolderPath, !exportFolderPath.isEmpty else { return nil }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: exportFolderPath, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return nil
+        }
+        return URL(fileURLWithPath: exportFolderPath, isDirectory: true)
     }
 }
 
@@ -901,9 +1018,12 @@ private struct DriveDetailView: View {
     let snapshot: SmartSnapshot?
     var viewModel: AppModel
     let smartHistory: [SmartHistoryRecord]
+    let selfTestHistory: [SmartSelfTestHistoryRecord]
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
     let saveSnapshot: (String?) -> String
+    let exportSelfTestHistory: ([SmartSelfTestHistoryRecord], String?, SmartDiagnosticsExportFormat) -> String
+    let exportErrorLog: (SmartErrorLogReport, String?, SmartDiagnosticsExportFormat) -> String
     let saveBenchmarkResults: ([BenchmarkResult], [DiskActivitySample]) -> Void
     @Environment(\.appLanguage) private var language
 
@@ -917,7 +1037,10 @@ private struct DriveDetailView: View {
                 drive: drive,
                 snapshot: snapshot,
                 viewModel: viewModel,
-                saveSnapshot: saveSnapshot
+                selfTestHistory: selfTestHistory,
+                saveSnapshot: saveSnapshot,
+                exportSelfTestHistory: exportSelfTestHistory,
+                exportErrorLog: exportErrorLog
             )
                 .tabItem { Label("SMART", systemImage: "list.bullet.rectangle") }
                 .tag(DriveFeatureTab.smart)
@@ -931,6 +1054,7 @@ private struct DriveDetailView: View {
                 drive: drive,
                 snapshot: snapshot,
                 smartHistory: smartHistory,
+                selfTestHistory: selfTestHistory,
                 benchmarkHistory: benchmarkHistory,
                 activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
             )
@@ -977,5 +1101,5 @@ struct DrivePageHeaderView: View {
 
 #Preview {
     ContentView(viewModel: .preview)
-        .modelContainer(for: [SmartHistoryRecord.self, BenchmarkHistoryRecord.self, DiskActivityHistoryRecord.self, AppSettingsRecord.self], inMemory: true)
+        .modelContainer(for: [SmartHistoryRecord.self, SmartSelfTestHistoryRecord.self, BenchmarkHistoryRecord.self, DiskActivityHistoryRecord.self, AppSettingsRecord.self], inMemory: true)
 }
