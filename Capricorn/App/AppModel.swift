@@ -1380,7 +1380,7 @@ final class AppModel {
             storeSelfTestCapability(nil, status: .unavailable, message: message, for: drive)
         } else {
             smartSelfTestCapabilities[drive.id] = .unknown
-            smartSelfTestMessage = "Self-test support could not be verified. It will be retried when this drive is selected again."
+            smartSelfTestMessage = "Self-test support could not be verified. Use Retry Self-Test Check to try again."
         }
     }
 
@@ -1395,7 +1395,7 @@ final class AppModel {
             storeErrorLogCapability(status: .unavailable, message: message, for: drive)
         } else {
             smartErrorLogCapabilities[drive.id] = .unknown
-            smartErrorLogMessage = "SMART error log support could not be verified. It will be retried when this drive is selected again."
+            smartErrorLogMessage = "SMART error log support could not be verified. Use Retry Error Log Check to try again."
         }
     }
 
