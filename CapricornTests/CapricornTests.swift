@@ -1673,6 +1673,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(snapshot.lifeRemainingPercent, 98)
         XCTAssertEqual(snapshot.mediaErrors, 0)
         XCTAssertTrue(snapshot.attributes.contains(where: { $0.name == "Available Spare" }))
+        XCTAssertEqual(snapshot.attributes.first(where: { $0.name == "Temperature" })?.status, .good)
 
         let read = snapshot.attributes.first(where: { $0.name == "Data Units Read" })
         let written = snapshot.attributes.first(where: { $0.name == "Data Units Written" })
@@ -2873,17 +2874,35 @@ final class CapricornTests: XCTestCase {
         var snapshot = Self.fixtureSnapshot(for: drive)
         let evaluator = DriveHealthEvaluator()
 
-        for temperature in [70.0, 84.9, 85.0, 100.0] {
+        for temperature in [60.0, 79.9, 80.0, 100.0] {
             snapshot.temperatureCelsius = temperature
             XCTAssertEqual(evaluator.evaluate(drive: drive, snapshot: snapshot), .good, "\(temperature) C")
         }
     }
 
-    func testDriveTemperatureLevelUsesOverviewOnlyThresholds() {
-        XCTAssertEqual(DriveTemperatureLevel(celsius: 69.9), .normal)
-        XCTAssertEqual(DriveTemperatureLevel(celsius: 70), .elevated)
-        XCTAssertEqual(DriveTemperatureLevel(celsius: 84.9), .elevated)
-        XCTAssertEqual(DriveTemperatureLevel(celsius: 85), .critical)
+    func testDriveTemperatureLevelUsesSmartAttributeThresholds() {
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 59.9), .normal)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 60), .elevated)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 79.9), .elevated)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 80), .critical)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 60).healthStatus, .warning)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 80).healthStatus, .failed)
+    }
+
+    func testHealthEvaluatorIgnoresErrorLogAttributeForOverallHealth() {
+        let drive = Self.fixtureDrive()
+        var snapshot = Self.fixtureSnapshot(for: drive)
+        snapshot.attributes = [SmartAttribute(
+            id: "NUM_ERROR_INFO_LOG_ENTRIES",
+            name: "Error Log Entries",
+            rawValue: "1",
+            current: nil,
+            worst: nil,
+            threshold: nil,
+            status: .warning,
+            source: "Fixture"
+        )]
+        XCTAssertEqual(DriveHealthEvaluator().evaluate(drive: drive, snapshot: snapshot), .good)
     }
 
     func testBenchmarkProfileConfigurationAppliesRunSizeAndDataPattern() {

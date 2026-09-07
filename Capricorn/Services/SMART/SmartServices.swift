@@ -367,7 +367,7 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
             current: nil,
             worst: nil,
             threshold: nil,
-            status: .good,
+            status: DriveTemperatureLevel(celsius: nativeTemperature(from: value) ?? Double(value)).healthStatus,
             source: providerName
         ))
     }
@@ -1317,6 +1317,8 @@ enum SmartctlParser {
 
         appendNVMeAttributes(nvme, providerName: providerName, to: &attributes)
         appendATAAttributes(root, drive: drive, providerName: providerName, to: &attributes)
+        appendTemperatureAttributeIfNeeded(to: &attributes, celsius: temperature, providerName: providerName)
+        applyTemperatureStatus(to: &attributes, celsius: temperature)
         appendUnifiedHealthAttributes(
             enduranceUsed: enduranceUsed,
             spareAvailable: spareAvailable,
@@ -1736,6 +1738,44 @@ enum SmartctlParser {
         }
     }
 
+    private static func applyTemperatureStatus(to attributes: inout [SmartAttribute], celsius: Double?) {
+        guard let celsius else { return }
+        let status = DriveTemperatureLevel(celsius: celsius).healthStatus
+        for index in attributes.indices {
+            let key = "\(attributes[index].id) \(attributes[index].name)".lowercased()
+            if key.contains("temperature") || key.contains("温度") {
+                attributes[index].status = status
+            }
+        }
+    }
+
+    private static func appendTemperatureAttributeIfNeeded(
+        to attributes: inout [SmartAttribute],
+        celsius: Double?,
+        providerName: String
+    ) {
+        guard let celsius,
+              !attributes.contains(where: { isTemperatureAttribute($0) }) else { return }
+        attributes.append(SmartAttribute(
+            id: "temperature.current",
+            name: "Temperature",
+            rawValue: String(format: "%.0f °C", celsius),
+            current: nil,
+            worst: nil,
+            threshold: nil,
+            status: DriveTemperatureLevel(celsius: celsius).healthStatus,
+            source: providerName
+        ))
+    }
+
+    private static func isTemperatureAttribute(_ attribute: SmartAttribute) -> Bool {
+        let key = "\(attribute.id) \(attribute.name)"
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .lowercased()
+        return key.contains("temperature") || key.contains("温度")
+    }
+
     private static func appendUnifiedHealthAttributes(
         enduranceUsed: Int?,
         spareAvailable: Int?,
@@ -1994,7 +2034,9 @@ final class DriveHealthEvaluator {
         }
 
         var health: HealthStatus = .good
-        let healthAttributes = snapshot.attributes.filter { !Self.isTemperatureAttribute($0) }
+        let healthAttributes = snapshot.attributes.filter {
+            !Self.isTemperatureAttribute($0) && !Self.isErrorLogAttribute($0)
+        }
         if healthAttributes.contains(where: { $0.status == .failed }) {
             health = max(health, .failed)
         }
@@ -2038,6 +2080,14 @@ final class DriveHealthEvaluator {
             .replacingOccurrences(of: "-", with: " ")
             .lowercased()
         return key.contains("temperature") || key.contains("温度")
+    }
+
+    private static func isErrorLogAttribute(_ attribute: SmartAttribute) -> Bool {
+        let key = "\(attribute.id) \(attribute.name)"
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .lowercased()
+        return key.contains("error log") || key.contains("错误日志")
     }
 
     func summary(for drive: DriveDevice, snapshot: SmartSnapshot) -> String {
