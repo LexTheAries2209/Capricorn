@@ -934,6 +934,9 @@ final class CapricornTests: XCTestCase {
         let expectedTranslations = [
             "Check and Repair": "检查与修复",
             "Disk Self-Test": "硬盘自检",
+            "Self-Check": "自检",
+            "Run Disk Check": "运行硬盘检查",
+            "Disk Check In Progress": "硬盘检查进行中",
             "First Aid…": "急救…",
             "Disk First Aid": "磁盘急救",
             "Required Confirmations": "必要确认",

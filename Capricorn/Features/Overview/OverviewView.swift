@@ -6,8 +6,10 @@ import SwiftUI
 struct OverviewView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
+    let diskCheckReport: DiskCheckReport?
+    let isDiskChecking: Bool
+    let runDiskCheck: () -> Void
     @Environment(\.appLanguage) private var language
-    @AppStorage(AppPreferences.Key.showsSmartSelfTestInterface) private var showsSmartSelfTestInterface = false
 
     var body: some View {
         ScrollView {
@@ -93,9 +95,11 @@ struct OverviewView: View {
                     }
                 }
 
-                if showsSmartSelfTestInterface {
-                    SelfTestOverviewSummary(snapshot: snapshot)
-                }
+                DiskCheckOverviewSummary(
+                    report: diskCheckReport,
+                    isRunning: isDiskChecking,
+                    run: runDiskCheck
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -142,68 +146,61 @@ private extension ProviderState {
     }
 }
 
-private struct SelfTestOverviewSummary: View {
-    let snapshot: SmartSnapshot?
+private struct DiskCheckOverviewSummary: View {
+    let report: DiskCheckReport?
+    let isRunning: Bool
+    let run: () -> Void
     @Environment(\.appLanguage) private var language
 
-    private var report: SmartSelfTestReport? { snapshot?.selfTestReport }
-
     var body: some View {
-        InfoPanel(title: language.t("Self-Tests"), symbol: "stethoscope") {
+        InfoPanel(title: language.t("Self-Check"), symbol: "doc.text.magnifyingglass") {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: statusSymbol)
                     .foregroundStyle(statusTint)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(statusTitle)
                         .font(.headline)
-                    Text(language.t("Open SMART to view full self-test details and run tests."))
+                    Text(language.t("Runs the same filesystem check as Check and Repair."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    if let latest = report?.latestEntry {
-                        Text("\(kindTitle(latest.kind)) · \(language.statusMessage(latest.status))")
+                    if let report {
+                        Text("\(report.completedEntryCount)/\(report.totalEntryCount) \(language.t("checks completed"))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
+                Button(action: run) {
+                    Label(
+                        language.t(isRunning ? "Checking" : "Run Disk Check"),
+                        systemImage: isRunning ? "hourglass" : "play.fill"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(isRunning)
             }
         }
     }
 
     private var statusTitle: String {
-        switch report?.state {
-        case .running: language.t("Self-Test In Progress")
-        case .passed: language.t("Last Self-Test Passed")
-        case .failed: language.t("Last Self-Test Failed")
-        case .aborted: language.t("Last Self-Test Aborted")
-        case .unknown: language.t("Last Self-Test Status Unknown")
-        default: language.t("No Self-Test Record")
+        if isRunning {
+            return language.t("Disk Check In Progress")
         }
+        guard let report else { return language.t("No Disk Check Record") }
+        return report.hasIssues
+            ? language.t("Disk Check Reported Issues")
+            : language.t("Last Disk Check Passed")
     }
 
     private var statusSymbol: String {
-        switch report?.state {
-        case .passed: "checkmark.circle.fill"
-        case .failed, .aborted: "exclamationmark.triangle.fill"
-        case .running: "hourglass"
-        default: "questionmark.circle"
-        }
+        if isRunning { return "hourglass" }
+        guard let report else { return "questionmark.circle" }
+        return report.hasIssues ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
     }
 
     private var statusTint: Color {
-        switch report?.state {
-        case .passed: .green
-        case .failed, .aborted: .orange
-        default: .secondary
-        }
-    }
-
-    private func kindTitle(_ kind: SmartSelfTestKind) -> String {
-        switch kind {
-        case .short: language.t("Quick")
-        case .long: language.t("Full")
-        case .vendor: language.t("Vendor")
-        case .unknown: language.t("Unknown")
-        }
+        if isRunning { return .blue }
+        guard let report else { return .secondary }
+        return report.hasIssues ? .orange : .green
     }
 }
