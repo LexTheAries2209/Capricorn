@@ -157,10 +157,13 @@ private struct DiskCheckOverviewSummary: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(statusTitle)
                         .font(.headline)
-                    Text(language.t("Runs the same filesystem check as Check and Repair."))
+                    Text(language.t("Run this check from the drive context menu: Check and Repair > Disk Self-Test."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     if let report {
+                        Text("\(language.t("Last checked")): \(formattedCheckDate(report.capturedAt))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         Text("\(report.completedEntryCount)/\(report.totalEntryCount) \(language.t("checks completed"))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -191,5 +194,15 @@ private struct DiskCheckOverviewSummary: View {
         if isRunning { return .blue }
         guard let report else { return .secondary }
         return report.hasIssues ? .orange : .green
+    }
+
+    private func formattedCheckDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: language.localeIdentifier)
+        formatter.timeZone = TimeZone(secondsFromGMT: language == .simplifiedChinese ? 8 * 60 * 60 : 0)
+        formatter.dateFormat = language == .simplifiedChinese
+            ? "yyyy年M月d日 HH:mm:ss 'UTC+8'"
+            : "yyyy-MM-dd HH:mm:ss 'UTC'"
+        return formatter.string(from: date)
     }
 }
