@@ -1170,24 +1170,99 @@ final class CapricornTests: XCTestCase {
         drive.isInternal = false
         drive.isSystemDisk = false
         drive.volumes = [
-            DriveDevice.Volume(deviceIdentifier: "disk9s1", name: "APFS", mountPoint: "/Volumes/APFS", sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "APFS"),
-            DriveDevice.Volume(deviceIdentifier: "disk9s2", name: "ExFAT", mountPoint: "/Volumes/EXFAT", sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "ExFAT"),
-            DriveDevice.Volume(deviceIdentifier: "disk9s3", name: "HFS", mountPoint: "/Volumes/HFS", sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "HFS+"),
-            DriveDevice.Volume(deviceIdentifier: "disk9s4", name: "FAT", mountPoint: "/Volumes/FAT", sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "FAT32")
+            DriveDevice.Volume(deviceIdentifier: "disk9s1", name: "APFS", mountPoint: nil, sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "APFS"),
+            DriveDevice.Volume(deviceIdentifier: "disk9s2", name: "ExFAT", mountPoint: nil, sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "ExFAT"),
+            DriveDevice.Volume(deviceIdentifier: "disk9s3", name: "HFS", mountPoint: nil, sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "HFS+"),
+            DriveDevice.Volume(deviceIdentifier: "disk9s4", name: "FAT", mountPoint: nil, sizeBytes: 1_000, isWritable: true, isSystem: false, fileSystemType: "FAT32")
         ]
 
         let report = await service.check(.detailed, drive: drive)
 
         XCTAssertEqual(report.mode, .detailed)
-        XCTAssertEqual(runner.calls.map(\.executable), ["/sbin/fsck_apfs", "/sbin/fsck_exfat", "/sbin/fsck_hfs", "/sbin/fsck_msdos"])
+        XCTAssertEqual(runner.calls.map(\.executable), [
+            "/usr/sbin/diskutil", "/sbin/fsck_apfs",
+            "/usr/sbin/diskutil", "/sbin/fsck_exfat",
+            "/usr/sbin/diskutil", "/sbin/fsck_hfs",
+            "/usr/sbin/diskutil", "/sbin/fsck_msdos"
+        ])
         XCTAssertEqual(runner.calls.map(\.arguments), [
+            ["info", "-plist", "disk9s1"],
             ["-n", "-x", "/dev/rdisk9s1"],
+            ["info", "-plist", "disk9s2"],
             ["-n", "-x", "/dev/rdisk9s2"],
+            ["info", "-plist", "disk9s3"],
             ["-n", "-x", "/dev/rdisk9s3"],
+            ["info", "-plist", "disk9s4"],
             ["-n", "/dev/rdisk9s4"]
         ])
         XCTAssertEqual(report.entries.count, 4)
         XCTAssertFalse(report.entries.contains(where: \.hasIssue))
+    }
+
+    func testDiskCheckServiceUnmountsMountedVolumeAndRestoresWritableMount() async throws {
+        let runner = RecordingDiskCheckRunner(
+            stdout: "APFS volume is consistent\n",
+            infoPlists: [
+                "disk9s1": Self.diskInfoPlist(mounted: true, readOnly: false)
+            ]
+        )
+        let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/APFS")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.volumes[0] = DriveDevice.Volume(
+            deviceIdentifier: "disk9s1",
+            name: "APFS",
+            mountPoint: "/Volumes/APFS",
+            sizeBytes: 1_000,
+            isWritable: true,
+            isSystem: false,
+            fileSystemType: "APFS"
+        )
+
+        let report = await service.check(.detailed, drive: drive)
+
+        XCTAssertEqual(runner.calls.map(\.arguments), [
+            ["info", "-plist", "disk9s1"],
+            ["unmount", "disk9s1"],
+            ["-n", "-x", "/dev/rdisk9s1"],
+            ["mount", "disk9s1"]
+        ])
+        XCTAssertFalse(report.entries[0].hasIssue)
+        XCTAssertTrue(report.entries[0].stderr.contains("Preflight: mounted=true, read-only=false."))
+        XCTAssertTrue(report.entries[0].stderr.contains("Restoring volume mount (read-only=false)."))
+    }
+
+    func testDiskCheckServiceRestoresReadOnlyMountAfterDetailedCheck() async throws {
+        let runner = RecordingDiskCheckRunner(
+            infoPlists: [
+                "disk9s1": Self.diskInfoPlist(mounted: true, readOnly: true)
+            ]
+        )
+        let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/APFS")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.volumes[0] = DriveDevice.Volume(
+            deviceIdentifier: "disk9s1",
+            name: "APFS",
+            mountPoint: "/Volumes/APFS",
+            sizeBytes: 1_000,
+            isWritable: false,
+            isSystem: false,
+            fileSystemType: "APFS"
+        )
+
+        let report = await service.check(.detailed, drive: drive)
+
+        XCTAssertEqual(runner.calls.map(\.arguments), [
+            ["info", "-plist", "disk9s1"],
+            ["unmount", "disk9s1"],
+            ["-n", "-x", "/dev/rdisk9s1"],
+            ["mount", "readOnly", "disk9s1"]
+        ])
+        XCTAssertFalse(report.entries[0].hasIssue)
+        XCTAssertTrue(report.entries[0].stderr.contains("Preflight: mounted=true, read-only=true."))
     }
 
     func testDiskCheckServiceReportsUnsupportedDetailedFileSystemsWithoutRunningCommand() async throws {
@@ -4552,6 +4627,16 @@ final class CapricornTests: XCTestCase {
         return drive
     }
 
+    static func diskInfoPlist(mounted: Bool, readOnly: Bool) -> String {
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <plist version="1.0"><dict>
+          <key>Mounted</key><\(mounted ? "true" : "false")/>
+          <key>ReadOnly</key><\(readOnly ? "true" : "false")/>
+        </dict></plist>
+        """
+    }
+
     static func fixtureSnapshot(for drive: DriveDevice) -> SmartSnapshot {
         SmartSnapshot(
             driveID: drive.id,
@@ -4971,12 +5056,19 @@ private final class RecordingDiskCheckRunner: DiskCheckCommandRunning, @unchecke
     private let stdout: String
     private let stderr: String
     private let terminationStatus: Int32
+    private let infoPlists: [String: String]
     private(set) var didCancel = false
 
-    init(stdout: String = "", stderr: String = "", terminationStatus: Int32 = 0) {
+    init(
+        stdout: String = "",
+        stderr: String = "",
+        terminationStatus: Int32 = 0,
+        infoPlists: [String: String] = [:]
+    ) {
         self.stdout = stdout
         self.stderr = stderr
         self.terminationStatus = terminationStatus
+        self.infoPlists = infoPlists
     }
 
     var calls: [RecordingCommandRunner.Call] {
@@ -4991,15 +5083,27 @@ private final class RecordingDiskCheckRunner: DiskCheckCommandRunning, @unchecke
     ) async throws -> CommandResult {
         recordedCalls.append(RecordingCommandRunner.Call(executable: executable, arguments: arguments))
 
-        if !stdout.isEmpty {
-            onStdout(stdout)
+        let commandStdout: String
+        if executable == "/usr/sbin/diskutil",
+           arguments.count == 3,
+           arguments[0] == "info",
+           arguments[1] == "-plist",
+           let volumeIdentifier = arguments.last {
+            commandStdout = infoPlists[volumeIdentifier]
+                ?? CapricornTests.diskInfoPlist(mounted: false, readOnly: false)
+        } else {
+            commandStdout = stdout
+        }
+
+        if !commandStdout.isEmpty {
+            onStdout(commandStdout)
         }
         if !stderr.isEmpty {
             onStderr(stderr)
         }
 
         return CommandResult(
-            stdout: Data(stdout.utf8),
+            stdout: Data(commandStdout.utf8),
             stderr: Data(stderr.utf8),
             terminationStatus: terminationStatus
         )

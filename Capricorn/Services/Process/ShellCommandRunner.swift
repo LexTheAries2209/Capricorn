@@ -631,6 +631,17 @@ final class DiskCheckService {
         var executable: String?
         var arguments: [String]
         var unsupportedMessage: String?
+        var volumeIdentifier: String? = nil
+    }
+
+    private enum DetailedCheckPreparation {
+        case ready(mountSession: MountSession?)
+        case failed(status: Int32?, message: String)
+    }
+
+    private struct MountSession {
+        var volumeIdentifier: String
+        var isReadOnly: Bool
     }
 
     private let runner: DiskCheckCommandRunning
@@ -708,6 +719,33 @@ final class DiskCheckService {
             }
 
             let streamedOutput = LockedDiskCheckOutput()
+            var mountSession: MountSession?
+            if mode == .detailed, let volumeIdentifier = plan.volumeIdentifier {
+                switch await prepareDetailedCheck(
+                    volumeIdentifier: volumeIdentifier,
+                    fallbackVolume: drive.volumes.first(where: { $0.deviceIdentifier == volumeIdentifier }),
+                    output: streamedOutput
+                ) {
+                case let .ready(session):
+                    mountSession = session
+                case let .failed(status, message):
+                    let snapshot = streamedOutput.snapshot
+                    updateEntry(
+                        entryID,
+                        in: &report,
+                        terminationStatus: status,
+                        stdout: snapshot.stdout,
+                        stderr: [snapshot.stderr, message]
+                            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                            .joined(separator: "\n"),
+                        isRunning: false
+                    )
+                    if let onUpdate {
+                        await onUpdate(report)
+                    }
+                    continue
+                }
+            }
             let completion = LockedDiskCheckCompletion()
             let commandRunner = runner
             let commandTask = Task {
@@ -731,22 +769,39 @@ final class DiskCheckService {
                     commandTask.cancel()
                     switch result {
                     case let .success(commandResult):
+                        var terminationStatus = commandResult.terminationStatus
+                        var snapshot = streamedOutput.snapshot
+                        let stdout = snapshot.stdout.isEmpty ? commandResult.stdoutString : snapshot.stdout
+                        let stderr = snapshot.stderr.isEmpty ? commandResult.stderrString : snapshot.stderr
+                        if let mountSession {
+                            let remountResult = await remountVolume(mountSession, output: streamedOutput)
+                            if let remountResult, remountResult.terminationStatus != 0, terminationStatus == 0 {
+                                terminationStatus = remountResult.terminationStatus
+                            } else if remountResult == nil, terminationStatus == 0 {
+                                terminationStatus = 1
+                            }
+                            snapshot = streamedOutput.snapshot
+                        }
                         updateEntry(
                             entryID,
                             in: &report,
-                            terminationStatus: commandResult.terminationStatus,
-                            stdout: commandResult.stdoutString,
-                            stderr: commandResult.stderrString,
+                            terminationStatus: terminationStatus,
+                            stdout: snapshot.stdout.isEmpty ? stdout : snapshot.stdout,
+                            stderr: snapshot.stderr.isEmpty ? stderr : snapshot.stderr,
                             isRunning: false
                         )
                     case let .failure(error):
                         let snapshot = streamedOutput.snapshot
+                        if let mountSession {
+                            _ = await remountVolume(mountSession, output: streamedOutput)
+                        }
+                        let finalSnapshot = streamedOutput.snapshot
                         updateEntry(
                             entryID,
                             in: &report,
                             terminationStatus: nil,
-                            stdout: snapshot.stdout,
-                            stderr: [snapshot.stderr, error.localizedDescription]
+                            stdout: finalSnapshot.stdout.isEmpty ? snapshot.stdout : finalSnapshot.stdout,
+                            stderr: [finalSnapshot.stderr, error.localizedDescription]
                                 .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                                 .joined(separator: "\n"),
                             isRunning: false
@@ -758,6 +813,9 @@ final class DiskCheckService {
                 if Task.isCancelled {
                     runner.cancel()
                     commandTask.cancel()
+                    if let mountSession {
+                        _ = await remountVolume(mountSession, output: streamedOutput)
+                    }
                     let snapshot = streamedOutput.snapshot
                     updateEntry(
                         entryID,
@@ -890,13 +948,13 @@ final class DiskCheckService {
 
             switch format {
             case "APFS":
-                return CommandPlan(title: "APFS Volume: \(volume.name)", executable: fsckAPFSPath, arguments: ["-n", "-x", rawDevice], unsupportedMessage: nil)
+                return CommandPlan(title: "APFS Volume: \(volume.name)", executable: fsckAPFSPath, arguments: ["-n", "-x", rawDevice], unsupportedMessage: nil, volumeIdentifier: volume.deviceIdentifier)
             case "HFS+":
-                return CommandPlan(title: "HFS+ Volume: \(volume.name)", executable: fsckHFSPath, arguments: ["-n", "-x", rawDevice], unsupportedMessage: nil)
+                return CommandPlan(title: "HFS+ Volume: \(volume.name)", executable: fsckHFSPath, arguments: ["-n", "-x", rawDevice], unsupportedMessage: nil, volumeIdentifier: volume.deviceIdentifier)
             case "ExFAT":
-                return CommandPlan(title: "ExFAT Volume: \(volume.name)", executable: fsckExFATPath, arguments: ["-n", "-x", rawDevice], unsupportedMessage: nil)
+                return CommandPlan(title: "ExFAT Volume: \(volume.name)", executable: fsckExFATPath, arguments: ["-n", "-x", rawDevice], unsupportedMessage: nil, volumeIdentifier: volume.deviceIdentifier)
             case "FAT32", "MS-DOS":
-                return CommandPlan(title: "FAT Volume: \(volume.name)", executable: fsckMSDOSPath, arguments: ["-n", rawDevice], unsupportedMessage: nil)
+                return CommandPlan(title: "FAT Volume: \(volume.name)", executable: fsckMSDOSPath, arguments: ["-n", rawDevice], unsupportedMessage: nil, volumeIdentifier: volume.deviceIdentifier)
             default:
                 return CommandPlan(
                     title: "\(format) Volume: \(volume.name)",
@@ -906,6 +964,138 @@ final class DiskCheckService {
                 )
             }
         }
+    }
+
+    private func prepareDetailedCheck(
+        volumeIdentifier: String,
+        fallbackVolume: DriveDevice.Volume?,
+        output: LockedDiskCheckOutput
+    ) async -> DetailedCheckPreparation {
+        let infoResult: CommandResult
+        do {
+            infoResult = try await runner.run(
+                diskutilPath,
+                arguments: ["info", "-plist", volumeIdentifier],
+                stdout: { _ in },
+                stderr: { _ in }
+            )
+        } catch {
+            return .failed(
+                status: nil,
+                message: "Unable to inspect whether the volume is mounted and read-only: \(error.localizedDescription)"
+            )
+        }
+
+        guard infoResult.terminationStatus == 0,
+              let propertyList = try? PropertyListSerialization.propertyList(
+                  from: infoResult.stdout,
+                  options: [],
+                  format: nil
+              ) as? [String: Any] else {
+            return .failed(
+                status: infoResult.terminationStatus,
+                message: "Unable to inspect whether the volume is mounted and read-only."
+            )
+        }
+
+        let isMounted = bool(in: propertyList, keys: ["Mounted"])
+            ?? (fallbackVolume?.mountPoint != nil)
+        let isReadOnly = readOnly(in: propertyList)
+            ?? !(fallbackVolume?.isWritable ?? true)
+
+        output.appendStderr(
+            "Preflight: mounted=\(isMounted), read-only=\(isReadOnly).\n"
+        )
+
+        guard isMounted else {
+            return .ready(mountSession: nil)
+        }
+
+        let unmountTarget = string(in: propertyList, keys: ["APFSContainerReference"])
+            ?? volumeIdentifier
+        let unmountArguments = unmountTarget == volumeIdentifier
+            ? ["unmount", volumeIdentifier]
+            : ["unmountDisk", unmountTarget]
+        guard let result = await runAuxiliary(
+            diskutilPath,
+            arguments: unmountArguments,
+            output: output
+        ) else {
+            return .failed(
+                status: nil,
+                message: "The mounted volume could not be unloaded, so the filesystem check was not started."
+            )
+        }
+        guard result.terminationStatus == 0 else {
+            return .failed(
+                status: result.terminationStatus,
+                message: "The mounted volume could not be unloaded, so the filesystem check was not started."
+            )
+        }
+
+        return .ready(mountSession: MountSession(
+            volumeIdentifier: volumeIdentifier,
+            isReadOnly: isReadOnly
+        ))
+    }
+
+    private func remountVolume(
+        _ session: MountSession,
+        output: LockedDiskCheckOutput
+    ) async -> CommandResult? {
+        let arguments = session.isReadOnly
+            ? ["mount", "readOnly", session.volumeIdentifier]
+            : ["mount", session.volumeIdentifier]
+        output.appendStderr(
+            "Restoring volume mount (read-only=\(session.isReadOnly)).\n"
+        )
+        return await runAuxiliary(diskutilPath, arguments: arguments, output: output)
+    }
+
+    private func runAuxiliary(
+        _ executable: String,
+        arguments: [String],
+        output: LockedDiskCheckOutput
+    ) async -> CommandResult? {
+        do {
+            return try await runner.run(
+                executable,
+                arguments: arguments,
+                stdout: { output.appendStdout($0) },
+                stderr: { output.appendStderr($0) }
+            )
+        } catch {
+            output.appendStderr(error.localizedDescription + "\n")
+            return nil
+        }
+    }
+
+    private func string(in dictionary: [String: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let value = dictionary[key] as? String,
+               !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private func bool(in dictionary: [String: Any], keys: [String]) -> Bool? {
+        for key in keys {
+            if let value = dictionary[key] as? Bool { return value }
+            if let value = dictionary[key] as? NSNumber { return value.boolValue }
+        }
+        return nil
+    }
+
+    private func readOnly(in dictionary: [String: Any]) -> Bool? {
+        if let value = bool(in: dictionary, keys: ["ReadOnly", "ReadOnlyVolume", "ReadOnlyMedia"]) {
+            return value
+        }
+        if let writable = bool(in: dictionary, keys: ["Writable", "WritableVolume"]) {
+            return !writable
+        }
+        return nil
     }
 
     private func uniqueVolumes(_ volumes: [DriveDevice.Volume]) -> [DriveDevice.Volume] {
