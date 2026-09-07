@@ -933,8 +933,7 @@ final class CapricornTests: XCTestCase {
     func testDiskCheckContentIsLocalized() {
         let expectedTranslations = [
             "Check and Repair": "检查与修复",
-            "Quick Check": "快速检查",
-            "System Check": "系统检查",
+            "Disk Self-Test": "硬盘自检",
             "First Aid…": "急救…",
             "Disk First Aid": "磁盘急救",
             "Required Confirmations": "必要确认",
@@ -1026,9 +1025,8 @@ final class CapricornTests: XCTestCase {
         drive.isSystemDisk = false
 
         XCTAssertTrue(DiskSidebarActionPolicy.actions(for: drive).contains(.checkLog))
-        XCTAssertTrue(DiskSidebarActionPolicy.actions(for: drive).contains(.detailedCheck))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
-        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
     }
 
     func testDiskSidebarActionPolicyGroupsCheckAndRepairActions() {
@@ -1038,11 +1036,11 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(
             DiskSidebarActionPolicy.checkAndRepairActions(for: physicalDrive),
-            [.checkLog, .detailedCheck, .firstAid]
+            [.checkLog, .firstAid]
         )
         XCTAssertFalse(
             DiskSidebarActionPolicy.actionsOutsideCheckAndRepair(for: physicalDrive)
-                .contains(where: { [.checkLog, .detailedCheck, .firstAid].contains($0) })
+                .contains(where: { [.checkLog, .firstAid].contains($0) })
         )
 
         var networkDrive = physicalDrive

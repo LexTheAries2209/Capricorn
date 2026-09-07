@@ -328,7 +328,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Eject": "推出",
         "View Open Files": "查看占用程序",
         "Check and Repair": "检查与修复",
-        "Quick Check": "快速检查",
+        "Disk Self-Test": "硬盘自检",
         "System Check": "系统检查",
         "Uses macOS system verification to check filesystem integrity safely.": "使用 macOS 系统验证安全检查文件系统完整性。",
         "First Aid…": "急救…",

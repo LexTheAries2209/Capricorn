@@ -374,7 +374,7 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
         case .forceUnmount: "Force Unmount"
         case .eject: "Eject"
         case .inspectOpenFiles: "View Open Files"
-        case .checkLog: "Quick Check"
+        case .checkLog: "Disk Self-Test"
         case .detailedCheck: "System Check"
         case .firstAid: "First Aid…"
         case .rename: "Rename Volume"
@@ -407,7 +407,7 @@ enum DiskSidebarActionPolicy {
         if drive.isNetwork {
             return [.mount, .unmount, .disconnect, .inspectOpenFiles]
         }
-        return [.checkLog, .detailedCheck, .firstAid, .mount, .unmount, .forceUnmount, .eject, .inspectOpenFiles, .rename, .revealInFinder, .refresh]
+        return [.checkLog, .firstAid, .mount, .unmount, .forceUnmount, .eject, .inspectOpenFiles, .rename, .revealInFinder, .refresh]
     }
 
     /// Actions that can inspect or repair a local filesystem. Keeping this
@@ -416,7 +416,7 @@ enum DiskSidebarActionPolicy {
     static func checkAndRepairActions(for drive: DriveDevice) -> [DiskSidebarAction] {
         actions(for: drive).filter {
             switch $0 {
-            case .checkLog, .detailedCheck, .firstAid:
+            case .checkLog, .firstAid:
                 true
             default:
                 false
@@ -427,7 +427,7 @@ enum DiskSidebarActionPolicy {
     static func actionsOutsideCheckAndRepair(for drive: DriveDevice) -> [DiskSidebarAction] {
         actions(for: drive).filter {
             switch $0 {
-            case .checkLog, .detailedCheck, .firstAid:
+            case .checkLog, .firstAid:
                 false
             default:
                 true
@@ -451,8 +451,10 @@ enum DiskSidebarActionPolicy {
             return !drive.isNetwork && (!drive.isInternal || drive.isRemovable || drive.isMemoryCard)
         case .inspectOpenFiles:
             return drive.primaryMountPoint != nil
-        case .checkLog, .detailedCheck:
+        case .checkLog:
             return !isProtectedInternalSystemDisk(drive) && !drive.isNetwork && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
+        case .detailedCheck:
+            return false
         case .firstAid:
             return !drive.isNetwork && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
         case .rename:
@@ -555,7 +557,7 @@ enum DiskCheckMode: String, CaseIterable, Codable, Hashable, Sendable {
 
     var titleKey: String {
         switch self {
-        case .ordinary: "Quick Check"
+        case .ordinary: "Disk Self-Test"
         case .detailed: "System Check"
         }
     }
