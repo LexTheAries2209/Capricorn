@@ -840,15 +840,18 @@ final class SmartSelfTestService: @unchecked Sendable {
     static let macOSNativeNVMeUnavailableMessage = "This NVMe drive reports self-test support, but smartctl on macOS cannot send Device Self-test command 0x14. Identify (0x06) and Get Log Page (0x02) remain available."
 
     private let smartctlProvider: SmartctlSmartProvider
+    private let runner: CommandRunning
     private let administratorRunner: CommandRunning
     private let commandCoordinator: SmartctlCommandCoordinator
 
     init(
         smartctlProvider: SmartctlSmartProvider = SmartctlSmartProvider(),
+        runner: CommandRunning = ShellCommandRunner(),
         administratorRunner: CommandRunning = AdministratorCommandRunner(),
         commandCoordinator: SmartctlCommandCoordinator = .shared
     ) {
         self.smartctlProvider = smartctlProvider
+        self.runner = runner
         self.administratorRunner = administratorRunner
         self.commandCoordinator = commandCoordinator
     }
@@ -913,9 +916,7 @@ final class SmartSelfTestService: @unchecked Sendable {
             fallback: drive.deviceNode,
             executable: executable
         )
-        let result = try await commandCoordinator.run { [self] in
-            try await self.administratorRunner.run(executable.path, arguments: arguments)
-        }
+        let result = try await runReadOnly(executable: executable.path, arguments: arguments)
         guard let capability = SmartctlParser.parseSelfTestCapability(result) else {
             throw SmartSelfTestServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
         }
@@ -926,6 +927,18 @@ final class SmartSelfTestService: @unchecked Sendable {
             throw SmartSelfTestServiceError.unsupported(Self.macOSNativeNVMeUnavailableMessage)
         }
         return capability
+    }
+
+    private func runReadOnly(executable: String, arguments: [String]) async throws -> CommandResult {
+        let result = try await commandCoordinator.run { [self] in
+            try await self.runner.run(executable, arguments: arguments)
+        }
+        guard SmartctlParser.requiresAdministrator(result) else {
+            return result
+        }
+        return try await commandCoordinator.run { [self] in
+            try await self.administratorRunner.run(executable, arguments: arguments)
+        }
     }
 
     func targetDescriptor(for drive: DriveDevice) async -> SmartctlTargetDescriptor? {
@@ -995,15 +1008,18 @@ enum SmartErrorLogServiceError: Error, LocalizedError, Sendable {
 /// self-tests so a bridge is never queried concurrently through two nodes.
 final class SmartErrorLogService: @unchecked Sendable {
     private let smartctlProvider: SmartctlSmartProvider
+    private let runner: CommandRunning
     private let administratorRunner: CommandRunning
     private let commandCoordinator: SmartctlCommandCoordinator
 
     init(
         smartctlProvider: SmartctlSmartProvider = SmartctlSmartProvider(),
+        runner: CommandRunning = ShellCommandRunner(),
         administratorRunner: CommandRunning = AdministratorCommandRunner(),
         commandCoordinator: SmartctlCommandCoordinator = .shared
     ) {
         self.smartctlProvider = smartctlProvider
+        self.runner = runner
         self.administratorRunner = administratorRunner
         self.commandCoordinator = commandCoordinator
     }
@@ -1024,13 +1040,23 @@ final class SmartErrorLogService: @unchecked Sendable {
             fallback: drive.deviceNode,
             executable: executable
         )
-        let result = try await commandCoordinator.run { [self] in
-            try await self.administratorRunner.run(executable.path, arguments: arguments)
-        }
+        let result = try await runReadOnly(executable: executable.path, arguments: arguments)
         guard let report = SmartctlParser.parseErrorLog(result) else {
             throw SmartErrorLogServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
         }
         return report
+    }
+
+    private func runReadOnly(executable: String, arguments: [String]) async throws -> CommandResult {
+        let result = try await commandCoordinator.run { [self] in
+            try await self.runner.run(executable, arguments: arguments)
+        }
+        guard SmartctlParser.requiresAdministrator(result) else {
+            return result
+        }
+        return try await commandCoordinator.run { [self] in
+            try await self.administratorRunner.run(executable, arguments: arguments)
+        }
     }
 
     private func executable(for drive: DriveDevice) throws -> SmartctlExecutableDescriptor {
@@ -1154,6 +1180,14 @@ enum SmartctlParser {
             return "The device could not be opened by smartctl."
         }
         return output.count > 500 ? String(output.prefix(500)) + "…" : output
+    }
+
+    static func requiresAdministrator(_ result: CommandResult) -> Bool {
+        let output = combinedOutput(result).lowercased()
+        return output.contains("permission denied")
+            || output.contains("operation not permitted")
+            || output.contains("not permitted")
+            || output.contains("eacces")
     }
 
     static func parseScan(_ data: Data) -> [ScanDevice]? {

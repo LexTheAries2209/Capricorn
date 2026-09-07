@@ -1770,7 +1770,7 @@ final class CapricornTests: XCTestCase {
         ])
         let service = SmartErrorLogService(
             smartctlProvider: Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: "")),
-            administratorRunner: runner,
+            runner: runner,
             commandCoordinator: SmartctlCommandCoordinator()
         )
 
@@ -1781,6 +1781,85 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(call.arguments.contains("-l"))
         XCTAssertTrue(call.arguments.contains("error"))
         XCTAssertTrue(call.arguments.contains("--json"))
+    }
+
+    func testSmartSelfTestCapabilityUsesOrdinaryRunnerBeforeAdministratorFallback() async throws {
+        let runner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(Self.smartctlATACapabilityFixture.utf8),
+                stderr: Data(),
+                terminationStatus: 0
+            )
+        ])
+        let adminRunner = SequencedCommandRunner(results: [])
+        let service = SmartSelfTestService(
+            smartctlProvider: Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: "")),
+            runner: runner,
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+        var drive = Self.fixtureDrive()
+        drive.protocolName = "ATA"
+
+        let capability = try await service.capability(for: drive)
+
+        XCTAssertTrue(capability.shortSupported)
+        XCTAssertEqual(runner.calls.count, 1)
+        XCTAssertTrue(adminRunner.calls.isEmpty)
+    }
+
+    func testSmartSelfTestCapabilityFallsBackToAdministratorOnlyForPermissionDenied() async throws {
+        let runner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(),
+                stderr: Data("smartctl: Permission denied".utf8),
+                terminationStatus: 1
+            )
+        ])
+        let adminRunner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(Self.smartctlATACapabilityFixture.utf8),
+                stderr: Data(),
+                terminationStatus: 0
+            )
+        ])
+        let service = SmartSelfTestService(
+            smartctlProvider: Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: "")),
+            runner: runner,
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+        var drive = Self.fixtureDrive()
+        drive.protocolName = "ATA"
+
+        let capability = try await service.capability(for: drive)
+
+        XCTAssertTrue(capability.longSupported)
+        XCTAssertEqual(runner.calls.count, 1)
+        XCTAssertEqual(adminRunner.calls.count, 1)
+    }
+
+    func testSmartErrorLogUsesOrdinaryRunnerBeforeAdministratorFallback() async throws {
+        let runner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(Self.smartctlEmptyErrorLogFixture.utf8),
+                stderr: Data(),
+                terminationStatus: 0
+            )
+        ])
+        let adminRunner = SequencedCommandRunner(results: [])
+        let service = SmartErrorLogService(
+            smartctlProvider: Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: "")),
+            runner: runner,
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+
+        let report = try await service.read(for: Self.fixtureDrive())
+
+        XCTAssertTrue(report.isSupported)
+        XCTAssertEqual(runner.calls.count, 1)
+        XCTAssertTrue(adminRunner.calls.isEmpty)
     }
 
     func testSmartErrorLogExportsCSVAndJSON() throws {
