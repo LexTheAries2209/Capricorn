@@ -2273,6 +2273,30 @@ final class CapricornTests: XCTestCase {
     }
 
     @MainActor
+    func testSelectingDriveDoesNotRequestSmartDiagnosticsAuthorization() {
+        let adminRunner = SequencedCommandRunner(results: [])
+        let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: ""))
+        let model = AppModel(
+            smartSelfTestService: SmartSelfTestService(
+                smartctlProvider: provider,
+                administratorRunner: adminRunner
+            ),
+            smartErrorLogService: SmartErrorLogService(
+                smartctlProvider: provider,
+                administratorRunner: adminRunner
+            )
+        )
+        let drive = Self.fixtureDrive()
+        model.drives = [drive]
+
+        model.selectDriveFromSidebar(drive.id)
+
+        XCTAssertEqual(model.smartSelfTestCapability(for: drive), .unknown)
+        XCTAssertEqual(model.smartErrorLogCapability(for: drive), .unknown)
+        XCTAssertTrue(adminRunner.calls.isEmpty)
+    }
+
+    @MainActor
     func testClearingSmartSelfTestMessageKeepsSessionState() {
         let model = AppModel()
         let failure = "Self-test command failed."
