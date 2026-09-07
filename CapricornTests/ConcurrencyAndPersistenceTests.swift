@@ -638,6 +638,50 @@ extension CapricornTests {
     }
 
     @MainActor
+    func testDiskCheckHistoryPersistsLatestReportBySerialAndClearsWithDriveHistory() throws {
+        let container = try ModelContainerFactory.makeInMemory()
+        let repository = HistoryRepository(modelContext: container.mainContext)
+        var drive = Self.fixtureDrive()
+        drive.serialNumber = "DISK-CHECK-SERIAL"
+        let firstDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let firstReport = DiskCheckReport(
+            mode: .ordinary,
+            driveID: drive.id,
+            driveName: drive.displayName,
+            capturedAt: firstDate,
+            entries: []
+        )
+
+        let firstRecord = try XCTUnwrap(repository.saveDiskCheckReport(drive: drive, report: firstReport))
+        var rediscoveredDrive = drive
+        rediscoveredDrive.bsdName = "disk99"
+        rediscoveredDrive.displayName = "Rediscovered Drive"
+        let secondDate = firstDate.addingTimeInterval(60)
+        let secondReport = DiskCheckReport(
+            mode: .detailed,
+            driveID: rediscoveredDrive.id,
+            driveName: rediscoveredDrive.displayName,
+            capturedAt: secondDate,
+            entries: []
+        )
+
+        let secondRecord = try XCTUnwrap(
+            repository.saveDiskCheckReport(drive: rediscoveredDrive, report: secondReport)
+        )
+        XCTAssertEqual(firstRecord.id, secondRecord.id)
+
+        let records = try container.mainContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>())
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.serialNumber, "DISK-CHECK-SERIAL")
+        XCTAssertEqual(records.first?.report?.mode, .detailed)
+        XCTAssertEqual(records.first?.report?.capturedAt, secondDate)
+
+        let counts = try repository.clearHistory(for: rediscoveredDrive)
+        XCTAssertEqual(counts.total, 1)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>()).isEmpty)
+    }
+
+    @MainActor
     func testHistoryRepositoryClearsHistoryRecordsWithoutRemovingTheContainer() throws {
         let container = try ModelContainerFactory.makeInMemory()
         let repository = HistoryRepository(modelContext: container.mainContext)
@@ -737,8 +781,8 @@ extension CapricornTests {
             "清理历史数据库"
         )
         XCTAssertEqual(
-            AppLanguage.simplifiedChinese.t("This permanently removes all SMART, benchmark, and live-activity history from the current database. It cannot be undone."),
-            "这会永久删除当前数据库中的所有 SMART、测速和实时活动历史记录，且无法撤销。"
+            AppLanguage.simplifiedChinese.t("This permanently removes all SMART, self-test, disk-check, benchmark, and live-activity history from the current database. It cannot be undone."),
+            "这会永久删除当前数据库中的所有 SMART、自检、硬盘检查、测速和实时活动历史记录，且无法撤销。"
         )
     }
 }

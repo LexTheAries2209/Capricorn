@@ -137,6 +137,7 @@ struct CapricornSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistoryRecords: [SmartHistoryRecord]
     @Query(sort: \SmartSelfTestHistoryRecord.capturedAt, order: .reverse) private var selfTestHistoryRecords: [SmartSelfTestHistoryRecord]
+    @Query(sort: \DiskCheckHistoryRecord.capturedAt, order: .reverse) private var diskCheckHistoryRecords: [DiskCheckHistoryRecord]
     @Query(sort: \BenchmarkHistoryRecord.measuredAt, order: .reverse) private var benchmarkHistoryRecords: [BenchmarkHistoryRecord]
     @Query(sort: \DiskActivityHistoryRecord.endedAt, order: .reverse) private var activityHistoryRecords: [DiskActivityHistoryRecord]
     @State private var historyDatabaseLocationError: String?
@@ -327,7 +328,7 @@ struct CapricornSettingsView: View {
             Text(
                 "\(language.t("Database Size")): \(formattedByteCount(statistics.sizeBytes))\n" +
                 "\(language.t("History Record Count")): \(statistics.recordCount)\n\n" +
-                language.t("This permanently removes all SMART, self-test, benchmark, and live-activity history from the current database. It cannot be undone.")
+                language.t("This permanently removes all SMART, self-test, disk-check, benchmark, and live-activity history from the current database. It cannot be undone.")
             )
         }
     }
@@ -341,6 +342,7 @@ struct CapricornSettingsView: View {
     private var historyRecordCount: Int {
         smartHistoryRecords.count
             + selfTestHistoryRecords.count
+            + diskCheckHistoryRecords.count
             + benchmarkHistoryRecords.count
             + activityHistoryRecords.count
     }

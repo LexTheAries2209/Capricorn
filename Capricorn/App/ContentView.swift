@@ -13,6 +13,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistory: [SmartHistoryRecord]
     @Query(sort: \SmartSelfTestHistoryRecord.capturedAt, order: .reverse) private var selfTestHistory: [SmartSelfTestHistoryRecord]
+    @Query(sort: \DiskCheckHistoryRecord.capturedAt, order: .reverse) private var diskCheckHistory: [DiskCheckHistoryRecord]
     @Query(sort: \BenchmarkHistoryRecord.measuredAt, order: .reverse) private var benchmarkHistory: [BenchmarkHistoryRecord]
     @Query(sort: \DiskActivityHistoryRecord.endedAt, order: .reverse) private var activityHistory: [DiskActivityHistoryRecord]
     @MainActor
@@ -100,6 +101,7 @@ struct ContentView: View {
             viewModel.startDriveSystemEventMonitoring()
             viewModel.showVirtualDisks = preferences.showVirtualDisks
             await viewModel.refreshIfNeeded()
+            restoreDiskCheckReports()
         }
         .task(id: preferences.automaticRefreshInterval) {
             await viewModel.runAutomaticRefresh(every: preferences.automaticRefreshInterval)
@@ -111,6 +113,30 @@ struct ContentView: View {
         .onChange(of: preferences.showVirtualDisks) {
             guard viewModel.showVirtualDisks != preferences.showVirtualDisks else { return }
             viewModel.showVirtualDisks = preferences.showVirtualDisks
+        }
+        .onChange(of: viewModel.drives.map(\.id)) {
+            restoreDiskCheckReports()
+        }
+        .onChange(of: diskCheckHistory.map(\.id)) {
+            restoreDiskCheckReports()
+        }
+        .onChange(of: viewModel.isDiskChecking) {
+            guard !viewModel.isDiskChecking,
+                  let report = viewModel.diskCheckReport,
+                  let drive = viewModel.drives.first(where: { $0.id == report.driveID }) else {
+                return
+            }
+            do {
+                _ = try HistoryRepository(modelContext: modelContext).saveDiskCheckReport(
+                    drive: drive,
+                    report: report
+                )
+            } catch {
+                viewModel.refreshMessage = UserFacingError.message(
+                    "Could not save disk check history.",
+                    error: error
+                )
+            }
         }
         .onChange(of: viewModel.completedSmartSelfTest?.id) {
             guard let completion = viewModel.completedSmartSelfTest else { return }
@@ -181,6 +207,17 @@ struct ContentView: View {
         )) {
             DiskFirstAidSheet(viewModel: viewModel, language: language)
         }
+    }
+
+    private func restoreDiskCheckReports() {
+        let reportsBySerial = diskCheckHistory.reduce(into: [String: DiskCheckReport]()) { result, record in
+            guard let serialNumber = HistoryDriveMatcher.normalize(record.serialNumber),
+                  let report = record.report else {
+                return
+            }
+            result[serialNumber] = report
+        }
+        viewModel.restoreDiskCheckReports(from: reportsBySerial)
     }
 
     private var sidebar: some View {

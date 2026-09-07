@@ -121,6 +121,34 @@ final class SmartSelfTestHistoryRecord {
 }
 
 @Model
+final class DiskCheckHistoryRecord {
+    @Attribute(.unique) var id: UUID
+    var serialNumber: String?
+    var driveName: String
+    var capturedAt: Date
+    var encodedReport: Data?
+    var hiddenAt: Date?
+
+    init(drive: DriveDevice, report: DiskCheckReport) {
+        self.id = UUID()
+        self.serialNumber = HistoryDriveMatcher.normalize(drive.serialNumber)
+        self.driveName = drive.displayName
+        self.capturedAt = report.capturedAt
+        self.encodedReport = try? JSONEncoder.dit.encode(report)
+        self.hiddenAt = nil
+    }
+
+    var report: DiskCheckReport? {
+        guard let encodedReport else { return nil }
+        return try? JSONDecoder.dit.decode(DiskCheckReport.self, from: encodedReport)
+    }
+
+    var volumeUUIDs: [String] {
+        []
+    }
+}
+
+@Model
 final class BenchmarkHistoryRecord {
     @Attribute(.unique) var id: UUID
     var serialNumber: String?
@@ -252,6 +280,7 @@ struct HistoryClearCounts: Equatable, Sendable {
 
 extension SmartHistoryRecord: HistoryDisplayRecord {}
 extension SmartSelfTestHistoryRecord: HistoryDisplayRecord {}
+extension DiskCheckHistoryRecord: HistoryDisplayRecord {}
 extension BenchmarkHistoryRecord: HistoryDisplayRecord {}
 extension DiskActivityHistoryRecord: HistoryDisplayRecord {}
 

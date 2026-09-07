@@ -579,7 +579,7 @@ extension DiskCheckMode {
     }
 }
 
-struct DiskCheckEntry: Identifiable, Hashable, Sendable {
+struct DiskCheckEntry: Identifiable, Codable, Hashable, Sendable {
     var id = UUID()
     var title: String
     var executable: String?
@@ -605,7 +605,7 @@ struct DiskCheckEntry: Identifiable, Hashable, Sendable {
     }
 }
 
-struct DiskCheckReport: Identifiable, Hashable, Sendable {
+struct DiskCheckReport: Identifiable, Codable, Hashable, Sendable {
     var id = UUID()
     var mode: DiskCheckMode
     var driveID: String

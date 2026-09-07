@@ -34,9 +34,26 @@ enum CapricornSchemaV3: VersionedSchema {
     }
 }
 
+enum CapricornSchemaV4: VersionedSchema {
+    static var versionIdentifier: Schema.Version {
+        Schema.Version(4, 0, 0)
+    }
+
+    static var models: [any PersistentModel.Type] {
+        [
+            SmartHistoryRecord.self,
+            SmartSelfTestHistoryRecord.self,
+            DiskCheckHistoryRecord.self,
+            BenchmarkHistoryRecord.self,
+            DiskActivityHistoryRecord.self,
+            AppSettingsRecord.self
+        ]
+    }
+}
+
 enum CapricornMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [CapricornSchemaV2.self, CapricornSchemaV3.self]
+        [CapricornSchemaV2.self, CapricornSchemaV3.self, CapricornSchemaV4.self]
     }
 
     static var stages: [MigrationStage] {
@@ -44,6 +61,10 @@ enum CapricornMigrationPlan: SchemaMigrationPlan {
             .lightweight(
                 fromVersion: CapricornSchemaV2.self,
                 toVersion: CapricornSchemaV3.self
+            ),
+            .lightweight(
+                fromVersion: CapricornSchemaV3.self,
+                toVersion: CapricornSchemaV4.self
             )
         ]
     }
@@ -88,7 +109,7 @@ enum ModelContainerFactory {
     }
 
     static func makePersistent(at url: URL) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CapricornSchemaV3.self)
+        let schema = Schema(versionedSchema: CapricornSchemaV4.self)
         let configuration = ModelConfiguration(
             "Capricorn",
             schema: schema,
@@ -103,7 +124,7 @@ enum ModelContainerFactory {
     }
 
     private static func make(isStoredInMemoryOnly: Bool) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: CapricornSchemaV3.self)
+        let schema = Schema(versionedSchema: CapricornSchemaV4.self)
         let configuration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: isStoredInMemoryOnly
@@ -149,6 +170,31 @@ final class HistoryRepository {
         modelContext.insert(record)
         try modelContext.save()
         CapricornLog.persistence.info("SMART self-test history saved")
+        return record
+    }
+
+    @discardableResult
+    func saveDiskCheckReport(
+        drive: DriveDevice,
+        report: DiskCheckReport
+    ) throws -> DiskCheckHistoryRecord? {
+        guard let serialNumber = HistoryDriveMatcher.normalize(drive.serialNumber) else {
+            CapricornLog.persistence.info("Disk check history skipped because the drive has no serial number")
+            return nil
+        }
+
+        let existing = try modelContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>())
+            .first { HistoryDriveMatcher.normalize($0.serialNumber) == serialNumber }
+        let record = existing ?? DiskCheckHistoryRecord(drive: drive, report: report)
+        record.serialNumber = serialNumber
+        record.driveName = drive.displayName
+        record.capturedAt = report.capturedAt
+        record.encodedReport = try JSONEncoder.dit.encode(report)
+        if existing == nil {
+            modelContext.insert(record)
+        }
+        try modelContext.save()
+        CapricornLog.persistence.info("Disk check history saved")
         return record
     }
 
@@ -211,21 +257,24 @@ final class HistoryRepository {
     /// Removes every user-facing history record from the current SwiftData
     /// store while leaving the store itself, application settings, and schema
     /// metadata intact. This is intentionally a cache operation: the next
-    /// SMART, benchmark, or live-activity save can use the same container.
+    /// SMART, self-test, disk-check, benchmark, or live-activity save can use
+    /// the same container.
     @discardableResult
     func clearAllHistory() throws -> Int {
         let smartRecords = try modelContext.fetch(FetchDescriptor<SmartHistoryRecord>())
         let selfTestRecords = try modelContext.fetch(FetchDescriptor<SmartSelfTestHistoryRecord>())
+        let diskCheckRecords = try modelContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>())
         let benchmarkRecords = try modelContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>())
         let activityRecords = try modelContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>())
 
         smartRecords.forEach(modelContext.delete)
         selfTestRecords.forEach(modelContext.delete)
+        diskCheckRecords.forEach(modelContext.delete)
         benchmarkRecords.forEach(modelContext.delete)
         activityRecords.forEach(modelContext.delete)
         try modelContext.save()
 
-        let count = smartRecords.count + selfTestRecords.count + benchmarkRecords.count + activityRecords.count
+        let count = smartRecords.count + selfTestRecords.count + diskCheckRecords.count + benchmarkRecords.count + activityRecords.count
         CapricornLog.persistence.info("History cache cleared: \(count) records")
         return count
     }
@@ -239,6 +288,8 @@ final class HistoryRepository {
             .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
         let selfTestRecords = try modelContext.fetch(FetchDescriptor<SmartSelfTestHistoryRecord>())
             .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
+        let diskCheckRecords = try modelContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>())
+            .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
         let benchmarkRecords = try modelContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>())
             .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
         let activityRecords = try modelContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>())
@@ -246,16 +297,19 @@ final class HistoryRepository {
 
         let visibleCount = smartRecords.filter { $0.hiddenAt == nil }.count
             + selfTestRecords.filter { $0.hiddenAt == nil }.count
+            + diskCheckRecords.filter { $0.hiddenAt == nil }.count
             + benchmarkRecords.filter { $0.hiddenAt == nil }.count
             + activityRecords.filter { $0.hiddenAt == nil }.count
         let hiddenCount = smartRecords.filter { $0.hiddenAt != nil }.count
             + selfTestRecords.filter { $0.hiddenAt != nil }.count
+            + diskCheckRecords.filter { $0.hiddenAt != nil }.count
             + benchmarkRecords.filter { $0.hiddenAt != nil }.count
             + activityRecords.filter { $0.hiddenAt != nil }.count
         let counts = HistoryClearCounts(visible: visibleCount, hidden: hiddenCount)
 
         smartRecords.forEach(modelContext.delete)
         selfTestRecords.forEach(modelContext.delete)
+        diskCheckRecords.forEach(modelContext.delete)
         benchmarkRecords.forEach(modelContext.delete)
         activityRecords.forEach(modelContext.delete)
         try modelContext.save()
@@ -272,14 +326,17 @@ final class HistoryRepository {
             .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
         let selfTestRecords = try modelContext.fetch(FetchDescriptor<SmartSelfTestHistoryRecord>())
             .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
+        let diskCheckRecords = try modelContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>())
+            .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
         let benchmarkRecords = try modelContext.fetch(FetchDescriptor<BenchmarkHistoryRecord>())
             .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
         let activityRecords = try modelContext.fetch(FetchDescriptor<DiskActivityHistoryRecord>())
             .filter { $0.hiddenAt != nil && HistoryDriveMatcher.matches(record: $0, drive: drive) }
 
-        let count = smartRecords.count + selfTestRecords.count + benchmarkRecords.count + activityRecords.count
+        let count = smartRecords.count + selfTestRecords.count + diskCheckRecords.count + benchmarkRecords.count + activityRecords.count
         smartRecords.forEach(modelContext.delete)
         selfTestRecords.forEach(modelContext.delete)
+        diskCheckRecords.forEach(modelContext.delete)
         benchmarkRecords.forEach(modelContext.delete)
         activityRecords.forEach(modelContext.delete)
         try modelContext.save()

@@ -250,7 +250,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Open History Database Location": "打开历史数据库位置",
         "Unable to open the history database location.": "无法打开历史数据库位置。",
         "Clear History Database": "清理历史数据库",
-        "This permanently removes all SMART, self-test, benchmark, and live-activity history from the current database. It cannot be undone.": "这会永久删除当前数据库中的所有 SMART、自检、测速和实时活动历史记录，且无法撤销。",
+        "This permanently removes all SMART, self-test, disk-check, benchmark, and live-activity history from the current database. It cannot be undone.": "这会永久删除当前数据库中的所有 SMART、自检、硬盘检查、测速和实时活动历史记录，且无法撤销。",
         "History database cleared.": "历史数据库已清理。",
         "records removed.": "条记录已删除。",
         "Unable to clear the history database.": "无法清理历史数据库。",
