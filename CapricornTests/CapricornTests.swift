@@ -2874,19 +2874,19 @@ final class CapricornTests: XCTestCase {
         var snapshot = Self.fixtureSnapshot(for: drive)
         let evaluator = DriveHealthEvaluator()
 
-        for temperature in [60.0, 79.9, 80.0, 100.0] {
+        for temperature in [70.0, 84.9, 85.0, 100.0] {
             snapshot.temperatureCelsius = temperature
             XCTAssertEqual(evaluator.evaluate(drive: drive, snapshot: snapshot), .good, "\(temperature) C")
         }
     }
 
     func testDriveTemperatureLevelUsesSmartAttributeThresholds() {
-        XCTAssertEqual(DriveTemperatureLevel(celsius: 59.9), .normal)
-        XCTAssertEqual(DriveTemperatureLevel(celsius: 60), .elevated)
-        XCTAssertEqual(DriveTemperatureLevel(celsius: 79.9), .elevated)
-        XCTAssertEqual(DriveTemperatureLevel(celsius: 80), .critical)
-        XCTAssertEqual(DriveTemperatureLevel(celsius: 60).healthStatus, .warning)
-        XCTAssertEqual(DriveTemperatureLevel(celsius: 80).healthStatus, .failed)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 69.9), .normal)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 70), .elevated)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 84.9), .elevated)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 85), .critical)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 70).healthStatus, .warning)
+        XCTAssertEqual(DriveTemperatureLevel(celsius: 85).healthStatus, .failed)
     }
 
     func testHealthEvaluatorIgnoresErrorLogAttributeForOverallHealth() {

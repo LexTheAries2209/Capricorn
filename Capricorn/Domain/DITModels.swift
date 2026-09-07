@@ -52,9 +52,9 @@ enum DriveTemperatureLevel: String, Sendable {
     case critical
 
     init(celsius: Double) {
-        if celsius >= 80 {
+        if celsius >= 85 {
             self = .critical
-        } else if celsius >= 60 {
+        } else if celsius >= 70 {
             self = .elevated
         } else {
             self = .normal
