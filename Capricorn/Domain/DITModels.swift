@@ -375,7 +375,7 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
         case .eject: "Eject"
         case .inspectOpenFiles: "View Open Files"
         case .checkLog: "Quick Check"
-        case .detailedCheck: "Deep Check"
+        case .detailedCheck: "System Check"
         case .firstAid: "First Aid…"
         case .rename: "Rename Volume"
         case .revealInFinder: "Reveal in Finder"
@@ -556,14 +556,14 @@ enum DiskCheckMode: String, CaseIterable, Codable, Hashable, Sendable {
     var titleKey: String {
         switch self {
         case .ordinary: "Quick Check"
-        case .detailed: "Deep Check"
+        case .detailed: "System Check"
         }
     }
 
     var descriptionKey: String {
         switch self {
         case .ordinary: "Runs diskutil verification and shows the complete system log."
-        case .detailed: "Runs read-only filesystem-specific fsck checks where macOS provides a checker."
+        case .detailed: "Checks filesystem integrity with read-only fsck after safely handling mounted volumes."
         }
     }
 }

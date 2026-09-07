@@ -296,7 +296,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "View Open Files": "查看占用程序",
         "Check and Repair": "检查与修复",
         "Quick Check": "快速检查",
-        "Deep Check": "深度检查",
+        "System Check": "系统检查",
         "First Aid…": "急救…",
         "Disk First Aid": "磁盘急救",
         "Preparing First Aid": "正在准备磁盘急救",

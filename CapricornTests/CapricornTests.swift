@@ -930,11 +930,11 @@ final class CapricornTests: XCTestCase {
         )
     }
 
-    func testFirstAidContentIsLocalized() {
+    func testDiskCheckContentIsLocalized() {
         let expectedTranslations = [
             "Check and Repair": "检查与修复",
             "Quick Check": "快速检查",
-            "Deep Check": "深度检查",
+            "System Check": "系统检查",
             "First Aid…": "急救…",
             "Disk First Aid": "磁盘急救",
             "Required Confirmations": "必要确认",
