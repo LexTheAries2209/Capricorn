@@ -631,6 +631,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "This permanently removes hidden history for the selected drive.": "这会永久删除所选硬盘的已隐藏历史记录，且无法撤销。",
         "Could not clear history.": "无法清理历史记录。",
         "Health": "健康",
+        "Check": "检查",
+        "Historical controller error entries require inspection; they do not change overall disk health.": "历史控制器错误条目需要检查，但不会改变磁盘整体健康状态。",
         "Detected": "已检测",
         "Not detected": "未检测",
         "Refresh": "刷新",

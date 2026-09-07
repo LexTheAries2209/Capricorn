@@ -1683,6 +1683,22 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(written?.rawValue.contains("TB") == true)
     }
 
+    func testSmartctlErrorLogCountIsCheckOnlyAndNeverWarning() {
+        let fixture = Self.smartctlNVMeFixture.replacingOccurrences(
+            of: #""num_err_log_entries": 0"#,
+            with: #""num_err_log_entries": 1"#
+        )
+        let snapshot = SmartctlParser.parseSnapshot(
+            Data(fixture.utf8),
+            drive: Self.fixtureDrive(),
+            providerName: "smartctl",
+            exitStatus: 0
+        )
+        let errorLog = snapshot.attributes.first(where: { $0.id == "nvme.num_err_log_entries" })
+        XCTAssertEqual(errorLog?.status, .good)
+        XCTAssertEqual(DriveHealthEvaluator().evaluate(drive: Self.fixtureDrive(), snapshot: snapshot), .good)
+    }
+
     func testSmartctlATAParserExtractsStructuredSelfTestLog() {
         let drive = Self.fixtureDrive()
         let snapshot = SmartctlParser.parseSnapshot(
@@ -1735,7 +1751,7 @@ final class CapricornTests: XCTestCase {
         )
         let nvme = try XCTUnwrap(SmartctlParser.parseErrorLog(nvmeResult))
         XCTAssertTrue(nvme.isSupported)
-        XCTAssertEqual(nvme.totalEntryCount, 2)
+        XCTAssertEqual(nvme.totalEntryCount, 1)
         XCTAssertEqual(nvme.entries.count, 1)
         XCTAssertEqual(nvme.entries.first?.errorNumber, 7)
         XCTAssertEqual(nvme.entries.first?.namespaceID, 1)
@@ -1761,6 +1777,18 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(emptyReport.isSupported)
         XCTAssertEqual(emptyReport.totalEntryCount, 0)
         XCTAssertTrue(emptyReport.entries.isEmpty)
+
+        let healthOnly = CommandResult(
+            stdout: Data("""
+            {
+              "smartctl": {"exit_status": 0},
+              "nvme_smart_health_information_log": {"num_err_log_entries": 1}
+            }
+            """.utf8),
+            stderr: Data(),
+            terminationStatus: 0
+        )
+        XCTAssertNil(SmartctlParser.parseErrorLog(healthOnly))
     }
 
     func testSmartErrorLogServiceUsesErrorLogJSONCommand() async throws {
@@ -1862,6 +1890,60 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertTrue(report.isSupported)
         XCTAssertEqual(runner.calls.count, 1)
+        XCTAssertTrue(adminRunner.calls.isEmpty)
+    }
+
+    func testSmartErrorLogFallsBackToAdministratorForIOKitOpenFailure() async throws {
+        let runner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(),
+                stderr: Data("Smartctl open device failed: IOCreatePlugInInterfaceForService failed".utf8),
+                terminationStatus: 2
+            )
+        ])
+        let adminRunner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(Self.smartctlEmptyErrorLogFixture.utf8),
+                stderr: Data(),
+                terminationStatus: 0
+            )
+        ])
+        let service = SmartErrorLogService(
+            smartctlProvider: Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: "")),
+            runner: runner,
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+
+        let report = try await service.read(for: Self.fixtureDrive())
+
+        XCTAssertTrue(report.isSupported)
+        XCTAssertEqual(runner.calls.count, 1)
+        XCTAssertEqual(adminRunner.calls.count, 1)
+    }
+
+    func testSmartErrorLogDoesNotUseAdministratorForGetLogPageFailure() async throws {
+        let runner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(),
+                stderr: Data("Read 1 entries from Error Information Log failed: GetLogPage failed: system=0x38".utf8),
+                terminationStatus: 4
+            )
+        ])
+        let adminRunner = SequencedCommandRunner(results: [])
+        let service = SmartErrorLogService(
+            smartctlProvider: Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: "")),
+            runner: runner,
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+
+        do {
+            _ = try await service.read(for: Self.fixtureDrive())
+            XCTFail("Expected the driver/target error to be reported")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("GetLogPage failed"))
+        }
         XCTAssertTrue(adminRunner.calls.isEmpty)
     }
 

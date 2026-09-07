@@ -401,6 +401,12 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
     ) {
         guard let value = combinedValue(prefix: prefix, keys: keys) else { return }
         let raw = multiplier == 1 ? "\(value)" : formatSmartDataUnits(value, unitBytes: multiplier)
+        // A controller error-log count is historical evidence for inspection,
+        // not a SMART health failure. The table presents it as a blue check
+        // action while the drive-health evaluator excludes it from health.
+        let status: HealthStatus = prefix == "NUM_ERROR_INFO_LOG_ENTRIES"
+            ? .good
+            : (value == 0 || !prefix.contains("ERROR") ? .good : .warning)
         attributes.append(SmartAttribute(
             id: prefix,
             name: name,
@@ -408,7 +414,7 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
             current: nil,
             worst: nil,
             threshold: nil,
-            status: value == 0 || !prefix.contains("ERROR") ? .good : .warning,
+            status: status,
             source: providerName
         ))
     }
@@ -1042,7 +1048,9 @@ final class SmartErrorLogService: @unchecked Sendable {
         )
         let result = try await runReadOnly(executable: executable.path, arguments: arguments)
         guard let report = SmartctlParser.parseErrorLog(result) else {
-            throw SmartErrorLogServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
+            throw SmartErrorLogServiceError.commandFailed(
+                SmartctlParser.commandFailureMessage(result, fallback: "SMART error-log command failed.")
+            )
         }
         return report
     }
@@ -1137,9 +1145,20 @@ enum SmartctlParser {
         let exitStatus = root.dictionary("smartctl").int("exit_status") ?? Int(result.terminationStatus)
         guard exitStatus & 0x03 == 0 else { return nil }
 
+        // The NVMe health page contains a lifetime counter named
+        // `num_err_log_entries`, but it is not the error-information log
+        // payload. Require the dedicated ATA/NVMe log object so a health-only
+        // response cannot be reported as a successfully read log.
+        let ataLogValue = root["ata_smart_error_log"]
+        let extendedATAlogValue = root["ata_smart_extended_comprehensive_error_log"]
+        let nvmeLogValue = root["nvme_error_information_log"] ?? root["nvme_error_log"]
+        guard ataLogValue != nil || extendedATAlogValue != nil || nvmeLogValue != nil else {
+            return nil
+        }
+
         let ataLog = root.dictionary("ata_smart_error_log")
         let extendedATAlog = root.dictionary("ata_smart_extended_comprehensive_error_log")
-        let nvmeLog = root["nvme_error_information_log"] ?? root["nvme_error_log"]
+        let nvmeLog = nvmeLogValue
         let items = errorLogItems(in: ataLog)
             + errorLogItems(in: extendedATAlog)
             + errorLogItems(in: nvmeLog)
@@ -1148,7 +1167,6 @@ enum SmartctlParser {
         }
         let reportedCount = ataLog.dictionary("summary").int("count")
             ?? extendedATAlog.dictionary("summary").int("count")
-            ?? root.dictionary("nvme_smart_health_information_log").int("num_err_log_entries")
         let totalCount = reportedCount ?? entries.count
         return SmartErrorLogReport(
             isSupported: true,
@@ -1161,7 +1179,10 @@ enum SmartctlParser {
         )
     }
 
-    static func commandFailureMessage(_ result: CommandResult) -> String {
+    static func commandFailureMessage(
+        _ result: CommandResult,
+        fallback: String = "SMART self-test command failed."
+    ) -> String {
         if let root = commandJSONRoot(result) {
             if let openError = root.string("open_error") {
                 return friendlyOpenError(openError)
@@ -1172,7 +1193,7 @@ enum SmartctlParser {
             }
         }
         let output = combinedOutput(result).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !output.isEmpty else { return "SMART self-test command failed." }
+        guard !output.isEmpty else { return fallback }
         if output.localizedCaseInsensitiveContains("NVMe admin command 0x14 is not supported") {
             return SmartSelfTestService.macOSNativeNVMeUnavailableMessage
         }
@@ -1184,10 +1205,17 @@ enum SmartctlParser {
 
     static func requiresAdministrator(_ result: CommandResult) -> Bool {
         let output = combinedOutput(result).lowercased()
+        // macOS may report a device-node permission failure as an IOKit
+        // plugin-open error instead of the literal "Permission denied".
+        // Retry those open failures with the existing one-shot authorization
+        // runner, but do not retry GetLogPage/device-protocol failures: those
+        // indicate a wrong target or unsupported driver path, not privileges.
         return output.contains("permission denied")
             || output.contains("operation not permitted")
             || output.contains("not permitted")
             || output.contains("eacces")
+            || output.contains("iocreateplugininterfaceforservice failed")
+            || (output.contains("smartctl open device") && output.contains("failed"))
     }
 
     static func parseScan(_ data: Data) -> [ScanDevice]? {
@@ -1724,7 +1752,10 @@ enum SmartctlParser {
             } else {
                 rawValue = value
             }
-            let warningKeys: Set<String> = ["critical_warning", "media_errors", "num_err_log_entries"]
+            // Error-log count is historical diagnostic information. It is
+            // surfaced as a check-only indicator in the SMART table and must
+            // not downgrade the drive's overall health state.
+            let warningKeys: Set<String> = ["critical_warning", "media_errors"]
             attributes.append(SmartAttribute(
                 id: "nvme.\(key)",
                 name: name,

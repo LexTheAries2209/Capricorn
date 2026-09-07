@@ -182,7 +182,7 @@ struct SmartAttributesView: View {
                     .width(62)
                 TableColumn(language.t("Threshold")) { Text($0.threshold.map(String.init) ?? "-").help(language.t(normalizedValueHelp)) }
                     .width(72)
-                TableColumn(language.t("Status")) { HealthBadge(status: $0.status, compact: true).fixedSize() }
+                TableColumn(language.t("Status")) { smartAttributeStatusBadge($0).fixedSize() }
                     .width(82)
                 TableColumn(language.t("Source")) { Text($0.source) }
                     .width(92)
@@ -197,7 +197,7 @@ struct SmartAttributesView: View {
                 .width(min: 220, ideal: 320)
                 TableColumn(language.t("Raw")) { Text($0.rawValue).monospacedDigit() }
                     .width(min: 140, ideal: 180)
-                TableColumn(language.t("Status")) { HealthBadge(status: $0.status, compact: true).fixedSize() }
+                TableColumn(language.t("Status")) { smartAttributeStatusBadge($0).fixedSize() }
                     .width(82)
                 TableColumn(language.t("Source")) { Text($0.source) }
                     .width(92)
@@ -207,6 +207,34 @@ struct SmartAttributesView: View {
 
     private var normalizedValueHelp: String {
         "Current, worst, and threshold are ATA normalized health values. NVMe and native macOS SMART usually do not provide them."
+    }
+
+    @ViewBuilder
+    private func smartAttributeStatusBadge(_ attribute: SmartAttribute) -> some View {
+        if isErrorLogAttribute(attribute), errorLogEntryCount(attribute) >= 1 {
+            Label(language.t("Check"), systemImage: "magnifyingglass")
+                .font(.caption.bold())
+                .foregroundStyle(.blue)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.blue.opacity(0.12), in: Capsule())
+                .help(language.t("Historical controller error entries require inspection; they do not change overall disk health."))
+        } else {
+            HealthBadge(status: attribute.status, compact: true)
+        }
+    }
+
+    private func isErrorLogAttribute(_ attribute: SmartAttribute) -> Bool {
+        let key = "\(attribute.id) \(attribute.name)"
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .lowercased()
+        return key.contains("error log") || key.contains("错误日志")
+    }
+
+    private func errorLogEntryCount(_ attribute: SmartAttribute) -> Int {
+        let digits = attribute.rawValue.split(whereSeparator: { !$0.isNumber && $0 != "-" }).first
+        return Int(digits.map(String.init) ?? "0") ?? 0
     }
 }
 
@@ -230,6 +258,10 @@ struct SmartDiagnosticsPanel: View {
     private var capabilityState: SmartSelfTestCapabilityState { viewModel.smartSelfTestCapability(for: drive) }
     private var errorLogCapabilityState: SmartErrorLogCapabilityState { viewModel.smartErrorLogCapability(for: drive) }
     private var errorLogReport: SmartErrorLogReport? { viewModel.smartErrorLogReports[drive.id] }
+    private var hasReadableErrorEntries: Bool {
+        guard let errorLogReport else { return false }
+        return (errorLogReport.totalEntryCount ?? errorLogReport.entries.count) >= 1
+    }
     private var isActiveForDrive: Bool { viewModel.smartSelfTestDriveID == drive.id && viewModel.isSmartSelfTestActive }
     private var effectiveState: SmartSelfTestState? {
         if isActiveForDrive {
@@ -548,8 +580,8 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var errorLogSymbol: String {
-        if let errorLogReport, !errorLogReport.entries.isEmpty {
-            return "exclamationmark.triangle.fill"
+        if hasReadableErrorEntries {
+            return "magnifyingglass"
         }
         switch errorLogCapabilityState {
         case .supported: return "checkmark.circle.fill"
@@ -559,8 +591,8 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var errorLogTint: Color {
-        if let errorLogReport, !errorLogReport.entries.isEmpty {
-            return .orange
+        if hasReadableErrorEntries {
+            return .blue
         }
         switch errorLogCapabilityState {
         case .supported: return .green
