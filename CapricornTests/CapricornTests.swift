@@ -1265,6 +1265,49 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(report.entries[0].stderr.contains("Preflight: mounted=true, read-only=true."))
     }
 
+    func testDiskCheckServiceUsesAdministratorRunnerOnlyForFilesystemChecks() async throws {
+        let diskutilRunner = RecordingDiskCheckRunner(
+            infoPlists: [
+                "disk9s1": Self.diskInfoPlist(mounted: false, readOnly: false)
+            ]
+        )
+        let privilegedRunner = RecordingDiskCheckRunner(stdout: "APFS volume is consistent\n")
+        let service = DiskCheckService(
+            runner: diskutilRunner,
+            privilegedRunner: privilegedRunner,
+            updateIntervalNanoseconds: 1_000_000
+        )
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/APFS")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        drive.volumes[0] = DriveDevice.Volume(
+            deviceIdentifier: "disk9s1",
+            name: "APFS",
+            mountPoint: nil,
+            sizeBytes: 1_000,
+            isWritable: true,
+            isSystem: false,
+            fileSystemType: "APFS"
+        )
+
+        let report = await service.check(.detailed, drive: drive)
+
+        XCTAssertEqual(diskutilRunner.calls.map(\.arguments), [["info", "-plist", "disk9s1"]])
+        XCTAssertEqual(privilegedRunner.calls.map(\.executable), ["/sbin/fsck_apfs"])
+        XCTAssertEqual(privilegedRunner.calls.map(\.arguments), [["-n", "-x", "/dev/rdisk9s1"]])
+        XCTAssertFalse(report.entries[0].hasIssue)
+    }
+
+    func testAdministratorCommandScriptUsesMacOSAuthorization() {
+        let script = AdministratorCommandRunner.script(
+            for: "/sbin/fsck_apfs",
+            arguments: ["-n", "-x", "/dev/rdisk9s1"]
+        )
+
+        XCTAssertTrue(script.contains("with administrator privileges"))
+        XCTAssertTrue(script.contains("'/sbin/fsck_apfs' '-n' '-x' '/dev/rdisk9s1'"))
+    }
+
     func testDiskCheckServiceReportsUnsupportedDetailedFileSystemsWithoutRunningCommand() async throws {
         let runner = RecordingDiskCheckRunner()
         let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)

@@ -252,9 +252,15 @@ final class AdministratorCommandRunner: CommandRunning, @unchecked Sendable {
     }
 
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
-        let command = ([executable] + arguments).map(Self.shellQuote).joined(separator: " ")
-        let script = "do shell script \(Self.appleScriptQuote(command)) with administrator privileges"
-        return try await runner.run("/usr/bin/osascript", arguments: ["-e", script])
+        return try await runner.run(
+            "/usr/bin/osascript",
+            arguments: ["-e", Self.script(for: executable, arguments: arguments)]
+        )
+    }
+
+    static func script(for executable: String, arguments: [String]) -> String {
+        let command = ([executable] + arguments).map(shellQuote).joined(separator: " ")
+        return "do shell script \(appleScriptQuote(command)) with administrator privileges"
     }
 
     private static func shellQuote(_ value: String) -> String {
@@ -265,6 +271,34 @@ final class AdministratorCommandRunner: CommandRunning, @unchecked Sendable {
         "\"" + value
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"") + "\""
+    }
+}
+
+/// Runs only filesystem checkers through macOS's administrator authorization prompt.
+/// The prompt grants the child command root access without changing device-node permissions.
+final class AdministratorDiskCheckCommandRunner: DiskCheckCommandRunning, @unchecked Sendable {
+    private let runner: StreamingDiskCheckCommandRunner
+
+    init(runner: StreamingDiskCheckCommandRunner = StreamingDiskCheckCommandRunner()) {
+        self.runner = runner
+    }
+
+    func run(
+        _ executable: String,
+        arguments: [String],
+        stdout onStdout: @escaping @Sendable (String) -> Void,
+        stderr onStderr: @escaping @Sendable (String) -> Void
+    ) async throws -> CommandResult {
+        try await runner.run(
+            "/usr/bin/osascript",
+            arguments: ["-e", AdministratorCommandRunner.script(for: executable, arguments: arguments)],
+            stdout: onStdout,
+            stderr: onStderr
+        )
+    }
+
+    func cancel() {
+        runner.cancel()
     }
 }
 
@@ -650,6 +684,7 @@ final class DiskCheckService {
     private let fsckHFSPath: String
     private let fsckExFATPath: String
     private let fsckMSDOSPath: String
+    private let privilegedRunner: DiskCheckCommandRunning
     private let updateIntervalNanoseconds: UInt64
 
     init(
@@ -659,6 +694,7 @@ final class DiskCheckService {
         fsckHFSPath: String = "/sbin/fsck_hfs",
         fsckExFATPath: String = "/sbin/fsck_exfat",
         fsckMSDOSPath: String = "/sbin/fsck_msdos",
+        privilegedRunner: DiskCheckCommandRunning? = nil,
         updateIntervalNanoseconds: UInt64 = 250_000_000
     ) {
         self.runner = runner
@@ -667,11 +703,16 @@ final class DiskCheckService {
         self.fsckHFSPath = fsckHFSPath
         self.fsckExFATPath = fsckExFATPath
         self.fsckMSDOSPath = fsckMSDOSPath
+        self.privilegedRunner = privilegedRunner
+            ?? (runner is StreamingDiskCheckCommandRunner
+                ? AdministratorDiskCheckCommandRunner()
+                : runner)
         self.updateIntervalNanoseconds = updateIntervalNanoseconds
     }
 
     func cancel() {
         runner.cancel()
+        privilegedRunner.cancel()
     }
 
     func check(
@@ -747,7 +788,9 @@ final class DiskCheckService {
                 }
             }
             let completion = LockedDiskCheckCompletion()
-            let commandRunner = runner
+            let commandRunner = requiresAdministrator(executable)
+                ? privilegedRunner
+                : runner
             let commandTask = Task {
                 do {
                     let result = try await commandRunner.run(
@@ -811,7 +854,7 @@ final class DiskCheckService {
                 }
 
                 if Task.isCancelled {
-                    runner.cancel()
+                    commandRunner.cancel()
                     commandTask.cancel()
                     if let mountSession {
                         _ = await remountVolume(mountSession, output: streamedOutput)
@@ -1106,6 +1149,13 @@ final class DiskCheckService {
             seen.insert(key)
             return true
         }
+    }
+
+    private func requiresAdministrator(_ executable: String) -> Bool {
+        executable == fsckAPFSPath
+            || executable == fsckHFSPath
+            || executable == fsckExFATPath
+            || executable == fsckMSDOSPath
     }
 
     private func rawDevicePath(for identifier: String) -> String? {
