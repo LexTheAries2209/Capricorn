@@ -894,6 +894,8 @@ final class CapricornTests: XCTestCase {
             "Choose": "选择",
             "Choose the smartctl executable.": "选择 smartctl 可执行文件。",
             "Open Settings": "打开设置",
+            "Unable to Complete Self-Test": "无法完成自检",
+            "No SMART error log entries were reported.": "未报告 SMART 错误条目。",
             "Used Capacity": "已用容量",
             "Available Capacity": "可用容量",
             "Used": "已用",
@@ -908,6 +910,17 @@ final class CapricornTests: XCTestCase {
 
     func testContinueMonitoringIsLocalized() {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Continue Monitoring"), "继续监控")
+    }
+
+    func testSmartDiagnosticStatusMessagesAreLocalized() {
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.statusMessage("No SMART error log entries were reported."),
+            "未报告 SMART 错误条目。"
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.statusMessage(SmartSelfTestService.macOSNativeNVMeUnavailableMessage),
+            "macOS 上的 smartctl 无法发送设备自检命令 0x14。"
+        )
     }
 
     func testSingleBenchmarkActionsAreLocalized() {

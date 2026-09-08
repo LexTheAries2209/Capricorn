@@ -282,6 +282,11 @@ struct SmartDiagnosticsPanel: View {
         drive.isNetwork || drive.isMemoryCard || (drive.isSystemDisk && !allowSystemDiskSelfTests)
     }
 
+    private var cannotCompleteSelfTest: Bool {
+        guard case let .unavailable(message) = capabilityState else { return false }
+        return message == SmartSelfTestService.macOSNativeNVMeUnavailableMessage
+    }
+
     var body: some View {
         InfoPanel(title: language.t("SMART Diagnostics"), symbol: "stethoscope") {
             VStack(alignment: .leading, spacing: 12) {
@@ -525,6 +530,9 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var stateTitle: String {
+        if cannotCompleteSelfTest {
+            return language.t("Unable to Complete Self-Test")
+        }
         if let state = effectiveState {
             switch state {
             case .noLog: return language.t("No Self-Test Record")
@@ -632,6 +640,9 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var stateSymbol: String {
+        if cannotCompleteSelfTest {
+            return "minus.circle"
+        }
         switch effectiveState {
         case .passed: "checkmark.circle.fill"
         case .failed, .aborted: "exclamationmark.triangle.fill"
@@ -641,6 +652,9 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var stateTint: Color {
+        if cannotCompleteSelfTest {
+            return .secondary
+        }
         switch effectiveState {
         case .passed: .green
         case .failed, .aborted: .orange
