@@ -150,14 +150,14 @@ private struct DiskCheckOverviewSummary: View {
     @Environment(\.appLanguage) private var language
 
     var body: some View {
-        InfoPanel(title: language.t("Self-Check"), symbol: "doc.text.magnifyingglass") {
+        InfoPanel(title: language.t("Quick Disk Check"), symbol: "doc.text.magnifyingglass") {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: statusSymbol)
                     .foregroundStyle(statusTint)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(statusTitle)
                         .font(.headline)
-                    Text(language.t("Run this check from the drive context menu: Check and Repair > Disk Self-Test."))
+                    Text(language.t("Run this check from the drive context menu: Check and Repair > Quick Disk Check."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     if let report {

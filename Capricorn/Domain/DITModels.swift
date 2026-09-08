@@ -382,7 +382,7 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
         case .forceUnmount: "Force Unmount"
         case .eject: "Eject"
         case .inspectOpenFiles: "View Open Files"
-        case .checkLog: "Disk Self-Test"
+        case .checkLog: "Quick Disk Check"
         case .detailedCheck: "System Check"
         case .firstAid: "First Aid…"
         case .rename: "Rename Volume"
@@ -565,7 +565,7 @@ enum DiskCheckMode: String, CaseIterable, Codable, Hashable, Sendable {
 
     var titleKey: String {
         switch self {
-        case .ordinary: "Disk Self-Test"
+        case .ordinary: "Quick Disk Check"
         case .detailed: "System Check"
         }
     }
