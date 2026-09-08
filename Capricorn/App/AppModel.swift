@@ -738,6 +738,10 @@ final class AppModel {
     func runDiskCheck(_ mode: DiskCheckMode, on drive: DriveDevice) async {
         guard !isDiskChecking, !diskOperations.isFirstAidBlocking else { return }
         selectedDriveID = drive.id
+        guard !drive.isSystemDisk || allowsSystemDiskSelfTests() else {
+            refreshMessage = "System-disk self-tests are disabled in Settings."
+            return
+        }
         refreshMessage = "Checking disk..."
         publishDiskCheckReport(DiskCheckReport(
             mode: mode,
@@ -746,7 +750,11 @@ final class AppModel {
             entries: []
         ))
         isDiskChecking = true
-        let finalReport = await diskCheckService.check(mode, drive: drive) { [weak self] report in
+        let finalReport = await diskCheckService.check(
+            mode,
+            drive: drive,
+            allowSystemDisk: allowsSystemDiskSelfTests()
+        ) { [weak self] report in
             await MainActor.run {
                 self?.publishDiskCheckReport(report)
             }

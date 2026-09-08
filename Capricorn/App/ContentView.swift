@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var preferences: AppPreferences
     @State private var showsDiskCheckReport = false
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
+    @AppStorage(AppPreferences.Key.allowSystemDiskSelfTests) private var allowSystemDiskSelfTests = false
     @AppStorage("representativeVolumeSelectionsByDrive") private var representativeVolumePreferencesJSON = ""
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistory: [SmartHistoryRecord]
@@ -52,6 +53,7 @@ struct ContentView: View {
                     selfTestHistory: selfTestHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     benchmarkHistory: benchmarkHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
+                    allowSystemDiskSelfTests: allowSystemDiskSelfTests,
                     saveSnapshot: { exportFolderPath in saveSnapshot(drive: drive, exportFolderPath: exportFolderPath) },
                     exportSelfTestHistory: { records, exportFolderPath, format in
                         exportSelfTestHistory(
@@ -468,7 +470,11 @@ struct ContentView: View {
     }
 
     private func sidebarActionIsDisabled(_ action: DiskSidebarAction, for drive: DriveDevice) -> Bool {
-        guard DiskSidebarActionPolicy.isEnabled(action, for: drive) else { return true }
+        guard DiskSidebarActionPolicy.isEnabled(
+            action,
+            for: drive,
+            allowSystemDiskSelfTests: allowSystemDiskSelfTests
+        ) else { return true }
         if viewModel.isFirstAidBlocking { return true }
         if action == .firstAid {
             return viewModel.isRefreshing || viewModel.isDiskChecking || viewModel.isBenchmarking || viewModel.isLiveActivityWorkloadRunning
@@ -1066,6 +1072,7 @@ private struct DriveDetailView: View {
     let selfTestHistory: [SmartSelfTestHistoryRecord]
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
+    let allowSystemDiskSelfTests: Bool
     let saveSnapshot: (String?) -> String
     let exportSelfTestHistory: ([SmartSelfTestHistoryRecord], String?, SmartDiagnosticsExportFormat) -> String
     let exportErrorLog: (SmartErrorLogReport, String?, SmartDiagnosticsExportFormat) -> String
@@ -1080,7 +1087,12 @@ private struct DriveDetailView: View {
                 snapshot: snapshot,
                 diskCheckReport: viewModel.diskCheckReport(for: drive),
                 isDiskChecking: viewModel.isDiskChecking,
-                canRunQuickCheck: DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive)
+                allowSystemDiskSelfTests: allowSystemDiskSelfTests,
+                canRunQuickCheck: DiskSidebarActionPolicy.isEnabled(
+                    .checkLog,
+                    for: drive,
+                    allowSystemDiskSelfTests: allowSystemDiskSelfTests
+                )
                     && !viewModel.isDiskChecking
                     && !viewModel.isFirstAidBlocking
                     && !viewModel.isBenchmarking

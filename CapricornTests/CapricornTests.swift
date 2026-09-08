@@ -935,6 +935,7 @@ final class CapricornTests: XCTestCase {
             "Check and Repair": "检查与修复",
             "Quick Disk Check": "快速自检",
             "Run Quick Disk Check": "运行快速自检",
+            "Enable system-disk checks in Settings before running Quick Disk Check.": "运行快速自检前，请先在设置中允许系统盘执行自检。",
             "SMART Self-Tests": "SMART 自检",
             "Disk Check In Progress": "硬盘检查进行中",
             "First Aid…": "急救…",
@@ -1030,6 +1031,21 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(DiskSidebarActionPolicy.actions(for: drive).contains(.checkLog))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
+    }
+
+    func testSystemDiskQuickCheckRequiresSettingsPermission() {
+        var drive = Self.fixtureDrive(mountedAt: "/")
+        drive.isInternal = true
+        drive.isSystemDisk = true
+
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
+        XCTAssertTrue(
+            DiskSidebarActionPolicy.isEnabled(
+                .checkLog,
+                for: drive,
+                allowSystemDiskSelfTests: true
+            )
+        )
     }
 
     func testDiskSidebarActionPolicyGroupsCheckAndRepairActions() {
@@ -1347,7 +1363,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(report.entries[0].stderr.contains("No native detailed checker"))
     }
 
-    func testDiskCheckServiceSkipsProtectedSystemDiskWithoutRunningCommands() async throws {
+    func testDiskCheckServiceSkipsSystemDiskWhenSettingsPermissionIsDisabled() async throws {
         let runner = RecordingDiskCheckRunner()
         let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
         var drive = Self.fixtureDrive(mountedAt: "/")
@@ -1359,7 +1375,23 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(runner.calls.isEmpty)
         XCTAssertEqual(report.entries.count, 1)
         XCTAssertTrue(report.entries[0].hasIssue)
-        XCTAssertTrue(report.entries[0].stderr.contains("System internal disks are protected"))
+        XCTAssertTrue(report.entries[0].stderr.contains("System-disk self-tests are disabled in Settings"))
+    }
+
+    func testDiskCheckServiceRunsSystemDiskVerificationWhenSettingsPermissionIsEnabled() async throws {
+        let runner = RecordingDiskCheckRunner(stdout: "Verified\n")
+        let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
+        var drive = Self.fixtureDrive(mountedAt: "/")
+        drive.isInternal = true
+        drive.isSystemDisk = true
+
+        let report = await service.check(.ordinary, drive: drive, allowSystemDisk: true)
+
+        XCTAssertEqual(runner.calls.map(\.arguments), [
+            ["verifyDisk", "disk0"],
+            ["verifyVolume", "/"]
+        ])
+        XCTAssertFalse(report.entries.contains(where: \.hasIssue))
     }
 
     func testDiskCheckServicePublishesProgressBeforeAndAfterEachCommand() async throws {

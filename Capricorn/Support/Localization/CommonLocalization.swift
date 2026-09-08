@@ -297,6 +297,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Self-Tests": "自检",
         "Quick Disk Check": "快速自检",
         "Run Quick Disk Check": "运行快速自检",
+        "Enable system-disk checks in Settings before running Quick Disk Check.": "运行快速自检前，请先在设置中允许系统盘执行自检。",
         "Last checked": "上次检查",
         "Disk Check In Progress": "硬盘检查进行中",
         "No Disk Check Record": "尚无硬盘检查记录",

@@ -443,7 +443,11 @@ enum DiskSidebarActionPolicy {
         }
     }
 
-    static func isEnabled(_ action: DiskSidebarAction, for drive: DriveDevice) -> Bool {
+    static func isEnabled(
+        _ action: DiskSidebarAction,
+        for drive: DriveDevice,
+        allowSystemDiskSelfTests: Bool = false
+    ) -> Bool {
         if isProtectedSystemControlAction(action, for: drive) {
             return false
         }
@@ -460,7 +464,13 @@ enum DiskSidebarActionPolicy {
         case .inspectOpenFiles:
             return drive.primaryMountPoint != nil
         case .checkLog:
-            return !isProtectedInternalSystemDisk(drive) && !drive.isNetwork && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
+            let systemDiskIsAllowed = !drive.isSystemDisk || allowSystemDiskSelfTests
+            let protectedDiskIsAllowed = !isProtectedInternalSystemDisk(drive)
+                || (drive.isSystemDisk && allowSystemDiskSelfTests)
+            return systemDiskIsAllowed
+                && protectedDiskIsAllowed
+                && !drive.isNetwork
+                && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
         case .detailedCheck:
             return false
         case .firstAid:
