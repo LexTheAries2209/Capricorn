@@ -181,12 +181,10 @@ private struct DiskCheckOverviewSummary: View {
                 HStack(spacing: 8) {
                     if requiresSystemDiskPermission {
                         SettingsLink {
-                            Image(systemName: "gearshape")
+                            Label(language.t("Settings"), systemImage: "gearshape")
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .help(language.t("Open Settings"))
-                        .accessibilityLabel(language.t("Open Settings"))
                     }
                     Button(action: runQuickCheck) {
                         Label(language.t("Run Quick Disk Check"), systemImage: "play.fill")
