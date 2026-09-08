@@ -27,6 +27,17 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         return Self.zhHans[key] ?? key
     }
 
+    func smartErrorLogHistoryWithoutDetailsMessage(count: Int) -> String {
+        let safeCount = max(0, count)
+        switch self {
+        case .english:
+            let noun = safeCount == 1 ? "error" : "errors"
+            return "The controller reports \(safeCount) historical \(noun), but this read returned no parseable hardware error details."
+        case .simplifiedChinese:
+            return "控制器记录了 \(safeCount) 条历史错误，但本次读取未返回可解析的硬件错误详情。"
+        }
+    }
+
 
 
 
@@ -224,6 +235,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "SMART Error Entries": "SMART 错误条目",
         "No Error Entries": "没有错误条目",
         "No controller error entries were reported.": "控制器未报告错误条目。",
+        "Historical Error Count Requires Inspection": "历史错误计数需要检查",
+        "No parseable error details are available to export.": "没有可供导出的可解析错误详情。",
         "Error Entries": "错误条目",
         "Error Number": "错误编号",
         "Namespace": "命名空间",

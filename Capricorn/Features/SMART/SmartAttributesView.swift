@@ -258,9 +258,15 @@ struct SmartDiagnosticsPanel: View {
     private var capabilityState: SmartSelfTestCapabilityState { viewModel.smartSelfTestCapability(for: drive) }
     private var errorLogCapabilityState: SmartErrorLogCapabilityState { viewModel.smartErrorLogCapability(for: drive) }
     private var errorLogReport: SmartErrorLogReport? { viewModel.smartErrorLogReports[drive.id] }
-    private var hasReadableErrorEntries: Bool {
-        guard let errorLogReport else { return false }
-        return (errorLogReport.totalEntryCount ?? errorLogReport.entries.count) >= 1
+    private var historicalErrorEntryCount: Int {
+        SmartErrorLogPresentationState.historicalEntryCount(in: snapshot?.attributes ?? [])
+    }
+    private var errorLogPresentationState: SmartErrorLogPresentationState {
+        guard let errorLogReport else { return .unavailable }
+        return SmartErrorLogPresentationState.resolve(
+            report: errorLogReport,
+            historicalEntryCount: historicalErrorEntryCount
+        )
     }
     private var isActiveForDrive: Bool { viewModel.smartSelfTestDriveID == drive.id && viewModel.isSmartSelfTestActive }
     private var effectiveState: SmartSelfTestState? {
@@ -305,7 +311,11 @@ struct SmartDiagnosticsPanel: View {
         }
         .sheet(isPresented: $showsErrorLog) {
             if let errorLogReport {
-                SmartErrorLogSheet(report: errorLogReport, language: language)
+                SmartErrorLogSheet(
+                    report: errorLogReport,
+                    displayState: errorLogPresentationState,
+                    language: language
+                )
             }
         }
     }
@@ -446,9 +456,11 @@ struct SmartDiagnosticsPanel: View {
 
             if let errorLogReport {
                 HStack(spacing: 8) {
-                    Text(errorLogSummary(errorLogReport))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if let summary = errorLogSummary(errorLogReport) {
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     Spacer()
                     Button {
                         showsErrorLog = true
@@ -465,6 +477,12 @@ struct SmartDiagnosticsPanel: View {
                     } label: {
                         Label(language.t("Export Error Entries"), systemImage: "square.and.arrow.up")
                     }
+                    .disabled(!errorLogPresentationState.hasExportableDetails)
+                    .help(
+                        errorLogPresentationState.hasExportableDetails
+                            ? language.t("Export Error Entries")
+                            : language.t("No parseable error details are available to export.")
+                    )
                     if exportFolderPath == nil {
                         Button {
                             chooseExportFolder()
@@ -552,6 +570,9 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var errorLogTitle: String {
+        if errorLogPresentationState.requiresInspection {
+            return "\(language.t("SMART Error Entries")) · \(language.t("Check"))"
+        }
         switch errorLogCapabilityState {
         case .supported:
             return language.t("SMART Error Entries")
@@ -565,9 +586,19 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var errorLogDescription: String {
+        switch errorLogPresentationState {
+        case let .inspectHistoricalCount(count):
+            return language.smartErrorLogHistoryWithoutDetailsMessage(count: count)
+        case .inspectDetails, .noEntries:
+            if let errorLogReport {
+                return language.statusMessage(errorLogReport.message)
+            }
+        case .unavailable:
+            break
+        }
         switch errorLogCapabilityState {
         case .supported:
-            return errorLogReport?.message ?? language.t("Read ATA or NVMe controller error entries on demand.")
+            return language.t("Read ATA or NVMe controller error entries on demand.")
         case .checking:
             return language.t("Checking error-log support automatically.")
         case let .retrying(message, attempt):
@@ -580,7 +611,7 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var errorLogSymbol: String {
-        if hasReadableErrorEntries {
+        if errorLogPresentationState.requiresInspection {
             return "magnifyingglass"
         }
         switch errorLogCapabilityState {
@@ -591,7 +622,7 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var errorLogTint: Color {
-        if hasReadableErrorEntries {
+        if errorLogPresentationState.requiresInspection {
             return .blue
         }
         switch errorLogCapabilityState {
@@ -655,11 +686,9 @@ struct SmartDiagnosticsPanel: View {
         return parts.isEmpty ? language.t("No additional details") : parts.joined(separator: " · ")
     }
 
-    private func errorLogSummary(_ report: SmartErrorLogReport) -> String {
-        if report.entries.isEmpty {
-            return language.t("No controller error entries were reported.")
-        }
-        let count = report.totalEntryCount ?? report.entries.count
+    private func errorLogSummary(_ report: SmartErrorLogReport) -> String? {
+        guard errorLogPresentationState == .inspectDetails else { return nil }
+        let count = max(report.entries.count, report.totalEntryCount ?? 0)
         return "\(count) \(language.t("Error Entries"))"
     }
 }
@@ -758,6 +787,7 @@ private struct SmartSelfTestHistoryDetail: View {
 
 private struct SmartErrorLogSheet: View {
     let report: SmartErrorLogReport
+    let displayState: SmartErrorLogPresentationState
     let language: AppLanguage
     @Environment(\.dismiss) private var dismiss
     @State private var selectedID: String?
@@ -769,8 +799,14 @@ private struct SmartErrorLogSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Label(language.t("SMART Error Entries"), systemImage: "exclamationmark.triangle")
+                Label(
+                    displayState.requiresInspection
+                        ? "\(language.t("SMART Error Entries")) · \(language.t("Check"))"
+                        : language.t("SMART Error Entries"),
+                    systemImage: displayState.requiresInspection ? "magnifyingglass" : "exclamationmark.triangle"
+                )
                     .font(.title3.bold())
+                    .foregroundStyle(displayState.requiresInspection ? .blue : .primary)
                 Spacer()
                 Button(language.t("Close")) { dismiss() }
             }
@@ -779,12 +815,32 @@ private struct SmartErrorLogSheet: View {
             Divider()
 
             if report.entries.isEmpty {
-                ContentUnavailableView(
-                    language.t("No Error Entries"),
-                    systemImage: "checkmark.circle",
-                    description: Text(language.statusMessage(report.message))
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                switch displayState {
+                case let .inspectHistoricalCount(count):
+                    ContentUnavailableView(
+                        language.t("Historical Error Count Requires Inspection"),
+                        systemImage: "magnifyingglass",
+                        description: Text(language.smartErrorLogHistoryWithoutDetailsMessage(count: count))
+                    )
+                    .foregroundStyle(.blue)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .noEntries:
+                    ContentUnavailableView(
+                        language.t("No Error Entries"),
+                        systemImage: "checkmark.circle",
+                        description: Text(language.statusMessage(report.message))
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .unavailable:
+                    ContentUnavailableView(
+                        language.t("Error Log Unavailable"),
+                        systemImage: "questionmark.circle",
+                        description: Text(language.statusMessage(report.message))
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .inspectDetails:
+                    EmptyView()
+                }
             } else {
                 HStack(spacing: 0) {
                     List(selection: $selectedID) {

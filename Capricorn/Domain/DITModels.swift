@@ -1211,6 +1211,67 @@ struct SmartErrorLogReport: Codable, Hashable, Sendable {
     var capturedAt: Date
 }
 
+/// Separates the controller's historical error counter from the details
+/// returned by the current `smartctl -l error` read. A non-zero counter is
+/// an inspection signal, not a health failure.
+enum SmartErrorLogPresentationState: Equatable, Sendable {
+    case unavailable
+    case noEntries
+    case inspectDetails
+    case inspectHistoricalCount(Int)
+
+    var requiresInspection: Bool {
+        switch self {
+        case .inspectDetails, .inspectHistoricalCount:
+            return true
+        case .unavailable, .noEntries:
+            return false
+        }
+    }
+
+    var hasExportableDetails: Bool {
+        self == .inspectDetails
+    }
+
+    static func resolve(
+        report: SmartErrorLogReport,
+        historicalEntryCount: Int
+    ) -> SmartErrorLogPresentationState {
+        guard report.isSupported else { return .unavailable }
+        if !report.entries.isEmpty { return .inspectDetails }
+        if historicalEntryCount >= 1 {
+            return .inspectHistoricalCount(historicalEntryCount)
+        }
+        return .noEntries
+    }
+
+    /// Native macOS and smartctl may both expose the same lifetime counter.
+    /// Taking the maximum avoids double-counting while preserving the largest
+    /// valid value reported by either provider.
+    static func historicalEntryCount(in attributes: [SmartAttribute]) -> Int {
+        attributes.compactMap { attribute in
+            let identity = "\(attribute.id) \(attribute.name)"
+                .replacingOccurrences(of: "_", with: " ")
+                .replacingOccurrences(of: ".", with: " ")
+                .replacingOccurrences(of: "-", with: " ")
+                .lowercased()
+            guard identity.contains("num error info log entries")
+                    || identity.contains("num err log entries")
+                    || identity.contains("error log entries")
+                    || identity.contains("错误日志条目") else {
+                return nil
+            }
+
+            let raw = attribute.rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let numericStart = raw.firstIndex(where: { $0.isNumber || $0 == "-" }) else {
+                return 0
+            }
+            let numericText = raw[numericStart...].prefix { $0.isNumber || $0 == "-" }
+            return max(0, Int(numericText) ?? 0)
+        }.max() ?? 0
+    }
+}
+
 struct SmartctlDiagnostics: Codable, Hashable, Sendable {
     var version: String?
     var driveDatabaseVersion: String?

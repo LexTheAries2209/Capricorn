@@ -1732,6 +1732,125 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(DriveHealthEvaluator().evaluate(drive: Self.fixtureDrive(), snapshot: snapshot), .good)
     }
 
+    func testSmartErrorLogPresentationSeparatesHistoricalCountFromReadDetails() {
+        let historicalOnly = SmartErrorLogReport(
+            isSupported: true,
+            message: "No SMART error log entries were reported.",
+            entries: [],
+            totalEntryCount: 0,
+            capturedAt: Date()
+        )
+        XCTAssertEqual(
+            SmartErrorLogPresentationState.resolve(report: historicalOnly, historicalEntryCount: 1),
+            .inspectHistoricalCount(1)
+        )
+        XCTAssertFalse(
+            SmartErrorLogPresentationState.resolve(
+                report: historicalOnly,
+                historicalEntryCount: 1
+            ).hasExportableDetails
+        )
+        XCTAssertEqual(
+            SmartErrorLogPresentationState.resolve(report: historicalOnly, historicalEntryCount: 0),
+            .noEntries
+        )
+
+        let details = SmartErrorLogReport(
+            isSupported: true,
+            message: "One SMART error log entry was read.",
+            entries: [SmartErrorLogEntry(
+                id: "error-1",
+                errorNumber: 1,
+                status: "Error",
+                message: "Controller error",
+                lifetimeHours: nil,
+                failingLBA: nil,
+                namespaceID: nil,
+                details: [:]
+            )],
+            totalEntryCount: 1,
+            capturedAt: Date()
+        )
+        XCTAssertEqual(
+            SmartErrorLogPresentationState.resolve(report: details, historicalEntryCount: 0),
+            .inspectDetails
+        )
+        XCTAssertTrue(
+            SmartErrorLogPresentationState.resolve(
+                report: details,
+                historicalEntryCount: 0
+            ).hasExportableDetails
+        )
+
+        let unsupported = SmartErrorLogReport(
+            isSupported: false,
+            message: "Unsupported",
+            entries: [],
+            totalEntryCount: nil,
+            capturedAt: Date()
+        )
+        XCTAssertEqual(
+            SmartErrorLogPresentationState.resolve(report: unsupported, historicalEntryCount: 1),
+            .unavailable
+        )
+    }
+
+    func testSmartErrorLogHistoricalEntryCountUsesMaximumProviderValue() {
+        let attributes = [
+            SmartAttribute(
+                id: "NUM_ERROR_INFO_LOG_ENTRIES",
+                name: "Error Log Entries",
+                rawValue: "1",
+                current: nil,
+                worst: nil,
+                threshold: nil,
+                status: .good,
+                source: "Native macOS"
+            ),
+            SmartAttribute(
+                id: "nvme.num_err_log_entries",
+                name: "Error Log Entries",
+                rawValue: "2",
+                current: nil,
+                worst: nil,
+                threshold: nil,
+                status: .good,
+                source: "smartctl"
+            ),
+            SmartAttribute(
+                id: "legacy-counter",
+                name: "Error Log Entries",
+                rawValue: "3 entries",
+                current: nil,
+                worst: nil,
+                threshold: nil,
+                status: .good,
+                source: "Fixture"
+            )
+        ]
+
+        XCTAssertEqual(SmartErrorLogPresentationState.historicalEntryCount(in: attributes), 3)
+    }
+
+    func testSmartErrorLogHistoricalCountMessagesAreLocalizedAndPluralized() {
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.smartErrorLogHistoryWithoutDetailsMessage(count: 1),
+            "控制器记录了 1 条历史错误，但本次读取未返回可解析的硬件错误详情。"
+        )
+        XCTAssertEqual(
+            AppLanguage.english.smartErrorLogHistoryWithoutDetailsMessage(count: 1),
+            "The controller reports 1 historical error, but this read returned no parseable hardware error details."
+        )
+        XCTAssertEqual(
+            AppLanguage.english.smartErrorLogHistoryWithoutDetailsMessage(count: 2),
+            "The controller reports 2 historical errors, but this read returned no parseable hardware error details."
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("No parseable error details are available to export."),
+            "没有可供导出的可解析错误详情。"
+        )
+    }
+
     func testSmartctlATAParserExtractsStructuredSelfTestLog() {
         let drive = Self.fixtureDrive()
         let snapshot = SmartctlParser.parseSnapshot(
