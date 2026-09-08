@@ -8,6 +8,8 @@ struct OverviewView: View {
     let snapshot: SmartSnapshot?
     let diskCheckReport: DiskCheckReport?
     let isDiskChecking: Bool
+    let canRunQuickCheck: Bool
+    let runQuickCheck: () -> Void
     @Environment(\.appLanguage) private var language
 
     var body: some View {
@@ -96,7 +98,9 @@ struct OverviewView: View {
 
                 DiskCheckOverviewSummary(
                     report: diskCheckReport,
-                    isRunning: isDiskChecking
+                    isRunning: isDiskChecking,
+                    canRunQuickCheck: canRunQuickCheck,
+                    runQuickCheck: runQuickCheck
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -147,6 +151,8 @@ private extension ProviderState {
 private struct DiskCheckOverviewSummary: View {
     let report: DiskCheckReport?
     let isRunning: Bool
+    let canRunQuickCheck: Bool
+    let runQuickCheck: () -> Void
     @Environment(\.appLanguage) private var language
 
     var body: some View {
@@ -168,6 +174,12 @@ private struct DiskCheckOverviewSummary: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    Button(action: runQuickCheck) {
+                        Label(language.t("Run Quick Disk Check"), systemImage: "play.fill")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!canRunQuickCheck)
                 }
                 Spacer()
             }

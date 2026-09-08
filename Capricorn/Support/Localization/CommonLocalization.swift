@@ -296,6 +296,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Live Activity": "实时活动",
         "Self-Tests": "自检",
         "Quick Disk Check": "快速自检",
+        "Run Quick Disk Check": "运行快速自检",
         "Run this check from the drive context menu: Check and Repair > Quick Disk Check.": "在硬盘右键菜单中的“检查与修复-快速自检”进行检查。",
         "Last checked": "上次检查",
         "checks completed": "项已完成",

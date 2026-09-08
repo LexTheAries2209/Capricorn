@@ -1071,7 +1071,15 @@ private struct DriveDetailView: View {
                 drive: drive,
                 snapshot: snapshot,
                 diskCheckReport: viewModel.diskCheckReport(for: drive),
-                isDiskChecking: viewModel.isDiskChecking
+                isDiskChecking: viewModel.isDiskChecking,
+                canRunQuickCheck: DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive)
+                    && !viewModel.isDiskChecking
+                    && !viewModel.isFirstAidBlocking
+                    && !viewModel.isBenchmarking
+                    && !viewModel.isLiveActivityWorkloadRunning,
+                runQuickCheck: {
+                    Task { await viewModel.runDiskCheck(.ordinary, on: drive) }
+                }
             )
                 .tabItem { Label(language.t("Overview"), systemImage: "gauge.with.dots.needle.bottom.50percent") }
                 .tag(DriveFeatureTab.overview)

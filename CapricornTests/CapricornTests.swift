@@ -934,6 +934,7 @@ final class CapricornTests: XCTestCase {
         let expectedTranslations = [
             "Check and Repair": "检查与修复",
             "Quick Disk Check": "快速自检",
+            "Run Quick Disk Check": "运行快速自检",
             "Run this check from the drive context menu: Check and Repair > Quick Disk Check.": "在硬盘右键菜单中的“检查与修复-快速自检”进行检查。",
             "SMART Self-Tests": "SMART 自检",
             "Disk Check In Progress": "硬盘检查进行中",
