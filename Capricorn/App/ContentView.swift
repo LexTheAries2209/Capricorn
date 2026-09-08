@@ -8,6 +8,7 @@ private let capricornGitHubURL = URL(string: "https://github.com/LexTheAries2209
 struct ContentView: View {
     @State private var viewModel: AppModel
     @State private var preferences: AppPreferences
+    @State private var showsDiskCheckReport = false
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
     @AppStorage("representativeVolumeSelectionsByDrive") private var representativeVolumePreferencesJSON = ""
     @Environment(\.modelContext) private var modelContext
@@ -121,6 +122,11 @@ struct ContentView: View {
             restoreDiskCheckReports()
         }
         .onChange(of: viewModel.isDiskChecking) {
+            if viewModel.isDiskChecking {
+                // Only an active check should present the report sheet. Restored history remains in the overview.
+                showsDiskCheckReport = true
+                return
+            }
             guard !viewModel.isDiskChecking,
                   let report = viewModel.diskCheckReport,
                   let drive = viewModel.drives.first(where: { $0.id == report.driveID }) else {
@@ -176,9 +182,10 @@ struct ContentView: View {
             )
         }
         .sheet(isPresented: Binding(
-            get: { viewModel.diskCheckReport != nil },
+            get: { showsDiskCheckReport },
             set: { isPresented in
                 if !isPresented, !viewModel.isDiskChecking {
+                    showsDiskCheckReport = false
                     viewModel.diskCheckReport = nil
                 }
             }
@@ -192,6 +199,7 @@ struct ContentView: View {
                         viewModel.cancelDiskCheck()
                     },
                     close: {
+                        showsDiskCheckReport = false
                         viewModel.diskCheckReport = nil
                     }
                 )
