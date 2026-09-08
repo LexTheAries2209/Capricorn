@@ -312,6 +312,9 @@ struct CapricornSettingsView: View {
             alignment: .topLeading
         )
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
+        .onExitCommand {
+            NSApp.keyWindow?.performClose(nil)
+        }
         .task {
             refreshHistoryDatabaseSize()
         }
