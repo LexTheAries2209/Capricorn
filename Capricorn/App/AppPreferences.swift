@@ -134,6 +134,7 @@ final class AppPreferences {
 struct CapricornSettingsView: View {
     @Bindable var preferences: AppPreferences
     @Bindable var updateChecker: AppUpdateChecker
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistoryRecords: [SmartHistoryRecord]
     @Query(sort: \SmartSelfTestHistoryRecord.capturedAt, order: .reverse) private var selfTestHistoryRecords: [SmartSelfTestHistoryRecord]
@@ -312,8 +313,18 @@ struct CapricornSettingsView: View {
             alignment: .topLeading
         )
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
-        .onExitCommand {
-            NSApp.keyWindow?.performClose(nil)
+        .background {
+            // Register Escape as the standard cancel action for this Settings scene.
+            // Using dismiss keeps the close operation inside SwiftUI's scene lifecycle.
+            Button {
+                dismiss()
+            } label: {
+                Text(language.t("Close"))
+            }
+            .keyboardShortcut(.cancelAction)
+            .opacity(0.01)
+            .frame(width: 1, height: 1)
+            .accessibilityHidden(true)
         }
         .task {
             refreshHistoryDatabaseSize()
