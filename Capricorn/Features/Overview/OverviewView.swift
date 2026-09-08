@@ -163,14 +163,8 @@ private struct DiskCheckOverviewSummary: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(statusTitle)
                         .font(.headline)
-                    Text(language.t("Run this check from the drive context menu: Check and Repair > Quick Disk Check."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                     if let report {
                         Text("\(language.t("Last checked")): \(formattedCheckDate(report.capturedAt))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("\(report.completedEntryCount)/\(report.totalEntryCount) \(language.t("checks completed"))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
