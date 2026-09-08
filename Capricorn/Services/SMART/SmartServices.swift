@@ -843,7 +843,7 @@ enum SmartSelfTestServiceError: Error, LocalizedError, Sendable {
 }
 
 final class SmartSelfTestService: @unchecked Sendable {
-    static let macOSNativeNVMeUnavailableMessage = "This NVMe drive reports self-test support, but smartctl on macOS cannot send Device Self-test command 0x14. Identify (0x06) and Get Log Page (0x02) remain available."
+    static let macOSNativeNVMeUnavailableMessage = "smartctl on macOS cannot send Device Self-test command 0x14."
 
     private let smartctlProvider: SmartctlSmartProvider
     private let runner: CommandRunning
