@@ -2508,6 +2508,7 @@ final class CapricornTests: XCTestCase {
         )
         let service = SmartSelfTestService(
             smartctlProvider: provider,
+            runner: adminRunner,
             administratorRunner: adminRunner
         )
 
@@ -2563,6 +2564,7 @@ final class CapricornTests: XCTestCase {
         )
         let service = SmartSelfTestService(
             smartctlProvider: provider,
+            runner: adminRunner,
             administratorRunner: adminRunner
         )
 

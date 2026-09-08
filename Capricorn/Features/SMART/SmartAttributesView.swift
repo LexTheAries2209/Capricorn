@@ -644,10 +644,10 @@ struct SmartDiagnosticsPanel: View {
             return "minus.circle"
         }
         switch effectiveState {
-        case .passed: "checkmark.circle.fill"
-        case .failed, .aborted: "exclamationmark.triangle.fill"
-        case .running: "hourglass"
-        default: "questionmark.circle"
+        case .passed: return "checkmark.circle.fill"
+        case .failed, .aborted: return "exclamationmark.triangle.fill"
+        case .running: return "hourglass"
+        default: return "questionmark.circle"
         }
     }
 
@@ -656,9 +656,9 @@ struct SmartDiagnosticsPanel: View {
             return .secondary
         }
         switch effectiveState {
-        case .passed: .green
-        case .failed, .aborted: .orange
-        default: .secondary
+        case .passed: return .green
+        case .failed, .aborted: return .orange
+        default: return .secondary
         }
     }
 
