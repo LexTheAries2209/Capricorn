@@ -174,14 +174,14 @@ private struct DiskCheckOverviewSummary: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    Button(action: runQuickCheck) {
-                        Label(language.t("Run Quick Disk Check"), systemImage: "play.fill")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(!canRunQuickCheck)
                 }
                 Spacer()
+                Button(action: runQuickCheck) {
+                    Label(language.t("Run Quick Disk Check"), systemImage: "play.fill")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!canRunQuickCheck)
             }
         }
     }
