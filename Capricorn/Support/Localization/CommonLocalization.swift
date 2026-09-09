@@ -315,6 +315,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Last checked": "上次检查",
         "Disk Check In Progress": "硬盘检查进行中",
         "No Disk Check Record": "尚无硬盘检查记录",
+        "No saved quick disk checks yet.": "尚无已保存的快速自检记录。",
+        "No visible quick disk checks. Hidden checks can be restored below.": "当前没有显示中的快速自检记录，隐藏记录可在下方找回。",
         "Disk Check Reported Issues": "硬盘检查报告了问题",
         "Last Disk Check Passed": "上次硬盘检查通过",
         "External": "外接",

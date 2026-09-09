@@ -7,6 +7,7 @@ struct HistoryReportView: View {
     let snapshot: SmartSnapshot?
     let smartHistory: [SmartHistoryRecord]
     let selfTestHistory: [SmartSelfTestHistoryRecord]
+    let diskCheckHistory: [DiskCheckHistoryRecord]
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
     @Environment(\.modelContext) private var modelContext
@@ -34,6 +35,14 @@ struct HistoryReportView: View {
         HistoryVisibility.hidden(selfTestHistory)
     }
 
+    private var visibleDiskCheckHistory: [DiskCheckHistoryRecord] {
+        HistoryVisibility.visible(diskCheckHistory)
+    }
+
+    private var hiddenDiskCheckHistory: [DiskCheckHistoryRecord] {
+        HistoryVisibility.hidden(diskCheckHistory)
+    }
+
     private var visibleBenchmarkHistory: [BenchmarkHistoryRecord] {
         HistoryVisibility.visible(benchmarkHistory)
     }
@@ -53,6 +62,7 @@ struct HistoryReportView: View {
     private var hasHiddenHistory: Bool {
         !hiddenSmartHistory.isEmpty
             || !hiddenSelfTestHistory.isEmpty
+            || !hiddenDiskCheckHistory.isEmpty
             || !hiddenBenchmarkHistory.isEmpty
             || !hiddenActivityHistory.isEmpty
     }
@@ -60,6 +70,7 @@ struct HistoryReportView: View {
     private var visibleHistoryCount: Int {
         visibleSmartHistory.count
             + visibleSelfTestHistory.count
+            + visibleDiskCheckHistory.count
             + visibleBenchmarkHistory.count
             + visibleActivityHistory.count
     }
@@ -67,6 +78,7 @@ struct HistoryReportView: View {
     private var hiddenHistoryCount: Int {
         hiddenSmartHistory.count
             + hiddenSelfTestHistory.count
+            + hiddenDiskCheckHistory.count
             + hiddenBenchmarkHistory.count
             + hiddenActivityHistory.count
     }
@@ -158,6 +170,18 @@ struct HistoryReportView: View {
                 ) {
                     historyRows(visibleSelfTestHistory) { item in
                         selfTestHistoryRow(item, isHidden: false)
+                    }
+                }
+
+                historyPanel(
+                    title: language.t("Quick Disk Check"),
+                    symbol: "doc.text.magnifyingglass",
+                    count: visibleDiskCheckHistory.count,
+                    emptyText: hiddenDiskCheckHistory.isEmpty ? language.t("No saved quick disk checks yet.") : language.t("No visible quick disk checks. Hidden checks can be restored below."),
+                    hideAll: { hideAllHistory(visibleDiskCheckHistory) }
+                ) {
+                    historyRows(visibleDiskCheckHistory) { item in
+                        diskCheckHistoryRow(item, isHidden: false)
                     }
                 }
 
@@ -300,6 +324,15 @@ struct HistoryReportView: View {
                     }
                 }
 
+                if !hiddenDiskCheckHistory.isEmpty {
+                    Text(language.t("Quick Disk Check"))
+                        .font(.subheadline.bold())
+                    ForEach(hiddenDiskCheckHistory) { item in
+                        diskCheckHistoryRow(item, isHidden: true)
+                        Divider()
+                    }
+                }
+
                 if !hiddenBenchmarkHistory.isEmpty {
                     Text(language.t("Benchmark Runs"))
                         .font(.subheadline.bold())
@@ -395,6 +428,38 @@ struct HistoryReportView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+            }
+            Spacer()
+            historyVisibilityButton(isHidden: isHidden) {
+                if isHidden {
+                    restoreHistory(item)
+                } else {
+                    hideHistory(item)
+                }
+            }
+        }
+    }
+
+    private func diskCheckHistoryRow(_ item: DiskCheckHistoryRecord, isHidden: Bool) -> some View {
+        let report = item.report
+        let hasIssues = report?.hasIssues ?? true
+        let statusKey = report.map { $0.hasIssues ? "Disk Check Reported Issues" : "Last Disk Check Passed" }
+            ?? "No Disk Check Record"
+
+        return HStack {
+            Image(systemName: hasIssues ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .foregroundStyle(hasIssues ? .orange : .green)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.capturedAt.formatted(date: .abbreviated, time: .standard))
+                Text(language.t(statusKey))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                if let report {
+                    Text("\(report.completedEntryCount)/\(report.totalEntryCount) \(language.t("Completed"))")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
             Spacer()
             historyVisibilityButton(isHidden: isHidden) {

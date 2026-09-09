@@ -51,6 +51,7 @@ struct ContentView: View {
                     viewModel: viewModel,
                     smartHistory: smartHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     selfTestHistory: selfTestHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
+                    diskCheckHistory: diskCheckHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     benchmarkHistory: benchmarkHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     allowSystemDiskSelfTests: allowSystemDiskSelfTests,
@@ -1070,6 +1071,7 @@ private struct DriveDetailView: View {
     var viewModel: AppModel
     let smartHistory: [SmartHistoryRecord]
     let selfTestHistory: [SmartSelfTestHistoryRecord]
+    let diskCheckHistory: [DiskCheckHistoryRecord]
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
     let allowSystemDiskSelfTests: Bool
@@ -1125,6 +1127,7 @@ private struct DriveDetailView: View {
                 snapshot: snapshot,
                 smartHistory: smartHistory,
                 selfTestHistory: selfTestHistory,
+                diskCheckHistory: diskCheckHistory,
                 benchmarkHistory: benchmarkHistory,
                 activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
             )
