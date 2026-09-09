@@ -532,7 +532,7 @@ enum ReportExporter {
             MetadataRow(
                 id: "drive_name",
                 englishName: "Drive Name",
-                chineseName: "磁盘名称",
+                chineseName: "硬盘名称",
                 description: language == .simplifiedChinese ? "当前显示名称" : "Current display name",
                 value: drive.displayName
             ),
@@ -556,7 +556,7 @@ enum ReportExporter {
                 id: "volume_uuids",
                 englishName: "Volume UUIDs",
                 chineseName: "卷 UUID",
-                description: language == .simplifiedChinese ? "当前磁盘所含卷的 UUID；多个值以分号分隔" : "UUIDs of volumes on this drive; multiple values are separated by semicolons",
+                description: language == .simplifiedChinese ? "当前硬盘所含卷的 UUID；多个值以分号分隔" : "UUIDs of volumes on this drive; multiple values are separated by semicolons",
                 value: drive.volumeUUIDs.joined(separator: "; ")
             ),
             MetadataRow(

@@ -235,7 +235,7 @@ extension AppLanguage {
         case "real-world":
             return "真实场景：队列深度更贴近日常使用，并包含混合负载，适合应用启动、项目目录和普通文件操作。"
         case "demo":
-            return "演示 / 轻量：写入量低、完成快，适合快速确认目标文件夹和磁盘状态。"
+            return "演示 / 轻量：写入量低、完成快，适合快速确认目标文件夹和硬盘状态。"
         case "custom":
             return "自定义：可编辑测试项目组，用于指定 SEQ/RND、块大小、队列深度、线程数和可选混合负载。"
         case "test":

@@ -587,7 +587,7 @@ struct SmartDiagnosticsPanel: View {
         case .checking, .retrying:
             return language.t("Checking Error Log Support")
         case .unknown:
-            return language.t("Error Log Support Pending")
+            return language.t("Error Log Support Not Checked")
         case .unavailable:
             return language.t("Error Log Unavailable")
         }
@@ -612,7 +612,7 @@ struct SmartDiagnosticsPanel: View {
         case let .retrying(message, attempt):
             return "\(language.t("Retrying")) \(attempt)/3: \(language.statusMessage(message))"
         case .unknown:
-            return language.t("Error-log support will be retried when this drive is available.")
+            return language.t("Error-log support has not been checked yet.")
         case let .unavailable(message):
             return language.statusMessage(message)
         }

@@ -511,7 +511,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(chineseCSV.contains("AVAILABLE_SPARE,Available Spare,可用备用空间,NVMe 备用块剩余比例，低于阈值时需要关注。,\"value, with \"\"quotes\"\"\",100,99,10,Good,Fixture"))
         XCTAssertTrue(chineseCSV.contains("serial_number,Serial Number,序列号,设备报告的硬件序列号,SN"))
         XCTAssertTrue(chineseCSV.contains("device_type,Device Type,设备类型,设备介质类型,SSD"))
-        XCTAssertTrue(chineseCSV.contains("volume_uuids,Volume UUIDs,卷 UUID,当前磁盘所含卷的 UUID；多个值以分号分隔,D714E346-9F5F-48DF-8E75-353B47128D9B"))
+        XCTAssertTrue(chineseCSV.contains("volume_uuids,Volume UUIDs,卷 UUID,当前硬盘所含卷的 UUID；多个值以分号分隔,D714E346-9F5F-48DF-8E75-353B47128D9B"))
     }
 
     func testSmartSnapshotCSVReportSortsExternalVolumeNamesAndFormatsByCapacity() {
@@ -881,7 +881,7 @@ final class CapricornTests: XCTestCase {
             "Show SMART self-test status and controls": "显示 SMART 自检状态和测试功能",
             "When disabled, self-test status, records, and controls are hidden in Overview and SMART.": "关闭后，概览和 SMART 界面不会显示自检状态、记录或测试控制。",
             "SMART Refresh": "SMART 刷新",
-            "Do not wake sleeping disks for SMART refresh": "SMART 刷新时不唤醒休眠磁盘",
+            "Do not wake sleeping disks for SMART refresh": "SMART 刷新时不唤醒休眠硬盘",
             "Automatic detection": "自动检测",
             "Choose…": "选择…",
             "Automatic": "自动",
@@ -953,14 +953,14 @@ final class CapricornTests: XCTestCase {
             "SMART Self-Tests": "SMART 自检",
             "Disk Check In Progress": "硬盘检查进行中",
             "First Aid…": "急救…",
-            "Disk First Aid": "磁盘急救",
+            "Disk First Aid": "硬盘急救",
             "Required Confirmations": "必要确认",
-            "Run First Aid": "运行磁盘急救",
-            "Direct First Aid Unavailable": "无法直接执行磁盘急救",
+            "Run First Aid": "运行硬盘急救",
+            "Direct First Aid Unavailable": "无法直接执行硬盘急救",
             "Open Files Found": "发现占用文件的程序",
             "Stop After Current Volume": "完成当前卷后停止",
             "Windows CHKDSK Guide": "Windows CHKDSK 指南",
-            "First Aid completed.": "磁盘急救已完成。"
+            "First Aid completed.": "硬盘急救已完成。"
         ]
 
         for (key, expected) in expectedTranslations {
@@ -2068,6 +2068,17 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t(key), "尚未检测自检支持。")
     }
 
+    func testErrorLogCapabilityNotCheckedMessageIsLocalized() {
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Error Log Support Not Checked"),
+            "尚未检测错误日志支持"
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Error-log support has not been checked yet."),
+            "尚未检测错误日志支持。"
+        )
+    }
+
     func testSmartSelfTestCapabilityFallsBackToAdministratorOnlyForPermissionDenied() async throws {
         let runner = SequencedCommandRunner(results: [
             CommandResult(
@@ -3146,7 +3157,7 @@ final class CapricornTests: XCTestCase {
             "Airflow_Temperature_Cel": "气流温度",
             "Power-Off_Retract_Count": "断电磁头回收次数",
             "Load_Cycle_Count": "磁头加载循环次数",
-            "Temperature_Celsius": "磁盘温度",
+            "Temperature_Celsius": "硬盘温度",
             "Hardware_ECC_Recovered": "硬件 ECC 已校正",
             "Head_Flying_Hours": "磁头工作时间",
             "Reallocated_Event_Count": "扇区重映射事件数"
