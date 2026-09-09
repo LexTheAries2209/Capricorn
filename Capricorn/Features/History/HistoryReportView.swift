@@ -274,12 +274,15 @@ struct HistoryReportView: View {
             HStack(spacing: 8) {
                 Label(title, systemImage: symbol)
                     .font(.headline)
-                Spacer(minLength: 8)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+                Spacer(minLength: 0)
                 Button(action: action) {
                     Label(actionTitle, systemImage: actionSymbol)
+                        .frame(width: historyActionWidth)
                 }
                 .controlSize(.small)
-                .frame(width: historyActionWidth)
                 .disabled(count == 0)
                 .help(actionTitle)
             }
