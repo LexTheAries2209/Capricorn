@@ -20,6 +20,10 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 0), "battery.0percent")
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 125), "battery.100percent")
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: -10), "battery.0percent")
+        XCTAssertNil(LifeRemainingBatterySymbol.nearFullFillFraction(for: 100))
+        XCTAssertEqual(LifeRemainingBatterySymbol.nearFullFillFraction(for: 90) ?? -1, 0.9, accuracy: 0.001)
+        XCTAssertEqual(LifeRemainingBatterySymbol.nearFullFillFraction(for: 99) ?? -1, 0.99, accuracy: 0.001)
+        XCTAssertNil(LifeRemainingBatterySymbol.nearFullFillFraction(for: 89))
     }
 
     func testDiskutilParserMapsAPFSVolumesToPhysicalDisk() throws {
