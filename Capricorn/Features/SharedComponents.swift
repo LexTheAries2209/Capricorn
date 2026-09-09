@@ -52,6 +52,28 @@ struct StatTile: View {
     }
 }
 
+/// Uses the native battery glyphs to make remaining-life bands visible at a glance.
+enum LifeRemainingBatterySymbol {
+    static func symbol(for percent: Int?) -> String {
+        guard let percent else { return "battery" }
+
+        switch min(max(percent, 0), 100) {
+        case 90...100:
+            return "battery.100percent"
+        case 70..<90:
+            return "battery.75percent"
+        case 45..<70:
+            return "battery.50percent"
+        case 20..<45:
+            return "battery.25percent"
+        case 1..<20:
+            return "battery.0percent"
+        default:
+            return "battery.0percent"
+        }
+    }
+}
+
 struct HealthBadge: View {
     let status: HealthStatus
     var compact = false

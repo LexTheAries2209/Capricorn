@@ -5,6 +5,23 @@ import SwiftUI
 @testable import Capricorn
 
 final class CapricornTests: XCTestCase {
+    func testLifeRemainingBatterySymbolUsesNativeHealthBands() {
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: nil), "battery")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 100), "battery.100percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 90), "battery.100percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 89), "battery.75percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 70), "battery.75percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 69), "battery.50percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 45), "battery.50percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 44), "battery.25percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 20), "battery.25percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 19), "battery.0percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 1), "battery.0percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 0), "battery.0percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 125), "battery.100percent")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: -10), "battery.0percent")
+    }
+
     func testDiskutilParserMapsAPFSVolumesToPhysicalDisk() throws {
         let list = try DiskutilPlistParser.parseList(Self.diskutilListFixture.data(using: .utf8)!)
         XCTAssertTrue(list.wholeDiskIDs.contains("disk0"))
