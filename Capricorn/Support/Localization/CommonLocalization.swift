@@ -227,6 +227,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Retry Self-Test Check": "重试自检支持检测",
         "Retry Error Log Check": "重试错误日志支持检测",
         "Checking self-test support automatically.": "正在自动检测自检支持。",
+        "Self-test support has not been checked yet.": "尚未检测自检支持。",
         "Checking error-log support automatically.": "正在自动检测错误日志支持。",
         "Error Log Support Pending": "错误日志支持待重试",
         "Error Log Unavailable": "错误日志不可用",

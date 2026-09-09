@@ -2004,6 +2004,13 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(adminRunner.calls.isEmpty)
     }
 
+    func testSelfTestCapabilityPendingMessageIsLocalized() {
+        let key = "Self-test support has not been checked yet."
+
+        XCTAssertEqual(AppLanguage.english.t(key), key)
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t(key), "尚未检测自检支持。")
+    }
+
     func testSmartSelfTestCapabilityFallsBackToAdministratorOnlyForPermissionDenied() async throws {
         let runner = SequencedCommandRunner(results: [
             CommandResult(

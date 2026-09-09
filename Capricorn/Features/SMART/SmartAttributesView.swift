@@ -555,7 +555,7 @@ struct SmartDiagnosticsPanel: View {
         }
         switch capabilityState {
         case .unknown:
-            return language.t("Checking self-test support automatically.")
+            return language.t("Self-test support has not been checked yet.")
         case .checking:
             return language.t("Checking Self-Test Support")
         case let .retrying(message, attempt):
