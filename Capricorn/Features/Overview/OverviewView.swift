@@ -40,10 +40,8 @@ struct OverviewView: View {
                     StatTile(
                         title: language.t("Life Remaining"),
                         value: snapshot?.lifeRemainingPercent.map { "\($0)%" } ?? language.t("Unavailable"),
-                        valueTint: nil
-                    ) {
-                        LifeRemainingBatteryIcon(percent: snapshot?.lifeRemainingPercent)
-                    }
+                        symbol: LifeRemainingBatterySymbol.symbol(for: snapshot?.lifeRemainingPercent)
+                    )
                     StatTile(title: language.t("Power-On Hours"), value: snapshot?.powerOnHours.map(String.init) ?? language.t("Unavailable"), symbol: "timer")
                     StatTile(title: language.t("Media Errors"), value: snapshot?.mediaErrors.map(String.init) ?? language.t("Unavailable"), symbol: "exclamationmark.triangle")
                     StatTile(title: "SMART", value: language.statusMessage(snapshot?.smartStatusRaw ?? drive.smartStatusRaw) ?? language.t("Unavailable"), symbol: "checklist.checked")
