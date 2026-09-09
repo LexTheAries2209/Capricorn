@@ -55,7 +55,7 @@ struct StatTile: View {
 /// Uses the native battery glyphs to make remaining-life bands visible at a glance.
 enum LifeRemainingBatterySymbol {
     static func symbol(for percent: Int?) -> String {
-        guard let percent else { return "battery" }
+        guard let percent else { return "battery.50percent" }
 
         switch min(max(percent, 0), 100) {
         case 90...100:

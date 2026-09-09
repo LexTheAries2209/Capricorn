@@ -6,7 +6,7 @@ import SwiftUI
 
 final class CapricornTests: XCTestCase {
     func testLifeRemainingBatterySymbolUsesNativeHealthBands() {
-        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: nil), "battery")
+        XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: nil), "battery.50percent")
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 100), "battery.100percent")
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 90), "battery.100percent")
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 89), "battery.75percent")
