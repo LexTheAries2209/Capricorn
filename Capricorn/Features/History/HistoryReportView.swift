@@ -21,6 +21,7 @@ struct HistoryReportView: View {
     @State private var reportError: String?
     private let historyScrollThreshold = 10
     private let historyRowHeight: CGFloat = 58
+    private let historyActionWidth: CGFloat = 178
 
     private var visibleSmartHistory: [SmartHistoryRecord] {
         HistoryVisibility.visible(smartHistory)
@@ -278,6 +279,7 @@ struct HistoryReportView: View {
                     Label(actionTitle, systemImage: actionSymbol)
                 }
                 .controlSize(.small)
+                .frame(width: historyActionWidth)
                 .disabled(count == 0)
                 .help(actionTitle)
             }
