@@ -2004,6 +2004,62 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(adminRunner.calls.isEmpty)
     }
 
+    @MainActor
+    func testAppModelAutomaticallyProbesSelfTestCapabilityAfterDriveDiscovery() async {
+        var drive = Self.fixtureDrive()
+        drive.protocolName = "ATA"
+        let refreshService = StagedDriveRefreshService(
+            discovery: DriveRefreshSnapshot(
+                drives: [drive],
+                snapshots: [drive.id: .refreshingNative(for: drive)]
+            ),
+            updateDelayNanoseconds: 0,
+            updates: []
+        )
+        let capabilityRunner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(Self.smartctlATACapabilityFixture.utf8),
+                stderr: Data(),
+                terminationStatus: 0
+            )
+        ])
+        let adminRunner = SequencedCommandRunner(results: [])
+        let provider = Self.testSmartctlProvider(
+            runner: StaticCommandRunner(
+                stdout: #"{"devices":[{"name":"/dev/disk0","type":"sat","protocol":"ATA"}]}"#
+            )
+        )
+        let suiteName = "CapricornTests.automaticSelfTestProbe.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let model = AppModel(
+            refreshService: refreshService,
+            smartSelfTestService: SmartSelfTestService(
+                smartctlProvider: provider,
+                runner: capabilityRunner,
+                administratorRunner: adminRunner,
+                commandCoordinator: SmartctlCommandCoordinator()
+            ),
+            smartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCache(defaults: defaults)
+        )
+
+        await model.refresh()
+        let supported = await AsyncTestWaiter.wait {
+            if case .supported = model.smartSelfTestCapability(for: drive) {
+                return true
+            }
+            return false
+        }
+
+        XCTAssertTrue(supported)
+        let call = capabilityRunner.calls.first
+        XCTAssertEqual(capabilityRunner.calls.count, 1)
+        XCTAssertTrue(call?.arguments.contains("-c") == true)
+        XCTAssertFalse(call?.arguments.contains("-t") == true)
+        XCTAssertTrue(adminRunner.calls.isEmpty)
+    }
+
     func testSelfTestCapabilityPendingMessageIsLocalized() {
         let key = "Self-test support has not been checked yet."
 

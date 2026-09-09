@@ -523,6 +523,7 @@ final class AppModel {
         }
         for drive in loadedDrives {
             restoreCachedSmartDiagnosticsCapabilities(for: drive)
+            startAutomaticSmartSelfTestCapabilityProbe(for: drive)
         }
         if let liveActivityDriveID,
            !loadedDrives.contains(where: { $0.id == liveActivityDriveID }),
@@ -534,6 +535,15 @@ final class AppModel {
             liveActivityError = "The active drive is no longer available."
         }
         refreshMessage = loadedDrives.isEmpty ? "No physical or network drives found." : "Reading SMART data..."
+    }
+
+    private func startAutomaticSmartSelfTestCapabilityProbe(for drive: DriveDevice) {
+        guard !drive.isNetwork, !drive.isMemoryCard else { return }
+        guard smartSelfTestCapabilities[drive.id] == nil else { return }
+
+        // This is a read-only capability query (`smartctl -c --json`); it never
+        // starts, aborts, or otherwise changes the drive's hardware self-test.
+        probeSmartSelfTestCapability(for: drive, force: false)
     }
 
     private func refreshRepresentativeVolumeSelections(for drives: [DriveDevice]) {
