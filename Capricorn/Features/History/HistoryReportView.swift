@@ -132,6 +132,30 @@ struct HistoryReportView: View {
                         .foregroundStyle(.red)
                 }
 
+                historyPanel(
+                    title: language.t("Quick Disk Check"),
+                    symbol: "doc.text.magnifyingglass",
+                    count: visibleDiskCheckHistory.count,
+                    emptyText: hiddenDiskCheckHistory.isEmpty ? language.t("No saved quick disk checks yet.") : language.t("No visible quick disk checks. Hidden checks can be restored below."),
+                    hideAll: { hideAllHistory(visibleDiskCheckHistory) }
+                ) {
+                    historyRows(visibleDiskCheckHistory) { item in
+                        diskCheckHistoryRow(item, isHidden: false)
+                    }
+                }
+
+                historyPanel(
+                    title: language.t("Self-Test Reports"),
+                    symbol: "stethoscope",
+                    count: visibleSelfTestHistory.count,
+                    emptyText: hiddenSelfTestHistory.isEmpty ? language.t("No saved self-test reports yet.") : language.t("No visible self-test reports. Hidden reports can be restored below."),
+                    hideAll: { hideAllHistory(visibleSelfTestHistory) }
+                ) {
+                    historyRows(visibleSelfTestHistory) { item in
+                        selfTestHistoryRow(item, isHidden: false)
+                    }
+                }
+
                 HStack(alignment: .top, spacing: 16) {
                     historyPanel(
                         title: language.t("SMART Snapshots"),
@@ -166,33 +190,6 @@ struct HistoryReportView: View {
                     ) {
                         historyRows(visibleActivityHistory) { item in
                             activityHistoryRow(item, isHidden: false)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-
-                HStack(alignment: .top, spacing: 16) {
-                    historyPanel(
-                        title: language.t("Quick Disk Check"),
-                        symbol: "doc.text.magnifyingglass",
-                        count: visibleDiskCheckHistory.count,
-                        emptyText: hiddenDiskCheckHistory.isEmpty ? language.t("No saved quick disk checks yet.") : language.t("No visible quick disk checks. Hidden checks can be restored below."),
-                        hideAll: { hideAllHistory(visibleDiskCheckHistory) }
-                    ) {
-                        historyRows(visibleDiskCheckHistory) { item in
-                            diskCheckHistoryRow(item, isHidden: false)
-                        }
-                    }
-
-                    historyPanel(
-                        title: language.t("Self-Test Reports"),
-                        symbol: "stethoscope",
-                        count: visibleSelfTestHistory.count,
-                        emptyText: hiddenSelfTestHistory.isEmpty ? language.t("No saved self-test reports yet.") : language.t("No visible self-test reports. Hidden reports can be restored below."),
-                        hideAll: { hideAllHistory(visibleSelfTestHistory) }
-                    ) {
-                        historyRows(visibleSelfTestHistory) { item in
-                            selfTestHistoryRow(item, isHidden: false)
                         }
                     }
                 }
