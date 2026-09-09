@@ -36,6 +36,8 @@ protocol SmartDiagnosticsCapabilityCaching: AnyObject {
         for drive: DriveDevice,
         smartctlVersion: String?
     )
+
+    func remove(for drive: DriveDevice)
 }
 
 /// Persists capability probes independently from SwiftData history. Capability
@@ -85,6 +87,14 @@ final class SmartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching {
             entry.errorLog = record
         }
         allEntries[identity] = entry
+        guard let data = try? JSONEncoder.dit.encode(allEntries) else { return }
+        defaults.set(data, forKey: Self.defaultsKey)
+    }
+
+    func remove(for drive: DriveDevice) {
+        guard let identity = identityKey(for: drive) else { return }
+        var allEntries = entries()
+        guard allEntries.removeValue(forKey: identity) != nil else { return }
         guard let data = try? JSONEncoder.dit.encode(allEntries) else { return }
         defaults.set(data, forKey: Self.defaultsKey)
     }

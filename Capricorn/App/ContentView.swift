@@ -1125,6 +1125,7 @@ private struct DriveDetailView: View {
             HistoryReportView(
                 drive: drive,
                 snapshot: snapshot,
+                viewModel: viewModel,
                 smartHistory: smartHistory,
                 selfTestHistory: selfTestHistory,
                 diskCheckHistory: diskCheckHistory,

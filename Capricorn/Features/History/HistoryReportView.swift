@@ -5,6 +5,7 @@ import SwiftUI
 struct HistoryReportView: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
+    let viewModel: AppModel
     let smartHistory: [SmartHistoryRecord]
     let selfTestHistory: [SmartSelfTestHistoryRecord]
     let diskCheckHistory: [DiskCheckHistoryRecord]
@@ -15,6 +16,7 @@ struct HistoryReportView: View {
     @State private var showHiddenHistory = false
     @State private var showClearCurrentDriveConfirmation = false
     @State private var showClearHiddenHistoryConfirmation = false
+    @State private var showClearDiagnosticCacheConfirmation = false
     @State private var reportError: String?
     private let historyScrollThreshold = 10
     private let historyRowHeight: CGFloat = 58
@@ -113,6 +115,14 @@ struct HistoryReportView: View {
                         .tint(.red)
                         .disabled(visibleHistoryCount + hiddenHistoryCount == 0)
                         .help(language.t("Clear Drive History"))
+                        Button {
+                            showClearDiagnosticCacheConfirmation = true
+                        } label: {
+                            Label(language.t("Clear Diagnostic Cache"), systemImage: "eraser")
+                        }
+                        .controlSize(.small)
+                        .disabled(!viewModel.hasSmartDiagnosticsState(for: drive))
+                        .help(language.t("Clear Diagnostic Cache"))
                     }
                 }
 
@@ -213,6 +223,17 @@ struct HistoryReportView: View {
             Button(language.t("Cancel"), role: .cancel) {}
         } message: {
             Text("\(language.t("This permanently removes hidden history for the selected drive."))\n\(language.t("Hidden records")): \(hiddenHistoryCount)")
+        }
+        .confirmationDialog(
+            language.t("Clear Diagnostic Cache?"),
+            isPresented: $showClearDiagnosticCacheConfirmation
+        ) {
+            Button(language.t("Clear Diagnostic Cache"), role: .destructive) {
+                viewModel.clearSmartDiagnostics(for: drive)
+            }
+            Button(language.t("Cancel"), role: .cancel) {}
+        } message: {
+            Text(language.t("This clears the selected drive's cached self-test and error-log diagnostics without deleting history records."))
         }
     }
 
@@ -547,6 +568,7 @@ struct HistoryReportView: View {
     private func clearCurrentDriveHistory() {
         do {
             _ = try HistoryRepository(modelContext: modelContext).clearHistory(for: drive)
+            viewModel.clearDiskCheckReport(for: drive)
             reportError = nil
         } catch {
             reportError = language.t("Could not clear history.")

@@ -2238,6 +2238,46 @@ final class CapricornTests: XCTestCase {
     }
 
     @MainActor
+    func testClearingSmartDiagnosticsRemovesCurrentStateAndCapabilityCache() throws {
+        let suiteName = "CapricornTests.clearSmartDiagnostics.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let cache = SmartDiagnosticsCapabilityCache(defaults: defaults)
+        let drive = Self.fixtureDrive()
+        let cacheRecord = SmartDiagnosticsFeatureCacheRecord(
+            status: .supported,
+            message: "confirmed",
+            selfTestCapability: SmartSelfTestCapability(
+                shortSupported: true,
+                longSupported: true,
+                message: "confirmed"
+            ),
+            checkedAt: Date(timeIntervalSince1970: 100)
+        )
+        cache.store(cacheRecord, feature: .selfTest, for: drive, smartctlVersion: nil)
+
+        let model = AppModel(smartDiagnosticsCapabilityCache: cache)
+        model.smartSelfTestCapabilities[drive.id] = .supported(cacheRecord.selfTestCapability!)
+        model.smartErrorLogCapabilities[drive.id] = .supported
+        model.smartErrorLogReports[drive.id] = SmartErrorLogReport(
+            isSupported: true,
+            message: "No controller errors.",
+            entries: [],
+            totalEntryCount: 0,
+            capturedAt: Date(timeIntervalSince1970: 100)
+        )
+
+        XCTAssertTrue(model.hasSmartDiagnosticsState(for: drive))
+        model.clearSmartDiagnostics(for: drive)
+
+        XCTAssertFalse(model.hasSmartDiagnosticsState(for: drive))
+        XCTAssertEqual(model.smartSelfTestCapability(for: drive), .unknown)
+        XCTAssertEqual(model.smartErrorLogCapability(for: drive), .unknown)
+        XCTAssertNil(model.smartErrorLogReports[drive.id])
+        XCTAssertNil(cache.cachedEntry(for: drive, smartctlVersion: nil))
+    }
+
+    @MainActor
     func testSelfTestHistoryDeduplicatesAndExportsStructuredReports() throws {
         let container = try ModelContainerFactory.makeInMemory()
         let repository = HistoryRepository(modelContext: ModelContext(container))

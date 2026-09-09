@@ -1243,6 +1243,49 @@ final class AppModel {
         smartErrorLogCapabilities[drive.id] ?? .unknown
     }
 
+    func hasSmartDiagnosticsState(for drive: DriveDevice) -> Bool {
+        smartSelfTestCapabilities[drive.id] != nil
+            || smartErrorLogCapabilities[drive.id] != nil
+            || smartErrorLogReports[drive.id] != nil
+            || smartDiagnosticsCapabilityCache.cachedEntry(
+                for: drive,
+                smartctlVersion: smartctlVersion(for: drive)
+            ) != nil
+    }
+
+    func clearSmartDiagnostics(for drive: DriveDevice) {
+        guard !(smartSelfTestDriveID == drive.id && isSmartSelfTestActive) else { return }
+
+        smartSelfTestCapabilityTasks[drive.id]?.cancel()
+        smartSelfTestCapabilityTasks.removeValue(forKey: drive.id)
+        smartErrorLogCapabilityTasks[drive.id]?.cancel()
+        smartErrorLogCapabilityTasks.removeValue(forKey: drive.id)
+        smartErrorLogReadTasks[drive.id]?.cancel()
+        smartErrorLogReadTasks.removeValue(forKey: drive.id)
+
+        smartSelfTestCapabilities.removeValue(forKey: drive.id)
+        smartErrorLogCapabilities.removeValue(forKey: drive.id)
+        smartErrorLogReports.removeValue(forKey: drive.id)
+        smartDiagnosticsCapabilityCache.remove(for: drive)
+
+        if smartSelfTestDriveID == drive.id {
+            smartSelfTestSession = .idle
+            smartSelfTestDriveID = nil
+            smartSelfTestMessage = nil
+        }
+        smartErrorLogMessage = nil
+        if completedSmartSelfTest?.drive.id == drive.id {
+            completedSmartSelfTest = nil
+        }
+    }
+
+    func clearDiskCheckReport(for drive: DriveDevice) {
+        diskCheckReportsByDrive.removeValue(forKey: drive.id)
+        if diskCheckReport?.driveID == drive.id {
+            diskCheckReport = nil
+        }
+    }
+
     func checkSmartSelfTestCapability(for drive: DriveDevice) {
         guard !isSmartSelfTestActive else { return }
         probeSmartSelfTestCapability(for: drive, force: true)
