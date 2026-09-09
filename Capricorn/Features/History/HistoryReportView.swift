@@ -493,17 +493,6 @@ struct HistoryReportView: View {
                 }
             }
             Spacer()
-            Button {
-                showClearQuickDiskCheckConfirmation = true
-            } label: {
-                Image(systemName: "trash")
-                    .frame(width: 18, height: 18)
-            }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            .foregroundStyle(.secondary)
-            .help(language.t("Clear Result"))
-            .accessibilityLabel(language.t("Clear Result"))
         }
     }
 
