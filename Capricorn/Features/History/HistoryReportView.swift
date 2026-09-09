@@ -16,6 +16,7 @@ struct HistoryReportView: View {
     @State private var showHiddenHistory = false
     @State private var showClearCurrentDriveConfirmation = false
     @State private var showClearHiddenHistoryConfirmation = false
+    @State private var showClearQuickDiskCheckConfirmation = false
     @State private var showClearDiagnosticCacheConfirmation = false
     @State private var reportError: String?
     private let historyScrollThreshold = 10
@@ -38,11 +39,8 @@ struct HistoryReportView: View {
     }
 
     private var visibleDiskCheckHistory: [DiskCheckHistoryRecord] {
-        HistoryVisibility.visible(diskCheckHistory)
-    }
-
-    private var hiddenDiskCheckHistory: [DiskCheckHistoryRecord] {
-        HistoryVisibility.hidden(diskCheckHistory)
+        // Quick disk checks retain only the latest result and are never hidden.
+        diskCheckHistory
     }
 
     private var visibleBenchmarkHistory: [BenchmarkHistoryRecord] {
@@ -64,7 +62,6 @@ struct HistoryReportView: View {
     private var hasHiddenHistory: Bool {
         !hiddenSmartHistory.isEmpty
             || !hiddenSelfTestHistory.isEmpty
-            || !hiddenDiskCheckHistory.isEmpty
             || !hiddenBenchmarkHistory.isEmpty
             || !hiddenActivityHistory.isEmpty
     }
@@ -80,7 +77,6 @@ struct HistoryReportView: View {
     private var hiddenHistoryCount: Int {
         hiddenSmartHistory.count
             + hiddenSelfTestHistory.count
-            + hiddenDiskCheckHistory.count
             + hiddenBenchmarkHistory.count
             + hiddenActivityHistory.count
     }
@@ -136,11 +132,13 @@ struct HistoryReportView: View {
                     title: language.t("Quick Disk Check"),
                     symbol: "doc.text.magnifyingglass",
                     count: visibleDiskCheckHistory.count,
-                    emptyText: hiddenDiskCheckHistory.isEmpty ? language.t("No saved quick disk checks yet.") : language.t("No visible quick disk checks. Hidden checks can be restored below."),
-                    hideAll: { hideAllHistory(visibleDiskCheckHistory) }
+                    emptyText: language.t("No saved quick disk checks yet."),
+                    actionTitle: language.t("Clear Result"),
+                    actionSymbol: "trash",
+                    action: { showClearQuickDiskCheckConfirmation = true }
                 ) {
                     historyRows(visibleDiskCheckHistory) { item in
-                        diskCheckHistoryRow(item, isHidden: false)
+                        diskCheckHistoryRow(item)
                     }
                 }
 
@@ -149,7 +147,9 @@ struct HistoryReportView: View {
                     symbol: "stethoscope",
                     count: visibleSelfTestHistory.count,
                     emptyText: hiddenSelfTestHistory.isEmpty ? language.t("No saved self-test reports yet.") : language.t("No visible self-test reports. Hidden reports can be restored below."),
-                    hideAll: { hideAllHistory(visibleSelfTestHistory) }
+                    actionTitle: language.t("Hide All"),
+                    actionSymbol: "eye.slash",
+                    action: { hideAllHistory(visibleSelfTestHistory) }
                 ) {
                     historyRows(visibleSelfTestHistory) { item in
                         selfTestHistoryRow(item, isHidden: false)
@@ -162,7 +162,9 @@ struct HistoryReportView: View {
                         symbol: "clock",
                         count: visibleSmartHistory.count,
                         emptyText: hiddenSmartHistory.isEmpty ? language.t("No saved snapshots yet.") : language.t("No visible snapshots. Hidden snapshots can be restored below."),
-                        hideAll: { hideAllHistory(visibleSmartHistory) }
+                        actionTitle: language.t("Hide All"),
+                        actionSymbol: "eye.slash",
+                        action: { hideAllHistory(visibleSmartHistory) }
                     ) {
                         historyRows(visibleSmartHistory) { item in
                             smartHistoryRow(item, isHidden: false)
@@ -174,7 +176,9 @@ struct HistoryReportView: View {
                         symbol: "chart.xyaxis.line",
                         count: visibleBenchmarkHistory.count,
                         emptyText: hiddenBenchmarkHistory.isEmpty ? language.t("No saved benchmark results yet.") : language.t("No visible benchmark results. Hidden benchmark results can be restored below."),
-                        hideAll: { hideAllHistory(visibleBenchmarkHistory) }
+                        actionTitle: language.t("Hide All"),
+                        actionSymbol: "eye.slash",
+                        action: { hideAllHistory(visibleBenchmarkHistory) }
                     ) {
                         historyRows(visibleBenchmarkHistory) { item in
                             benchmarkHistoryRow(item, isHidden: false)
@@ -186,7 +190,9 @@ struct HistoryReportView: View {
                         symbol: "waveform.path.ecg.rectangle",
                         count: visibleActivityHistory.count,
                         emptyText: hiddenActivityHistory.isEmpty ? language.t("No saved activity records yet.") : language.t("No visible activity records. Hidden activity records can be restored below."),
-                        hideAll: { hideAllHistory(visibleActivityHistory) }
+                        actionTitle: language.t("Hide All"),
+                        actionSymbol: "eye.slash",
+                        action: { hideAllHistory(visibleActivityHistory) }
                     ) {
                         historyRows(visibleActivityHistory) { item in
                             activityHistoryRow(item, isHidden: false)
@@ -225,6 +231,17 @@ struct HistoryReportView: View {
             Text("\(language.t("This permanently removes hidden history for the selected drive."))\n\(language.t("Hidden records")): \(hiddenHistoryCount)")
         }
         .confirmationDialog(
+            language.t("Clear Quick Disk Check Result?"),
+            isPresented: $showClearQuickDiskCheckConfirmation
+        ) {
+            Button(language.t("Clear Result"), role: .destructive) {
+                clearQuickDiskCheckResult()
+            }
+            Button(language.t("Cancel"), role: .cancel) {}
+        } message: {
+            Text(language.t("This permanently removes the saved quick disk check result for the selected drive."))
+        }
+        .confirmationDialog(
             language.t("Clear Diagnostic Cache?"),
             isPresented: $showClearDiagnosticCacheConfirmation
         ) {
@@ -247,7 +264,9 @@ struct HistoryReportView: View {
         symbol: String,
         count: Int,
         emptyText: String,
-        hideAll: @escaping () -> Void,
+        actionTitle: String,
+        actionSymbol: String,
+        action: @escaping () -> Void,
         @ViewBuilder rows: () -> Rows
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -255,12 +274,12 @@ struct HistoryReportView: View {
                 Label(title, systemImage: symbol)
                     .font(.headline)
                 Spacer(minLength: 8)
-                Button(action: hideAll) {
-                    Label(language.t("Hide All"), systemImage: "eye.slash")
+                Button(action: action) {
+                    Label(actionTitle, systemImage: actionSymbol)
                 }
                 .controlSize(.small)
                 .disabled(count == 0)
-                .help(language.t("Hide All"))
+                .help(actionTitle)
             }
 
             if count == 0 {
@@ -341,15 +360,6 @@ struct HistoryReportView: View {
                         .font(.subheadline.bold())
                     ForEach(hiddenSelfTestHistory) { item in
                         selfTestHistoryRow(item, isHidden: true)
-                        Divider()
-                    }
-                }
-
-                if !hiddenDiskCheckHistory.isEmpty {
-                    Text(language.t("Quick Disk Check"))
-                        .font(.subheadline.bold())
-                    ForEach(hiddenDiskCheckHistory) { item in
-                        diskCheckHistoryRow(item, isHidden: true)
                         Divider()
                     }
                 }
@@ -461,7 +471,7 @@ struct HistoryReportView: View {
         }
     }
 
-    private func diskCheckHistoryRow(_ item: DiskCheckHistoryRecord, isHidden: Bool) -> some View {
+    private func diskCheckHistoryRow(_ item: DiskCheckHistoryRecord) -> some View {
         let report = item.report
         let hasIssues = report?.hasIssues ?? true
         let statusKey = report.map { $0.hasIssues ? "Disk Check Reported Issues" : "Last Disk Check Passed" }
@@ -483,13 +493,17 @@ struct HistoryReportView: View {
                 }
             }
             Spacer()
-            historyVisibilityButton(isHidden: isHidden) {
-                if isHidden {
-                    restoreHistory(item)
-                } else {
-                    hideHistory(item)
-                }
+            Button {
+                showClearQuickDiskCheckConfirmation = true
+            } label: {
+                Image(systemName: "trash")
+                    .frame(width: 18, height: 18)
             }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .foregroundStyle(.secondary)
+            .help(language.t("Clear Result"))
+            .accessibilityLabel(language.t("Clear Result"))
         }
     }
 
@@ -568,6 +582,16 @@ struct HistoryReportView: View {
     private func clearCurrentDriveHistory() {
         do {
             _ = try HistoryRepository(modelContext: modelContext).clearHistory(for: drive)
+            viewModel.clearDiskCheckReport(for: drive)
+            reportError = nil
+        } catch {
+            reportError = language.t("Could not clear history.")
+        }
+    }
+
+    private func clearQuickDiskCheckResult() {
+        do {
+            _ = try HistoryRepository(modelContext: modelContext).clearDiskCheckResult(for: drive)
             viewModel.clearDiskCheckReport(for: drive)
             reportError = nil
         } catch {

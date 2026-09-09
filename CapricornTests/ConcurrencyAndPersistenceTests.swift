@@ -676,9 +676,58 @@ extension CapricornTests {
         XCTAssertEqual(records.first?.report?.mode, .detailed)
         XCTAssertEqual(records.first?.report?.capturedAt, secondDate)
 
+        secondRecord.hiddenAt = Date()
+        try container.mainContext.save()
+        XCTAssertNotNil(secondRecord.hiddenAt)
+        _ = try repository.saveDiskCheckReport(drive: rediscoveredDrive, report: secondReport)
+        XCTAssertNil(secondRecord.hiddenAt)
+
         let counts = try repository.clearHistory(for: rediscoveredDrive)
         XCTAssertEqual(counts.total, 1)
         XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>()).isEmpty)
+    }
+
+    @MainActor
+    func testDiskCheckHistoryCannotBeHidden() throws {
+        let container = try ModelContainerFactory.makeInMemory()
+        let repository = HistoryRepository(modelContext: container.mainContext)
+        let drive = Self.fixtureDrive()
+        let report = DiskCheckReport(
+            mode: .ordinary,
+            driveID: drive.id,
+            driveName: drive.displayName,
+            capturedAt: Date(),
+            entries: []
+        )
+
+        let record = try XCTUnwrap(repository.saveDiskCheckReport(drive: drive, report: report))
+        try repository.hide(record)
+        XCTAssertNil(record.hiddenAt)
+        try repository.hideAll([record])
+        XCTAssertNil(record.hiddenAt)
+    }
+
+    @MainActor
+    func testDiskCheckHistoryCanBeClearedWithoutRemovingOtherHistory() throws {
+        let container = try ModelContainerFactory.makeInMemory()
+        let repository = HistoryRepository(modelContext: container.mainContext)
+        let drive = Self.fixtureDrive()
+        let report = DiskCheckReport(
+            mode: .ordinary,
+            driveID: drive.id,
+            driveName: drive.displayName,
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            entries: []
+        )
+
+        _ = try repository.saveDiskCheckReport(drive: drive, report: report)
+        _ = try repository.saveSmart(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
+
+        let removedCount = try repository.clearDiskCheckResult(for: drive)
+
+        XCTAssertEqual(removedCount, 1)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>()).isEmpty)
+        XCTAssertEqual(try container.mainContext.fetch(FetchDescriptor<SmartHistoryRecord>()).count, 1)
     }
 
     @MainActor

@@ -294,11 +294,19 @@ enum HistoryVisibility {
     }
 
     static func hide<T: HistoryDisplayRecord>(_ record: T, at date: Date = Date()) {
+        guard !(record is DiskCheckHistoryRecord) else {
+            record.hiddenAt = nil
+            return
+        }
         record.hiddenAt = date
     }
 
     static func hideAll<T: HistoryDisplayRecord>(_ records: [T], at date: Date = Date(), matching drive: DriveDevice? = nil) {
         for record in records {
+            guard !(record is DiskCheckHistoryRecord) else {
+                record.hiddenAt = nil
+                continue
+            }
             guard drive.map({ HistoryDriveMatcher.matches(record: record, drive: $0) }) ?? true else { continue }
             record.hiddenAt = date
         }

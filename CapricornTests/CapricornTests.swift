@@ -948,6 +948,7 @@ final class CapricornTests: XCTestCase {
             "Check and Repair": "检查与修复",
             "Quick Disk Check": "快速自检",
             "Run Quick Disk Check": "运行快速自检",
+            "Clear Result": "清理结果",
             "Enable system-disk checks in Settings before running Quick Disk Check.": "运行快速自检前，请先在设置中允许系统盘执行自检。",
             "SMART Self-Tests": "SMART 自检",
             "Disk Check In Progress": "硬盘检查进行中",

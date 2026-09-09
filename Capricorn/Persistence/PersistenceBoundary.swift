@@ -190,6 +190,8 @@ final class HistoryRepository {
         record.driveName = drive.displayName
         record.capturedAt = report.capturedAt
         record.encodedReport = try JSONEncoder.dit.encode(report)
+        // Quick disk checks are always current and cannot be hidden.
+        record.hiddenAt = nil
         if existing == nil {
             modelContext.insert(record)
         }
@@ -252,6 +254,18 @@ final class HistoryRepository {
     func restoreAll<T: HistoryDisplayRecord>(_ records: [T], matching drive: DriveDevice? = nil) throws {
         HistoryVisibility.restoreAll(records, matching: drive)
         try modelContext.save()
+    }
+
+    /// Removes the latest quick disk-check result for the selected drive.
+    /// Quick checks are intentionally not part of hidden-history management.
+    @discardableResult
+    func clearDiskCheckResult(for drive: DriveDevice) throws -> Int {
+        let records = try modelContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>())
+            .filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
+        records.forEach(modelContext.delete)
+        try modelContext.save()
+        CapricornLog.persistence.info("Quick disk check result cleared: \(records.count) records")
+        return records.count
     }
 
     /// Removes every user-facing history record from the current SwiftData
