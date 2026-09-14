@@ -203,6 +203,7 @@ struct DiskActivityView: View {
 
                 Spacer(minLength: 0)
             }
+            .padding(.leading, 8)
 
             HStack(spacing: 8) {
                 Button {
@@ -438,8 +439,6 @@ struct DiskActivityView: View {
                 .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
         }
         .frame(minHeight: 36, alignment: .center)
-        // Match the monitoring controls, whose enclosing panel uses a smaller inset.
-        .padding(.leading, -8)
     }
 
     private func workloadActionLabel(_ title: String, systemImage: String) -> some View {
