@@ -203,7 +203,7 @@ struct DiskActivityView: View {
 
                 Spacer(minLength: 0)
             }
-
+            .padding(.leading, 8)
             HStack(spacing: 8) {
                 Button {
                     saveMessage = nil
@@ -246,6 +246,7 @@ struct DiskActivityView: View {
                 }
                 .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || displayedSamples.isEmpty)
             }
+            .frame(minHeight: 36, alignment: .center)
         }
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -420,11 +421,7 @@ struct DiskActivityView: View {
     }
 
     private var workloadActionsControl: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(language.t("Actions"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 8) {
+        HStack(spacing: 8) {
                 Button {
                     startWorkload()
                 } label: {
@@ -439,8 +436,8 @@ struct DiskActivityView: View {
                     workloadActionLabel(language.t("Stop Workload"), systemImage: "stop.fill")
                 }
                 .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
-            }
         }
+        .frame(minHeight: 36, alignment: .center)
     }
 
     private func workloadActionLabel(_ title: String, systemImage: String) -> some View {

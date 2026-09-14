@@ -1283,6 +1283,10 @@ struct SmartctlDiagnostics: Codable, Hashable, Sendable {
     var openError: String?
     var executablePath: String? = nil
     var executableOrigin: String? = nil
+    var selectedTransport: String? = nil
+    var fallbackUsed: Bool? = nil
+    var fallbackReason: String? = nil
+    var attemptedTransports: [String] = []
 }
 
 struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
@@ -1307,6 +1311,26 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     var spareAvailableThresholdPercent: Int? = nil
     var smartctlDiagnostics: SmartctlDiagnostics? = nil
     var nativeSmartCapturedAt: Date? = nil
+    var selectedProvider: String? = nil
+    var selectedTransport: String? = nil
+    var fallbackUsed: Bool? = nil
+    var fallbackReason: String? = nil
+
+    var hasSMARTPayload: Bool {
+        smartStatusRaw?.isEmpty == false || !attributes.isEmpty
+            || temperatureCelsius != nil || lifeRemainingPercent != nil
+            || powerOnHours != nil || powerCycleCount != nil
+            || mediaErrors != nil || unsafeShutdowns != nil
+            || selfTestReport != nil
+    }
+
+    // Old snapshots may name an attempted provider even when it returned no data.
+    var verifiedSource: ProviderStatus? {
+        guard hasSMARTPayload, let selectedProvider else { return nil }
+        return providerStatuses.first {
+            $0.name == selectedProvider && ($0.state == .available || $0.state == .limited)
+        }
+    }
 
     static func unavailable(for drive: DriveDevice, reason: String) -> SmartSnapshot {
         SmartSnapshot(
@@ -1506,6 +1530,13 @@ struct USBSmartCommandPassthroughStatus: Hashable, Sendable {
     }
 
     private static func kind(for diagnostics: SmartctlDiagnostics) -> USBSmartCommandPassthroughKind? {
+        let transport = diagnostics.selectedTransport?.lowercased() ?? ""
+        if transport == "sat" || transport.hasSuffix("/sat") {
+            return .sata
+        }
+        if transport == "snt" || transport.hasPrefix("snt") {
+            return .nvme
+        }
         let protocolName = diagnostics.protocolName?.lowercased() ?? ""
         let deviceType = diagnostics.deviceType?.lowercased() ?? ""
 

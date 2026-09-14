@@ -319,6 +319,7 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
             spareAvailableThresholdPercent: spareThreshold
         )
         snapshot.nativeSmartCapturedAt = snapshot.capturedAt
+        snapshot.selectedProvider = snapshot.hasSMARTPayload ? providerName : nil
         snapshot.health = evaluator.evaluate(drive: drive, snapshot: snapshot)
         snapshot.summary = evaluator.summary(for: drive, snapshot: snapshot)
         return snapshot
@@ -602,22 +603,50 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             return snapshot
         }
         do {
-            let result = try await commandCoordinator.run { [self] in
-                try await self.runner.run(
-                    executable.path,
-                    arguments: self.smartReadArguments(for: drive, target: resolvedTargetDescriptor, fallback: target, executable: executable)
-                )
-            }
-            return annotate(
-                SmartctlParser.parseSnapshot(
-                result.stdout,
-                drive: drive,
-                providerName: providerName,
-                exitStatus: result.terminationStatus,
-                stderr: result.stderr,
-                targetDescriptor: resolvedTargetDescriptor
-                ), with: executable
+            let primary = try await readCandidate(
+                for: drive,
+                target: resolvedTargetDescriptor,
+                fallback: target,
+                executable: executable
             )
+
+            guard shouldTrySAT(for: drive, target: resolvedTargetDescriptor, snapshot: primary) else {
+                return primary
+            }
+
+            let satTarget = SmartctlTargetDescriptor(
+                path: target,
+                type: "sat",
+                protocolName: resolvedTargetDescriptor?.protocolName ?? drive.protocolName
+            )
+            let sat = try? await readCandidate(
+                for: drive,
+                target: satTarget,
+                fallback: target,
+                executable: executable
+            )
+            guard let sat, hasSMARTPayload(sat) else {
+                var result = primary
+                if var diagnostics = result.smartctlDiagnostics {
+                    diagnostics.attemptedTransports = (diagnostics.attemptedTransports ?? []) + ["sat"]
+                    diagnostics.fallbackReason = "SAT did not return a SMART payload."
+                    result.smartctlDiagnostics = diagnostics
+                }
+                return result
+            }
+
+            var result = sat
+            result.selectedProvider = providerName
+            result.selectedTransport = "SAT"
+            result.fallbackUsed = true
+            result.fallbackReason = "The primary smartctl path did not return a SMART payload."
+            let fallbackReason = result.fallbackReason
+            if var diagnostics = result.smartctlDiagnostics {
+                diagnostics.fallbackUsed = true
+                diagnostics.fallbackReason = fallbackReason
+                result.smartctlDiagnostics = diagnostics
+            }
+            return result
         } catch {
             var snapshot = SmartSnapshot(
                 driveID: drive.id,
@@ -646,6 +675,55 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             )
             return snapshot
         }
+    }
+
+    private func readCandidate(
+        for drive: DriveDevice,
+        target: SmartctlTargetDescriptor?,
+        fallback: String,
+        executable: SmartctlExecutableDescriptor
+    ) async throws -> SmartSnapshot {
+        let result = try await commandCoordinator.run { [self] in
+            try await self.runner.run(
+                executable.path,
+                arguments: self.smartReadArguments(for: drive, target: target, fallback: fallback, executable: executable)
+            )
+        }
+        var snapshot = SmartctlParser.parseSnapshot(
+            result.stdout,
+            drive: drive,
+            providerName: providerName,
+            exitStatus: result.terminationStatus,
+            stderr: result.stderr,
+            targetDescriptor: target
+        )
+        let transport = target?.type?.uppercased()
+        snapshot.selectedProvider = snapshot.hasSMARTPayload ? providerName : nil
+        snapshot.selectedTransport = snapshot.hasSMARTPayload ? transport : nil
+        snapshot.smartctlDiagnostics?.selectedTransport = snapshot.selectedTransport
+        snapshot.smartctlDiagnostics?.attemptedTransports = [transport ?? "auto"]
+        return annotate(snapshot, with: executable)
+    }
+
+    private func shouldTrySAT(
+        for drive: DriveDevice,
+        target: SmartctlTargetDescriptor?,
+        snapshot: SmartSnapshot
+    ) -> Bool {
+        guard !hasSMARTPayload(snapshot),
+              !drive.isInternal,
+              !drive.isNetwork,
+              !drive.isVirtual,
+              !drive.isMemoryCard,
+              drive.protocolName.localizedCaseInsensitiveContains("USB") else {
+            return false
+        }
+        let type = target?.type?.lowercased() ?? ""
+        return type.isEmpty || type == "auto" || type == "ata" || type == "sat" || type.hasSuffix("/sat")
+    }
+
+    private func hasSMARTPayload(_ snapshot: SmartSnapshot) -> Bool {
+        snapshot.hasSMARTPayload
     }
 
     func resolvedTargets(for drives: [DriveDevice]) async -> [String: String] {
@@ -2033,8 +2111,14 @@ final class SmartSnapshotService: @unchecked Sendable {
             merged.enduranceUsedPercent = snapshot.enduranceUsedPercent ?? merged.enduranceUsedPercent
             merged.spareAvailablePercent = snapshot.spareAvailablePercent ?? merged.spareAvailablePercent
             merged.spareAvailableThresholdPercent = snapshot.spareAvailableThresholdPercent ?? merged.spareAvailableThresholdPercent
-            merged.smartctlDiagnostics = snapshot.smartctlDiagnostics ?? merged.smartctlDiagnostics
+            if let diagnostics = snapshot.smartctlDiagnostics {
+                merged.smartctlDiagnostics = diagnostics
+            }
             merged.nativeSmartCapturedAt = snapshot.nativeSmartCapturedAt ?? merged.nativeSmartCapturedAt
+            merged.selectedProvider = snapshot.selectedProvider ?? merged.selectedProvider
+            merged.selectedTransport = snapshot.selectedTransport ?? merged.selectedTransport
+            merged.fallbackUsed = snapshot.fallbackUsed ?? merged.fallbackUsed
+            merged.fallbackReason = snapshot.fallbackReason ?? merged.fallbackReason
         }
 
         merged.health = evaluator.evaluate(drive: drive, snapshot: merged)

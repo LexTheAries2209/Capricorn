@@ -148,6 +148,7 @@ struct CapricornSettingsView: View {
     @State private var historyDatabaseSizeBytes: Int64?
     @State private var pendingHistoryDatabaseStatistics: HistoryDatabaseStatistics?
     @State private var smartctlExecutableInfo: SmartctlExecutableInfo?
+    @State private var satSMARTDriverStatus: SATSMARTDriverStatus?
 
     private var language: AppLanguage {
         preferences.language
@@ -293,6 +294,48 @@ struct CapricornSettingsView: View {
                     Label(language.t("Open smartmontools Project"), systemImage: "safari")
                 }
 
+                Section(language.t("SAT SMART Driver")) {
+                    if let status = satSMARTDriverStatus {
+                        LabeledContent(language.t("Status"), value: language.statusMessage(status.message))
+                        if let version = status.version {
+                            LabeledContent(language.t("Version"), value: version)
+                        }
+                    } else {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+
+                    HStack {
+                        Button {
+                            SATSMARTDriverService().revealPackage()
+                        } label: {
+                            Label(language.t("Show SAT SMART Driver Installer"), systemImage: "shippingbox")
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Spacer()
+                        Button {
+                            satSMARTDriverStatus = SATSMARTDriverService().status()
+                        } label: {
+                            Label(language.t("Recheck SAT SMART Driver"), systemImage: "arrow.clockwise")
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+
+                    HStack {
+                        Link(destination: SATSMARTDriverService.guideURL) {
+                            Label(language.t("Open Binary Fruit SAT SMART Driver Guide"), systemImage: "safari")
+                        }
+                        Spacer()
+                        Link(destination: SATSMARTDriverService.sourceURL) {
+                            Label(language.t("Open SAT SMART Driver Open Source Project"), systemImage: "chevron.left.forwardslash.chevron.right")
+                        }
+                    }
+
+                    Text(language.t("SAT SMART Driver is an optional third-party component for compatible USB-SATA devices. Capricorn does not install, load, or change system security settings."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 if let error = smartctlExecutableInfo?.error {
                     Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
@@ -331,6 +374,7 @@ struct CapricornSettingsView: View {
         }
         .task {
             smartctlExecutableInfo = await SmartctlSmartProvider().executableInfo()
+            satSMARTDriverStatus = SATSMARTDriverService().status()
         }
         .alert(language.t("Clear History Database"), isPresented: $isConfirmingHistoryDatabaseClear) {
             Button(language.t("Clear History Database"), role: .destructive) {

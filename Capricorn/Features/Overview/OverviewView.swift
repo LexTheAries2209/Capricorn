@@ -70,10 +70,32 @@ struct OverviewView: View {
                 }
 
                 InfoPanel(title: language.t("Providers"), symbol: "antenna.radiowaves.left.and.right") {
+                    if let source = snapshot?.verifiedSource {
+                        let sourceState = source.state
+                        HStack(alignment: .top) {
+                            Image(systemName: sourceState.symbolName)
+                                .foregroundStyle(sourceState.tint)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(language.t("Selected SMART Source"))
+                                    .font(.headline)
+                                Text(sourceDescription(provider: source.name, transport: snapshot?.selectedTransport))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if let reason = snapshot?.fallbackReason {
+                                    Text(language.t(reason))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                        }
+                    }
                     ForEach(snapshot?.providerStatuses ?? []) { status in
                         HStack(alignment: .top) {
-                            Image(systemName: status.state.symbolName)
-                                .foregroundStyle(status.state.tint)
+                            let displayState: ProviderState = status.name.caseInsensitiveCompare("Native macOS") == .orderedSame
+                                && status.state == .unavailable ? .failed : status.state
+                            Image(systemName: displayState.symbolName)
+                                .foregroundStyle(displayState.tint)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(status.name)
                                     .font(.headline)
@@ -111,6 +133,17 @@ struct OverviewView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func sourceDescription(provider: String, transport: String?) -> String {
+        let normalized = transport?.uppercased()
+        if normalized == "SAT" || normalized?.hasSuffix("/SAT") == true {
+            return "\(provider) · SAT"
+        }
+        if normalized == "SNT" || normalized?.hasPrefix("SNT") == true {
+            return "\(provider) · SNT"
+        }
+        return provider
     }
 
     private func volumeSubtitle(_ volume: DriveDevice.Volume) -> String {

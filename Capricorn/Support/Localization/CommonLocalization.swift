@@ -83,6 +83,17 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         if message.hasPrefix("Open file inspection failed: ") {
             return message.replacingOccurrences(of: "Open file inspection failed: ", with: "查看占用程序失败：")
         }
+        if message.hasPrefix("smartctl did not return SMART data (exit status ") {
+            let prefix = "smartctl did not return SMART data (exit status "
+            let value = message.dropFirst(prefix.count).dropLast(1)
+            return "smartctl 未返回 SMART 数据（退出状态 \(value)）。"
+        }
+        if message.hasPrefix("smartctl did not return SMART data.") {
+            return "smartctl 未返回 SMART 数据。"
+        }
+        if message.hasPrefix("smartctl could not open ") {
+            return message.replacingOccurrences(of: "smartctl could not open ", with: "smartctl 无法打开 ")
+        }
         if message.hasPrefix("SMART data does not show immediate risk for "), message.hasSuffix(".") {
             let name = message
                 .replacingOccurrences(of: "SMART data does not show immediate risk for ", with: "")
@@ -453,6 +464,18 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Enter a new name for the selected volume.": "输入所选卷宗的新名称。",
         "Rename": "重命名",
         "Providers": "数据来源",
+        "Selected SMART Source": "当前 SMART 数据来源",
+        "SAT SMART Driver": "SAT SMART 驱动",
+        "Version": "版本",
+        "Show SAT SMART Driver Installer": "显示 SAT SMART Driver 安装包位置",
+        "Recheck SAT SMART Driver": "重新检测 SAT SMART Driver",
+        "Open Binary Fruit SAT SMART Driver Guide": "打开 Binary Fruit SAT SMART Driver 说明",
+        "Open SAT SMART Driver Open Source Project": "打开 SAT SMART Driver 开源项目",
+        "SAT SMART Driver is an optional third-party component for compatible USB-SATA devices. Capricorn does not install, load, or change system security settings.": "SAT SMART Driver 是适用于兼容 USB-SATA 设备的可选第三方组件。Capricorn 不会安装、加载驱动或修改系统安全设置。",
+        "SAT SMART Driver is not installed.": "SAT SMART Driver 未安装。",
+        "SAT SMART Driver is loaded and has an IOKit match.": "SAT SMART Driver 已加载并存在 IOKit 匹配。",
+        "SAT SMART Driver files are installed.": "SAT SMART Driver 文件已安装。",
+        "SAT did not return a SMART payload.": "SAT 未返回有效 SMART 数据。",
         "Save SMART Snapshot CSV": "保存 SMART 快照 CSV",
         "Save SMART Snapshot CSV (Command-S)": "保存 SMART 快照 CSV（Command-S）",
         "Choose Storage Folder": "选择存储文件夹",
@@ -702,6 +725,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "smartctl data parsed.": "已解析 smartctl 数据。",
         "Detailed SMART data available.": "可用详细 SMART 数据。",
         "smartctl returned partial data.": "smartctl 返回了部分数据。",
+        "SAT SMART Driver is not installed.": "SAT SMART Driver 未安装。",
+        "SAT SMART Driver is loaded and has an IOKit match.": "SAT SMART Driver 已加载并存在 IOKit 匹配。",
+        "SAT SMART Driver files are installed.": "SAT SMART Driver 文件已安装。",
+        "SAT SMART Driver is installed but its load state could not be confirmed.": "SAT SMART Driver 已安装，但无法确认其加载状态。",
         "Self-test polling timed out.": "自检状态轮询超时。",
         "Self-test support must be checked before a test can start.": "开始测试前需要先检测此硬盘的自检支持能力。",
         "Self-test capability confirmed.": "已确认此硬盘支持 SMART 自检。",
