@@ -1316,6 +1316,22 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     var fallbackUsed: Bool? = nil
     var fallbackReason: String? = nil
 
+    var hasSMARTPayload: Bool {
+        smartStatusRaw?.isEmpty == false || !attributes.isEmpty
+            || temperatureCelsius != nil || lifeRemainingPercent != nil
+            || powerOnHours != nil || powerCycleCount != nil
+            || mediaErrors != nil || unsafeShutdowns != nil
+            || selfTestReport != nil
+    }
+
+    // Old snapshots may name an attempted provider even when it returned no data.
+    var verifiedSource: ProviderStatus? {
+        guard hasSMARTPayload, let selectedProvider else { return nil }
+        return providerStatuses.first {
+            $0.name == selectedProvider && ($0.state == .available || $0.state == .limited)
+        }
+    }
+
     static func unavailable(for drive: DriveDevice, reason: String) -> SmartSnapshot {
         SmartSnapshot(
             driveID: drive.id,

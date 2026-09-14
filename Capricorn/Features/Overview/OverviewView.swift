@@ -70,25 +70,15 @@ struct OverviewView: View {
                 }
 
                 InfoPanel(title: language.t("Providers"), symbol: "antenna.radiowaves.left.and.right") {
-                    if let selectedProvider = snapshot?.selectedProvider {
-                        let sourceHasPayload = snapshot.map {
-                            $0.smartStatusRaw != nil
-                                || !$0.attributes.isEmpty
-                                || $0.temperatureCelsius != nil
-                                || $0.lifeRemainingPercent != nil
-                                || $0.powerOnHours != nil
-                                || $0.powerCycleCount != nil
-                                || $0.mediaErrors != nil
-                                || $0.unsafeShutdowns != nil
-                        } ?? false
-                        let sourceState: ProviderState = sourceHasPayload ? .available : .failed
+                    if let source = snapshot?.verifiedSource {
+                        let sourceState = source.state
                         HStack(alignment: .top) {
                             Image(systemName: sourceState.symbolName)
                                 .foregroundStyle(sourceState.tint)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(language.t("Selected SMART Source"))
                                     .font(.headline)
-                                Text(sourceDescription(provider: selectedProvider, transport: snapshot?.selectedTransport))
+                                Text(sourceDescription(provider: source.name, transport: snapshot?.selectedTransport))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 if let reason = snapshot?.fallbackReason {

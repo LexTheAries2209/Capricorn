@@ -319,6 +319,7 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
             spareAvailableThresholdPercent: spareThreshold
         )
         snapshot.nativeSmartCapturedAt = snapshot.capturedAt
+        snapshot.selectedProvider = snapshot.hasSMARTPayload ? providerName : nil
         snapshot.health = evaluator.evaluate(drive: drive, snapshot: snapshot)
         snapshot.summary = evaluator.summary(for: drive, snapshot: snapshot)
         return snapshot
@@ -696,10 +697,11 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             stderr: result.stderr,
             targetDescriptor: target
         )
-        snapshot.selectedProvider = providerName
-        snapshot.selectedTransport = target?.type?.uppercased()
+        let transport = target?.type?.uppercased()
+        snapshot.selectedProvider = snapshot.hasSMARTPayload ? providerName : nil
+        snapshot.selectedTransport = snapshot.hasSMARTPayload ? transport : nil
         snapshot.smartctlDiagnostics?.selectedTransport = snapshot.selectedTransport
-        snapshot.smartctlDiagnostics?.attemptedTransports = [snapshot.selectedTransport ?? "auto"]
+        snapshot.smartctlDiagnostics?.attemptedTransports = [transport ?? "auto"]
         return annotate(snapshot, with: executable)
     }
 
@@ -721,14 +723,7 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     }
 
     private func hasSMARTPayload(_ snapshot: SmartSnapshot) -> Bool {
-        snapshot.smartStatusRaw != nil
-            || !snapshot.attributes.isEmpty
-            || snapshot.temperatureCelsius != nil
-            || snapshot.lifeRemainingPercent != nil
-            || snapshot.powerOnHours != nil
-            || snapshot.powerCycleCount != nil
-            || snapshot.mediaErrors != nil
-            || snapshot.unsafeShutdowns != nil
+        snapshot.hasSMARTPayload
     }
 
     func resolvedTargets(for drives: [DriveDevice]) async -> [String: String] {
