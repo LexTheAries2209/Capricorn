@@ -203,6 +203,7 @@ struct DiskActivityView: View {
 
                 Spacer(minLength: 0)
             }
+            .padding(.leading, 8)
             HStack(spacing: 8) {
                 Button {
                     saveMessage = nil
@@ -246,7 +247,6 @@ struct DiskActivityView: View {
                 .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || displayedSamples.isEmpty)
             }
             .frame(minHeight: 36, alignment: .center)
-            .padding(.leading, 8)
         }
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
