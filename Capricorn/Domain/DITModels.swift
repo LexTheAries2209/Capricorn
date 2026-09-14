@@ -1283,6 +1283,10 @@ struct SmartctlDiagnostics: Codable, Hashable, Sendable {
     var openError: String?
     var executablePath: String? = nil
     var executableOrigin: String? = nil
+    var selectedTransport: String? = nil
+    var fallbackUsed: Bool = false
+    var fallbackReason: String? = nil
+    var attemptedTransports: [String] = []
 }
 
 struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
@@ -1307,6 +1311,10 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     var spareAvailableThresholdPercent: Int? = nil
     var smartctlDiagnostics: SmartctlDiagnostics? = nil
     var nativeSmartCapturedAt: Date? = nil
+    var selectedProvider: String? = nil
+    var selectedTransport: String? = nil
+    var fallbackUsed: Bool = false
+    var fallbackReason: String? = nil
 
     static func unavailable(for drive: DriveDevice, reason: String) -> SmartSnapshot {
         SmartSnapshot(

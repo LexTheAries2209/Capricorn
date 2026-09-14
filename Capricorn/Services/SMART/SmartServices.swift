@@ -602,22 +602,43 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             return snapshot
         }
         do {
-            let result = try await commandCoordinator.run { [self] in
-                try await self.runner.run(
-                    executable.path,
-                    arguments: self.smartReadArguments(for: drive, target: resolvedTargetDescriptor, fallback: target, executable: executable)
-                )
-            }
-            return annotate(
-                SmartctlParser.parseSnapshot(
-                result.stdout,
-                drive: drive,
-                providerName: providerName,
-                exitStatus: result.terminationStatus,
-                stderr: result.stderr,
-                targetDescriptor: resolvedTargetDescriptor
-                ), with: executable
+            let primary = try await readCandidate(
+                for: drive,
+                target: resolvedTargetDescriptor,
+                fallback: target,
+                executable: executable
             )
+
+            guard shouldTrySAT(for: drive, target: resolvedTargetDescriptor, snapshot: primary) else {
+                return primary
+            }
+
+            let satTarget = SmartctlTargetDescriptor(
+                path: target,
+                type: "sat",
+                protocolName: resolvedTargetDescriptor?.protocolName ?? drive.protocolName
+            )
+            let sat = try? await readCandidate(
+                for: drive,
+                target: satTarget,
+                fallback: target,
+                executable: executable
+            )
+            guard let sat, hasSMARTPayload(sat) else {
+                var result = primary
+                result.smartctlDiagnostics?.attemptedTransports.append("sat")
+                result.smartctlDiagnostics?.fallbackReason = "SAT did not return a SMART payload."
+                return result
+            }
+
+            var result = sat
+            result.selectedProvider = providerName
+            result.selectedTransport = "SAT"
+            result.fallbackUsed = true
+            result.fallbackReason = "The primary smartctl path did not return a SMART payload."
+            result.smartctlDiagnostics?.fallbackUsed = true
+            result.smartctlDiagnostics?.fallbackReason = result.fallbackReason
+            return result
         } catch {
             var snapshot = SmartSnapshot(
                 driveID: drive.id,
@@ -646,6 +667,61 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             )
             return snapshot
         }
+    }
+
+    private func readCandidate(
+        for drive: DriveDevice,
+        target: SmartctlTargetDescriptor?,
+        fallback: String,
+        executable: SmartctlExecutableDescriptor
+    ) async throws -> SmartSnapshot {
+        let result = try await commandCoordinator.run { [self] in
+            try await self.runner.run(
+                executable.path,
+                arguments: self.smartReadArguments(for: drive, target: target, fallback: fallback, executable: executable)
+            )
+        }
+        var snapshot = SmartctlParser.parseSnapshot(
+            result.stdout,
+            drive: drive,
+            providerName: providerName,
+            exitStatus: result.terminationStatus,
+            stderr: result.stderr,
+            targetDescriptor: target
+        )
+        snapshot.selectedProvider = providerName
+        snapshot.selectedTransport = target?.type?.uppercased()
+        snapshot.smartctlDiagnostics?.selectedTransport = snapshot.selectedTransport
+        snapshot.smartctlDiagnostics?.attemptedTransports = [snapshot.selectedTransport ?? "auto"]
+        return annotate(snapshot, with: executable)
+    }
+
+    private func shouldTrySAT(
+        for drive: DriveDevice,
+        target: SmartctlTargetDescriptor?,
+        snapshot: SmartSnapshot
+    ) -> Bool {
+        guard !hasSMARTPayload(snapshot),
+              !drive.isInternal,
+              !drive.isNetwork,
+              !drive.isVirtual,
+              !drive.isMemoryCard,
+              drive.protocolName.localizedCaseInsensitiveContains("USB") else {
+            return false
+        }
+        let type = target?.type?.lowercased() ?? ""
+        return type.isEmpty || type == "auto" || type == "ata" || type == "sat" || type.hasSuffix("/sat")
+    }
+
+    private func hasSMARTPayload(_ snapshot: SmartSnapshot) -> Bool {
+        snapshot.smartStatusRaw != nil
+            || !snapshot.attributes.isEmpty
+            || snapshot.temperatureCelsius != nil
+            || snapshot.lifeRemainingPercent != nil
+            || snapshot.powerOnHours != nil
+            || snapshot.powerCycleCount != nil
+            || snapshot.mediaErrors != nil
+            || snapshot.unsafeShutdowns != nil
     }
 
     func resolvedTargets(for drives: [DriveDevice]) async -> [String: String] {
