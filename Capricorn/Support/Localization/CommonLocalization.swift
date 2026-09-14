@@ -27,6 +27,19 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         return Self.zhHans[key] ?? key
     }
 
+    func smartSelfTestKindTitle(_ kind: SmartSelfTestKind) -> String {
+        guard self == .simplifiedChinese else {
+            return kind.rawValue.capitalized
+        }
+
+        return switch kind {
+        case .short: t("Quick")
+        case .long: t("Full")
+        case .vendor: t("Vendor")
+        case .unknown: t("Unknown")
+        }
+    }
+
     func smartErrorLogHistoryWithoutDetailsMessage(count: Int) -> String {
         let safeCount = max(0, count)
         switch self {

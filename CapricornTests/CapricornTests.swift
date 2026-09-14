@@ -939,6 +939,20 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testSmartSelfTestKindTitlesAreLocalized() {
+        let expectedTitles: [(SmartSelfTestKind, String, String)] = [
+            (.short, "Short", "快速"),
+            (.long, "Long", "完整"),
+            (.vendor, "Vendor", "厂商"),
+            (.unknown, "Unknown", "未知")
+        ]
+
+        for (kind, english, simplifiedChinese) in expectedTitles {
+            XCTAssertEqual(AppLanguage.english.smartSelfTestKindTitle(kind), english)
+            XCTAssertEqual(AppLanguage.simplifiedChinese.smartSelfTestKindTitle(kind), simplifiedChinese)
+        }
+    }
+
     func testSingleBenchmarkActionsAreLocalized() {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Run Single Test"), "运行单项测试")
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Benchmark in Progress"), "测速正在进行")

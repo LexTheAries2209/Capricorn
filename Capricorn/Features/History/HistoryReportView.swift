@@ -458,7 +458,7 @@ struct HistoryReportView: View {
                 .foregroundStyle(item.state == .passed ? .green : .orange)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.capturedAt.formatted(date: .abbreviated, time: .standard))
-                Text("\(item.testKind.rawValue.capitalized) · \(language.statusMessage(item.statusDetails))")
+                Text("\(language.smartSelfTestKindTitle(item.testKind)) · \(language.statusMessage(item.statusDetails))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

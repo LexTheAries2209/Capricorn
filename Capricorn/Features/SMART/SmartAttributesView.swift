@@ -734,7 +734,7 @@ private struct SmartSelfTestHistorySheet: View {
                     ForEach(records.sorted { $0.capturedAt > $1.capturedAt }) { record in
                         VStack(alignment: .leading, spacing: 3) {
                             Text(record.capturedAt.formatted(date: .abbreviated, time: .standard))
-                            Text("\(record.testKind.rawValue.capitalized) · \(record.statusDetails)")
+                            Text("\(language.smartSelfTestKindTitle(record.testKind)) · \(language.statusMessage(record.statusDetails))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -773,7 +773,7 @@ private struct SmartSelfTestHistoryDetail: View {
             Text(record.driveName)
                 .font(.title3.bold())
             LabeledContent(language.t("Completed"), value: record.capturedAt.formatted(date: .abbreviated, time: .standard))
-            LabeledContent(language.t("Test Type"), value: record.testKind.rawValue.capitalized)
+            LabeledContent(language.t("Test Type"), value: language.smartSelfTestKindTitle(record.testKind))
             LabeledContent(language.t("Status"), value: language.statusMessage(record.statusDetails))
             if let hours = record.powerOnHours {
                 LabeledContent(language.t("Power-On Hours"), value: String(hours))
@@ -787,7 +787,7 @@ private struct SmartSelfTestHistoryDetail: View {
                     .font(.headline)
                 ForEach(report.entries) { entry in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(entry.kind.rawValue.capitalized) · \(language.statusMessage(entry.status))")
+                        Text("\(language.smartSelfTestKindTitle(entry.kind)) · \(language.statusMessage(entry.status))")
                         Text(entry.id)
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
