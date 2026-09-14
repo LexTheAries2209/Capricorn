@@ -71,9 +71,20 @@ struct OverviewView: View {
 
                 InfoPanel(title: language.t("Providers"), symbol: "antenna.radiowaves.left.and.right") {
                     if let selectedProvider = snapshot?.selectedProvider {
+                        let sourceHasPayload = snapshot.map {
+                            $0.smartStatusRaw != nil
+                                || !$0.attributes.isEmpty
+                                || $0.temperatureCelsius != nil
+                                || $0.lifeRemainingPercent != nil
+                                || $0.powerOnHours != nil
+                                || $0.powerCycleCount != nil
+                                || $0.mediaErrors != nil
+                                || $0.unsafeShutdowns != nil
+                        } ?? false
+                        let sourceState: ProviderState = sourceHasPayload ? .available : .failed
                         HStack(alignment: .top) {
-                            Image(systemName: snapshot?.smartStatusRaw != nil || !(snapshot?.attributes.isEmpty ?? true) ? "checkmark.circle.fill" : "questionmark.circle")
-                                .foregroundStyle(.secondary)
+                            Image(systemName: sourceState.symbolName)
+                                .foregroundStyle(sourceState.tint)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(language.t("Selected SMART Source"))
                                     .font(.headline)
@@ -91,8 +102,10 @@ struct OverviewView: View {
                     }
                     ForEach(snapshot?.providerStatuses ?? []) { status in
                         HStack(alignment: .top) {
-                            Image(systemName: status.state.symbolName)
-                                .foregroundStyle(status.state.tint)
+                            let displayState: ProviderState = status.name.caseInsensitiveCompare("Native macOS") == .orderedSame
+                                && status.state == .unavailable ? .failed : status.state
+                            Image(systemName: displayState.symbolName)
+                                .foregroundStyle(displayState.tint)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(status.name)
                                     .font(.headline)
