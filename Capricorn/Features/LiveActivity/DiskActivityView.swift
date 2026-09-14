@@ -246,6 +246,7 @@ struct DiskActivityView: View {
                 }
                 .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || displayedSamples.isEmpty)
             }
+            .frame(minHeight: 36, alignment: .center)
         }
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -436,6 +437,7 @@ struct DiskActivityView: View {
                 }
                 .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
         }
+        .frame(minHeight: 36, alignment: .center)
     }
 
     private func workloadActionLabel(_ title: String, systemImage: String) -> some View {
