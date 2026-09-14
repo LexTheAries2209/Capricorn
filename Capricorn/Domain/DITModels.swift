@@ -2152,11 +2152,26 @@ func formatByteCount(_ bytes: Int64) -> String {
 func formatBenchmarkFileSize(_ bytes: Int64) -> String {
     let gib: Int64 = 1_024 * 1_024 * 1_024
     let mib: Int64 = 1_024 * 1_024
-    if bytes >= gib, bytes % gib == 0 {
-        return "\(bytes / gib) GiB"
+    let tib: Int64 = 1_024 * gib
+
+    if bytes >= tib {
+        return formatBinaryFileSize(bytes, unitBytes: tib, symbol: "TiB")
     }
-    if bytes >= mib, bytes % mib == 0 {
-        return "\(bytes / mib) MiB"
+    if bytes >= gib {
+        return formatBinaryFileSize(bytes, unitBytes: gib, symbol: "GiB")
+    }
+    if bytes >= mib {
+        return formatBinaryFileSize(bytes, unitBytes: mib, symbol: "MiB")
     }
     return formatByteCount(bytes)
+}
+
+private func formatBinaryFileSize(_ bytes: Int64, unitBytes: Int64, symbol: String) -> String {
+    let value = Double(bytes) / Double(unitBytes)
+    let formattedValue = value.formatted(
+        .number
+            .locale(Locale(identifier: "en_US_POSIX"))
+            .precision(.fractionLength(0...2))
+    )
+    return "\(formattedValue) \(symbol)"
 }

@@ -4271,6 +4271,17 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testBenchmarkFileSizeFormatterUsesBinaryUnitThresholds() {
+        let mib: Int64 = 1_024 * 1_024
+        let gib: Int64 = 1_024 * mib
+        let tib: Int64 = 1_024 * gib
+
+        XCTAssertEqual(formatBenchmarkFileSize(512 * mib), "512 MiB")
+        XCTAssertEqual(formatBenchmarkFileSize(1_536 * mib), "1.5 GiB")
+        XCTAssertEqual(formatBenchmarkFileSize(1_024 * gib), "1 TiB")
+        XCTAssertEqual(formatBenchmarkFileSize(3 * tib + tib / 4), "3.25 TiB")
+    }
+
     func testDiskActivityWorkloadAvailabilityAccountsForMixedTwoFileFootprint() {
         let fileSize = DiskActivityWorkloadFileSize.gib32.fixedBytes!
         let required = DiskActivityWorkloadStorageValidator.requiredSpace(fileSizeBytes: fileSize, operation: .mixed)
