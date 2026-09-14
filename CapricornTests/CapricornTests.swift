@@ -928,6 +928,11 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Continue Monitoring"), "继续监控")
     }
 
+    func testLiveActivityWorkloadActionsLabelIsLocalized() {
+        XCTAssertEqual(AppLanguage.english.t("Actions"), "Actions")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Actions"), "操作")
+    }
+
     func testSmartDiagnosticStatusMessagesAreLocalized() {
         XCTAssertEqual(
             AppLanguage.simplifiedChinese.statusMessage("No SMART error log entries were reported."),

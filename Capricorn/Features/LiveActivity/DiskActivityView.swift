@@ -328,7 +328,8 @@ struct DiskActivityView: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 170)
+                        .frame(minWidth: 230, idealWidth: 260, maxWidth: 300, alignment: .leading)
+                        .layoutPriority(1)
                         .disabled(viewModel.isLiveActivityWorkloadRunning)
                     }
 
@@ -345,25 +346,28 @@ struct DiskActivityView: View {
                         .frame(width: 110)
                         .disabled(viewModel.isLiveActivityWorkloadRunning)
                     }
-                }
 
-                HStack(spacing: 8) {
-                    Spacer(minLength: 10)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(language.t("Actions"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            Button {
+                                startWorkload()
+                            } label: {
+                                workloadActionLabel(language.t("Start Workload"), systemImage: "play.fill")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!canStartWorkload)
 
-                    Button {
-                        startWorkload()
-                    } label: {
-                        workloadActionLabel(language.t("Start Workload"), systemImage: "play.fill")
+                            Button {
+                                viewModel.stopLiveActivityWorkload()
+                            } label: {
+                                workloadActionLabel(language.t("Stop Workload"), systemImage: "stop.fill")
+                            }
+                            .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canStartWorkload)
-
-                    Button {
-                        viewModel.stopLiveActivityWorkload()
-                    } label: {
-                        workloadActionLabel(language.t("Stop Workload"), systemImage: "stop.fill")
-                    }
-                    .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
                 }
 
                 VStack(alignment: .leading, spacing: 5) {

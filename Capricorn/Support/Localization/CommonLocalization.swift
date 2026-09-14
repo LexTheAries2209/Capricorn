@@ -532,6 +532,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Workload": "负载",
         "Large File Size": "大文件大小",
         "Loop": "循环",
+        "Actions": "操作",
         "Start Workload": "开始负载",
         "Stop Workload": "停止负载",
         "Full Disk (95%)": "全盘 (95%)",
