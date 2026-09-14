@@ -311,18 +311,24 @@ struct CapricornSettingsView: View {
                         } label: {
                             Label(language.t("Open SAT SMART Driver Installer"), systemImage: "shippingbox")
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Spacer()
                         Button {
                             satSMARTDriverStatus = SATSMARTDriverService().status()
                         } label: {
                             Label(language.t("Recheck SAT SMART Driver"), systemImage: "arrow.clockwise")
                         }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                     }
 
-                    Link(destination: SATSMARTDriverService.guideURL) {
-                        Label(language.t("Open SAT SMART Driver Guide"), systemImage: "safari")
-                    }
-                    Link(destination: SATSMARTDriverService.sourceURL) {
-                        Label(language.t("Open SAT SMART Driver Open Source Project"), systemImage: "chevron.left.forwardslash.chevron.right")
+                    HStack {
+                        Link(destination: SATSMARTDriverService.guideURL) {
+                            Label(language.t("Open Binary Fruit SAT SMART Driver Guide"), systemImage: "safari")
+                        }
+                        Spacer()
+                        Link(destination: SATSMARTDriverService.sourceURL) {
+                            Label(language.t("Open SAT SMART Driver Open Source Project"), systemImage: "chevron.left.forwardslash.chevron.right")
+                        }
                     }
 
                     Text(language.t("SAT SMART Driver is an optional third-party component for compatible USB-SATA devices. Capricorn does not install, load, or change system security settings."))

@@ -469,7 +469,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Version": "版本",
         "Open SAT SMART Driver Installer": "打开 SAT SMART Driver 安装包",
         "Recheck SAT SMART Driver": "重新检测 SAT SMART Driver",
-        "Open SAT SMART Driver Guide": "打开 SAT SMART Driver 官方说明",
+        "Open Binary Fruit SAT SMART Driver Guide": "打开 Binary Fruit SAT SMART Driver 说明",
         "Open SAT SMART Driver Open Source Project": "打开 SAT SMART Driver 开源项目",
         "SAT SMART Driver is an optional third-party component for compatible USB-SATA devices. Capricorn does not install, load, or change system security settings.": "SAT SMART Driver 是适用于兼容 USB-SATA 设备的可选第三方组件。Capricorn 不会安装、加载驱动或修改系统安全设置。",
         "SAT SMART Driver is not installed.": "SAT SMART Driver 未安装。",
