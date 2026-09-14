@@ -420,11 +420,7 @@ struct DiskActivityView: View {
     }
 
     private var workloadActionsControl: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(language.t("Actions"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 8) {
+        HStack(spacing: 8) {
                 Button {
                     startWorkload()
                 } label: {
@@ -439,7 +435,6 @@ struct DiskActivityView: View {
                     workloadActionLabel(language.t("Stop Workload"), systemImage: "stop.fill")
                 }
                 .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
-            }
         }
     }
 
