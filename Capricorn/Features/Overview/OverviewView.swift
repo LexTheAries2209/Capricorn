@@ -70,6 +70,25 @@ struct OverviewView: View {
                 }
 
                 InfoPanel(title: language.t("Providers"), symbol: "antenna.radiowaves.left.and.right") {
+                    if let selectedProvider = snapshot?.selectedProvider {
+                        HStack(alignment: .top) {
+                            Image(systemName: snapshot?.smartStatusRaw != nil || !(snapshot?.attributes.isEmpty ?? true) ? "checkmark.circle.fill" : "questionmark.circle")
+                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(language.t("Selected SMART Source"))
+                                    .font(.headline)
+                                Text(sourceDescription(provider: selectedProvider, transport: snapshot?.selectedTransport))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if let reason = snapshot?.fallbackReason {
+                                    Text(language.t(reason))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                        }
+                    }
                     ForEach(snapshot?.providerStatuses ?? []) { status in
                         HStack(alignment: .top) {
                             Image(systemName: status.state.symbolName)
@@ -111,6 +130,17 @@ struct OverviewView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func sourceDescription(provider: String, transport: String?) -> String {
+        let normalized = transport?.uppercased()
+        if normalized == "SAT" || normalized?.hasSuffix("/SAT") == true {
+            return "\(provider) · SAT"
+        }
+        if normalized == "SNT" || normalized?.hasPrefix("SNT") == true {
+            return "\(provider) · SNT"
+        }
+        return provider
     }
 
     private func volumeSubtitle(_ volume: DriveDevice.Volume) -> String {

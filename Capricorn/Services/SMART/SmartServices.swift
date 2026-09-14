@@ -626,8 +626,11 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             )
             guard let sat, hasSMARTPayload(sat) else {
                 var result = primary
-                result.smartctlDiagnostics?.attemptedTransports.append("sat")
-                result.smartctlDiagnostics?.fallbackReason = "SAT did not return a SMART payload."
+                if var diagnostics = result.smartctlDiagnostics {
+                    diagnostics.attemptedTransports = (diagnostics.attemptedTransports ?? []) + ["sat"]
+                    diagnostics.fallbackReason = "SAT did not return a SMART payload."
+                    result.smartctlDiagnostics = diagnostics
+                }
                 return result
             }
 
@@ -636,8 +639,12 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             result.selectedTransport = "SAT"
             result.fallbackUsed = true
             result.fallbackReason = "The primary smartctl path did not return a SMART payload."
-            result.smartctlDiagnostics?.fallbackUsed = true
-            result.smartctlDiagnostics?.fallbackReason = result.fallbackReason
+            let fallbackReason = result.fallbackReason
+            if var diagnostics = result.smartctlDiagnostics {
+                diagnostics.fallbackUsed = true
+                diagnostics.fallbackReason = fallbackReason
+                result.smartctlDiagnostics = diagnostics
+            }
             return result
         } catch {
             var snapshot = SmartSnapshot(
@@ -2109,8 +2116,14 @@ final class SmartSnapshotService: @unchecked Sendable {
             merged.enduranceUsedPercent = snapshot.enduranceUsedPercent ?? merged.enduranceUsedPercent
             merged.spareAvailablePercent = snapshot.spareAvailablePercent ?? merged.spareAvailablePercent
             merged.spareAvailableThresholdPercent = snapshot.spareAvailableThresholdPercent ?? merged.spareAvailableThresholdPercent
-            merged.smartctlDiagnostics = snapshot.smartctlDiagnostics ?? merged.smartctlDiagnostics
+            if let diagnostics = snapshot.smartctlDiagnostics {
+                merged.smartctlDiagnostics = diagnostics
+            }
             merged.nativeSmartCapturedAt = snapshot.nativeSmartCapturedAt ?? merged.nativeSmartCapturedAt
+            merged.selectedProvider = snapshot.selectedProvider ?? merged.selectedProvider
+            merged.selectedTransport = snapshot.selectedTransport ?? merged.selectedTransport
+            merged.fallbackUsed = snapshot.fallbackUsed ?? merged.fallbackUsed
+            merged.fallbackReason = snapshot.fallbackReason ?? merged.fallbackReason
         }
 
         merged.health = evaluator.evaluate(drive: drive, snapshot: merged)

@@ -1284,7 +1284,7 @@ struct SmartctlDiagnostics: Codable, Hashable, Sendable {
     var executablePath: String? = nil
     var executableOrigin: String? = nil
     var selectedTransport: String? = nil
-    var fallbackUsed: Bool = false
+    var fallbackUsed: Bool? = nil
     var fallbackReason: String? = nil
     var attemptedTransports: [String] = []
 }
@@ -1313,7 +1313,7 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     var nativeSmartCapturedAt: Date? = nil
     var selectedProvider: String? = nil
     var selectedTransport: String? = nil
-    var fallbackUsed: Bool = false
+    var fallbackUsed: Bool? = nil
     var fallbackReason: String? = nil
 
     static func unavailable(for drive: DriveDevice, reason: String) -> SmartSnapshot {
@@ -1514,6 +1514,13 @@ struct USBSmartCommandPassthroughStatus: Hashable, Sendable {
     }
 
     private static func kind(for diagnostics: SmartctlDiagnostics) -> USBSmartCommandPassthroughKind? {
+        let transport = diagnostics.selectedTransport?.lowercased() ?? ""
+        if transport == "sat" || transport.hasSuffix("/sat") {
+            return .sata
+        }
+        if transport == "snt" || transport.hasPrefix("snt") {
+            return .nvme
+        }
         let protocolName = diagnostics.protocolName?.lowercased() ?? ""
         let deviceType = diagnostics.deviceType?.lowercased() ?? ""
 
