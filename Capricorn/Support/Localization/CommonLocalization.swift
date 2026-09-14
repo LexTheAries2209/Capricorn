@@ -727,7 +727,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "smartctl returned partial data.": "smartctl 返回了部分数据。",
         "SAT SMART Driver is not installed.": "SAT SMART Driver 未安装。",
         "SAT SMART Driver is loaded and has an IOKit match.": "SAT SMART Driver 已加载并存在 IOKit 匹配。",
-        "SAT SMART Driver files are installed but no IOKit match is loaded.": "SAT SMART Driver 文件已安装，但没有已加载的 IOKit 匹配。",
+        "SAT SMART Driver files are installed.": "SAT SMART Driver 文件已安装。",
         "SAT SMART Driver is installed but its load state could not be confirmed.": "SAT SMART Driver 已安装，但无法确认其加载状态。",
         "Self-test polling timed out.": "自检状态轮询超时。",
         "Self-test support must be checked before a test can start.": "开始测试前需要先检测此硬盘的自检支持能力。",
