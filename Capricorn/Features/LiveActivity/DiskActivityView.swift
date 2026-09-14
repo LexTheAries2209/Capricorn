@@ -353,7 +353,7 @@ struct DiskActivityView: View {
                     Button {
                         startWorkload()
                     } label: {
-                        Label(language.t("Start Workload"), systemImage: "play.fill")
+                        workloadActionLabel(language.t("Start Workload"), systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!canStartWorkload)
@@ -361,7 +361,7 @@ struct DiskActivityView: View {
                     Button {
                         viewModel.stopLiveActivityWorkload()
                     } label: {
-                        Label(language.t("Stop Workload"), systemImage: "stop.fill")
+                        workloadActionLabel(language.t("Stop Workload"), systemImage: "stop.fill")
                     }
                     .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
                 }
@@ -399,6 +399,13 @@ struct DiskActivityView: View {
                 }
             }
         }
+    }
+
+    private func workloadActionLabel(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 6)
     }
 
     private var workloadTargetStatusText: String {
