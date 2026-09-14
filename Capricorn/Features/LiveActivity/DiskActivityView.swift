@@ -296,29 +296,18 @@ struct DiskActivityView: View {
     }
 
     private var workloadControlLayout: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .bottom, spacing: 10) {
-                workloadTargetControl(width: 360)
-                workloadOperationControl
-                workloadFileSizeControl
-                workloadLoopControl
-                workloadActionsControl
-            }
-            .fixedSize(horizontal: true, vertical: false)
-
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .bottom, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
+            workloadActionsControl
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .bottom, spacing: 24) {
                     workloadTargetControl(width: 360)
                     workloadOperationControl
                     workloadFileSizeControl
                     workloadLoopControl
                 }
                 .fixedSize(horizontal: true, vertical: false)
-                workloadActionsControl
-            }
 
-            VStack(alignment: .leading, spacing: 12) {
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
+                Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 12) {
                     GridRow {
                         workloadTargetControl(width: 360)
                         workloadOperationControl
@@ -328,7 +317,6 @@ struct DiskActivityView: View {
                         workloadLoopControl
                     }
                 }
-                workloadActionsControl
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
