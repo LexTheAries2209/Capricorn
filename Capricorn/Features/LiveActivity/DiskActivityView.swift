@@ -185,7 +185,7 @@ struct DiskActivityView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .bottom, spacing: 10) {
+            HStack(alignment: .bottom, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(language.t("Sample Interval"))
                         .font(.caption2)
@@ -258,117 +258,7 @@ struct DiskActivityView: View {
     private var workloadPanel: some View {
         InfoPanel(title: language.t("Large File Workload"), symbol: "bolt.horizontal.circle") {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .bottom, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(language.t("Target Location"))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Menu {
-                            Button {
-                                setWorkloadTargetSelection(.automatic)
-                            } label: {
-                                Label(
-                                    automaticTargetTitle,
-                                    systemImage: workloadTargetSelection == .automatic ? "checkmark" : "internaldrive"
-                                )
-                            }
-
-                            Divider()
-
-                            ForEach(DiskActivityWorkloadTargetResolver.orderedVolumes(for: drive)) { volume in
-                                Button {
-                                    setWorkloadTargetSelection(.volume(deviceIdentifier: volume.deviceIdentifier))
-                                } label: {
-                                    Label(
-                                        workloadVolumeTitle(volume),
-                                        systemImage: workloadTargetSelection == .volume(deviceIdentifier: volume.deviceIdentifier) ? "checkmark" : "externaldrive"
-                                    )
-                                }
-                                .disabled(!DiskActivityWorkloadTargetResolver.isUsable(volume))
-                            }
-
-                            Divider()
-
-                            Button {
-                                chooseWorkloadTargetFolder()
-                            } label: {
-                                Label(language.t("Choose Folder…"), systemImage: "folder.badge.gearshape")
-                            }
-                        } label: {
-                            Label(workloadTargetMenuTitle, systemImage: "folder")
-                        }
-                        .frame(width: 220, alignment: .leading)
-                        .disabled(viewModel.isLiveActivityWorkloadRunning)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(language.t("Workload"))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Picker("", selection: $workloadOperationRaw) {
-                            ForEach(DiskActivityWorkloadOperation.allCases) { operation in
-                                Text(language.activityWorkloadOperationTitle(operation)).tag(operation.rawValue)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(width: 230)
-                        .disabled(viewModel.isLiveActivityWorkloadRunning)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(language.t("Large File Size"))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Picker("", selection: $workloadFileSizeRaw) {
-                            ForEach(DiskActivityWorkloadFileSize.allCases) { option in
-                                Text(workloadFileSizeTitle(option))
-                                    .tag(option.rawValue)
-                                    .disabled(!isWorkloadFileSizeSelectable(option))
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(minWidth: 230, idealWidth: 260, maxWidth: 300, alignment: .leading)
-                        .layoutPriority(1)
-                        .disabled(viewModel.isLiveActivityWorkloadRunning)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(language.t("Loop"))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Picker("", selection: $workloadLoopEnabled) {
-                            Text(language.t("Off")).tag(false)
-                            Text(language.t("On")).tag(true)
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(width: 110)
-                        .disabled(viewModel.isLiveActivityWorkloadRunning)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(language.t("Actions"))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 8) {
-                            Button {
-                                startWorkload()
-                            } label: {
-                                workloadActionLabel(language.t("Start Workload"), systemImage: "play.fill")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(!canStartWorkload)
-
-                            Button {
-                                viewModel.stopLiveActivityWorkload()
-                            } label: {
-                                workloadActionLabel(language.t("Stop Workload"), systemImage: "stop.fill")
-                            }
-                            .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
-                        }
-                    }
-                }
+                workloadControlLayout
 
                 VStack(alignment: .leading, spacing: 5) {
                     Label(workloadTargetStatusText, systemImage: workloadTargetStatusSymbol)
@@ -401,6 +291,166 @@ struct DiskActivityView: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
+            }
+        }
+    }
+
+    private var workloadControlLayout: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .bottom, spacing: 10) {
+                workloadTargetControl(width: 360)
+                workloadOperationControl
+                workloadFileSizeControl
+                workloadLoopControl
+                workloadActionsControl
+            }
+            .fixedSize(horizontal: true, vertical: false)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .bottom, spacing: 16) {
+                    workloadTargetControl(width: 360)
+                    workloadOperationControl
+                    workloadFileSizeControl
+                    workloadLoopControl
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                workloadActionsControl
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
+                    GridRow {
+                        workloadTargetControl(width: 360)
+                        workloadOperationControl
+                    }
+                    GridRow {
+                        workloadFileSizeControl
+                        workloadLoopControl
+                    }
+                }
+                workloadActionsControl
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func workloadTargetControl(width: CGFloat?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(language.t("Target Location"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Menu {
+                Button {
+                    setWorkloadTargetSelection(.automatic)
+                } label: {
+                    Label(
+                        automaticTargetTitle,
+                        systemImage: workloadTargetSelection == .automatic ? "checkmark" : "internaldrive"
+                    )
+                }
+
+                Divider()
+
+                ForEach(DiskActivityWorkloadTargetResolver.orderedVolumes(for: drive)) { volume in
+                    Button {
+                        setWorkloadTargetSelection(.volume(deviceIdentifier: volume.deviceIdentifier))
+                    } label: {
+                        Label(
+                            workloadVolumeTitle(volume),
+                            systemImage: workloadTargetSelection == .volume(deviceIdentifier: volume.deviceIdentifier) ? "checkmark" : "externaldrive"
+                        )
+                    }
+                    .disabled(!DiskActivityWorkloadTargetResolver.isUsable(volume))
+                }
+
+                Divider()
+
+                Button {
+                    chooseWorkloadTargetFolder()
+                } label: {
+                    Label(language.t("Choose Folder…"), systemImage: "folder.badge.gearshape")
+                }
+            } label: {
+                Label(workloadTargetMenuTitle, systemImage: "folder")
+                    .frame(width: (width ?? 360) - 40, alignment: .leading)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .help(workloadTargetMenuHelp)
+            .disabled(viewModel.isLiveActivityWorkloadRunning)
+        }
+    }
+
+    private var workloadOperationControl: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(language.t("Workload"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Picker("", selection: $workloadOperationRaw) {
+                ForEach(DiskActivityWorkloadOperation.allCases) { operation in
+                    Text(language.activityWorkloadOperationTitle(operation)).tag(operation.rawValue)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .fixedSize(horizontal: true, vertical: false)
+            .disabled(viewModel.isLiveActivityWorkloadRunning)
+        }
+    }
+
+    private var workloadFileSizeControl: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(language.t("Large File Size"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Picker("", selection: $workloadFileSizeRaw) {
+                ForEach(DiskActivityWorkloadFileSize.allCases) { option in
+                    Text(workloadFileSizeTitle(option))
+                        .tag(option.rawValue)
+                        .disabled(!isWorkloadFileSizeSelectable(option))
+                }
+            }
+            .labelsHidden()
+            .fixedSize(horizontal: true, vertical: false)
+            .disabled(viewModel.isLiveActivityWorkloadRunning)
+        }
+    }
+
+    private var workloadLoopControl: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(language.t("Loop"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Picker("", selection: $workloadLoopEnabled) {
+                Text(language.t("Off")).tag(false)
+                Text(language.t("On")).tag(true)
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .fixedSize(horizontal: true, vertical: false)
+            .disabled(viewModel.isLiveActivityWorkloadRunning)
+        }
+    }
+
+    private var workloadActionsControl: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(language.t("Actions"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button {
+                    startWorkload()
+                } label: {
+                    workloadActionLabel(language.t("Start Workload"), systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canStartWorkload)
+
+                Button {
+                    viewModel.stopLiveActivityWorkload()
+                } label: {
+                    workloadActionLabel(language.t("Stop Workload"), systemImage: "stop.fill")
+                }
+                .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
             }
         }
     }
@@ -454,6 +504,17 @@ struct DiskActivityView: View {
         case let .folder(path):
             let name = URL(fileURLWithPath: path, isDirectory: true).lastPathComponent
             return name.isEmpty ? path : name
+        }
+    }
+
+    private var workloadTargetMenuHelp: String {
+        switch workloadTargetSelection {
+        case .automatic:
+            return resolvedWorkloadTarget.volume?.name ?? language.t("Automatic")
+        case .volume:
+            return resolvedWorkloadTarget.volume?.name ?? automaticTargetTitle
+        case let .folder(path):
+            return path
         }
     }
 
