@@ -307,9 +307,9 @@ struct CapricornSettingsView: View {
 
                     HStack {
                         Button {
-                            SATSMARTDriverService().openPackage()
+                            SATSMARTDriverService().revealPackage()
                         } label: {
-                            Label(language.t("Open SAT SMART Driver Installer"), systemImage: "shippingbox")
+                            Label(language.t("Show SAT SMART Driver Installer"), systemImage: "shippingbox")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         Spacer()

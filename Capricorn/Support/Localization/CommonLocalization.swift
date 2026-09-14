@@ -467,7 +467,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Selected SMART Source": "当前 SMART 数据来源",
         "SAT SMART Driver": "SAT SMART 驱动",
         "Version": "版本",
-        "Open SAT SMART Driver Installer": "打开 SAT SMART Driver 安装包",
+        "Show SAT SMART Driver Installer": "显示 SAT SMART Driver 安装包位置",
         "Recheck SAT SMART Driver": "重新检测 SAT SMART Driver",
         "Open Binary Fruit SAT SMART Driver Guide": "打开 Binary Fruit SAT SMART Driver 说明",
         "Open SAT SMART Driver Open Source Project": "打开 SAT SMART Driver 开源项目",

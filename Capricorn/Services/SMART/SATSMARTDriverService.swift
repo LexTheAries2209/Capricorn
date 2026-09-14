@@ -54,8 +54,8 @@ struct SATSMARTDriverService: Sendable {
         )
     }
 
-    func openPackage() {
-        guard let resource = Bundle.main.url(forResource: "SATSMARTDriver-0.10.3.macOS11_and_AppleSilicon", withExtension: "zip") else { return }
-        NSWorkspace.shared.open(resource)
+    func revealPackage() {
+        guard let resource = Bundle.main.url(forResource: "SATSMARTDriver-0.10.3", withExtension: "pkg") else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([resource])
     }
 }
