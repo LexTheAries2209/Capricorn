@@ -474,7 +474,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "SAT SMART Driver is an optional third-party component for compatible USB-SATA devices. Capricorn does not install, load, or change system security settings.": "SAT SMART Driver 是适用于兼容 USB-SATA 设备的可选第三方组件。Capricorn 不会安装、加载驱动或修改系统安全设置。",
         "SAT SMART Driver is not installed.": "SAT SMART Driver 未安装。",
         "SAT SMART Driver is loaded and has an IOKit match.": "SAT SMART Driver 已加载并存在 IOKit 匹配。",
-        "SAT SMART Driver files are installed but no IOKit match is loaded.": "SAT SMART Driver 文件已安装，但没有已加载的 IOKit 匹配。",
+        "SAT SMART Driver files are installed.": "SAT SMART Driver 文件已安装。",
         "SAT did not return a SMART payload.": "SAT 未返回有效 SMART 数据。",
         "Save SMART Snapshot CSV": "保存 SMART 快照 CSV",
         "Save SMART Snapshot CSV (Command-S)": "保存 SMART 快照 CSV（Command-S）",

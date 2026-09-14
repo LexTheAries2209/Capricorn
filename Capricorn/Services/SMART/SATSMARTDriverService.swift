@@ -50,7 +50,7 @@ struct SATSMARTDriverService: Sendable {
             pluginPath: pluginPath,
             message: isLoaded
                 ? "SAT SMART Driver is loaded and has an IOKit match."
-                : "SAT SMART Driver files are installed but no IOKit match is loaded."
+                : "SAT SMART Driver files are installed."
         )
     }
 
