@@ -83,6 +83,17 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         if message.hasPrefix("Open file inspection failed: ") {
             return message.replacingOccurrences(of: "Open file inspection failed: ", with: "查看占用程序失败：")
         }
+        if message.hasPrefix("smartctl did not return SMART data (exit status ") {
+            let prefix = "smartctl did not return SMART data (exit status "
+            let value = message.dropFirst(prefix.count).dropLast(1)
+            return "smartctl 未返回 SMART 数据（退出状态 \(value)）。"
+        }
+        if message.hasPrefix("smartctl did not return SMART data.") {
+            return "smartctl 未返回 SMART 数据。"
+        }
+        if message.hasPrefix("smartctl could not open ") {
+            return message.replacingOccurrences(of: "smartctl could not open ", with: "smartctl 无法打开 ")
+        }
         if message.hasPrefix("SMART data does not show immediate risk for "), message.hasSuffix(".") {
             let name = message
                 .replacingOccurrences(of: "SMART data does not show immediate risk for ", with: "")
