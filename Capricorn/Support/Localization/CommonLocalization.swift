@@ -28,10 +28,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 
     func smartSelfTestKindTitle(_ kind: SmartSelfTestKind) -> String {
-        guard self == .simplifiedChinese else {
-            return kind.rawValue.capitalized
-        }
-
         return switch kind {
         case .short: t("Quick")
         case .long: t("Full")

@@ -941,8 +941,8 @@ final class CapricornTests: XCTestCase {
 
     func testSmartSelfTestKindTitlesAreLocalized() {
         let expectedTitles: [(SmartSelfTestKind, String, String)] = [
-            (.short, "Short", "快速"),
-            (.long, "Long", "完整"),
+            (.short, "Quick", "快速"),
+            (.long, "Full", "完整"),
             (.vendor, "Vendor", "厂商"),
             (.unknown, "Unknown", "未知")
         ]
