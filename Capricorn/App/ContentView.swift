@@ -1142,6 +1142,7 @@ private struct DriveDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .padding(.horizontal, 0)
                     .help("Capricorn version and macOS user name")
             }
         }

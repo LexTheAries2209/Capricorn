@@ -203,7 +203,6 @@ struct DiskActivityView: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(.leading, 8)
             HStack(spacing: 8) {
                 Button {
                     saveMessage = nil
@@ -249,6 +248,7 @@ struct DiskActivityView: View {
             .frame(minHeight: 36, alignment: .center)
         }
         .padding(10)
+        .padding(.leading, 4)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
