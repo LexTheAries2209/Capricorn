@@ -1137,12 +1137,11 @@ private struct DriveDetailView: View {
         }
         .padding(18)
         .toolbar {
-            ToolbarItem(placement: .navigation) {
+            ToolbarItem(placement: .automatic) {
                 Text("Capricorn V\(AppVersion.current.displayValue) · \(NSUserName())")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .padding(.horizontal, 0)
                     .help("Capricorn version and macOS user name")
             }
         }
