@@ -86,7 +86,7 @@ V2.5.1 的中文发布说明见 [docs/releases/v2.5.1.zh-CN.md](docs/releases/v2
 - 急救会阻断 SMART 故障、系统盘、内置盘、网络卷、虚拟盘、只读卷、锁定卷和 NTFS；NTFS 仅提供 Windows CHKDSK 指引。
 - Shell 命令取消时会终止对应子进程，并区分启动失败、非零退出和主动取消。
 - 设置页支持虚拟磁盘显示、序列号脱敏、普通 Tab 切页、内置 `smartctl` 版本与源项目入口、历史数据库位置打开、自动刷新、检查与修复菜单和 SMART 自检界面，并完整支持简体中文。序列号脱敏默认关闭；开启后只保留前四位，其余显示为 `*`，内部身份匹配仍使用完整值。
-- 应用菜单只保留系统 `Settings…` 设置入口，并使用 `Command-P` 打开；另支持 `Command-R` 刷新、`Control-Tab` / `Control-Shift-Tab` 切换功能页，普通 `Tab` 切页可在设置中关闭。
+- 应用菜单只保留系统 `Settings…` 设置入口；另支持 `Command-R` 刷新、`Control-Tab` / `Control-Shift-Tab` 切换功能页，普通 `Tab` 切页可在设置中关闭。
 - 应用启动时静默检查 GitHub 最新稳定版；设置页和应用菜单提供手动检查、重试、打开 Releases 和查看发布说明入口，不会主动弹出更新提醒。
 - 界面支持较小窗口和自适应控制栏、指标卡布局，宽表格保留水平滚动。
 - SwiftData 历史记录使用版本化 Schema、独立 `CapricornHistory` 存储目录和统一 Repository，保存失败会显示明确错误。
@@ -233,7 +233,7 @@ Common use cases:
 - Blocks First Aid for failing SMART health, system/internal disks, network or virtual volumes, read-only/locked volumes, and NTFS; NTFS shows Windows CHKDSK guidance only.
 - Cancelling a shell command terminates its child process and distinguishes launch failures, non-zero exits, and user cancellation.
 - Settings cover virtual-drive visibility, serial-number redaction, plain-Tab navigation, the bundled `smartctl` version and smartmontools project link, history-database reveal, automatic refresh, the Check and Repair menu, and the SMART self-test interface, with complete Simplified Chinese content. Redaction is off by default; when enabled, only the first four characters remain visible while internal identity matching still uses the complete serial.
-- The application menu keeps only the system `Settings…` command and maps it to `Command-P`. Capricorn also supports `Command-R` to refresh and `Control-Tab` / `Control-Shift-Tab` to switch feature pages; plain-Tab switching can be disabled.
+- The application menu keeps only the system `Settings…` command. Capricorn also supports `Command-R` to refresh and `Control-Tab` / `Control-Shift-Tab` to switch feature pages; plain-Tab switching can be disabled.
 - Responsive controls and metric grids support smaller windows while wide tables keep horizontal scrolling.
 - SwiftData history uses a versioned schema, a dedicated `CapricornHistory` storage directory, and a repository boundary with explicit save errors.
 - Provides Simplified Chinese and English UI text.

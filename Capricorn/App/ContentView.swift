@@ -321,6 +321,15 @@ struct ContentView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+
+                    Spacer(minLength: 8)
+
+                    Text("Capricorn V\(AppVersion.current.displayValue) · \(NSUserName())")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .multilineTextAlignment(.trailing)
+                        .help("Capricorn version and macOS user name")
                 }
 
                 Divider()
@@ -330,9 +339,6 @@ struct ContentView: View {
                         Label(language.t("Settings"), systemImage: "gearshape")
                             .font(.caption.weight(.semibold))
                         Spacer(minLength: 8)
-                        Text("⌘P")
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.tertiary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
@@ -1136,15 +1142,6 @@ private struct DriveDetailView: View {
             .tag(DriveFeatureTab.history)
         }
         .padding(18)
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Text("Capricorn V\(AppVersion.current.displayValue) · \(NSUserName())")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .help("Capricorn version and macOS user name")
-            }
-        }
     }
 }
 

@@ -48,10 +48,6 @@ struct CapricornApp: App {
                 .disabled(updateChecker.state == .checking)
 
                 SettingsLink()
-                .keyboardShortcut(
-                    AppCommandShortcut.settingsKeyEquivalent,
-                    modifiers: AppCommandShortcut.settings.modifiers
-                )
             }
 
             CommandGroup(after: .toolbar) {

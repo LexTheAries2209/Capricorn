@@ -1547,12 +1547,6 @@ final class CapricornTests: XCTestCase {
         )
     }
 
-    func testSettingsShortcutUsesCommandP() {
-        XCTAssertEqual(AppCommandShortcut.settings.key, "p")
-        XCTAssertTrue(AppCommandShortcut.settings.modifiers.contains(.command))
-        XCTAssertEqual(AppCommandShortcut.settingsKeyEquivalent, KeyEquivalent("p"))
-    }
-
     func testDriveFeatureTabsCycleThroughFiveModules() {
         XCTAssertEqual(DriveFeatureTab.allCases, [.overview, .smart, .benchmark, .liveActivity, .history])
         XCTAssertEqual(DriveFeatureTab.next(after: .overview), .smart)
