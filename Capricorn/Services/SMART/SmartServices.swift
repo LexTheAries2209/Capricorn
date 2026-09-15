@@ -628,7 +628,7 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             guard let sat, hasSMARTPayload(sat) else {
                 var result = primary
                 if var diagnostics = result.smartctlDiagnostics {
-                    diagnostics.attemptedTransports = (diagnostics.attemptedTransports ?? []) + ["sat"]
+                    diagnostics.attemptedTransports += ["sat"]
                     diagnostics.fallbackReason = "SAT did not return a SMART payload."
                     result.smartctlDiagnostics = diagnostics
                 }
