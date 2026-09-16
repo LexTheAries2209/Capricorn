@@ -949,7 +949,9 @@ final class CapricornTests: XCTestCase {
         let expectedTranslations = [
             "Waiting for refresh...": "等待刷新...",
             "Scanning disks...": "正在扫描硬盘...",
+            "Disk scan completed.": "硬盘扫描已完成。",
             "Reading SMART data...": "正在读取 SMART 数据...",
+            "SMART data reading completed.": "SMART 数据读取已完成。",
             "No physical or network drives found.": "未找到物理或网络硬盘。",
             "Running disk action...": "正在执行硬盘操作...",
             "Disk action completed.": "硬盘操作已完成。",
@@ -1019,6 +1021,31 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(model.sidebarStatusHistory.map(\.message), ["Five", "Four", "Three", "Two"])
         XCTAssertEqual(model.sidebarRecentStatusHistory.map(\.message), ["Five", "Four", "Three"])
+    }
+
+    @MainActor
+    func testSuccessfulRefreshMarksScanningAndSmartReadingCompleted() async {
+        var drive = Self.fixtureDrive()
+        drive.isMemoryCard = true
+        let refreshService = StagedDriveRefreshService(
+            discovery: DriveRefreshSnapshot(
+                drives: [drive],
+                snapshots: [drive.id: .refreshingNative(for: drive)]
+            ),
+            updateDelayNanoseconds: 0,
+            updates: []
+        )
+        let model = AppModel(refreshService: refreshService)
+
+        await model.refresh()
+
+        XCTAssertTrue(model.sidebarRefreshStatus?.hasPrefix("Last refreshed ") == true)
+        XCTAssertEqual(
+            model.sidebarRecentStatusHistory.map(\.message),
+            ["SMART data reading completed.", "Disk scan completed."]
+        )
+        XCTAssertFalse(model.sidebarStatusHistory.contains { $0.message == "Scanning disks..." })
+        XCTAssertFalse(model.sidebarStatusHistory.contains { $0.message == "Reading SMART data..." })
     }
 
     func testSmartSelfTestKindTitlesAreLocalized() {

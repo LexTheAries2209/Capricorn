@@ -344,9 +344,9 @@ struct ContentView: View {
 
                     ForEach(viewModel.sidebarRecentStatusHistory) { entry in
                         HStack(spacing: 7) {
-                            Image(systemName: "clock")
+                            Image(systemName: sidebarStatusSymbol(for: entry.message))
                                 .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(sidebarStatusTint(for: entry.message))
                                 .frame(width: 12)
                             Text(language.statusMessage(entry.message))
                                 .font(.caption2)
@@ -412,6 +412,26 @@ struct ContentView: View {
 
     private var sidebarWarningCount: Int {
         viewModel.snapshots.values.filter { $0.health.severity >= HealthStatus.warning.severity }.count
+    }
+
+    private func sidebarStatusSymbol(for message: String) -> String {
+        if message.localizedCaseInsensitiveContains("completed") {
+            return "checkmark.circle"
+        }
+        if message.localizedCaseInsensitiveContains("failed") {
+            return "exclamationmark.triangle"
+        }
+        return "clock"
+    }
+
+    private func sidebarStatusTint(for message: String) -> Color {
+        if message.localizedCaseInsensitiveContains("completed") {
+            return .green
+        }
+        if message.localizedCaseInsensitiveContains("failed") {
+            return .orange
+        }
+        return .secondary
     }
 
     @ViewBuilder

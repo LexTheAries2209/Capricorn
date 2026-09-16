@@ -374,6 +374,12 @@ final class AppModel {
         sidebarRefreshStatusEntryID = sidebarStatusHistory.first?.id
     }
 
+    private func completeSidebarStatus(_ pendingMessage: String, with completedMessage: String) {
+        guard let index = sidebarStatusHistory.firstIndex(where: { $0.message == pendingMessage }) else { return }
+        let pendingEntry = sidebarStatusHistory[index]
+        sidebarStatusHistory[index] = SidebarStatusEntry(id: pendingEntry.id, message: completedMessage)
+    }
+
     /// Applies persisted choices only once at launch. Later manual changes are
     /// kept in memory for this session even when the next-launch default is
     /// configured as the largest volume.
@@ -520,6 +526,7 @@ final class AppModel {
                     self.applyDriveSnapshotUpdate(update, refreshID: refreshID)
                 }
                 guard !Task.isCancelled, self.activeRefreshID == refreshID else { return }
+                self.completeSidebarStatus("Reading SMART data...", with: "SMART data reading completed.")
                 self.setSidebarRefreshStatus(
                     discovery.drives.isEmpty
                         ? "No physical or network drives found."
@@ -574,6 +581,7 @@ final class AppModel {
             stopLiveActivityMonitoring()
             liveActivityError = "The active drive is no longer available."
         }
+        completeSidebarStatus("Scanning disks...", with: "Disk scan completed.")
         setSidebarRefreshStatus(loadedDrives.isEmpty ? "No physical or network drives found." : "Reading SMART data...")
     }
 
