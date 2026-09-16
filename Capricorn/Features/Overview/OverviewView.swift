@@ -192,6 +192,7 @@ enum ProviderStatusPresentation {
     static func displayState(for status: ProviderStatus, drive: DriveDevice) -> ProviderState {
         guard status.state == .unavailable else { return status.state }
         let shouldShowUnavailableAsFailure = drive.isNetwork
+            || drive.isMemoryCard
             || status.name.caseInsensitiveCompare("Native macOS") == .orderedSame
         return shouldShowUnavailableAsFailure ? .failed : .unavailable
     }

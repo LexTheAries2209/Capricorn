@@ -934,6 +934,7 @@ final class CapricornTests: XCTestCase {
             "Capricorn version and macOS user name": "Capricorn 版本和 macOS 用户名",
             "Unable to Complete Self-Test": "无法完成自检",
             "No SMART error log entries were reported.": "未报告 SMART 错误条目。",
+            "SD cards do not expose standard SMART health data on macOS.": "此 SD 卡在 macOS 上不提供标准 SMART 健康数据。",
             "Used Capacity": "已用容量",
             "Available Capacity": "可用容量",
             "Used": "已用",
@@ -1979,7 +1980,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(smartctlSnapshot.summary, "Network volumes do not expose local SMART data.")
     }
 
-    func testNetworkDriveUnavailableProvidersUseFailurePresentation() {
+    func testNetworkAndMemoryCardUnavailableProvidersUseFailurePresentation() {
         var drive = Self.fixtureDrive()
         drive.isNetwork = true
         let unavailable = ProviderStatus(
@@ -1992,6 +1993,16 @@ final class CapricornTests: XCTestCase {
 
         drive.isNetwork = false
         XCTAssertEqual(ProviderStatusPresentation.displayState(for: unavailable, drive: drive), .unavailable)
+
+        drive.isMemoryCard = true
+        XCTAssertEqual(ProviderStatusPresentation.displayState(for: unavailable, drive: drive), .failed)
+
+        let available = ProviderStatus(
+            name: "SMART",
+            state: .available,
+            message: "Detailed SMART data available."
+        )
+        XCTAssertEqual(ProviderStatusPresentation.displayState(for: available, drive: drive), .available)
     }
 
     func testOverviewQuickDiskCheckVisibilityExcludesNetworkDrives() {

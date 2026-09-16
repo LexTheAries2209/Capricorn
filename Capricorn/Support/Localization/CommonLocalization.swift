@@ -738,7 +738,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "No physical or network drives found.": "未找到物理或网络硬盘。",
         "Network volumes do not expose local SMART data.": "网络卷不提供本机 SMART 数据。",
         "Network drives do not provide per-disk IOKit activity counters.": "网络硬盘不提供本机单盘 IOKit 活动计数。",
-        "SD cards do not expose standard SMART health data on macOS.": "SD 卡在 macOS 上不提供标准 SMART 健康数据。",
+        "SD cards do not expose standard SMART health data on macOS.": "此 SD 卡在 macOS 上不提供标准 SMART 健康数据。",
         "Native SMART data is not exposed for this device.": "macOS 未暴露此设备的原生 SMART 数据。",
         "Refreshing Native SMART data...": "正在刷新原生 SMART 数据...",
         "Native SMART is not supported for this device.": "此设备不支持原生 SMART。",
