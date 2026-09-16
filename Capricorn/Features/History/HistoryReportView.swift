@@ -135,6 +135,7 @@ struct HistoryReportView: View {
                     emptyText: language.t("No saved quick disk checks yet."),
                     actionTitle: language.t("Clear Result"),
                     actionSymbol: "trash",
+                    bottomPadding: 8,
                     action: { showClearQuickDiskCheckConfirmation = true }
                 ) {
                     historyRows(visibleDiskCheckHistory) { item in
@@ -266,6 +267,7 @@ struct HistoryReportView: View {
         emptyText: String,
         actionTitle: String,
         actionSymbol: String,
+        bottomPadding: CGFloat = 14,
         action: @escaping () -> Void,
         @ViewBuilder rows: () -> Rows
     ) -> some View {
@@ -300,7 +302,9 @@ struct HistoryReportView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, bottomPadding)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
