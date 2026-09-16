@@ -1061,6 +1061,28 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(model.sidebarStatusHistory.contains { $0.message == "Inspecting open files..." })
     }
 
+    @MainActor
+    func testSuccessfulDiskActionReplacesInProgressSidebarStatus() async {
+        let diskActionService = DiskActionService(runner: StaticCommandRunner(stdout: ""))
+        let refreshService = StagedDriveRefreshService(
+            discovery: DriveRefreshSnapshot(drives: [], snapshots: [:]),
+            updateDelayNanoseconds: 0,
+            updates: []
+        )
+        let model = AppModel(
+            refreshService: refreshService,
+            diskActionService: diskActionService
+        )
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/Media")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+
+        await model.performDiskAction(.unmount, on: drive)
+
+        XCTAssertEqual(model.sidebarStatusHistory.first?.message, "Disk action completed.")
+        XCTAssertFalse(model.sidebarStatusHistory.contains { $0.message == "Running disk action..." })
+    }
+
     func testSmartSelfTestKindTitlesAreLocalized() {
         let expectedTitles: [(SmartSelfTestKind, String, String)] = [
             (.short, "Quick", "快速"),

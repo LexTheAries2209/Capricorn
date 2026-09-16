@@ -383,8 +383,8 @@ final class AppModel {
 
     private func replaceSidebarStatus(_ pendingMessage: String, with resultMessage: String) {
         guard let index = sidebarStatusHistory.firstIndex(where: { $0.message == pendingMessage }) else { return }
-        let pendingEntry = sidebarStatusHistory[index]
-        sidebarStatusHistory[index] = SidebarStatusEntry(id: pendingEntry.id, message: resultMessage)
+        let pendingEntry = sidebarStatusHistory.remove(at: index)
+        sidebarStatusHistory.insert(SidebarStatusEntry(id: pendingEntry.id, message: resultMessage), at: 0)
     }
 
     /// Applies persisted choices only once at launch. Later manual changes are
@@ -780,7 +780,9 @@ final class AppModel {
                 targetVolumeID: representativeVolume(for: drive)?.deviceIdentifier
             )
             await refresh()
-            refreshMessage = "Disk action completed."
+            let resultMessage = "Disk action completed."
+            replaceSidebarStatus("Running disk action...", with: resultMessage)
+            refreshMessage = resultMessage
             CapricornLog.diskOperations.info("Disk operation completed: \(action.rawValue, privacy: .public)")
         } catch {
             let error = error as NSError
@@ -1051,7 +1053,9 @@ final class AppModel {
     }
 
     private func recordDiskActionFailure(action: DiskSidebarAction, drive: DriveDevice, message: String) async {
-        refreshMessage = "Disk action failed: \(message)"
+        let resultMessage = "Disk action failed: \(message)"
+        replaceSidebarStatus("Running disk action...", with: resultMessage)
+        refreshMessage = resultMessage
         guard shouldPresentDiskActionFailure(for: action) else { return }
 
         let inspection: DiskOpenFileInspection
