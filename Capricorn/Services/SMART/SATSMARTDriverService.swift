@@ -3,19 +3,63 @@ import AppKit
 import Foundation
 import IOKit
 
-enum SATSMARTDriverState: String, Sendable {
+enum SATSMARTDriverState: String, Equatable, Sendable {
     case notInstalled
     case installedNotLoaded
     case loaded
     case inconclusive
 }
 
-struct SATSMARTDriverStatus: Sendable {
+struct SATSMARTDriverStatus: Equatable, Sendable {
     var state: SATSMARTDriverState
     var version: String?
     var kextPath: String?
     var pluginPath: String?
     var message: String
+}
+
+enum SATSMARTDriverGuidance: Equatable, Sendable {
+    case installationSuggested
+    case activationRequired
+}
+
+enum SATSMARTDriverGuidancePolicy {
+    static func guidance(
+        for drive: DriveDevice,
+        snapshot: SmartSnapshot?,
+        driverStatus: SATSMARTDriverStatus
+    ) -> SATSMARTDriverGuidance? {
+        guard let snapshot,
+              !snapshot.hasSMARTPayload,
+              !drive.isInternal,
+              !drive.isSystemDisk,
+              !drive.isNetwork,
+              !drive.isVirtual,
+              !drive.isMemoryCard,
+              drive.protocolName.localizedCaseInsensitiveContains("USB"),
+              !diagnosticsIdentifyNVMe(snapshot.smartctlDiagnostics) else {
+            return nil
+        }
+
+        switch driverStatus.state {
+        case .notInstalled:
+            return .installationSuggested
+        case .installedNotLoaded, .inconclusive:
+            return .activationRequired
+        case .loaded:
+            return nil
+        }
+    }
+
+    private static func diagnosticsIdentifyNVMe(_ diagnostics: SmartctlDiagnostics?) -> Bool {
+        let values = [
+            diagnostics?.selectedTransport,
+            diagnostics?.deviceType,
+            diagnostics?.protocolName
+        ]
+            .compactMap { $0?.lowercased() }
+        return values.contains { $0.contains("nvme") || $0.hasPrefix("snt") }
+    }
 }
 
 struct SATSMARTDriverService: Sendable {

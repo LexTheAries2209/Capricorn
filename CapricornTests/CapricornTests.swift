@@ -2691,6 +2691,57 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(status.state, .unavailable)
     }
 
+    func testSATDriverGuidanceTargetsOnlyEligibleUSBDevicesWithoutSMARTData() {
+        var drive = Self.externalCatalogDrive(model: "USB Storage", protocolName: "USB")
+        drive.smartStatusRaw = nil
+        var snapshot = SmartSnapshot.unavailable(for: drive, reason: "SMART unavailable.")
+        let notInstalled = SATSMARTDriverStatus(
+            state: .notInstalled,
+            version: nil,
+            kextPath: nil,
+            pluginPath: nil,
+            message: "SAT SMART Driver is not installed."
+        )
+
+        XCTAssertEqual(
+            SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled),
+            .installationSuggested
+        )
+
+        snapshot.smartctlDiagnostics = SmartctlDiagnostics(deviceType: "sntrealtek", protocolName: "NVMe")
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled))
+
+        snapshot.smartctlDiagnostics = nil
+        drive.isNetwork = true
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled))
+    }
+
+    func testSATDriverGuidanceReflectsInstalledDriverState() {
+        var drive = Self.externalCatalogDrive(model: "USB Storage", protocolName: "USB")
+        drive.smartStatusRaw = nil
+        let snapshot = SmartSnapshot.unavailable(for: drive, reason: "SMART unavailable.")
+        let installed = SATSMARTDriverStatus(
+            state: .installedNotLoaded,
+            version: "0.10.3",
+            kextPath: "/Library/Extensions/SATSMARTDriver.kext",
+            pluginPath: "/Library/Extensions/SATSMARTLib.plugin",
+            message: "SAT SMART Driver files are installed."
+        )
+        let loaded = SATSMARTDriverStatus(
+            state: .loaded,
+            version: "0.10.3",
+            kextPath: installed.kextPath,
+            pluginPath: installed.pluginPath,
+            message: "SAT SMART Driver is loaded and has an IOKit match."
+        )
+
+        XCTAssertEqual(
+            SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: installed),
+            .activationRequired
+        )
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: loaded))
+    }
+
     func testSmartctlParserRejectsDeviceIdentificationWithoutSMARTPayload() throws {
         let fixture = """
         {
