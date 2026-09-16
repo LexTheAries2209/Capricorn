@@ -356,7 +356,7 @@ struct ContentView: View {
                         }
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
 
                 Divider()
 
