@@ -381,10 +381,10 @@ final class AppModel {
         }
     }
 
-    private func completeSidebarStatus(_ pendingMessage: String, with completedMessage: String) {
+    private func replaceSidebarStatus(_ pendingMessage: String, with resultMessage: String) {
         guard let index = sidebarStatusHistory.firstIndex(where: { $0.message == pendingMessage }) else { return }
         let pendingEntry = sidebarStatusHistory[index]
-        sidebarStatusHistory[index] = SidebarStatusEntry(id: pendingEntry.id, message: completedMessage)
+        sidebarStatusHistory[index] = SidebarStatusEntry(id: pendingEntry.id, message: resultMessage)
     }
 
     /// Applies persisted choices only once at launch. Later manual changes are
@@ -533,7 +533,7 @@ final class AppModel {
                     self.applyDriveSnapshotUpdate(update, refreshID: refreshID)
                 }
                 guard !Task.isCancelled, self.activeRefreshID == refreshID else { return }
-                self.completeSidebarStatus("Reading SMART data...", with: "SMART data reading completed.")
+                self.replaceSidebarStatus("Reading SMART data...", with: "SMART data reading completed.")
                 self.setSidebarRefreshStatus(
                     discovery.drives.isEmpty
                         ? "No physical or network drives found."
@@ -588,7 +588,7 @@ final class AppModel {
             stopLiveActivityMonitoring()
             liveActivityError = "The active drive is no longer available."
         }
-        completeSidebarStatus("Scanning disks...", with: "Disk scan completed.")
+        replaceSidebarStatus("Scanning disks...", with: "Disk scan completed.")
         setSidebarRefreshStatus(loadedDrives.isEmpty ? "No physical or network drives found." : "Reading SMART data...")
     }
 
@@ -794,9 +794,13 @@ final class AppModel {
         refreshMessage = "Inspecting open files..."
         do {
             diskOpenFileInspection = try await openFileService.inspectOpenFiles(on: drive)
-            refreshMessage = "Open file inspection completed."
+            let resultMessage = "Open file inspection completed."
+            replaceSidebarStatus("Inspecting open files...", with: resultMessage)
+            refreshMessage = resultMessage
         } catch {
-            refreshMessage = "Open file inspection failed: \(error.localizedDescription)"
+            let resultMessage = "Open file inspection failed: \(error.localizedDescription)"
+            replaceSidebarStatus("Inspecting open files...", with: resultMessage)
+            refreshMessage = resultMessage
         }
     }
 

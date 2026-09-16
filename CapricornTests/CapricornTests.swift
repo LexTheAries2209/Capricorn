@@ -1049,6 +1049,18 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(model.sidebarStatusHistory.contains { $0.message == "Reading SMART data..." })
     }
 
+    @MainActor
+    func testOpenFileInspectionReplacesInProgressSidebarStatus() async {
+        let openFileService = DiskOpenFileService(runner: StaticCommandRunner(stdout: ""))
+        let model = AppModel(openFileService: openFileService)
+        let drive = Self.fixtureDrive(mountedAt: "/Volumes/Media")
+
+        await model.inspectOpenFiles(on: drive)
+
+        XCTAssertEqual(model.sidebarStatusHistory.first?.message, "Open file inspection completed.")
+        XCTAssertFalse(model.sidebarStatusHistory.contains { $0.message == "Inspecting open files..." })
+    }
+
     func testSmartSelfTestKindTitlesAreLocalized() {
         let expectedTitles: [(SmartSelfTestKind, String, String)] = [
             (.short, "Quick", "快速"),
