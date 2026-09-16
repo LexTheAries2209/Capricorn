@@ -1877,6 +1877,21 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(smartctlSnapshot.summary, "Network volumes do not expose local SMART data.")
     }
 
+    func testNetworkDriveUnavailableProvidersUseFailurePresentation() {
+        var drive = Self.fixtureDrive()
+        drive.isNetwork = true
+        let unavailable = ProviderStatus(
+            name: "SMART",
+            state: .unavailable,
+            message: "Network volumes do not expose local SMART data."
+        )
+
+        XCTAssertEqual(ProviderStatusPresentation.displayState(for: unavailable, drive: drive), .failed)
+
+        drive.isNetwork = false
+        XCTAssertEqual(ProviderStatusPresentation.displayState(for: unavailable, drive: drive), .unavailable)
+    }
+
     func testMemoryCardSmartProvidersReturnUnavailableReason() async throws {
         var drive = Self.fixtureDrive()
         drive.bsdName = "disk10"

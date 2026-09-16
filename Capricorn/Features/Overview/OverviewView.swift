@@ -92,8 +92,10 @@ struct OverviewView: View {
                     }
                     ForEach(snapshot?.providerStatuses ?? []) { status in
                         HStack(alignment: .top) {
-                            let displayState: ProviderState = status.name.caseInsensitiveCompare("Native macOS") == .orderedSame
-                                && status.state == .unavailable ? .failed : status.state
+                            let displayState = ProviderStatusPresentation.displayState(
+                                for: status,
+                                drive: drive
+                            )
                             Image(systemName: displayState.symbolName)
                                 .foregroundStyle(displayState.tint)
                             VStack(alignment: .leading, spacing: 2) {
@@ -165,6 +167,15 @@ struct OverviewView: View {
     private var temperatureValueTint: Color? {
         guard let celsius = snapshot?.temperatureCelsius else { return nil }
         return temperatureTint(for: celsius)
+    }
+}
+
+enum ProviderStatusPresentation {
+    static func displayState(for status: ProviderStatus, drive: DriveDevice) -> ProviderState {
+        guard status.state == .unavailable else { return status.state }
+        let shouldShowUnavailableAsFailure = drive.isNetwork
+            || status.name.caseInsensitiveCompare("Native macOS") == .orderedSame
+        return shouldShowUnavailableAsFailure ? .failed : .unavailable
     }
 }
 
