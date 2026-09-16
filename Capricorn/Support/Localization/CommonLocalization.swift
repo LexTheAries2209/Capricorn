@@ -242,6 +242,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Show SMART diagnostics": "显示 SMART 诊断",
         "When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART.": "关闭后，概览和 SMART 页面将隐藏自检控制、已保存报告和错误日志工具。",
         "Self-tests, saved reports, and controller error entries.": "自检、已保存报告和控制器错误条目。",
+        "Self-tests and saved reports.": "自检和已保存报告。",
         "Collapse SMART Diagnostics": "收起 SMART 诊断",
         "Show SMART Diagnostics": "展开 SMART 诊断",
         "Self-Test History": "自检历史",

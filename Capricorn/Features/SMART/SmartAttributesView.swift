@@ -238,6 +238,12 @@ struct SmartAttributesView: View {
     }
 }
 
+enum SmartDiagnosticsVisibilityPolicy {
+    static func showsErrorLogSection(for drive: DriveDevice) -> Bool {
+        !drive.isSystemDisk
+    }
+}
+
 struct SmartDiagnosticsPanel: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
@@ -291,7 +297,11 @@ struct SmartDiagnosticsPanel: View {
         InfoPanel(title: language.t("SMART Diagnostics"), symbol: "stethoscope") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(language.t("Self-tests, saved reports, and controller error entries."))
+                    Text(language.t(
+                        SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive)
+                            ? "Self-tests, saved reports, and controller error entries."
+                            : "Self-tests and saved reports."
+                    ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -306,8 +316,10 @@ struct SmartDiagnosticsPanel: View {
 
                 if isExpanded {
                     selfTestSection
-                    Divider()
-                    errorLogSection
+                    if SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive) {
+                        Divider()
+                        errorLogSection
+                    }
                 }
             }
         }

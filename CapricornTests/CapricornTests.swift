@@ -1934,6 +1934,14 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(DriveHealthEvaluator().evaluate(drive: Self.fixtureDrive(), snapshot: snapshot), .good)
     }
 
+    func testSmartDiagnosticsHidesErrorLogSectionForSystemDisk() {
+        var drive = Self.fixtureDrive()
+        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive))
+
+        drive.isSystemDisk = false
+        XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive))
+    }
+
     func testSmartErrorLogPresentationSeparatesHistoricalCountFromReadDetails() {
         let historicalOnly = SmartErrorLogReport(
             isSupported: true,
