@@ -355,6 +355,7 @@ final class AppModel {
 
     private func recordSidebarStatus(_ message: String?) {
         guard let message, !message.isEmpty,
+              !message.hasPrefix("Last refreshed "),
               sidebarStatusHistory.first?.message != message else {
             return
         }
@@ -365,13 +366,19 @@ final class AppModel {
     }
 
     var sidebarRecentStatusHistory: [SidebarStatusEntry] {
-        Array(sidebarStatusHistory.lazy.filter { $0.id != self.sidebarRefreshStatusEntryID }.prefix(3))
+        Array(
+            sidebarStatusHistory.lazy
+                .filter { $0.id != self.sidebarRefreshStatusEntryID && !$0.message.hasPrefix("Last refreshed ") }
+                .prefix(3)
+        )
     }
 
     private func setSidebarRefreshStatus(_ message: String) {
         refreshMessage = message
         sidebarRefreshStatus = message
-        sidebarRefreshStatusEntryID = sidebarStatusHistory.first?.id
+        sidebarRefreshStatusEntryID = sidebarStatusHistory.first.flatMap { entry in
+            entry.message == message ? entry.id : nil
+        }
     }
 
     private func completeSidebarStatus(_ pendingMessage: String, with completedMessage: String) {

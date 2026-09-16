@@ -1044,6 +1044,7 @@ final class CapricornTests: XCTestCase {
             model.sidebarRecentStatusHistory.map(\.message),
             ["SMART data reading completed.", "Disk scan completed."]
         )
+        XCTAssertFalse(model.sidebarStatusHistory.contains { $0.message.hasPrefix("Last refreshed ") })
         XCTAssertFalse(model.sidebarStatusHistory.contains { $0.message == "Scanning disks..." })
         XCTAssertFalse(model.sidebarStatusHistory.contains { $0.message == "Reading SMART data..." })
     }
