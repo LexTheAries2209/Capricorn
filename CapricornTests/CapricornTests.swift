@@ -1041,18 +1041,29 @@ final class CapricornTests: XCTestCase {
     }
 
     @MainActor
-    func testSidebarStatusHistoryKeepsFourMostRecentDistinctMessages() {
+    func testSidebarStatusHistoryKeepsFourMostRecentUniqueMessages() {
         let model = AppModel()
 
         model.refreshMessage = "One"
+        let originalOneID = model.sidebarStatusHistory.first?.id
         model.refreshMessage = "Two"
         model.refreshMessage = "Three"
+        model.refreshMessage = "One"
         model.refreshMessage = "Four"
         model.refreshMessage = "Five"
         model.refreshMessage = "Five"
 
-        XCTAssertEqual(model.sidebarStatusHistory.map(\.message), ["Five", "Four", "Three", "Two"])
-        XCTAssertEqual(model.sidebarRecentStatusHistory.map(\.message), ["Five", "Four", "Three"])
+        XCTAssertEqual(model.sidebarStatusHistory.map(\.message), ["Five", "Four", "One", "Three"])
+        XCTAssertEqual(model.sidebarRecentStatusHistory.map(\.message), ["Five", "Four", "One"])
+        XCTAssertEqual(model.sidebarStatusHistory.filter { $0.message == "One" }.count, 1)
+        XCTAssertNotEqual(model.sidebarStatusHistory.first { $0.message == "One" }?.id, originalOneID)
+    }
+
+    func testSidebarStatusTimestampUsesLocalTwentyFourHourClock() {
+        let date = Date(timeIntervalSince1970: 13 * 60 * 60 + 4 * 60 + 5)
+        let utc = try! XCTUnwrap(TimeZone(secondsFromGMT: 0))
+
+        XCTAssertEqual(SidebarStatusTimestampFormatter.string(from: date, timeZone: utc), "13:04:05")
     }
 
     @MainActor

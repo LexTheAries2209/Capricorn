@@ -353,6 +353,11 @@ struct ContentView: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
+                            Spacer(minLength: 8)
+                            Text(SidebarStatusTimestampFormatter.string(from: entry.recordedAt))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                                .fixedSize()
                         }
                     }
                 }

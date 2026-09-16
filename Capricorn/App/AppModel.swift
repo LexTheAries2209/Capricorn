@@ -17,10 +17,26 @@ struct SmartSelfTestCompletion: Identifiable, Sendable {
 struct SidebarStatusEntry: Identifiable, Equatable, Sendable {
     let id: UUID
     let message: String
+    let recordedAt: Date
 
-    init(id: UUID = UUID(), message: String) {
+    init(id: UUID = UUID(), message: String, recordedAt: Date = Date()) {
         self.id = id
         self.message = message
+        self.recordedAt = recordedAt
+    }
+}
+
+enum SidebarStatusTimestampFormatter {
+    static func string(from date: Date, timeZone: TimeZone = .autoupdatingCurrent) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.hour, .minute, .second], from: date)
+        return String(
+            format: "%02d:%02d:%02d",
+            components.hour ?? 0,
+            components.minute ?? 0,
+            components.second ?? 0
+        )
     }
 }
 
@@ -355,11 +371,15 @@ final class AppModel {
 
     private func recordSidebarStatus(_ message: String?) {
         guard let message, !message.isEmpty,
-              !message.hasPrefix("Last refreshed "),
-              sidebarStatusHistory.first?.message != message else {
+              !message.hasPrefix("Last refreshed ") else {
             return
         }
-        sidebarStatusHistory.insert(SidebarStatusEntry(message: message), at: 0)
+        insertSidebarStatus(message)
+    }
+
+    private func insertSidebarStatus(_ message: String, id: UUID = UUID()) {
+        sidebarStatusHistory.removeAll { $0.message == message }
+        sidebarStatusHistory.insert(SidebarStatusEntry(id: id, message: message), at: 0)
         if sidebarStatusHistory.count > 4 {
             sidebarStatusHistory.removeLast(sidebarStatusHistory.count - 4)
         }
@@ -384,7 +404,7 @@ final class AppModel {
     private func replaceSidebarStatus(_ pendingMessage: String, with resultMessage: String) {
         guard let index = sidebarStatusHistory.firstIndex(where: { $0.message == pendingMessage }) else { return }
         let pendingEntry = sidebarStatusHistory.remove(at: index)
-        sidebarStatusHistory.insert(SidebarStatusEntry(id: pendingEntry.id, message: resultMessage), at: 0)
+        insertSidebarStatus(resultMessage, id: pendingEntry.id)
     }
 
     /// Applies persisted choices only once at launch. Later manual changes are
