@@ -2761,16 +2761,38 @@ final class CapricornTests: XCTestCase {
             message: "SAT SMART Driver is not installed."
         )
 
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: nil, driverStatus: notInstalled))
         XCTAssertEqual(
             SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled),
             .installationSuggested
         )
 
-        snapshot.smartctlDiagnostics = SmartctlDiagnostics(deviceType: "sntrealtek", protocolName: "NVMe")
+        snapshot.smartStatusRaw = "Verified"
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled))
+        snapshot.smartStatusRaw = nil
+
+        drive.isInternal = true
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled))
+        drive.isInternal = false
+        drive.isSystemDisk = true
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled))
+        drive.isSystemDisk = false
+        drive.isNetwork = true
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled))
+        drive.isNetwork = false
+        drive.isVirtual = true
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled))
+        drive.isVirtual = false
+        drive.isMemoryCard = true
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled))
+        drive.isMemoryCard = false
+        drive.protocolName = "SATA"
         XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled))
 
-        snapshot.smartctlDiagnostics = nil
-        drive.isNetwork = true
+        drive.protocolName = "USB-NVMe"
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled))
+        drive.protocolName = "USB"
+        snapshot.smartctlDiagnostics = SmartctlDiagnostics(deviceType: "sntrealtek", protocolName: "NVMe")
         XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: notInstalled))
     }
 
@@ -2795,6 +2817,12 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(
             SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: installed),
+            .activationRequired
+        )
+        var inconclusive = installed
+        inconclusive.state = .inconclusive
+        XCTAssertEqual(
+            SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: inconclusive),
             .activationRequired
         )
         XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: loaded))

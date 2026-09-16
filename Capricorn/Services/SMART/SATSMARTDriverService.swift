@@ -37,7 +37,7 @@ enum SATSMARTDriverGuidancePolicy {
               !drive.isVirtual,
               !drive.isMemoryCard,
               drive.protocolName.localizedCaseInsensitiveContains("USB"),
-              !diagnosticsIdentifyNVMe(snapshot.smartctlDiagnostics) else {
+              !identifiesNVMe(drive: drive, diagnostics: snapshot.smartctlDiagnostics) else {
             return nil
         }
 
@@ -51,8 +51,9 @@ enum SATSMARTDriverGuidancePolicy {
         }
     }
 
-    private static func diagnosticsIdentifyNVMe(_ diagnostics: SmartctlDiagnostics?) -> Bool {
+    private static func identifiesNVMe(drive: DriveDevice, diagnostics: SmartctlDiagnostics?) -> Bool {
         let values = [
+            drive.protocolName,
             diagnostics?.selectedTransport,
             diagnostics?.deviceType,
             diagnostics?.protocolName
