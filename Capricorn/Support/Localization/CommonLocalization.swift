@@ -486,7 +486,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "This USB storage device did not return SMART data. Installing SAT SMART Drive may provide more health information; support depends on the drive and enclosure.": "此 USB 存储设备未返回 SMART 数据。安装 SAT SMART Drive 可能提供更多健康信息，实际支持情况取决于硬盘和硬盘盒。",
         "SAT SMART Drive files are installed, but the driver is not active. Check macOS approval or restart, then recheck it in Settings.": "SAT SMART Drive 文件已安装，但驱动尚未启用。请检查 macOS 授权或重新启动，然后在设置中重新检测。",
         "Open SAT SMART Drive Settings": "前往 SAT SMART Drive 设置",
-        "Don't Show Again": "不再提示",
         "Show SAT guidance when SMART data is unavailable": "SMART 数据不可用时显示 SAT 引导",
         "SAT SMART Driver is not installed.": "SAT SMART Driver 未安装。",
         "SAT SMART Driver is loaded and has an IOKit match.": "SAT SMART Driver 已加载并存在 IOKit 匹配。",

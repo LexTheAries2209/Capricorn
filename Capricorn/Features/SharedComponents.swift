@@ -107,17 +107,14 @@ struct StatusLine: View {
 struct SATSMARTDriverGuidanceView: View {
     let guidance: SATSMARTDriverGuidance
     let openSettings: () -> Void
-    let dismiss: () -> Void
     @Environment(\.appLanguage) private var language
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.title3)
                 .foregroundStyle(.orange)
-                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(language.t(guidance.titleKey))
                     .font(.headline)
                 Text(language.t(guidance.messageKey))
@@ -128,23 +125,41 @@ struct SATSMARTDriverGuidanceView: View {
 
             Spacer(minLength: 12)
 
-            VStack(alignment: .trailing, spacing: 6) {
-                Button(action: openSettings) {
-                    Label(language.t("Open SAT SMART Drive Settings"), systemImage: "gearshape")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.orange)
-
-                Button(language.t("Don't Show Again"), action: dismiss)
-                    .buttonStyle(.borderless)
-                    .font(.caption)
+            Button(action: openSettings) {
+                Label(language.t("Open SAT SMART Drive Settings"), systemImage: "gearshape")
             }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
         }
-        .padding(.vertical, 4)
     }
 }
 
-private extension SATSMARTDriverGuidance {
+struct SATSMARTDriverGuidanceUnavailableView: View {
+    let guidance: SATSMARTDriverGuidance
+    let openSettings: () -> Void
+    @Environment(\.appLanguage) private var language
+
+    var body: some View {
+        ContentUnavailableView {
+            Label {
+                Text(language.t(guidance.titleKey))
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            }
+        } description: {
+            Text(language.t(guidance.messageKey))
+        } actions: {
+            Button(action: openSettings) {
+                Label(language.t("Open SAT SMART Drive Settings"), systemImage: "gearshape")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
+        }
+    }
+}
+
+extension SATSMARTDriverGuidance {
     var titleKey: String {
         switch self {
         case .installationSuggested:

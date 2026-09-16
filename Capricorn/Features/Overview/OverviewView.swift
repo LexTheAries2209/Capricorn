@@ -13,7 +13,6 @@ struct OverviewView: View {
     let runQuickCheck: () -> Void
     let satDriverGuidance: SATSMARTDriverGuidance?
     let openSATDriverSettings: () -> Void
-    let dismissSATDriverGuidance: () -> Void
     @Environment(\.appLanguage) private var language
 
     var body: some View {
@@ -131,8 +130,7 @@ struct OverviewView: View {
                         Divider()
                         SATSMARTDriverGuidanceView(
                             guidance: satDriverGuidance,
-                            openSettings: openSATDriverSettings,
-                            dismiss: dismissSATDriverGuidance
+                            openSettings: openSATDriverSettings
                         )
                     }
                 }

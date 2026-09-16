@@ -68,9 +68,6 @@ struct ContentView: View {
                         preferences.requestedSettingsDestination = .satSMARTDriver
                         openSettings()
                     },
-                    dismissSATDriverGuidance: {
-                        preferences.showsSATDriverGuidance = false
-                    },
                     saveSnapshot: { exportFolderPath in saveSnapshot(drive: drive, exportFolderPath: exportFolderPath) },
                     exportSelfTestHistory: { records, exportFolderPath, format in
                         exportSelfTestHistory(
@@ -1176,7 +1173,6 @@ private struct DriveDetailView: View {
     let allowSystemDiskSelfTests: Bool
     let satDriverGuidance: SATSMARTDriverGuidance?
     let openSATDriverSettings: () -> Void
-    let dismissSATDriverGuidance: () -> Void
     let saveSnapshot: (String?) -> String
     let exportSelfTestHistory: ([SmartSelfTestHistoryRecord], String?, SmartDiagnosticsExportFormat) -> String
     let exportErrorLog: (SmartErrorLogReport, String?, SmartDiagnosticsExportFormat) -> String
@@ -1205,8 +1201,7 @@ private struct DriveDetailView: View {
                     Task { await viewModel.runDiskCheck(.ordinary, on: drive) }
                 },
                 satDriverGuidance: satDriverGuidance,
-                openSATDriverSettings: openSATDriverSettings,
-                dismissSATDriverGuidance: dismissSATDriverGuidance
+                openSATDriverSettings: openSATDriverSettings
             )
                 .tabItem { Label(language.t("Overview"), systemImage: "gauge.with.dots.needle.bottom.50percent") }
                 .tag(DriveFeatureTab.overview)
@@ -1219,8 +1214,7 @@ private struct DriveDetailView: View {
                 exportSelfTestHistory: exportSelfTestHistory,
                 exportErrorLog: exportErrorLog,
                 satDriverGuidance: satDriverGuidance,
-                openSATDriverSettings: openSATDriverSettings,
-                dismissSATDriverGuidance: dismissSATDriverGuidance
+                openSATDriverSettings: openSATDriverSettings
             )
                 .tabItem { Label("SMART", systemImage: "list.bullet.rectangle") }
                 .tag(DriveFeatureTab.smart)
