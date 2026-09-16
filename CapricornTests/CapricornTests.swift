@@ -1942,6 +1942,26 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive))
     }
 
+    func testSmartDiagnosticsPanelRequiresLocalSmartAttributes() {
+        let attribute = SmartAttribute(
+            id: "temperature.current",
+            name: "Temperature",
+            rawValue: "31 C",
+            current: nil,
+            worst: nil,
+            threshold: nil,
+            status: .good,
+            source: "Fixture"
+        )
+        var drive = Self.fixtureDrive()
+
+        XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
+        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: []))
+
+        drive.isNetwork = true
+        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
+    }
+
     func testSmartErrorLogPresentationSeparatesHistoricalCountFromReadDetails() {
         let historicalOnly = SmartErrorLogReport(
             isSupported: true,

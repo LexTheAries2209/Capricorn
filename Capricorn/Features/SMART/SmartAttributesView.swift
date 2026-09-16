@@ -93,7 +93,8 @@ struct SmartAttributesView: View {
             primarySmartContent
                 .layoutPriority(1)
 
-            if showsSmartSelfTestInterface {
+            if showsSmartSelfTestInterface,
+               SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: attributes) {
                 SmartDiagnosticsPanel(
                     drive: drive,
                     snapshot: snapshot,
@@ -239,6 +240,10 @@ struct SmartAttributesView: View {
 }
 
 enum SmartDiagnosticsVisibilityPolicy {
+    static func showsPanel(for drive: DriveDevice, attributes: [SmartAttribute]) -> Bool {
+        !drive.isNetwork && !attributes.isEmpty
+    }
+
     static func showsErrorLogSection(for drive: DriveDevice) -> Bool {
         !drive.isSystemDisk
     }
