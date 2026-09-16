@@ -314,16 +314,36 @@ struct ContentView: View {
 
                 Divider()
 
-                HStack(spacing: 8) {
-                    if viewModel.isRefreshing {
-                        ProgressView()
-                            .controlSize(.small)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 7) {
+                        Image(systemName: sidebarHealthSymbol)
+                            .foregroundStyle(sidebarHealthTint)
+                            .frame(width: 12)
+                        Text(sidebarHealthSummary)
+                            .font(.caption.weight(.medium))
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        if viewModel.isRefreshing {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
                     }
-                    Text(sidebarStatusText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+
+                    ForEach(viewModel.sidebarStatusHistory) { entry in
+                        HStack(spacing: 7) {
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .frame(width: 12)
+                            Text(language.statusMessage(entry.message))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
                 }
+                .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
 
                 Divider()
 
@@ -362,12 +382,23 @@ struct ContentView: View {
         }
     }
 
-    private var sidebarStatusText: String {
-        if let refreshMessage = viewModel.refreshMessage {
-            return language.statusMessage(refreshMessage)
-        }
+    private var sidebarHealthSummary: String {
         let warningCount = viewModel.snapshots.values.filter { $0.health.severity >= HealthStatus.warning.severity }.count
         return language.healthSummary(driveCount: viewModel.drives.count, warningCount: warningCount)
+    }
+
+    private var sidebarHealthSymbol: String {
+        guard !viewModel.drives.isEmpty else { return "internaldrive" }
+        return sidebarWarningCount == 0 ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+    }
+
+    private var sidebarHealthTint: Color {
+        guard !viewModel.drives.isEmpty else { return .secondary }
+        return sidebarWarningCount == 0 ? .green : .orange
+    }
+
+    private var sidebarWarningCount: Int {
+        viewModel.snapshots.values.filter { $0.health.severity >= HealthStatus.warning.severity }.count
     }
 
     @ViewBuilder

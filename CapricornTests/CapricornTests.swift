@@ -1005,6 +1005,20 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testSidebarStatusHistoryKeepsFourMostRecentDistinctMessages() {
+        let model = AppModel()
+
+        model.refreshMessage = "One"
+        model.refreshMessage = "Two"
+        model.refreshMessage = "Three"
+        model.refreshMessage = "Four"
+        model.refreshMessage = "Five"
+        model.refreshMessage = "Five"
+
+        XCTAssertEqual(model.sidebarStatusHistory.map(\.message), ["Five", "Four", "Three", "Two"])
+    }
+
     func testSmartSelfTestKindTitlesAreLocalized() {
         let expectedTitles: [(SmartSelfTestKind, String, String)] = [
             (.short, "Quick", "快速"),

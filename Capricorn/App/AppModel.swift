@@ -14,6 +14,16 @@ struct SmartSelfTestCompletion: Identifiable, Sendable {
     let report: SmartSelfTestReport
 }
 
+struct SidebarStatusEntry: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let message: String
+
+    init(id: UUID = UUID(), message: String) {
+        self.id = id
+        self.message = message
+    }
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -21,7 +31,12 @@ final class AppModel {
     var snapshots: [String: SmartSnapshot] = [:]
     var selectedDriveID: String?
     var isRefreshing = false
-    var refreshMessage: String?
+    var refreshMessage: String? {
+        didSet {
+            recordSidebarStatus(refreshMessage)
+        }
+    }
+    private(set) var sidebarStatusHistory: [SidebarStatusEntry] = []
     let benchmarkSession = BenchmarkSessionModel()
     let liveActivitySession = LiveActivitySessionModel()
     let diskOperations = DiskOperationsModel()
@@ -334,6 +349,17 @@ final class AppModel {
     var selectedSnapshot: SmartSnapshot? {
         guard let selectedDrive else { return nil }
         return snapshots[selectedDrive.id]
+    }
+
+    private func recordSidebarStatus(_ message: String?) {
+        guard let message, !message.isEmpty,
+              sidebarStatusHistory.first?.message != message else {
+            return
+        }
+        sidebarStatusHistory.insert(SidebarStatusEntry(message: message), at: 0)
+        if sidebarStatusHistory.count > 4 {
+            sidebarStatusHistory.removeLast(sidebarStatusHistory.count - 4)
+        }
     }
 
     /// Applies persisted choices only once at launch. Later manual changes are
