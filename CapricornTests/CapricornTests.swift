@@ -1813,34 +1813,35 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(DrivePageHeaderText.subtitle(for: drive, language: .simplifiedChinese), "disk0 · USB · HDD")
     }
 
-    func testDrivePageHeaderTextShowsFullSerialOrNil() {
+    func testDrivePageHeaderTextShowsFullSerialOrLocalizedMissingValue() {
         var drive = Self.fixtureDrive()
         drive.serialNumber = "ZR51JYMS"
-        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive), "ZR51JYMS")
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive, language: .english), "ZR51JYMS")
         XCTAssertEqual(
             DrivePageHeaderText.serialNumberLine(for: drive, language: .simplifiedChinese),
             "序列号: ZR51JYMS"
         )
-        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive, redact: true), "ZR51****")
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive, language: .english, redact: true), "ZR51****")
         XCTAssertEqual(
             DrivePageHeaderText.serialNumberLine(for: drive, language: .simplifiedChinese, redact: true),
             "序列号: ZR51****"
         )
 
         drive.serialNumber = nil
-        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive), "nil")
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive, language: .simplifiedChinese), "无")
         XCTAssertEqual(
             DrivePageHeaderText.serialNumberLine(for: drive, language: .english),
-            "Serial Number: nil"
+            "Serial Number: None"
         )
-        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive, redact: true), "nil")
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(for: drive, language: .simplifiedChinese, redact: true), "无")
     }
 
     func testSerialNumberDisplayFormatterPreservesShortValuesAndRedactsOnlyAfterFourCharacters() {
         XCTAssertEqual(SerialNumberDisplayFormatter.displayValue("12345678", redact: true), "1234****")
         XCTAssertEqual(SerialNumberDisplayFormatter.displayValue("ABC", redact: true), "ABC")
         XCTAssertEqual(SerialNumberDisplayFormatter.displayValue("12345678", redact: false), "12345678")
-        XCTAssertEqual(SerialNumberDisplayFormatter.displayValue(nil, redact: true), "nil")
+        XCTAssertEqual(SerialNumberDisplayFormatter.displayValue(nil, redact: true), "None")
+        XCTAssertEqual(SerialNumberDisplayFormatter.displayValue(nil, redact: true, missingValue: "无"), "无")
     }
 
     @MainActor

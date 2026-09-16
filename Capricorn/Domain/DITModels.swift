@@ -924,12 +924,16 @@ enum AppFeatureTabKeyRouter {
 }
 
 enum DrivePageHeaderText {
-    static func serialNumber(for drive: DriveDevice, redact: Bool = false) -> String {
-        SerialNumberDisplayFormatter.displayValue(drive.serialNumber, redact: redact)
+    static func serialNumber(for drive: DriveDevice, language: AppLanguage, redact: Bool = false) -> String {
+        SerialNumberDisplayFormatter.displayValue(
+            drive.serialNumber,
+            redact: redact,
+            missingValue: language.t("None")
+        )
     }
 
     static func serialNumberLine(for drive: DriveDevice, language: AppLanguage, redact: Bool = false) -> String {
-        "\(language.t("Serial Number")): \(serialNumber(for: drive, redact: redact))"
+        "\(language.t("Serial Number")): \(serialNumber(for: drive, language: language, redact: redact))"
     }
 
     static func mediaKind(for drive: DriveDevice, language: AppLanguage) -> String {
@@ -950,8 +954,8 @@ enum DrivePageHeaderText {
 }
 
 enum SerialNumberDisplayFormatter {
-    static func displayValue(_ serialNumber: String?, redact: Bool) -> String {
-        guard let serialNumber, !serialNumber.isEmpty else { return "nil" }
+    static func displayValue(_ serialNumber: String?, redact: Bool, missingValue: String = "None") -> String {
+        guard let serialNumber, !serialNumber.isEmpty else { return missingValue }
         guard redact else { return serialNumber }
 
         let prefix = String(serialNumber.prefix(4))

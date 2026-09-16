@@ -498,6 +498,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "ID": "ID",
         "Name": "名称",
         "Serial Number": "序列号",
+        "None": "无",
         "Raw": "原始值",
         "Current": "当前",
         "Worst": "最差",
