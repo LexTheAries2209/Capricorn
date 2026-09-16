@@ -1060,11 +1060,11 @@ private struct DriveSidebarRow: View {
                 .foregroundStyle(snapshot?.health.tint ?? .secondary)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text(representativeVolume?.name ?? drive.sidebarVolumeName)
+                Text(primaryDisplayName)
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help(representativeVolume?.name ?? drive.sidebarVolumeName)
+                    .help(primaryDisplayName)
                 Text(drive.catalogSidebarDisplayName)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
@@ -1091,6 +1091,10 @@ private struct DriveSidebarRow: View {
             HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
         }
         .padding(.vertical, 4)
+    }
+
+    private var primaryDisplayName: String {
+        drive.networkServerDisplayName ?? representativeVolume?.name ?? drive.sidebarVolumeName
     }
 
     private var iconName: String {

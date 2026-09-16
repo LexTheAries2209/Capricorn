@@ -207,6 +207,11 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
             ?? volumes.first(where: { $0.mountPoint != nil })?.mountPoint
     }
 
+    var networkServerDisplayName: String? {
+        guard isNetwork else { return nil }
+        return NetworkMountSourceHostResolver.host(from: deviceNode)
+    }
+
     var actionTargetVolume: Volume? {
         RepresentativeVolumeResolver.fallbackVolume(for: self)
     }
@@ -231,6 +236,41 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
             return formats[0]
         }
         return formats.joined(separator: " + ")
+    }
+}
+
+enum NetworkMountSourceHostResolver {
+    static func host(from source: String) -> String? {
+        let source = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !source.isEmpty else { return nil }
+
+        if let components = URLComponents(string: source),
+           let host = components.host,
+           !host.isEmpty {
+            return host
+        }
+
+        let authority: String
+        if source.hasPrefix("//") {
+            authority = String(source.dropFirst(2).prefix { $0 != "/" })
+        } else if let pathSeparator = source.range(of: ":/") {
+            authority = String(source[..<pathSeparator.lowerBound])
+        } else {
+            return nil
+        }
+
+        var host = authority.split(separator: "@", omittingEmptySubsequences: false).last.map(String.init) ?? ""
+        if host.hasPrefix("["), host.hasSuffix("]") {
+            host.removeFirst()
+            host.removeLast()
+        } else if host.filter({ $0 == ":" }).count == 1,
+                  let separator = host.lastIndex(of: ":"),
+                  Int(host[host.index(after: separator)...]) != nil {
+            host = String(host[..<separator])
+        }
+
+        host = host.removingPercentEncoding ?? host
+        return host.isEmpty ? nil : host
     }
 }
 

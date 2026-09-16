@@ -860,6 +860,26 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(NetworkVolumeMountParser.protocolDisplayName(for: entries[1].fileSystemType), "NFS")
     }
 
+    func testNetworkDriveServerDisplayNameExtractsHostOrIPAddress() {
+        var drive = Self.fixtureDrive()
+        drive.isNetwork = true
+
+        drive.deviceNode = "//admin@192.168.31.194/Project"
+        XCTAssertEqual(drive.networkServerDisplayName, "192.168.31.194")
+
+        drive.deviceNode = "//lex@nas.local/Media"
+        XCTAssertEqual(drive.networkServerDisplayName, "nas.local")
+
+        drive.deviceNode = "server:/exports/project"
+        XCTAssertEqual(drive.networkServerDisplayName, "server")
+
+        drive.deviceNode = "smb://lex@storage.example.com/Archive"
+        XCTAssertEqual(drive.networkServerDisplayName, "storage.example.com")
+
+        drive.isNetwork = false
+        XCTAssertNil(drive.networkServerDisplayName)
+    }
+
     func testNetworkMountInventoryProviderCreatesBenchmarkableNetworkDrive() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         let target = root.appendingPathComponent("Benchmarks")
@@ -875,6 +895,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(drive.isNetwork)
         XCTAssertEqual(drive.protocolName, "SMB")
         XCTAssertEqual(drive.displayName, root.lastPathComponent)
+        XCTAssertEqual(drive.networkServerDisplayName, "nas.local")
         XCTAssertEqual(drive.benchmarkMountPoint, root.path)
         XCTAssertTrue(drive.isWritable)
         XCTAssertNotNil(drive.capacityUsage)
