@@ -708,6 +708,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
     private static let zhHansMessages: [String: String] = [
         "No drives": "无硬盘",
+        "Waiting for refresh...": "等待刷新...",
         "Scanning disks...": "正在扫描硬盘...",
         "Reading SMART data...": "正在读取 SMART 数据...",
         "Running disk action...": "正在执行硬盘操作...",

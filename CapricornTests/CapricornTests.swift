@@ -947,6 +947,7 @@ final class CapricornTests: XCTestCase {
 
     func testSidebarStatusMessagesAreLocalized() {
         let expectedTranslations = [
+            "Waiting for refresh...": "等待刷新...",
             "Scanning disks...": "正在扫描硬盘...",
             "Reading SMART data...": "正在读取 SMART 数据...",
             "No physical or network drives found.": "未找到物理或网络硬盘。",
@@ -1017,6 +1018,7 @@ final class CapricornTests: XCTestCase {
         model.refreshMessage = "Five"
 
         XCTAssertEqual(model.sidebarStatusHistory.map(\.message), ["Five", "Four", "Three", "Two"])
+        XCTAssertEqual(model.sidebarRecentStatusHistory.map(\.message), ["Five", "Four", "Three"])
     }
 
     func testSmartSelfTestKindTitlesAreLocalized() {

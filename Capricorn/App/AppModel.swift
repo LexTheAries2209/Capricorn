@@ -36,7 +36,9 @@ final class AppModel {
             recordSidebarStatus(refreshMessage)
         }
     }
+    private(set) var sidebarRefreshStatus: String?
     private(set) var sidebarStatusHistory: [SidebarStatusEntry] = []
+    private var sidebarRefreshStatusEntryID: UUID?
     let benchmarkSession = BenchmarkSessionModel()
     let liveActivitySession = LiveActivitySessionModel()
     let diskOperations = DiskOperationsModel()
@@ -362,6 +364,16 @@ final class AppModel {
         }
     }
 
+    var sidebarRecentStatusHistory: [SidebarStatusEntry] {
+        Array(sidebarStatusHistory.lazy.filter { $0.id != self.sidebarRefreshStatusEntryID }.prefix(3))
+    }
+
+    private func setSidebarRefreshStatus(_ message: String) {
+        refreshMessage = message
+        sidebarRefreshStatus = message
+        sidebarRefreshStatusEntryID = sidebarStatusHistory.first?.id
+    }
+
     /// Applies persisted choices only once at launch. Later manual changes are
     /// kept in memory for this session even when the next-launch default is
     /// configured as the largest volume.
@@ -493,7 +505,7 @@ final class AppModel {
         let refreshService = refreshService
         let showVirtualDisks = showVirtualDisks
         isRefreshing = true
-        refreshMessage = "Scanning disks..."
+        setSidebarRefreshStatus("Scanning disks...")
         benchmarkError = nil
         let worker = Task { [weak self] in
             do {
@@ -508,16 +520,18 @@ final class AppModel {
                     self.applyDriveSnapshotUpdate(update, refreshID: refreshID)
                 }
                 guard !Task.isCancelled, self.activeRefreshID == refreshID else { return }
-                self.refreshMessage = discovery.drives.isEmpty
-                    ? "No physical or network drives found."
-                    : "Last refreshed \(Date().formatted(date: .omitted, time: .standard))"
+                self.setSidebarRefreshStatus(
+                    discovery.drives.isEmpty
+                        ? "No physical or network drives found."
+                        : "Last refreshed \(Date().formatted(date: .omitted, time: .standard))"
+                )
             } catch is CancellationError {
                 return
             } catch {
                 guard let self, self.activeRefreshID == refreshID else { return }
                 let error = error as NSError
                 CapricornLog.inventory.error("Drive refresh failed: \(error.domain, privacy: .public) \(error.code)")
-                self.refreshMessage = "Disk refresh failed: \(error.localizedDescription)"
+                self.setSidebarRefreshStatus("Disk refresh failed: \(error.localizedDescription)")
             }
 
             guard let self, self.activeRefreshID == refreshID else { return }
@@ -560,7 +574,7 @@ final class AppModel {
             stopLiveActivityMonitoring()
             liveActivityError = "The active drive is no longer available."
         }
-        refreshMessage = loadedDrives.isEmpty ? "No physical or network drives found." : "Reading SMART data..."
+        setSidebarRefreshStatus(loadedDrives.isEmpty ? "No physical or network drives found." : "Reading SMART data...")
     }
 
     private func startAutomaticSmartSelfTestCapabilityProbe(for drive: DriveDevice) {

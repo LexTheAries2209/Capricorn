@@ -322,14 +322,27 @@ struct ContentView: View {
                         Text(sidebarHealthSummary)
                             .font(.caption.weight(.medium))
                             .lineLimit(1)
-                        Spacer(minLength: 8)
+                    }
+
+                    HStack(spacing: 7) {
                         if viewModel.isRefreshing {
                             ProgressView()
                                 .controlSize(.small)
+                                .frame(width: 12)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 12)
                         }
+                        Text(language.statusMessage(viewModel.sidebarRefreshStatus ?? "Waiting for refresh..."))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
 
-                    ForEach(viewModel.sidebarStatusHistory) { entry in
+                    ForEach(viewModel.sidebarRecentStatusHistory) { entry in
                         HStack(spacing: 7) {
                             Image(systemName: "clock")
                                 .font(.caption2)
