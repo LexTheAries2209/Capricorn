@@ -281,10 +281,13 @@ struct ContentView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 8)
-                    Picker("", selection: $preferences.languageRawValue) {
+                    // An empty label avoids the hidden-label inset that shifts the segmented control left.
+                    Picker(selection: $preferences.languageRawValue) {
                         ForEach(AppLanguage.allCases) { language in
                             Text(language.shortTitle).tag(language.rawValue)
                         }
+                    } label: {
+                        EmptyView()
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
