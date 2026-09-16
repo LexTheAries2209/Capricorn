@@ -946,6 +946,19 @@ final class CapricornTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testSettingsDestinationCanRequestSATDriverSectionWithoutPersistence() {
+        let suiteName = "CapricornTests.settingsDestination.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = AppPreferences(defaults: defaults)
+
+        preferences.requestedSettingsDestination = .satSMARTDriver
+
+        XCTAssertEqual(preferences.requestedSettingsDestination, .satSMARTDriver)
+        XCTAssertNil(defaults.string(forKey: "requestedSettingsDestination"))
+    }
+
     func testContinueMonitoringIsLocalized() {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Continue Monitoring"), "继续监控")
     }

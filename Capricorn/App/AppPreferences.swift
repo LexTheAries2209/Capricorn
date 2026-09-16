@@ -37,6 +37,10 @@ enum DiskAutomaticRefreshInterval: Int, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum CapricornSettingsDestination: String, Equatable, Sendable {
+    case satSMARTDriver
+}
+
 @MainActor
 @Observable
 final class AppPreferences {
@@ -57,6 +61,8 @@ final class AppPreferences {
     }
 
     private let defaults: UserDefaults
+
+    var requestedSettingsDestination: CapricornSettingsDestination?
 
     var languageRawValue: String {
         didSet { defaults.set(languageRawValue, forKey: Key.language) }
@@ -149,13 +155,15 @@ struct CapricornSettingsView: View {
     @State private var pendingHistoryDatabaseStatistics: HistoryDatabaseStatistics?
     @State private var smartctlExecutableInfo: SmartctlExecutableInfo?
     @State private var satSMARTDriverStatus: SATSMARTDriverStatus?
+    @State private var highlightedSettingsDestination: CapricornSettingsDestination?
 
     private var language: AppLanguage {
         preferences.language
     }
 
     var body: some View {
-        Form {
+        ScrollViewReader { proxy in
+            Form {
             AppUpdateSettingsSection(updateChecker: updateChecker, language: language)
 
             Picker(language.t("Language"), selection: $preferences.languageRawValue) {
@@ -296,7 +304,10 @@ struct CapricornSettingsView: View {
 
                 Section {
                     if let status = satSMARTDriverStatus {
-                        LabeledContent(language.t("Status"), value: language.statusMessage(status.message))
+                        LabeledContent(language.t("Status")) {
+                            Label(language.statusMessage(status.message), systemImage: satStatusSymbol(status.state))
+                                .foregroundStyle(satStatusTint(status.state))
+                        }
                         if let version = status.version {
                             LabeledContent(language.t("Version"), value: version)
                         }
@@ -340,6 +351,12 @@ struct CapricornSettingsView: View {
                         .fontWeight(.regular)
                         .foregroundStyle(.primary)
                 }
+                .id(CapricornSettingsDestination.satSMARTDriver)
+                .listRowBackground(
+                    highlightedSettingsDestination == .satSMARTDriver
+                        ? Color.orange.opacity(0.14)
+                        : Color.clear
+                )
 
                 if let error = smartctlExecutableInfo?.error {
                     Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
@@ -347,7 +364,6 @@ struct CapricornSettingsView: View {
                         .foregroundStyle(.orange)
                 }
             }
-
         }
         .formStyle(.grouped)
         .padding(20)
@@ -394,9 +410,50 @@ struct CapricornSettingsView: View {
                 language.t("This permanently removes all SMART, self-test, disk-check, benchmark, and live-activity history from the current database. It cannot be undone.")
             )
         }
+        .onAppear {
+            revealRequestedSettings(using: proxy)
+        }
+        .onChange(of: preferences.requestedSettingsDestination) {
+            revealRequestedSettings(using: proxy)
+        }
+        }
     }
 
     private static let smartmontoolsProjectURL = URL(string: "https://www.smartmontools.org/")!
+
+    private func revealRequestedSettings(using proxy: ScrollViewProxy) {
+        guard let destination = preferences.requestedSettingsDestination else { return }
+        withAnimation(.easeInOut(duration: 0.25)) {
+            proxy.scrollTo(destination, anchor: .center)
+        }
+        highlightedSettingsDestination = destination
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            if highlightedSettingsDestination == destination {
+                highlightedSettingsDestination = nil
+            }
+            if preferences.requestedSettingsDestination == destination {
+                preferences.requestedSettingsDestination = nil
+            }
+        }
+    }
+
+    private func satStatusSymbol(_ state: SATSMARTDriverState) -> String {
+        switch state {
+        case .loaded: "checkmark.circle.fill"
+        case .installedNotLoaded: "exclamationmark.triangle.fill"
+        case .notInstalled: "shippingbox"
+        case .inconclusive: "questionmark.circle.fill"
+        }
+    }
+
+    private func satStatusTint(_ state: SATSMARTDriverState) -> Color {
+        switch state {
+        case .loaded: .green
+        case .installedNotLoaded: .orange
+        case .notInstalled, .inconclusive: .secondary
+        }
+    }
 
     private var historyDatabaseDirectoryURL: URL? {
         try? ModelContainerFactory.applicationHistoryDirectoryURL()
