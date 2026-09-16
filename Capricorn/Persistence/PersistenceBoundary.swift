@@ -178,18 +178,25 @@ final class HistoryRepository {
         drive: DriveDevice,
         report: DiskCheckReport
     ) throws -> DiskCheckHistoryRecord? {
-        guard let serialNumber = HistoryDriveMatcher.normalize(drive.serialNumber) else {
-            CapricornLog.persistence.info("Disk check history skipped because the drive has no serial number")
+        let serialNumber = HistoryDriveMatcher.normalize(drive.serialNumber)
+        guard serialNumber != nil || !drive.volumeUUIDs.isEmpty else {
+            CapricornLog.persistence.info(
+                "Disk check history skipped because the drive has no serial number or volume UUID"
+            )
             return nil
         }
 
         let existing = try modelContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>())
-            .first { HistoryDriveMatcher.normalize($0.serialNumber) == serialNumber }
+            .first { HistoryDriveMatcher.matches(record: $0, drive: drive) }
         let record = existing ?? DiskCheckHistoryRecord(drive: drive, report: report)
         record.serialNumber = serialNumber
         record.driveName = drive.displayName
         record.capturedAt = report.capturedAt
-        record.encodedReport = try JSONEncoder.dit.encode(report)
+        record.encodedReport = try HistoryPayloadCoders.encode(
+            report,
+            volumeUUIDs: drive.volumeUUIDs,
+            encoder: .dit
+        )
         // Quick disk checks are always current and cannot be hidden.
         record.hiddenAt = nil
         if existing == nil {

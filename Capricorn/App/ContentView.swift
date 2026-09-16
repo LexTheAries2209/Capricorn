@@ -238,14 +238,18 @@ struct ContentView: View {
     }
 
     private func restoreDiskCheckReports() {
-        let reportsBySerial = diskCheckHistory.reduce(into: [String: DiskCheckReport]()) { result, record in
-            guard let serialNumber = HistoryDriveMatcher.normalize(record.serialNumber),
-                  let report = record.report else {
+        let reportsByDriveID = viewModel.drives.reduce(into: [String: DiskCheckReport]()) { result, drive in
+            guard let record = diskCheckHistory
+                .filter({ HistoryDriveMatcher.matches(record: $0, drive: drive) })
+                .max(by: { $0.capturedAt < $1.capturedAt }),
+                  var report = record.report else {
                 return
             }
-            result[serialNumber] = report
+            report.driveID = drive.id
+            report.driveName = drive.displayName
+            result[drive.id] = report
         }
-        viewModel.restoreDiskCheckReports(from: reportsBySerial)
+        viewModel.restoreDiskCheckReports(from: reportsByDriveID)
     }
 
     private var sidebar: some View {

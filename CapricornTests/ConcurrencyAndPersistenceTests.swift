@@ -688,6 +688,111 @@ extension CapricornTests {
     }
 
     @MainActor
+    func testDiskCheckHistoryUsesVolumeUUIDWhenSerialIsUnavailable() throws {
+        let container = try ModelContainerFactory.makeInMemory()
+        let repository = HistoryRepository(modelContext: container.mainContext)
+        var drive = Self.fixtureDrive()
+        drive.serialNumber = nil
+        drive.volumes = [
+            DriveDevice.Volume(
+                deviceIdentifier: "disk8s1",
+                name: "SD Card",
+                mountPoint: "/Volumes/SD Card",
+                sizeBytes: 64_000_000_000,
+                isWritable: true,
+                isSystem: false,
+                volumeUUID: "disk-check-volume"
+            )
+        ]
+        let firstDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let firstReport = DiskCheckReport(
+            mode: .ordinary,
+            driveID: drive.id,
+            driveName: drive.displayName,
+            capturedAt: firstDate,
+            entries: []
+        )
+
+        let firstRecord = try XCTUnwrap(repository.saveDiskCheckReport(drive: drive, report: firstReport))
+        XCTAssertNil(firstRecord.serialNumber)
+        XCTAssertEqual(firstRecord.volumeUUIDs, ["DISK-CHECK-VOLUME"])
+
+        var rediscoveredDrive = drive
+        rediscoveredDrive.bsdName = "disk12"
+        rediscoveredDrive.displayName = "Rediscovered SD Card"
+        let secondDate = firstDate.addingTimeInterval(60)
+        let secondReport = DiskCheckReport(
+            mode: .detailed,
+            driveID: rediscoveredDrive.id,
+            driveName: rediscoveredDrive.displayName,
+            capturedAt: secondDate,
+            entries: []
+        )
+
+        let secondRecord = try XCTUnwrap(
+            repository.saveDiskCheckReport(drive: rediscoveredDrive, report: secondReport)
+        )
+        XCTAssertEqual(firstRecord.id, secondRecord.id)
+        XCTAssertTrue(HistoryDriveMatcher.matches(record: secondRecord, drive: rediscoveredDrive))
+
+        let records = try container.mainContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>())
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.driveName, "Rediscovered SD Card")
+        XCTAssertEqual(records.first?.report?.mode, .detailed)
+        XCTAssertEqual(records.first?.report?.capturedAt, secondDate)
+
+        XCTAssertEqual(try repository.clearDiskCheckResult(for: rediscoveredDrive), 1)
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>()).isEmpty)
+    }
+
+    @MainActor
+    func testDiskCheckHistorySkipsDriveWithoutStableIdentity() throws {
+        let container = try ModelContainerFactory.makeInMemory()
+        let repository = HistoryRepository(modelContext: container.mainContext)
+        var drive = Self.fixtureDrive()
+        drive.serialNumber = nil
+        drive.volumes = []
+        let report = DiskCheckReport(
+            mode: .ordinary,
+            driveID: drive.id,
+            driveName: drive.displayName,
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            entries: []
+        )
+
+        XCTAssertNil(try repository.saveDiskCheckReport(drive: drive, report: report))
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<DiskCheckHistoryRecord>()).isEmpty)
+    }
+
+    @MainActor
+    func testDiskCheckHistoryDecodesLegacyReportWithoutVolumeUUIDs() throws {
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(
+                deviceIdentifier: "disk8s1",
+                name: "Legacy",
+                mountPoint: "/Volumes/Legacy",
+                sizeBytes: 1,
+                isWritable: true,
+                isSystem: false,
+                volumeUUID: "legacy-volume"
+            )
+        ]
+        let report = DiskCheckReport(
+            mode: .ordinary,
+            driveID: drive.id,
+            driveName: drive.displayName,
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            entries: []
+        )
+        let record = DiskCheckHistoryRecord(drive: drive, report: report)
+        record.encodedReport = try JSONEncoder.dit.encode(report)
+
+        XCTAssertEqual(record.report, report)
+        XCTAssertTrue(record.volumeUUIDs.isEmpty)
+    }
+
+    @MainActor
     func testDiskCheckHistoryCannotBeHidden() throws {
         let container = try ModelContainerFactory.makeInMemory()
         let repository = HistoryRepository(modelContext: container.mainContext)

@@ -183,13 +183,12 @@ final class AppModel {
         diskCheckReportsByDrive[drive.id]
     }
 
-    func restoreDiskCheckReports(from reportsBySerial: [String: DiskCheckReport]) {
+    func restoreDiskCheckReports(from reportsByDriveID: [String: DiskCheckReport]) {
         let liveDriveIDs = Set(drives.map(\.id))
         diskCheckReportsByDrive = diskCheckReportsByDrive.filter { liveDriveIDs.contains($0.key) }
 
         for drive in drives {
-            guard let serialNumber = HistoryDriveMatcher.normalize(drive.serialNumber),
-                  var report = reportsBySerial[serialNumber] else {
+            guard var report = reportsByDriveID[drive.id] else {
                 diskCheckReportsByDrive.removeValue(forKey: drive.id)
                 continue
             }

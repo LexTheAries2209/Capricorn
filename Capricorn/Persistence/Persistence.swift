@@ -134,17 +134,30 @@ final class DiskCheckHistoryRecord {
         self.serialNumber = HistoryDriveMatcher.normalize(drive.serialNumber)
         self.driveName = drive.displayName
         self.capturedAt = report.capturedAt
-        self.encodedReport = try? JSONEncoder.dit.encode(report)
+        self.encodedReport = try? HistoryPayloadCoders.encode(
+            report,
+            volumeUUIDs: drive.volumeUUIDs,
+            encoder: .dit
+        )
         self.hiddenAt = nil
     }
 
     var report: DiskCheckReport? {
         guard let encodedReport else { return nil }
-        return try? JSONDecoder.dit.decode(DiskCheckReport.self, from: encodedReport)
+        return HistoryPayloadCoders.decode(
+            DiskCheckReport.self,
+            from: encodedReport,
+            decoder: .dit
+        )?.value
     }
 
     var volumeUUIDs: [String] {
-        []
+        guard let encodedReport else { return [] }
+        return HistoryPayloadCoders.decode(
+            DiskCheckReport.self,
+            from: encodedReport,
+            decoder: .dit
+        )?.volumeUUIDs ?? []
     }
 }
 
