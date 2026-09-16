@@ -941,13 +941,40 @@ final class CapricornTests: XCTestCase {
             "Open SAT SMART Drive Settings": "前往 SAT SMART Drive 设置",
             "Show SAT guidance when SMART data is unavailable": "SMART 数据不可用时显示 SAT 引导",
             "SAT SMART Drive May Be Required": "可能需要 SAT SMART Drive",
-            "This USB storage device did not return SMART data. Installing SAT SMART Drive may provide more health information; support depends on the drive and enclosure.": "此 USB 存储设备未返回 SMART 数据。安装 SAT SMART Drive 可能提供更多健康信息，实际支持情况取决于硬盘和硬盘盒。"
+            "This USB storage device did not return SMART data. Installing SAT SMART Drive may provide more health information; support depends on the drive and enclosure.": "此 USB 存储设备未返回 SMART 数据。安装 SAT SMART Drive 可能提供更多健康信息，实际支持情况取决于硬盘和硬盘盒。",
+            "This USB storage device did not return SMART data": "此 USB 存储设备未返回 SMART 数据",
+            "Installing SAT SMART Drive may provide more health information": "安装 SAT SMART Drive 可能提供更多健康信息",
+            "Support depends on the drive and enclosure": "实际支持情况取决于硬盘和硬盘盒",
+            "SAT SMART Drive files are installed": "SAT SMART Drive 文件已安装",
+            "The driver is not active": "驱动尚未启用",
+            "Check macOS approval or restart": "请检查 macOS 授权或重新启动",
+            "Then recheck it in Settings": "然后在设置中重新检测"
         ]
 
         for (key, expected) in expectedTranslations {
             XCTAssertEqual(AppLanguage.simplifiedChinese.t(key), expected, key)
             XCTAssertEqual(AppLanguage.english.t(key), key, key)
         }
+    }
+
+    func testSATDriverGuidanceSMARTMessagesUseUnpunctuatedLines() {
+        XCTAssertEqual(
+            SATSMARTDriverGuidance.installationSuggested.smartMessageLineKeys,
+            [
+                "This USB storage device did not return SMART data",
+                "Installing SAT SMART Drive may provide more health information",
+                "Support depends on the drive and enclosure"
+            ]
+        )
+        XCTAssertEqual(
+            SATSMARTDriverGuidance.activationRequired.smartMessageLineKeys,
+            [
+                "SAT SMART Drive files are installed",
+                "The driver is not active",
+                "Check macOS approval or restart",
+                "Then recheck it in Settings"
+            ]
+        )
     }
 
     @MainActor
