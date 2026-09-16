@@ -1913,6 +1913,14 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(ProviderStatusPresentation.displayState(for: unavailable, drive: drive), .unavailable)
     }
 
+    func testOverviewQuickDiskCheckVisibilityExcludesNetworkDrives() {
+        var drive = Self.fixtureDrive()
+        XCTAssertTrue(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive))
+
+        drive.isNetwork = true
+        XCTAssertFalse(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive))
+    }
+
     func testMemoryCardSmartProvidersReturnUnavailableReason() async throws {
         var drive = Self.fixtureDrive()
         drive.bsdName = "disk10"

@@ -125,13 +125,15 @@ struct OverviewView: View {
                     }
                 }
 
-                DiskCheckOverviewSummary(
-                    report: diskCheckReport,
-                    isRunning: isDiskChecking,
-                    requiresSystemDiskPermission: drive.isSystemDisk && !allowSystemDiskSelfTests,
-                    canRunQuickCheck: canRunQuickCheck,
-                    runQuickCheck: runQuickCheck
-                )
+                if OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive) {
+                    DiskCheckOverviewSummary(
+                        report: diskCheckReport,
+                        isRunning: isDiskChecking,
+                        requiresSystemDiskPermission: drive.isSystemDisk && !allowSystemDiskSelfTests,
+                        canRunQuickCheck: canRunQuickCheck,
+                        runQuickCheck: runQuickCheck
+                    )
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -167,6 +169,12 @@ struct OverviewView: View {
     private var temperatureValueTint: Color? {
         guard let celsius = snapshot?.temperatureCelsius else { return nil }
         return temperatureTint(for: celsius)
+    }
+}
+
+enum OverviewModuleVisibilityPolicy {
+    static func showsQuickDiskCheck(for drive: DriveDevice) -> Bool {
+        !drive.isNetwork
     }
 }
 
