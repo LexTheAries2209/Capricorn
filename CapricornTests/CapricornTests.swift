@@ -937,7 +937,12 @@ final class CapricornTests: XCTestCase {
             "Used Capacity": "已用容量",
             "Available Capacity": "可用容量",
             "Used": "已用",
-            "Available": "可用"
+            "Available": "可用",
+            "Open SAT SMART Drive Settings": "前往 SAT SMART Drive 设置",
+            "Don't Show Again": "不再提示",
+            "Show SAT guidance when SMART data is unavailable": "SMART 数据不可用时显示 SAT 引导",
+            "SAT SMART Drive May Be Required": "可能需要 SAT SMART Drive",
+            "This USB storage device did not return SMART data. Installing SAT SMART Drive may provide more health information; support depends on the drive and enclosure.": "此 USB 存储设备未返回 SMART 数据。安装 SAT SMART Drive 可能提供更多健康信息，实际支持情况取决于硬盘和硬盘盒。"
         ]
 
         for (key, expected) in expectedTranslations {
@@ -957,6 +962,20 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(preferences.requestedSettingsDestination, .satSMARTDriver)
         XCTAssertNil(defaults.string(forKey: "requestedSettingsDestination"))
+    }
+
+    @MainActor
+    func testSATDriverGuidancePreferenceDefaultsOnAndPersistsChoice() {
+        let suiteName = "CapricornTests.satDriverGuidance.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let preferences = AppPreferences(defaults: defaults)
+        XCTAssertTrue(preferences.showsSATDriverGuidance)
+
+        preferences.showsSATDriverGuidance = false
+
+        XCTAssertFalse(AppPreferences(defaults: defaults).showsSATDriverGuidance)
     }
 
     func testContinueMonitoringIsLocalized() {

@@ -18,6 +18,8 @@ struct ContentView: View {
     @Query(sort: \DiskCheckHistoryRecord.capturedAt, order: .reverse) private var diskCheckHistory: [DiskCheckHistoryRecord]
     @Query(sort: \BenchmarkHistoryRecord.measuredAt, order: .reverse) private var benchmarkHistory: [BenchmarkHistoryRecord]
     @Query(sort: \DiskActivityHistoryRecord.endedAt, order: .reverse) private var activityHistory: [DiskActivityHistoryRecord]
+    @Environment(\.openSettings) private var openSettings
+    @Environment(\.scenePhase) private var scenePhase
     @MainActor
     init() {
         _viewModel = State(initialValue: AppModel())
@@ -55,6 +57,20 @@ struct ContentView: View {
                     benchmarkHistory: benchmarkHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     allowSystemDiskSelfTests: allowSystemDiskSelfTests,
+                    satDriverGuidance: preferences.showsSATDriverGuidance
+                        ? SATSMARTDriverGuidancePolicy.guidance(
+                            for: drive,
+                            snapshot: viewModel.snapshots[drive.id],
+                            driverStatus: preferences.satSMARTDriverStatus
+                        )
+                        : nil,
+                    openSATDriverSettings: {
+                        preferences.requestedSettingsDestination = .satSMARTDriver
+                        openSettings()
+                    },
+                    dismissSATDriverGuidance: {
+                        preferences.showsSATDriverGuidance = false
+                    },
                     saveSnapshot: { exportFolderPath in saveSnapshot(drive: drive, exportFolderPath: exportFolderPath) },
                     exportSelfTestHistory: { records, exportFolderPath, format in
                         exportSelfTestHistory(
@@ -123,6 +139,10 @@ struct ContentView: View {
         }
         .onChange(of: diskCheckHistory.map(\.id)) {
             restoreDiskCheckReports()
+        }
+        .onChange(of: scenePhase) {
+            guard scenePhase == .active else { return }
+            preferences.satSMARTDriverStatus = SATSMARTDriverService().status()
         }
         .onChange(of: viewModel.isDiskChecking) {
             if viewModel.isDiskChecking {
@@ -1154,6 +1174,9 @@ private struct DriveDetailView: View {
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
     let allowSystemDiskSelfTests: Bool
+    let satDriverGuidance: SATSMARTDriverGuidance?
+    let openSATDriverSettings: () -> Void
+    let dismissSATDriverGuidance: () -> Void
     let saveSnapshot: (String?) -> String
     let exportSelfTestHistory: ([SmartSelfTestHistoryRecord], String?, SmartDiagnosticsExportFormat) -> String
     let exportErrorLog: (SmartErrorLogReport, String?, SmartDiagnosticsExportFormat) -> String
@@ -1180,7 +1203,10 @@ private struct DriveDetailView: View {
                     && !viewModel.isLiveActivityWorkloadRunning,
                 runQuickCheck: {
                     Task { await viewModel.runDiskCheck(.ordinary, on: drive) }
-                }
+                },
+                satDriverGuidance: satDriverGuidance,
+                openSATDriverSettings: openSATDriverSettings,
+                dismissSATDriverGuidance: dismissSATDriverGuidance
             )
                 .tabItem { Label(language.t("Overview"), systemImage: "gauge.with.dots.needle.bottom.50percent") }
                 .tag(DriveFeatureTab.overview)
@@ -1191,7 +1217,10 @@ private struct DriveDetailView: View {
                 selfTestHistory: selfTestHistory,
                 saveSnapshot: saveSnapshot,
                 exportSelfTestHistory: exportSelfTestHistory,
-                exportErrorLog: exportErrorLog
+                exportErrorLog: exportErrorLog,
+                satDriverGuidance: satDriverGuidance,
+                openSATDriverSettings: openSATDriverSettings,
+                dismissSATDriverGuidance: dismissSATDriverGuidance
             )
                 .tabItem { Label("SMART", systemImage: "list.bullet.rectangle") }
                 .tag(DriveFeatureTab.smart)

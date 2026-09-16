@@ -58,11 +58,13 @@ final class AppPreferences {
         static let automaticRefreshIntervalMinutes = "automaticRefreshIntervalMinutes"
         static let showsCheckAndRepairActions = "showsCheckAndRepairActions"
         static let representativeVolumeStartupPreference = "representativeVolumeStartupPreference"
+        static let showsSATDriverGuidance = "showsSATDriverGuidance"
     }
 
     private let defaults: UserDefaults
 
     var requestedSettingsDestination: CapricornSettingsDestination?
+    var satSMARTDriverStatus: SATSMARTDriverStatus
 
     var languageRawValue: String {
         didSet { defaults.set(languageRawValue, forKey: Key.language) }
@@ -112,6 +114,10 @@ final class AppPreferences {
         didSet { defaults.set(representativeVolumeStartupPreference.rawValue, forKey: Key.representativeVolumeStartupPreference) }
     }
 
+    var showsSATDriverGuidance: Bool {
+        didSet { defaults.set(showsSATDriverGuidance, forKey: Key.showsSATDriverGuidance) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
@@ -129,6 +135,8 @@ final class AppPreferences {
         representativeVolumeStartupPreference = RepresentativeVolumeStartupPreference(
             rawValue: defaults.string(forKey: Key.representativeVolumeStartupPreference) ?? ""
         ) ?? .largestCapacity
+        showsSATDriverGuidance = defaults.object(forKey: Key.showsSATDriverGuidance) as? Bool ?? true
+        satSMARTDriverStatus = SATSMARTDriverService().status()
     }
 
     var language: AppLanguage {
@@ -154,7 +162,6 @@ struct CapricornSettingsView: View {
     @State private var historyDatabaseSizeBytes: Int64?
     @State private var pendingHistoryDatabaseStatistics: HistoryDatabaseStatistics?
     @State private var smartctlExecutableInfo: SmartctlExecutableInfo?
-    @State private var satSMARTDriverStatus: SATSMARTDriverStatus?
     @State private var highlightedSettingsDestination: CapricornSettingsDestination?
 
     private var language: AppLanguage {
@@ -303,18 +310,19 @@ struct CapricornSettingsView: View {
                 }
 
                 Section {
-                    if let status = satSMARTDriverStatus {
-                        LabeledContent(language.t("Status")) {
-                            Label(language.statusMessage(status.message), systemImage: satStatusSymbol(status.state))
-                                .foregroundStyle(satStatusTint(status.state))
-                        }
-                        if let version = status.version {
-                            LabeledContent(language.t("Version"), value: version)
-                        }
-                    } else {
-                        ProgressView()
-                            .controlSize(.small)
+                    let status = preferences.satSMARTDriverStatus
+                    LabeledContent(language.t("Status")) {
+                        Label(language.statusMessage(status.message), systemImage: satStatusSymbol(status.state))
+                            .foregroundStyle(satStatusTint(status.state))
                     }
+                    if let version = status.version {
+                        LabeledContent(language.t("Version"), value: version)
+                    }
+
+                    Toggle(
+                        language.t("Show SAT guidance when SMART data is unavailable"),
+                        isOn: $preferences.showsSATDriverGuidance
+                    )
 
                     HStack {
                         Button {
@@ -325,7 +333,7 @@ struct CapricornSettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         Spacer()
                         Button {
-                            satSMARTDriverStatus = SATSMARTDriverService().status()
+                            preferences.satSMARTDriverStatus = SATSMARTDriverService().status()
                         } label: {
                             Label(language.t("Recheck SAT SMART Drive"), systemImage: "arrow.clockwise")
                         }
@@ -395,7 +403,7 @@ struct CapricornSettingsView: View {
         }
         .task {
             smartctlExecutableInfo = await SmartctlSmartProvider().executableInfo()
-            satSMARTDriverStatus = SATSMARTDriverService().status()
+            preferences.satSMARTDriverStatus = SATSMARTDriverService().status()
         }
         .alert(language.t("Clear History Database"), isPresented: $isConfirmingHistoryDatabaseClear) {
             Button(language.t("Clear History Database"), role: .destructive) {

@@ -104,6 +104,66 @@ struct StatusLine: View {
     }
 }
 
+struct SATSMARTDriverGuidanceView: View {
+    let guidance: SATSMARTDriverGuidance
+    let openSettings: () -> Void
+    let dismiss: () -> Void
+    @Environment(\.appLanguage) private var language
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3)
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(language.t(guidance.titleKey))
+                    .font(.headline)
+                Text(language.t(guidance.messageKey))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            VStack(alignment: .trailing, spacing: 6) {
+                Button(action: openSettings) {
+                    Label(language.t("Open SAT SMART Drive Settings"), systemImage: "gearshape")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+
+                Button(language.t("Don't Show Again"), action: dismiss)
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private extension SATSMARTDriverGuidance {
+    var titleKey: String {
+        switch self {
+        case .installationSuggested:
+            "SAT SMART Drive May Be Required"
+        case .activationRequired:
+            "SAT SMART Drive Needs Attention"
+        }
+    }
+
+    var messageKey: String {
+        switch self {
+        case .installationSuggested:
+            "This USB storage device did not return SMART data. Installing SAT SMART Drive may provide more health information; support depends on the drive and enclosure."
+        case .activationRequired:
+            "SAT SMART Drive files are installed, but the driver is not active. Check macOS approval or restart, then recheck it in Settings."
+        }
+    }
+}
+
 extension HealthStatus {
     var tint: Color {
         switch self {

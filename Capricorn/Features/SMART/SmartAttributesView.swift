@@ -11,6 +11,9 @@ struct SmartAttributesView: View {
     let saveSnapshot: (String?) -> String
     let exportSelfTestHistory: ([SmartSelfTestHistoryRecord], String?, SmartDiagnosticsExportFormat) -> String
     let exportErrorLog: (SmartErrorLogReport, String?, SmartDiagnosticsExportFormat) -> String
+    let satDriverGuidance: SATSMARTDriverGuidance?
+    let openSATDriverSettings: () -> Void
+    let dismissSATDriverGuidance: () -> Void
     @Environment(\.appLanguage) private var language
     @AppStorage(AppPreferences.Key.showsSmartSelfTestInterface) private var showsSmartSelfTestInterface = false
     @AppStorage("smartSnapshotExportFolder") private var snapshotExportFolderPath = ""
@@ -126,11 +129,22 @@ struct SmartAttributesView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
-            ContentUnavailableView(
-                language.t("No SMART Attributes"),
-                systemImage: "questionmark.folder",
-                description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
-            )
+            VStack(spacing: 16) {
+                ContentUnavailableView(
+                    language.t("No SMART Attributes"),
+                    systemImage: "questionmark.folder",
+                    description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
+                )
+
+                if let satDriverGuidance {
+                    SATSMARTDriverGuidanceView(
+                        guidance: satDriverGuidance,
+                        openSettings: openSATDriverSettings,
+                        dismiss: dismissSATDriverGuidance
+                    )
+                    .frame(maxWidth: 720)
+                }
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
     }
