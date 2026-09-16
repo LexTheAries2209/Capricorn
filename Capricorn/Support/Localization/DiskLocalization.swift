@@ -34,9 +34,9 @@ extension AppLanguage {
         case .simplifiedChinese:
             guard driveCount > 0 else { return "无硬盘" }
             if warningCount == 0 {
-                return "正在监测 \(driveCount) 个硬盘"
+                return "正在监控 \(driveCount) 块硬盘"
             }
-            return "\(warningCount) 个硬盘需要注意"
+            return "\(warningCount) 块硬盘需要注意"
         }
     }
 }

@@ -950,6 +950,17 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Continue Monitoring"), "继续监控")
     }
 
+    func testChineseDriveHealthSummaryUsesMonitoringAndDiskMeasureWord() {
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.healthSummary(driveCount: 4, warningCount: 0),
+            "正在监控 4 块硬盘"
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.healthSummary(driveCount: 4, warningCount: 2),
+            "2 块硬盘需要注意"
+        )
+    }
+
     func testLiveActivityWorkloadActionsLabelIsLocalized() {
         XCTAssertEqual(AppLanguage.english.t("Actions"), "Actions")
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Actions"), "操作")
