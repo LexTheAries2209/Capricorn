@@ -910,6 +910,7 @@ final class CapricornTests: XCTestCase {
             "Choose": "选择",
             "Choose the smartctl executable.": "选择 smartctl 可执行文件。",
             "Open Settings": "打开设置",
+            "Capricorn version and macOS user name": "Capricorn 版本和 macOS 用户名",
             "Unable to Complete Self-Test": "无法完成自检",
             "No SMART error log entries were reported.": "未报告 SMART 错误条目。",
             "Used Capacity": "已用容量",

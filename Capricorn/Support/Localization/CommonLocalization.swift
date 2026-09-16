@@ -323,6 +323,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Choose": "选择",
         "Choose the smartctl executable.": "选择 smartctl 可执行文件。",
         "Open Settings": "打开设置",
+        "Capricorn version and macOS user name": "Capricorn 版本和 macOS 用户名",
         "Open Capricorn GitHub repository": "打开 Capricorn GitHub 仓库",
         "Capricorn GitHub repository introduction": "GitHub 仓库：github.com/LexTheAries2209/Capricorn。代码、版本说明、发布包与问题反馈均在仓库维护，欢迎通过 Issue 或 Pull Request 参与改进。",
         "Overview": "概览",

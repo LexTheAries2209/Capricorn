@@ -329,7 +329,7 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .multilineTextAlignment(.trailing)
-                        .help("Capricorn version and macOS user name")
+                        .help(language.t("Capricorn version and macOS user name"))
                 }
 
                 Divider()
