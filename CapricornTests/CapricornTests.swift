@@ -934,7 +934,6 @@ final class CapricornTests: XCTestCase {
             "Capricorn version and macOS user name": "Capricorn 版本和 macOS 用户名",
             "Unable to Complete Self-Test": "无法完成自检",
             "No SMART error log entries were reported.": "未报告 SMART 错误条目。",
-            "SD cards do not expose standard SMART health data on macOS.": "此 SD 卡在 macOS 上不提供标准 SMART 健康数据。",
             "Used Capacity": "已用容量",
             "Available Capacity": "可用容量",
             "Used": "已用",
@@ -956,6 +955,13 @@ final class CapricornTests: XCTestCase {
             XCTAssertEqual(AppLanguage.simplifiedChinese.t(key), expected, key)
             XCTAssertEqual(AppLanguage.english.t(key), key, key)
         }
+
+        let sdCardStatus = "SD cards do not expose standard SMART health data on macOS."
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.statusMessage(sdCardStatus),
+            "此 SD 卡在 macOS 上不提供标准 SMART 健康数据。"
+        )
+        XCTAssertEqual(AppLanguage.english.statusMessage(sdCardStatus), sdCardStatus)
     }
 
     func testSATDriverGuidanceSMARTMessagesUseUnpunctuatedLines() {
