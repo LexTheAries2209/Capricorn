@@ -446,6 +446,7 @@ enum DiskSidebarActionPolicy {
     static func isEnabled(
         _ action: DiskSidebarAction,
         for drive: DriveDevice,
+        targetVolume: DriveDevice.Volume? = nil,
         allowSystemDiskSelfTests: Bool = false
     ) -> Bool {
         if isProtectedSystemControlAction(action, for: drive) {
@@ -454,6 +455,9 @@ enum DiskSidebarActionPolicy {
 
         switch action {
         case .mount:
+            let isTargetMounted = targetVolume?.mountPoint != nil
+                || (targetVolume == nil && drive.primaryMountPoint != nil)
+            guard !isTargetMounted else { return false }
             return drive.isNetwork ? networkMountURL(for: drive) != nil : true
         case .unmount, .forceUnmount:
             return drive.primaryMountPoint != nil || !drive.isNetwork

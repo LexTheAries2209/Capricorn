@@ -1158,7 +1158,7 @@ final class CapricornTests: XCTestCase {
             DiskSidebarActionPolicy.actions(for: drive),
             [.mount, .unmount, .disconnect, .inspectOpenFiles]
         )
-        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.mount, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.mount, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.unmount, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.disconnect, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.inspectOpenFiles, for: drive))
@@ -1167,6 +1167,26 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.actions(for: drive).contains(.firstAid))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.firstAid, for: drive))
+
+        drive.volumes[0].mountPoint = nil
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.mount, for: drive))
+    }
+
+    func testMountActionIsDisabledForMountedRepresentativeVolume() {
+        var drive = Self.fixtureDrive(mountedAt: "/Volumes/Unit")
+        drive.isInternal = false
+        drive.isSystemDisk = false
+        let mountedVolume = drive.volumes[0]
+
+        XCTAssertFalse(
+            DiskSidebarActionPolicy.isEnabled(.mount, for: drive, targetVolume: mountedVolume)
+        )
+
+        var unmountedVolume = mountedVolume
+        unmountedVolume.mountPoint = nil
+        XCTAssertTrue(
+            DiskSidebarActionPolicy.isEnabled(.mount, for: drive, targetVolume: unmountedVolume)
+        )
     }
 
     func testDiskSidebarActionsProtectInternalSystemDiskFromMountUnmountAndEject() {

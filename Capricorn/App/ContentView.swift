@@ -543,6 +543,7 @@ struct ContentView: View {
         guard DiskSidebarActionPolicy.isEnabled(
             action,
             for: drive,
+            targetVolume: viewModel.representativeVolume(for: drive),
             allowSystemDiskSelfTests: allowSystemDiskSelfTests
         ) else { return true }
         if viewModel.isFirstAidBlocking { return true }
