@@ -65,7 +65,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     func statusMessage(_ message: String) -> String {
         guard self == .simplifiedChinese else { return message }
 
-        if let exact = Self.zhHansMessages[message] {
+        if let exact = Self.zhHansMessages[message] ?? Self.zhHans[message] {
             return exact
         }
         if message.hasPrefix("Last refreshed ") {
@@ -82,6 +82,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
         if message.hasPrefix("Open file inspection failed: ") {
             return message.replacingOccurrences(of: "Open file inspection failed: ", with: "查看占用程序失败：")
+        }
+        if message.hasPrefix("Disk refresh failed: ") {
+            return message.replacingOccurrences(of: "Disk refresh failed: ", with: "硬盘刷新失败：")
+        }
+        if message.hasPrefix("Could not save disk check history.") {
+            return message.replacingOccurrences(of: "Could not save disk check history.", with: "无法保存硬盘检查历史。")
         }
         if message.hasPrefix("smartctl did not return SMART data (exit status ") {
             let prefix = "smartctl did not return SMART data (exit status "
@@ -415,6 +421,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "The volume format changed before First Aid started.": "硬盘急救启动前，卷格式发生了变化。",
         "The disk information could not be refreshed before First Aid.": "硬盘急救启动前无法刷新硬盘信息。",
         "System disks must be repaired from macOS Recovery.": "系统硬盘必须在 macOS 恢复模式中修复。",
+        "Network volumes cannot run local First Aid.": "网络卷无法执行本机硬盘急救。",
         "SMART reports a failing device. Back up data and replace the disk instead of repairing it here.": "SMART 报告设备正在故障。请备份数据并更换硬盘，不要在此处修复。",
         "No external APFS or ExFAT volume is eligible for direct First Aid.": "没有符合条件的外接 APFS 或 ExFAT 卷可直接执行硬盘急救。",
         "First Aid preflight did not produce a repair plan.": "硬盘急救预检没有生成修复计划。",
@@ -637,6 +644,9 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Quick self-test is not supported by this drive.": "此硬盘不支持快速自检。",
         "Full self-test is not supported by this drive.": "此硬盘不支持完整自检。",
         "System-disk self-tests are disabled in Settings.": "设置中未允许系统盘执行自检。",
+        "Checking disk...": "正在检查硬盘...",
+        "Disk check completed.": "硬盘检查已完成。",
+        "Stopping disk check...": "正在停止硬盘检查...",
         "Enable system-disk self-tests in Settings only after confirming that a current backup is available.": "请在确认已有最新备份后，再前往设置允许系统盘执行自检。",
         "SMART self-test capability could not be confirmed.": "无法确认此硬盘的 SMART 自检能力。",
         "smartctl on macOS cannot send Device Self-test command 0x14.": "macOS 上的 smartctl 无法发送设备自检命令 0x14。",
@@ -822,6 +832,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Open files were found on the selected volume.": "所选卷上发现占用文件的程序。",
         "First Aid will stop after the current volume.": "硬盘急救将在当前卷完成后停止。",
         "First Aid is running...": "硬盘急救正在运行…",
+        "First Aid failed.": "硬盘急救失败。",
         "Refreshing disk information after First Aid...": "硬盘急救完成后正在刷新硬盘信息…",
         "First Aid completed with issues.": "硬盘急救完成，但存在问题。",
         "First Aid completed.": "硬盘急救已完成。",

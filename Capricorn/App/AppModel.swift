@@ -491,7 +491,7 @@ final class AppModel {
                 guard let self, self.activeRefreshID == refreshID else { return }
                 let error = error as NSError
                 CapricornLog.inventory.error("Drive refresh failed: \(error.domain, privacy: .public) \(error.code)")
-                self.refreshMessage = error.localizedDescription
+                self.refreshMessage = "Disk refresh failed: \(error.localizedDescription)"
             }
 
             guard let self, self.activeRefreshID == refreshID else { return }

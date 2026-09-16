@@ -945,6 +945,66 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testSidebarStatusMessagesAreLocalized() {
+        let expectedTranslations = [
+            "Scanning disks...": "正在扫描硬盘...",
+            "Reading SMART data...": "正在读取 SMART 数据...",
+            "No physical or network drives found.": "未找到物理或网络硬盘。",
+            "Running disk action...": "正在执行硬盘操作...",
+            "Disk action completed.": "硬盘操作已完成。",
+            "Inspecting open files...": "正在查看占用程序...",
+            "Open file inspection completed.": "占用程序查看完成。",
+            "System-disk self-tests are disabled in Settings.": "设置中未允许系统盘执行自检。",
+            "Checking disk...": "正在检查硬盘...",
+            "Disk check completed.": "硬盘检查已完成。",
+            "Stopping disk check...": "正在停止硬盘检查...",
+            "Preparing First Aid...": "正在准备硬盘急救…",
+            "First Aid is ready for confirmation.": "硬盘急救已准备好，等待确认。",
+            "First Aid is unavailable.": "硬盘急救不可用。",
+            "First Aid preflight failed.": "硬盘急救预检失败。",
+            "Could not inspect open files before First Aid.": "无法在硬盘急救前检查占用文件。",
+            "Open files were found on the selected volume.": "所选卷上发现占用文件的程序。",
+            "First Aid will stop after the current volume.": "硬盘急救将在当前卷完成后停止。",
+            "First Aid is running...": "硬盘急救正在运行…",
+            "First Aid failed.": "硬盘急救失败。",
+            "Refreshing disk information after First Aid...": "硬盘急救完成后正在刷新硬盘信息…",
+            "First Aid completed with issues.": "硬盘急救完成，但存在问题。",
+            "First Aid completed.": "硬盘急救已完成。",
+            "Network volumes cannot run local First Aid.": "网络卷无法执行本机硬盘急救。",
+            "Virtual disks are not eligible for direct First Aid.": "虚拟硬盘不具备直接硬盘急救资格。",
+            "Direct First Aid is limited to external or removable disks.": "直接硬盘急救仅适用于外接或可移除硬盘。",
+            "System disks must be repaired from macOS Recovery.": "系统硬盘必须在 macOS 恢复模式中修复。",
+            "SMART reports a failing device. Back up data and replace the disk instead of repairing it here.": "SMART 报告设备正在故障。请备份数据并更换硬盘，不要在此处修复。",
+            "No external APFS or ExFAT volume is eligible for direct First Aid.": "没有符合条件的外接 APFS 或 ExFAT 卷可直接执行硬盘急救。"
+        ]
+
+        for (message, expected) in expectedTranslations {
+            XCTAssertEqual(AppLanguage.simplifiedChinese.statusMessage(message), expected, message)
+            XCTAssertEqual(AppLanguage.english.statusMessage(message), message, message)
+        }
+
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.statusMessage("Disk refresh failed: Permission denied"),
+            "硬盘刷新失败：Permission denied"
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.statusMessage("Disk action failed: Permission denied"),
+            "硬盘操作失败：Permission denied"
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.statusMessage("Open file inspection failed: Permission denied"),
+            "查看占用程序失败：Permission denied"
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.statusMessage("Could not save disk check history. (SQLite 1)"),
+            "无法保存硬盘检查历史。 (SQLite 1)"
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.statusMessage("Last refreshed 14:22:23"),
+            "上次刷新 14:22:23"
+        )
+    }
+
     func testSmartSelfTestKindTitlesAreLocalized() {
         let expectedTitles: [(SmartSelfTestKind, String, String)] = [
             (.short, "Quick", "快速"),
