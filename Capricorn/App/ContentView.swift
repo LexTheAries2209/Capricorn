@@ -323,15 +323,6 @@ struct ContentView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
-
-                    Spacer(minLength: 8)
-
-                    Text("Capricorn V\(AppVersion.current.displayValue) · \(NSUserName())")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .multilineTextAlignment(.trailing)
-                        .help(language.t("Capricorn version and macOS user name"))
                 }
 
                 Divider()
@@ -341,6 +332,12 @@ struct ContentView: View {
                         Label(language.t("Settings"), systemImage: "gearshape")
                             .font(.caption.weight(.semibold))
                         Spacer(minLength: 8)
+                        Text("Capricorn V\(AppVersion.current.displayValue) · \(NSUserName())")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.trailing)
+                            .help(language.t("Capricorn version and macOS user name"))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
