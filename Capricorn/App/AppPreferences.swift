@@ -167,21 +167,23 @@ struct CapricornSettingsView: View {
             Form {
             AppUpdateSettingsSection(updateChecker: updateChecker, language: language)
 
-            Picker(language.t("Language"), selection: $preferences.languageRawValue) {
-                ForEach(AppLanguage.allCases) { language in
-                    Text(language.shortTitle).tag(language.rawValue)
+            Section(language.t("Interface Display")) {
+                Picker(language.t("Language"), selection: $preferences.languageRawValue) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.shortTitle).tag(language.rawValue)
+                    }
                 }
-            }
 
-            Toggle(language.t("Show virtual disks"), isOn: $preferences.showVirtualDisks)
-            Toggle(language.t("Use Tab to switch feature pages"), isOn: $preferences.usesPlainTabForFeatureSwitching)
-            Text(language.t("Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Toggle(language.t("Redact serial numbers"), isOn: $preferences.redactSerialNumbers)
-            Text(language.t("When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Toggle(language.t("Show virtual disks"), isOn: $preferences.showVirtualDisks)
+                Toggle(language.t("Use Tab to switch feature pages"), isOn: $preferences.usesPlainTabForFeatureSwitching)
+                Text(language.t("Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle(language.t("Redact serial numbers"), isOn: $preferences.redactSerialNumbers)
+                Text(language.t("When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Section(language.t("Disk Actions")) {
                 Toggle(language.t("Show Check and Repair in Disk Actions"), isOn: $preferences.showsCheckAndRepairActions)

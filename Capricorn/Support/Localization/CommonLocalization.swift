@@ -221,6 +221,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Show virtual disks": "显示虚拟硬盘",
         "Refresh disks and SMART data": "刷新硬盘和 SMART 数据",
         "Language": "语言",
+        "Interface Display": "界面显示",
         "Settings": "设置",
         "Updates": "更新",
         "Current Version": "当前版本",

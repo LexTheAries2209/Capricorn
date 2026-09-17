@@ -914,6 +914,7 @@ final class CapricornTests: XCTestCase {
     func testSettingsContentIsLocalized() {
         let expectedTranslations = [
             "Settings": "设置",
+            "Interface Display": "界面显示",
             "Use Tab to switch feature pages": "使用 Tab 切换功能页面",
             "Show SMART self-test status and controls": "显示 SMART 自检状态和测试功能",
             "When disabled, self-test status, records, and controls are hidden in Overview and SMART.": "关闭后，概览和 SMART 界面不会显示自检状态、记录或测试控制。",
