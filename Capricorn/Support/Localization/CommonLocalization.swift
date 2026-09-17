@@ -476,7 +476,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Selected SMART Source": "当前 SMART 数据来源",
         "SAT SMART Drive": "SAT SMART Drive",
         "Version": "版本",
-        "Show SAT SMART Drive Installer": "显示 SAT SMART Drive 安装包位置",
+        "Install SAT SMART Drive": "安装SAT SMART Drive",
         "Recheck SAT SMART Drive": "重新检测 SAT SMART Drive",
         "Open Binary Fruit SAT SMART Drive Guide": "打开 Binary Fruit SAT SMART Drive 说明",
         "Open SAT SMART Drive Open Source Project": "打开 SAT SMART Drive 开源项目",

@@ -328,7 +328,7 @@ struct CapricornSettingsView: View {
                         Button {
                             SATSMARTDriverService().revealPackage()
                         } label: {
-                            Label(language.t("Show SAT SMART Drive Installer"), systemImage: "shippingbox")
+                            Label(language.t("Install SAT SMART Drive"), systemImage: "shippingbox")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         Spacer()
