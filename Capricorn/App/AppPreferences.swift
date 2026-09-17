@@ -218,23 +218,7 @@ struct CapricornSettingsView: View {
                 Text(language.t("This applies only when Capricorn starts. Switching a volume from Disk Actions takes effect immediately."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
 
-            Section(language.t("SMART Diagnostics")) {
-                Toggle(language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
-                Text(language.t("When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if preferences.showsSmartSelfTestInterface {
-                    Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)
-                    Text(language.t("System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section(language.t("Disk Refresh")) {
                 Picker(
                     language.t("Automatic disk refresh"),
                     selection: $preferences.automaticRefreshInterval
@@ -251,6 +235,20 @@ struct CapricornSettingsView: View {
                 Text(language.t("When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up. Active disks continue to refresh normally."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section(language.t("SMART Diagnostics")) {
+                Toggle(language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
+                Text(language.t("When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if preferences.showsSmartSelfTestInterface {
+                    Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)
+                    Text(language.t("System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section(language.t("History Database")) {
