@@ -1790,6 +1790,26 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(AppCommandShortcut.refreshDisks.modifiers.contains(.command))
     }
 
+    func testSettingsShortcutUsesGraveAccentWithoutModifiers() {
+        XCTAssertEqual(AppCommandShortcut.settings.key, "`")
+        XCTAssertTrue(AppCommandShortcut.settings.modifiers.isEmpty)
+        XCTAssertEqual(AppCommandShortcut.settingsKeyEquivalent, KeyEquivalent("`"))
+        XCTAssertTrue(AppSettingsKeyRouter.matches(
+            keyCode: AppSettingsKeyRouter.graveAccentKeyCode,
+            charactersIgnoringModifiers: "·",
+            hasDisqualifyingModifiers: false
+        ))
+        XCTAssertTrue(AppSettingsKeyRouter.matches(
+            charactersIgnoringModifiers: "～",
+            hasDisqualifyingModifiers: false
+        ))
+        XCTAssertFalse(AppSettingsKeyRouter.matches(
+            keyCode: AppSettingsKeyRouter.graveAccentKeyCode,
+            charactersIgnoringModifiers: "`",
+            hasDisqualifyingModifiers: true
+        ))
+    }
+
     func testSaveSmartSnapshotShortcutUsesCommandS() {
         XCTAssertEqual(AppCommandShortcut.saveSmartSnapshot.key, "s")
         XCTAssertTrue(AppCommandShortcut.saveSmartSnapshot.modifiers.contains(.command))

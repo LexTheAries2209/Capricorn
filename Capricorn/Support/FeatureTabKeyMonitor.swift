@@ -4,11 +4,17 @@ import SwiftUI
 
 struct FeatureTabKeyMonitor: NSViewRepresentable {
     var isEnabled: Bool
+    var onOpenSettings: () -> Void
     var onNext: () -> Void
     var onPrevious: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isEnabled: isEnabled, onNext: onNext, onPrevious: onPrevious)
+        Coordinator(
+            isEnabled: isEnabled,
+            onOpenSettings: onOpenSettings,
+            onNext: onNext,
+            onPrevious: onPrevious
+        )
     }
 
     func makeNSView(context: Context) -> FeatureTabKeyMonitorView {
@@ -20,6 +26,7 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
     func updateNSView(_ nsView: FeatureTabKeyMonitorView, context: Context) {
         context.coordinator.onNext = onNext
         context.coordinator.onPrevious = onPrevious
+        context.coordinator.onOpenSettings = onOpenSettings
         context.coordinator.isEnabled = isEnabled
         context.coordinator.window = nsView.window
     }
@@ -30,13 +37,20 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
 
     final class Coordinator {
         var isEnabled: Bool
+        var onOpenSettings: () -> Void
         var onNext: () -> Void
         var onPrevious: () -> Void
         weak var window: NSWindow?
         private var monitor: Any?
 
-        init(isEnabled: Bool, onNext: @escaping () -> Void, onPrevious: @escaping () -> Void) {
+        init(
+            isEnabled: Bool,
+            onOpenSettings: @escaping () -> Void,
+            onNext: @escaping () -> Void,
+            onPrevious: @escaping () -> Void
+        ) {
             self.isEnabled = isEnabled
+            self.onOpenSettings = onOpenSettings
             self.onNext = onNext
             self.onPrevious = onPrevious
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -61,6 +75,15 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
             let hasDisqualifyingModifiers = relevantModifiers.contains(.control)
                 || relevantModifiers.contains(.option)
                 || relevantModifiers.contains(.command)
+
+            if AppSettingsKeyRouter.matches(
+                keyCode: event.keyCode,
+                charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                hasDisqualifyingModifiers: hasDisqualifyingModifiers
+            ) {
+                onOpenSettings()
+                return nil
+            }
 
             guard let action = AppFeatureTabKeyRouter.action(
                 keyCode: event.keyCode,

@@ -892,6 +892,8 @@ enum DiskOpenFileTableLayout {
 }
 
 enum AppCommandShortcut {
+    static let settings = (key: "`", modifiers: EventModifiers())
+    static let settingsKeyEquivalent = KeyEquivalent("`")
     static let refreshDisks = (key: "r", modifiers: EventModifiers.command)
     static let refreshDisksKeyEquivalent = KeyEquivalent("r")
     static let saveSmartSnapshot = (key: "s", modifiers: EventModifiers.command)
@@ -900,6 +902,21 @@ enum AppCommandShortcut {
     static let previousFeatureTab = (key: "tab", modifiers: EventModifiers.control.union(.shift))
     static let featureTabCharacter: Character = "\t"
     static let featureTabKeyEquivalent = KeyEquivalent(featureTabCharacter)
+}
+
+enum AppSettingsKeyRouter {
+    static let graveAccentKeyCode: UInt16 = 50
+
+    static func matches(
+        keyCode: UInt16? = nil,
+        charactersIgnoringModifiers: String?,
+        hasDisqualifyingModifiers: Bool
+    ) -> Bool {
+        guard !hasDisqualifyingModifiers else { return false }
+        // Key code 50 keeps the shortcut tied to the ` / ~ physical key across input sources.
+        return keyCode == graveAccentKeyCode
+            || ["`", "~", "·", "～"].contains(charactersIgnoringModifiers)
+    }
 }
 
 enum AppFeatureTabKeyAction: Equatable {

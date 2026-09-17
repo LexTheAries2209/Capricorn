@@ -99,6 +99,9 @@ struct ContentView: View {
         .background {
             FeatureTabKeyMonitor(
                 isEnabled: preferences.usesPlainTabForFeatureSwitching,
+                onOpenSettings: {
+                    openSettings()
+                },
                 onNext: {
                     viewModel.selectNextFeatureTab()
                 },
