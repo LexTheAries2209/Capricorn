@@ -57,13 +57,11 @@ struct ContentView: View {
                     benchmarkHistory: benchmarkHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     allowSystemDiskSelfTests: allowSystemDiskSelfTests,
-                    satDriverGuidance: preferences.showsSATDriverGuidance
-                        ? SATSMARTDriverGuidancePolicy.guidance(
-                            for: drive,
-                            snapshot: viewModel.snapshots[drive.id],
-                            driverStatus: preferences.satSMARTDriverStatus
-                        )
-                        : nil,
+                    satDriverGuidance: SATSMARTDriverGuidancePolicy.guidance(
+                        for: drive,
+                        snapshot: viewModel.snapshots[drive.id],
+                        driverStatus: preferences.satSMARTDriverStatus
+                    ),
                     openSATDriverSettings: {
                         preferences.requestedSettingsDestination = .satSMARTDriver
                         openSettings()

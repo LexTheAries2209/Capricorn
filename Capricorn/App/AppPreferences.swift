@@ -58,7 +58,6 @@ final class AppPreferences {
         static let automaticRefreshIntervalMinutes = "automaticRefreshIntervalMinutes"
         static let showsCheckAndRepairActions = "showsCheckAndRepairActions"
         static let representativeVolumeStartupPreference = "representativeVolumeStartupPreference"
-        static let showsSATDriverGuidance = "showsSATDriverGuidance"
     }
 
     private let defaults: UserDefaults
@@ -114,10 +113,6 @@ final class AppPreferences {
         didSet { defaults.set(representativeVolumeStartupPreference.rawValue, forKey: Key.representativeVolumeStartupPreference) }
     }
 
-    var showsSATDriverGuidance: Bool {
-        didSet { defaults.set(showsSATDriverGuidance, forKey: Key.showsSATDriverGuidance) }
-    }
-
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
@@ -135,7 +130,6 @@ final class AppPreferences {
         representativeVolumeStartupPreference = RepresentativeVolumeStartupPreference(
             rawValue: defaults.string(forKey: Key.representativeVolumeStartupPreference) ?? ""
         ) ?? .largestCapacity
-        showsSATDriverGuidance = defaults.object(forKey: Key.showsSATDriverGuidance) as? Bool ?? true
         satSMARTDriverStatus = SATSMARTDriverService().status()
     }
 
@@ -318,11 +312,6 @@ struct CapricornSettingsView: View {
                     if let version = status.version {
                         LabeledContent(language.t("Version"), value: version)
                     }
-
-                    Toggle(
-                        language.t("Show SAT guidance when SMART data is unavailable"),
-                        isOn: $preferences.showsSATDriverGuidance
-                    )
 
                     HStack {
                         Button {

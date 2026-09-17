@@ -493,7 +493,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Check macOS approval or restart": "请检查 macOS 授权或重新启动",
         "Then recheck it in Settings": "然后在设置中重新检测",
         "Open SAT SMART Drive Settings": "前往 SAT SMART Drive 设置",
-        "Show SAT guidance when SMART data is unavailable": "SMART 数据不可用时显示 SAT 引导",
         "SAT SMART Driver is not installed.": "SAT SMART Driver 未安装。",
         "SAT SMART Driver is loaded.": "SAT SMART Driver 已加载。",
         "SAT SMART Driver files are installed.": "SAT SMART Driver 文件已安装。",
