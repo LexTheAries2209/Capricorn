@@ -59,9 +59,13 @@ struct HistoryReportView: View {
         HistoryVisibility.hidden(activityHistory)
     }
 
+    private var showsSelfTestReports: Bool {
+        HistorySelfTestVisibilityPolicy.showsReports(for: snapshot)
+    }
+
     private var hasHiddenHistory: Bool {
         !hiddenSmartHistory.isEmpty
-            || !hiddenSelfTestHistory.isEmpty
+            || (showsSelfTestReports && !hiddenSelfTestHistory.isEmpty)
             || !hiddenBenchmarkHistory.isEmpty
             || !hiddenActivityHistory.isEmpty
     }
@@ -143,17 +147,19 @@ struct HistoryReportView: View {
                     }
                 }
 
-                historyPanel(
-                    title: language.t("Self-Test Reports"),
-                    symbol: "stethoscope",
-                    count: visibleSelfTestHistory.count,
-                    emptyText: hiddenSelfTestHistory.isEmpty ? language.t("No saved self-test reports yet.") : language.t("No visible self-test reports. Hidden reports can be restored below."),
-                    actionTitle: language.t("Hide All"),
-                    actionSymbol: "eye.slash",
-                    action: { hideAllHistory(visibleSelfTestHistory) }
-                ) {
-                    historyRows(visibleSelfTestHistory) { item in
-                        selfTestHistoryRow(item, isHidden: false)
+                if showsSelfTestReports {
+                    historyPanel(
+                        title: language.t("Self-Test Reports"),
+                        symbol: "stethoscope",
+                        count: visibleSelfTestHistory.count,
+                        emptyText: hiddenSelfTestHistory.isEmpty ? language.t("No saved self-test reports yet.") : language.t("No visible self-test reports. Hidden reports can be restored below."),
+                        actionTitle: language.t("Hide All"),
+                        actionSymbol: "eye.slash",
+                        action: { hideAllHistory(visibleSelfTestHistory) }
+                    ) {
+                        historyRows(visibleSelfTestHistory) { item in
+                            selfTestHistoryRow(item, isHidden: false)
+                        }
                     }
                 }
 
@@ -362,7 +368,7 @@ struct HistoryReportView: View {
                     }
                 }
 
-                if !hiddenSelfTestHistory.isEmpty {
+                if showsSelfTestReports, !hiddenSelfTestHistory.isEmpty {
                     Text(language.t("Self-Test Reports"))
                         .font(.subheadline.bold())
                     ForEach(hiddenSelfTestHistory) { item in
@@ -604,4 +610,10 @@ struct HistoryReportView: View {
         }
     }
 
+}
+
+enum HistorySelfTestVisibilityPolicy {
+    static func showsReports(for snapshot: SmartSnapshot?) -> Bool {
+        snapshot?.attributes.isEmpty == false
+    }
 }

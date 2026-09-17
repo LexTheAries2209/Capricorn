@@ -2104,6 +2104,37 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
     }
 
+    func testHistorySelfTestVisibilityTracksCurrentSMARTAttributes() {
+        let drive = Self.fixtureDrive()
+        let unavailable = SmartSnapshot.unavailable(for: drive, reason: "No SMART data.")
+
+        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: nil))
+        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: unavailable))
+
+        var recovered = unavailable
+        recovered.smartStatusRaw = "PASSED"
+        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+
+        let attribute = SmartAttribute(
+            id: "temperature.current",
+            name: "Temperature",
+            rawValue: "31 C",
+            current: nil,
+            worst: nil,
+            threshold: nil,
+            status: .good,
+            source: "Fixture"
+        )
+        recovered.attributes = [attribute]
+        XCTAssertTrue(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+
+        recovered.attributes = []
+        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+
+        recovered.attributes = [attribute]
+        XCTAssertTrue(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+    }
+
     func testSmartErrorLogPresentationSeparatesHistoricalCountFromReadDetails() {
         let historicalOnly = SmartErrorLogReport(
             isSupported: true,
