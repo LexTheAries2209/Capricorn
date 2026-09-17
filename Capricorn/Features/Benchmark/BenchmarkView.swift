@@ -1207,14 +1207,17 @@ struct DiskActivityChartView: View {
     var body: some View {
         let preparedChartData = chartData
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Text(title)
-                    .font(.caption.bold())
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    chartTitle
+                    Spacer(minLength: 8)
+                    chartLegend
+                }
 
-                Spacer(minLength: 8)
-
-                speedLegend(title: language.operationTitle(.read), value: readSpeed, color: .blue)
-                speedLegend(title: language.operationTitle(.write), value: writeSpeed, color: .green)
+                VStack(alignment: .leading, spacing: 4) {
+                    chartTitle
+                    chartLegend
+                }
             }
 
             HStack(alignment: .top, spacing: 6) {
@@ -1242,6 +1245,20 @@ struct DiskActivityChartView: View {
             .accessibilityValue(Text("\(language.operationTitle(.read)) \(DiskActivityFormatter.speed(readSpeed)), \(language.operationTitle(.write)) \(DiskActivityFormatter.speed(writeSpeed))"))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var chartTitle: some View {
+        Text(title)
+            .font(.caption.bold())
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var chartLegend: some View {
+        HStack(spacing: 10) {
+            speedLegend(title: language.operationTitle(.read), value: readSpeed, color: .blue)
+            speedLegend(title: language.operationTitle(.write), value: writeSpeed, color: .green)
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func yAxisLabels(_ yTicks: [Double]) -> some View {

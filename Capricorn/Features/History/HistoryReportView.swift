@@ -21,6 +21,7 @@ struct HistoryReportView: View {
     @State private var reportError: String?
     private let historyScrollThreshold = 10
     private let historyRowHeight: CGFloat = 58
+    private let historyPanelMinimumWidth: CGFloat = 380
 
     private var visibleSmartHistory: [SmartHistoryRecord] {
         HistoryVisibility.visible(smartHistory)
@@ -97,34 +98,7 @@ struct HistoryReportView: View {
                     Spacer()
                 }
 
-                HStack(alignment: .center, spacing: 12) {
-                    Text(language.t("History & Reports"))
-                        .font(.title2.bold())
-                    Spacer(minLength: 12)
-                    HStack(alignment: .center, spacing: 10) {
-                        Text(historyCountSummary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Button {
-                            showClearCurrentDriveConfirmation = true
-                        } label: {
-                            Label(language.t("Clear Drive History"), systemImage: "trash")
-                        }
-                        .controlSize(.small)
-                        .tint(.red)
-                        .disabled(visibleHistoryCount + hiddenHistoryCount == 0)
-                        .help(language.t("Clear Drive History"))
-                        Button {
-                            showClearDiagnosticCacheConfirmation = true
-                        } label: {
-                            Label(language.t("Clear Diagnostic Cache"), systemImage: "eraser")
-                        }
-                        .controlSize(.small)
-                        .disabled(!viewModel.hasSmartDiagnosticsState(for: drive))
-                        .help(language.t("Clear Diagnostic Cache"))
-                    }
-                }
+                historyHeader
 
                 if let reportError {
                     Label(reportError, systemImage: "exclamationmark.triangle.fill")
@@ -163,50 +137,7 @@ struct HistoryReportView: View {
                     }
                 }
 
-                HStack(alignment: .top, spacing: 16) {
-                    historyPanel(
-                        title: language.t("SMART Snapshots"),
-                        symbol: "clock",
-                        count: visibleSmartHistory.count,
-                        emptyText: hiddenSmartHistory.isEmpty ? language.t("No saved snapshots yet.") : language.t("No visible snapshots. Hidden snapshots can be restored below."),
-                        actionTitle: language.t("Hide All"),
-                        actionSymbol: "eye.slash",
-                        action: { hideAllHistory(visibleSmartHistory) }
-                    ) {
-                        historyRows(visibleSmartHistory) { item in
-                            smartHistoryRow(item, isHidden: false)
-                        }
-                    }
-
-                    historyPanel(
-                        title: language.t("Benchmark Runs"),
-                        symbol: "chart.xyaxis.line",
-                        count: visibleBenchmarkHistory.count,
-                        emptyText: hiddenBenchmarkHistory.isEmpty ? language.t("No saved benchmark results yet.") : language.t("No visible benchmark results. Hidden benchmark results can be restored below."),
-                        actionTitle: language.t("Hide All"),
-                        actionSymbol: "eye.slash",
-                        action: { hideAllHistory(visibleBenchmarkHistory) }
-                    ) {
-                        historyRows(visibleBenchmarkHistory) { item in
-                            benchmarkHistoryRow(item, isHidden: false)
-                        }
-                    }
-
-                    historyPanel(
-                        title: language.t("Live Activity History"),
-                        symbol: "waveform.path.ecg.rectangle",
-                        count: visibleActivityHistory.count,
-                        emptyText: hiddenActivityHistory.isEmpty ? language.t("No saved activity records yet.") : language.t("No visible activity records. Hidden activity records can be restored below."),
-                        actionTitle: language.t("Hide All"),
-                        actionSymbol: "eye.slash",
-                        action: { hideAllHistory(visibleActivityHistory) }
-                    ) {
-                        historyRows(visibleActivityHistory) { item in
-                            activityHistoryRow(item, isHidden: false)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                adaptiveHistoryPanels
 
                 if hasHiddenHistory {
                     hiddenHistoryDisclosure
@@ -261,6 +192,128 @@ struct HistoryReportView: View {
         }
     }
 
+    private var historyHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 12) {
+                historyHeaderTitle
+                Spacer(minLength: 12)
+                historyCountLabel
+                historyHeaderActions
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                historyHeaderTitle
+                HStack(alignment: .center, spacing: 10) {
+                    historyCountLabel
+                    Spacer(minLength: 8)
+                    historyHeaderActions
+                }
+            }
+        }
+    }
+
+    private var historyHeaderTitle: some View {
+        Text(language.t("History & Reports"))
+            .font(.title2.bold())
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var historyCountLabel: some View {
+        Text(historyCountSummary)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var historyHeaderActions: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Button {
+                showClearCurrentDriveConfirmation = true
+            } label: {
+                Label(language.t("Clear Drive History"), systemImage: "trash")
+            }
+            .controlSize(.small)
+            .tint(.red)
+            .disabled(visibleHistoryCount + hiddenHistoryCount == 0)
+            .help(language.t("Clear Drive History"))
+
+            Button {
+                showClearDiagnosticCacheConfirmation = true
+            } label: {
+                Label(language.t("Clear Diagnostic Cache"), systemImage: "eraser")
+            }
+            .controlSize(.small)
+            .disabled(!viewModel.hasSmartDiagnosticsState(for: drive))
+            .help(language.t("Clear Diagnostic Cache"))
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var adaptiveHistoryPanels: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                smartHistoryPanel
+                benchmarkHistoryPanel
+                activityHistoryPanel
+            }
+
+            VStack(alignment: .leading, spacing: 16) {
+                smartHistoryPanel
+                benchmarkHistoryPanel
+                activityHistoryPanel
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var smartHistoryPanel: some View {
+        historyPanel(
+            title: language.t("SMART Snapshots"),
+            symbol: "clock",
+            count: visibleSmartHistory.count,
+            emptyText: hiddenSmartHistory.isEmpty ? language.t("No saved snapshots yet.") : language.t("No visible snapshots. Hidden snapshots can be restored below."),
+            actionTitle: language.t("Hide All"),
+            actionSymbol: "eye.slash",
+            action: { hideAllHistory(visibleSmartHistory) }
+        ) {
+            historyRows(visibleSmartHistory) { item in
+                smartHistoryRow(item, isHidden: false)
+            }
+        }
+    }
+
+    private var benchmarkHistoryPanel: some View {
+        historyPanel(
+            title: language.t("Benchmark Runs"),
+            symbol: "chart.xyaxis.line",
+            count: visibleBenchmarkHistory.count,
+            emptyText: hiddenBenchmarkHistory.isEmpty ? language.t("No saved benchmark results yet.") : language.t("No visible benchmark results. Hidden benchmark results can be restored below."),
+            actionTitle: language.t("Hide All"),
+            actionSymbol: "eye.slash",
+            action: { hideAllHistory(visibleBenchmarkHistory) }
+        ) {
+            historyRows(visibleBenchmarkHistory) { item in
+                benchmarkHistoryRow(item, isHidden: false)
+            }
+        }
+    }
+
+    private var activityHistoryPanel: some View {
+        historyPanel(
+            title: language.t("Live Activity History"),
+            symbol: "waveform.path.ecg.rectangle",
+            count: visibleActivityHistory.count,
+            emptyText: hiddenActivityHistory.isEmpty ? language.t("No saved activity records yet.") : language.t("No visible activity records. Hidden activity records can be restored below."),
+            actionTitle: language.t("Hide All"),
+            actionSymbol: "eye.slash",
+            action: { hideAllHistory(visibleActivityHistory) }
+        ) {
+            historyRows(visibleActivityHistory) { item in
+                activityHistoryRow(item, isHidden: false)
+            }
+        }
+    }
+
     private var historyScrollHeight: CGFloat {
         CGFloat(historyScrollThreshold) * historyRowHeight
     }
@@ -278,19 +331,31 @@ struct HistoryReportView: View {
         @ViewBuilder rows: () -> Rows
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Label(title, systemImage: symbol)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
-                Spacer(minLength: 0)
-                Button(action: action) {
-                    Label(actionTitle, systemImage: actionSymbol)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    Label(title, systemImage: symbol)
+                        .font(.headline)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 0)
+                    Button(action: action) {
+                        Label(actionTitle, systemImage: actionSymbol)
+                    }
+                    .controlSize(.small)
+                    .disabled(count == 0)
+                    .help(actionTitle)
                 }
-                .controlSize(.small)
-                .disabled(count == 0)
-                .help(actionTitle)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(title, systemImage: symbol)
+                        .font(.headline)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(action: action) {
+                        Label(actionTitle, systemImage: actionSymbol)
+                    }
+                    .controlSize(.small)
+                    .disabled(count == 0)
+                    .help(actionTitle)
+                }
             }
 
             if count == 0 {
@@ -316,7 +381,7 @@ struct HistoryReportView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(.separator.opacity(0.45), lineWidth: 1)
         }
-        .frame(minWidth: 260, maxWidth: .infinity, alignment: .topLeading)
+        .frame(minWidth: historyPanelMinimumWidth, maxWidth: .infinity, alignment: .topLeading)
     }
 
     private func historyRows<Record: Identifiable, Row: View>(
@@ -337,26 +402,17 @@ struct HistoryReportView: View {
     private var hiddenHistoryDisclosure: some View {
         DisclosureGroup(isExpanded: $showHiddenHistory) {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(language.t("Hidden records remain in the local database and can be restored here."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        restoreAllHiddenHistory()
-                    } label: {
-                        Label(language.t("Restore All"), systemImage: "arrow.counterclockwise")
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline) {
+                        hiddenHistoryDescription
+                        Spacer(minLength: 12)
+                        hiddenHistoryActions
                     }
-                    .controlSize(.small)
-                    Button {
-                        showClearHiddenHistoryConfirmation = true
-                    } label: {
-                        Label(language.t("Clear Hidden Data"), systemImage: "trash")
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        hiddenHistoryDescription
+                        hiddenHistoryActions
                     }
-                    .controlSize(.small)
-                    .tint(.red)
-                    .disabled(hiddenHistoryCount == 0)
-                    .help(language.t("Clear Hidden Data"))
                 }
 
                 if !hiddenSmartHistory.isEmpty {
@@ -408,6 +464,35 @@ struct HistoryReportView: View {
         }
     }
 
+    private var hiddenHistoryDescription: some View {
+        Text(language.t("Hidden records remain in the local database and can be restored here."))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var hiddenHistoryActions: some View {
+        HStack(spacing: 8) {
+            Button {
+                restoreAllHiddenHistory()
+            } label: {
+                Label(language.t("Restore All"), systemImage: "arrow.counterclockwise")
+            }
+            .controlSize(.small)
+
+            Button {
+                showClearHiddenHistoryConfirmation = true
+            } label: {
+                Label(language.t("Clear Hidden Data"), systemImage: "trash")
+            }
+            .controlSize(.small)
+            .tint(.red)
+            .disabled(hiddenHistoryCount == 0)
+            .help(language.t("Clear Hidden Data"))
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
     private func smartHistoryRow(_ item: SmartHistoryRecord, isHidden: Bool) -> some View {
         HStack {
             HealthBadge(status: item.health, compact: true)
@@ -431,22 +516,32 @@ struct HistoryReportView: View {
 
     private func benchmarkHistoryRow(_ item: BenchmarkHistoryRecord, isHidden: Bool) -> some View {
         let activitySamples = item.activitySamples
+        let visibilityAction = {
+            if isHidden {
+                restoreHistory(item)
+            } else {
+                hideHistory(item)
+            }
+        }
         return VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("\(item.testLabel) \(language.operationTitle(item.operation))")
-                    Text(item.measuredAt.formatted(date: .abbreviated, time: .standard))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    benchmarkHistoryIdentity(item)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 8)
+                    Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
+                        .monospacedDigit()
+                        .fixedSize(horizontal: true, vertical: false)
+                    historyVisibilityButton(isHidden: isHidden, action: visibilityAction)
                 }
-                Spacer()
-                Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
-                    .monospacedDigit()
-                historyVisibilityButton(isHidden: isHidden) {
-                    if isHidden {
-                        restoreHistory(item)
-                    } else {
-                        hideHistory(item)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    benchmarkHistoryIdentity(item)
+                    HStack {
+                        Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
+                            .monospacedDigit()
+                        Spacer(minLength: 8)
+                        historyVisibilityButton(isHidden: isHidden, action: visibilityAction)
                     }
                 }
             }
@@ -459,6 +554,15 @@ struct HistoryReportView: View {
                     style: .mini
                 )
             }
+        }
+    }
+
+    private func benchmarkHistoryIdentity(_ item: BenchmarkHistoryRecord) -> some View {
+        VStack(alignment: .leading) {
+            Text("\(item.testLabel) \(language.operationTitle(item.operation))")
+            Text(item.measuredAt.formatted(date: .abbreviated, time: .standard))
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
