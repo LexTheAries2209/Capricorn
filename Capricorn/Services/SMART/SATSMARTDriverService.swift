@@ -71,7 +71,6 @@ struct SATSMARTDriverService: Sendable {
     private let fileExistsAtPath: @Sendable (String) -> Bool
     private let readDataAtURL: @Sendable (URL) -> Data?
     private let isKernelExtensionLoaded: @Sendable () -> Bool
-    static let packageURL = URL(string: "https://binaryfruit.com/download/mac/satsmartdriver/SATSMARTDriver-0.10.3.macOS11_and_AppleSilicon.zip")!
     static let guideURL = URL(string: "https://binaryfruit.com/drivedx/usb-drive-support")!
     static let sourceURL = URL(string: "https://github.com/kasbert/OS-X-SAT-SMART-Driver")!
 
