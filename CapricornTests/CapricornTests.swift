@@ -2860,7 +2860,7 @@ final class CapricornTests: XCTestCase {
             version: "0.10.3",
             kextPath: installed.kextPath,
             pluginPath: installed.pluginPath,
-            message: "SAT SMART Driver is loaded and has an IOKit match."
+            message: "SAT SMART Driver is loaded."
         )
 
         XCTAssertEqual(
@@ -2874,6 +2874,40 @@ final class CapricornTests: XCTestCase {
             .activationRequired
         )
         XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: loaded))
+    }
+
+    func testSATDriverStatusIsLoadedWithoutRequiringAnIOKitDeviceMatch() throws {
+        let plistData = try PropertyListSerialization.data(
+            fromPropertyList: ["CFBundleShortVersionString": "0.10.3"],
+            format: .xml,
+            options: 0
+        )
+        let service = SATSMARTDriverService(
+            fileExistsAtPath: { _ in true },
+            readDataAtURL: { _ in plistData },
+            isKernelExtensionLoaded: { true }
+        )
+
+        XCTAssertEqual(
+            service.status(),
+            SATSMARTDriverStatus(
+                state: .loaded,
+                version: "0.10.3",
+                kextPath: "/Library/Extensions/SATSMARTDriver.kext",
+                pluginPath: "/Library/Extensions/SATSMARTLib.plugin",
+                message: "SAT SMART Driver is loaded."
+            )
+        )
+    }
+
+    func testSATDriverStatusWarnsWhenFilesExistButKextIsNotLoaded() {
+        let service = SATSMARTDriverService(
+            fileExistsAtPath: { _ in true },
+            readDataAtURL: { _ in nil },
+            isKernelExtensionLoaded: { false }
+        )
+
+        XCTAssertEqual(service.status().state, .installedNotLoaded)
     }
 
     func testSmartctlParserRejectsDeviceIdentificationWithoutSMARTPayload() throws {

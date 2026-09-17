@@ -2,6 +2,7 @@
 import AppKit
 import Foundation
 import IOKit
+import IOKit.kext
 
 enum SATSMARTDriverState: String, Equatable, Sendable {
     case notInstalled
@@ -64,39 +65,62 @@ enum SATSMARTDriverGuidancePolicy {
 }
 
 struct SATSMARTDriverService: Sendable {
+    private static let bundleIdentifier = "com.binaryfruit.driver.SATSMARTDriver"
     private let kextPath = "/Library/Extensions/SATSMARTDriver.kext"
     private let pluginPath = "/Library/Extensions/SATSMARTLib.plugin"
+    private let fileExistsAtPath: @Sendable (String) -> Bool
+    private let readDataAtURL: @Sendable (URL) -> Data?
+    private let isKernelExtensionLoaded: @Sendable () -> Bool
     static let packageURL = URL(string: "https://binaryfruit.com/download/mac/satsmartdriver/SATSMARTDriver-0.10.3.macOS11_and_AppleSilicon.zip")!
     static let guideURL = URL(string: "https://binaryfruit.com/drivedx/usb-drive-support")!
     static let sourceURL = URL(string: "https://github.com/kasbert/OS-X-SAT-SMART-Driver")!
 
+    init() {
+        fileExistsAtPath = { FileManager.default.fileExists(atPath: $0) }
+        readDataAtURL = { try? Data(contentsOf: $0) }
+        isKernelExtensionLoaded = Self.kernelExtensionIsLoaded
+    }
+
+    init(
+        fileExistsAtPath: @escaping @Sendable (String) -> Bool,
+        readDataAtURL: @escaping @Sendable (URL) -> Data?,
+        isKernelExtensionLoaded: @escaping @Sendable () -> Bool
+    ) {
+        self.fileExistsAtPath = fileExistsAtPath
+        self.readDataAtURL = readDataAtURL
+        self.isKernelExtensionLoaded = isKernelExtensionLoaded
+    }
+
     func status() -> SATSMARTDriverStatus {
-        let fileManager = FileManager.default
-        let hasFiles = fileManager.fileExists(atPath: kextPath)
-            && fileManager.fileExists(atPath: pluginPath)
+        let hasFiles = fileExistsAtPath(kextPath) && fileExistsAtPath(pluginPath)
         guard hasFiles else {
             return SATSMARTDriverStatus(state: .notInstalled, version: nil, kextPath: nil, pluginPath: nil, message: "SAT SMART Driver is not installed.")
         }
         let plist = try? PropertyListSerialization.propertyList(
-            from: Data(contentsOf: URL(fileURLWithPath: "\(kextPath)/Contents/Info.plist")),
+            from: readDataAtURL(URL(fileURLWithPath: "\(kextPath)/Contents/Info.plist")) ?? Data(),
             options: [],
             format: nil
         ) as? [String: Any]
         let version = plist?["CFBundleShortVersionString"] as? String
-        let matching = IOServiceMatching("fi_dungeon_driver_IOSATDriver")
-        var iterator: io_iterator_t = 0
-        let result = IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator)
-        let isLoaded = result == KERN_SUCCESS && IOIteratorIsValid(iterator) != 0 && IOIteratorNext(iterator) != 0
-        IOObjectRelease(iterator)
+        let isLoaded = isKernelExtensionLoaded()
         return SATSMARTDriverStatus(
             state: isLoaded ? .loaded : .installedNotLoaded,
             version: version,
             kextPath: kextPath,
             pluginPath: pluginPath,
             message: isLoaded
-                ? "SAT SMART Driver is loaded and has an IOKit match."
+                ? "SAT SMART Driver is loaded."
                 : "SAT SMART Driver files are installed."
         )
+    }
+
+    private static func kernelExtensionIsLoaded() -> Bool {
+        let identifiers = NSArray(object: bundleIdentifier) as CFArray
+        guard let loadedInfo = KextManagerCopyLoadedKextInfo(identifiers, nil)?.takeRetainedValue() as? [String: Any],
+              let driverInfo = loadedInfo[bundleIdentifier] as? [String: Any] else {
+            return false
+        }
+        return driverInfo["OSBundleStarted"] as? Bool ?? true
     }
 
     func revealPackage() {
