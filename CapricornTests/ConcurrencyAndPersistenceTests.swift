@@ -5,14 +5,13 @@ import XCTest
 
 extension CapricornTests {
     @MainActor
-    func testAppPreferencesPreservesExistingUserDefaultsKeysAndPlainTabDefault() throws {
+    func testAppPreferencesPreservesExistingUserDefaultsKeys() throws {
         let suiteName = "CapricornTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         defaults.set("/usr/bin/true", forKey: AppPreferences.Key.legacySmartctlPath)
         let preferences = AppPreferences(defaults: defaults)
-        XCTAssertTrue(preferences.usesPlainTabForFeatureSwitching)
         XCTAssertFalse(preferences.allowSystemDiskSelfTests)
         XCTAssertFalse(preferences.showsSmartSelfTestInterface)
         XCTAssertTrue(preferences.avoidWakingSleepingDisks)
@@ -23,7 +22,6 @@ extension CapricornTests {
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
         preferences.showVirtualDisks = true
         XCTAssertNil(defaults.string(forKey: AppPreferences.Key.legacySmartctlPath))
-        preferences.usesPlainTabForFeatureSwitching = false
         preferences.allowSystemDiskSelfTests = true
         preferences.showsSmartSelfTestInterface = true
         preferences.avoidWakingSleepingDisks = false
@@ -36,7 +34,6 @@ extension CapricornTests {
         XCTAssertEqual(reloaded.languageRawValue, AppLanguage.simplifiedChinese.rawValue)
         XCTAssertTrue(reloaded.showVirtualDisks)
         XCTAssertNil(defaults.string(forKey: AppPreferences.Key.legacySmartctlPath))
-        XCTAssertFalse(reloaded.usesPlainTabForFeatureSwitching)
         XCTAssertTrue(reloaded.allowSystemDiskSelfTests)
         XCTAssertTrue(reloaded.showsSmartSelfTestInterface)
         XCTAssertFalse(reloaded.avoidWakingSleepingDisks)

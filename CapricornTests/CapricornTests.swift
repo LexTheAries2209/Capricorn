@@ -916,9 +916,7 @@ final class CapricornTests: XCTestCase {
             "Settings": "设置",
             "Interface Display": "界面显示",
             "Keyboard Shortcuts": "快捷键",
-            "Next feature page": "下一个功能页面",
-            "Previous feature page": "上一个功能页面",
-            "Use Tab to switch feature pages": "使用 Tab 切换功能页面",
+            "Switch feature pages in order": "按顺序切换功能页面",
             "Show SMART self-test status and controls": "显示 SMART 自检状态和测试功能",
             "When disabled, self-test status, records, and controls are hidden in Overview and SMART.": "关闭后，概览和 SMART 界面不会显示自检状态、记录或测试控制。",
             "SMART Refresh": "SMART 刷新",
@@ -932,7 +930,6 @@ final class CapricornTests: XCTestCase {
             "USB-NVMe SMART Command Passthrough": "USB-NVMe SMART 命令透传",
             "Verified": "已验证",
             "Limited": "有限支持",
-            "Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal.": "Control-Tab 和 Control-Shift-Tab 始终用于切换功能页面。关闭普通 Tab 切换后，可恢复标准键盘焦点遍历。",
             "Choose": "选择",
             "Choose the smartctl executable.": "选择 smartctl 可执行文件。",
             "Open Settings": "打开设置",
@@ -1836,44 +1833,23 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(DriveFeatureTab.previous(before: .history), .liveActivity)
     }
 
-    func testFeatureTabSwitchShortcutsUsePlainTab() {
-        XCTAssertEqual(AppCommandShortcut.nextFeatureTab.key, "tab")
-        XCTAssertEqual(AppCommandShortcut.previousFeatureTab.key, "tab")
-        XCTAssertTrue(AppCommandShortcut.nextFeatureTab.modifiers.contains(.control))
-        XCTAssertFalse(AppCommandShortcut.nextFeatureTab.modifiers.contains(.shift))
-        XCTAssertTrue(AppCommandShortcut.previousFeatureTab.modifiers.contains(.control))
-        XCTAssertTrue(AppCommandShortcut.previousFeatureTab.modifiers.contains(.shift))
-    }
-
-    func testFeatureTabKeyRouterHandlesPlainTabBeforeFocusTraversal() {
-        XCTAssertEqual(
-            AppFeatureTabKeyRouter.action(
+    func testFeatureTabKeyRouterAcceptsOnlyUnmodifiedTab() {
+        XCTAssertTrue(
+            AppFeatureTabKeyRouter.matches(
                 charactersIgnoringModifiers: "\t",
-                hasShift: false,
-                hasDisqualifyingModifiers: false
-            ),
-            .next
-        )
-        XCTAssertEqual(
-            AppFeatureTabKeyRouter.action(
-                charactersIgnoringModifiers: "\t",
-                hasShift: true,
-                hasDisqualifyingModifiers: false
-            ),
-            .previous
-        )
-        XCTAssertNil(
-            AppFeatureTabKeyRouter.action(
-                charactersIgnoringModifiers: "\t",
-                hasShift: false,
-                hasDisqualifyingModifiers: true
+                hasModifiers: false
             )
         )
-        XCTAssertNil(
-            AppFeatureTabKeyRouter.action(
+        XCTAssertFalse(
+            AppFeatureTabKeyRouter.matches(
+                charactersIgnoringModifiers: "\t",
+                hasModifiers: true
+            )
+        )
+        XCTAssertFalse(
+            AppFeatureTabKeyRouter.matches(
                 charactersIgnoringModifiers: "r",
-                hasShift: false,
-                hasDisqualifyingModifiers: false
+                hasModifiers: false
             )
         )
     }

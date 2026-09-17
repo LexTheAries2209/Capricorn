@@ -98,15 +98,11 @@ struct ContentView: View {
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
         .background {
             FeatureTabKeyMonitor(
-                isEnabled: preferences.usesPlainTabForFeatureSwitching,
                 onOpenSettings: {
                     openSettings()
                 },
                 onNext: {
                     viewModel.selectNextFeatureTab()
-                },
-                onPrevious: {
-                    viewModel.selectPreviousFeatureTab()
                 }
             )
             .frame(width: 0, height: 0)

@@ -50,7 +50,6 @@ final class AppPreferences {
         // Earlier builds allowed an external smartctl override. Keep the key
         // only long enough to clear it when the bundled-only policy is loaded.
         static let legacySmartctlPath = "smartctlPath"
-        static let usesPlainTabForFeatureSwitching = "usesPlainTabForFeatureSwitching"
         static let allowSystemDiskSelfTests = "allowSystemDiskSelfTests"
         static let showsSmartSelfTestInterface = "showsSmartSelfTestInterface"
         static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
@@ -71,10 +70,6 @@ final class AppPreferences {
 
     var showVirtualDisks: Bool {
         didSet { defaults.set(showVirtualDisks, forKey: Key.showVirtualDisks) }
-    }
-
-    var usesPlainTabForFeatureSwitching: Bool {
-        didSet { defaults.set(usesPlainTabForFeatureSwitching, forKey: Key.usesPlainTabForFeatureSwitching) }
     }
 
     var allowSystemDiskSelfTests: Bool {
@@ -118,7 +113,6 @@ final class AppPreferences {
         languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
         showVirtualDisks = defaults.bool(forKey: Key.showVirtualDisks)
         defaults.removeObject(forKey: Key.legacySmartctlPath)
-        usesPlainTabForFeatureSwitching = defaults.object(forKey: Key.usesPlainTabForFeatureSwitching) as? Bool ?? true
         allowSystemDiskSelfTests = defaults.bool(forKey: Key.allowSystemDiskSelfTests)
         showsSmartSelfTestInterface = defaults.bool(forKey: Key.showsSmartSelfTestInterface)
         avoidWakingSleepingDisks = defaults.object(forKey: Key.avoidWakingSleepingDisks) as? Bool ?? true
@@ -162,14 +156,6 @@ struct CapricornSettingsView: View {
         preferences.language
     }
 
-    private var nextFeatureShortcutDisplay: String {
-        preferences.usesPlainTabForFeatureSwitching ? "⌃⇥ / ⇥" : "⌃⇥"
-    }
-
-    private var previousFeatureShortcutDisplay: String {
-        preferences.usesPlainTabForFeatureSwitching ? "⌃⇧⇥ / ⇧⇥" : "⌃⇧⇥"
-    }
-
     var body: some View {
         ScrollViewReader { proxy in
             Form {
@@ -183,10 +169,6 @@ struct CapricornSettingsView: View {
                 }
 
                 Toggle(language.t("Show virtual disks"), isOn: $preferences.showVirtualDisks)
-                Toggle(language.t("Use Tab to switch feature pages"), isOn: $preferences.usesPlainTabForFeatureSwitching)
-                Text(language.t("Control-Tab and Control-Shift-Tab always switch feature pages. Disable plain Tab switching to restore standard keyboard focus traversal."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 Toggle(language.t("Redact serial numbers"), isOn: $preferences.redactSerialNumbers)
                 Text(language.t("When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value."))
                     .font(.caption)
@@ -197,8 +179,7 @@ struct CapricornSettingsView: View {
                 shortcutRow(language.t("Open Settings"), keys: "` / ~ / · / ～")
                 shortcutRow(language.t("Refresh disks and SMART data"), keys: "⌘R")
                 shortcutRow(language.t("Save SMART Snapshot CSV"), keys: "⌘S")
-                shortcutRow(language.t("Next feature page"), keys: nextFeatureShortcutDisplay)
-                shortcutRow(language.t("Previous feature page"), keys: previousFeatureShortcutDisplay)
+                shortcutRow(language.t("Switch feature pages in order"), keys: "Tab")
             }
 
             Section(language.t("Disk Actions")) {

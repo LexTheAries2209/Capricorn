@@ -898,10 +898,7 @@ enum AppCommandShortcut {
     static let refreshDisksKeyEquivalent = KeyEquivalent("r")
     static let saveSmartSnapshot = (key: "s", modifiers: EventModifiers.command)
     static let saveSmartSnapshotKeyEquivalent = KeyEquivalent("s")
-    static let nextFeatureTab = (key: "tab", modifiers: EventModifiers.control)
-    static let previousFeatureTab = (key: "tab", modifiers: EventModifiers.control.union(.shift))
     static let featureTabCharacter: Character = "\t"
-    static let featureTabKeyEquivalent = KeyEquivalent(featureTabCharacter)
 }
 
 enum AppSettingsKeyRouter {
@@ -919,24 +916,17 @@ enum AppSettingsKeyRouter {
     }
 }
 
-enum AppFeatureTabKeyAction: Equatable {
-    case next
-    case previous
-}
-
 enum AppFeatureTabKeyRouter {
     static let tabKeyCode: UInt16 = 48
 
-    static func action(
+    static func matches(
         keyCode: UInt16? = nil,
         charactersIgnoringModifiers: String?,
-        hasShift: Bool,
-        hasDisqualifyingModifiers: Bool
-    ) -> AppFeatureTabKeyAction? {
+        hasModifiers: Bool
+    ) -> Bool {
         let isTabKey = charactersIgnoringModifiers == String(AppCommandShortcut.featureTabCharacter)
             || keyCode == tabKeyCode
-        guard isTabKey, !hasDisqualifyingModifiers else { return nil }
-        return hasShift ? .previous : .next
+        return isTabKey && !hasModifiers
     }
 }
 

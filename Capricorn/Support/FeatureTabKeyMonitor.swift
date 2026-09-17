@@ -3,17 +3,13 @@ import AppKit
 import SwiftUI
 
 struct FeatureTabKeyMonitor: NSViewRepresentable {
-    var isEnabled: Bool
     var onOpenSettings: () -> Void
     var onNext: () -> Void
-    var onPrevious: () -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
-            isEnabled: isEnabled,
             onOpenSettings: onOpenSettings,
-            onNext: onNext,
-            onPrevious: onPrevious
+            onNext: onNext
         )
     }
 
@@ -25,9 +21,7 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
 
     func updateNSView(_ nsView: FeatureTabKeyMonitorView, context: Context) {
         context.coordinator.onNext = onNext
-        context.coordinator.onPrevious = onPrevious
         context.coordinator.onOpenSettings = onOpenSettings
-        context.coordinator.isEnabled = isEnabled
         context.coordinator.window = nsView.window
     }
 
@@ -36,23 +30,17 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
     }
 
     final class Coordinator {
-        var isEnabled: Bool
         var onOpenSettings: () -> Void
         var onNext: () -> Void
-        var onPrevious: () -> Void
         weak var window: NSWindow?
         private var monitor: Any?
 
         init(
-            isEnabled: Bool,
             onOpenSettings: @escaping () -> Void,
-            onNext: @escaping () -> Void,
-            onPrevious: @escaping () -> Void
+            onNext: @escaping () -> Void
         ) {
-            self.isEnabled = isEnabled
             self.onOpenSettings = onOpenSettings
             self.onNext = onNext
-            self.onPrevious = onPrevious
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 self?.handle(event) ?? event
             }
@@ -70,7 +58,7 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
         }
 
         private func handle(_ event: NSEvent) -> NSEvent? {
-            guard isEnabled, let window, event.window === window else { return event }
+            guard let window, event.window === window else { return event }
             let relevantModifiers = event.modifierFlags.intersection([.shift, .control, .option, .command])
             let hasDisqualifyingModifiers = relevantModifiers.contains(.control)
                 || relevantModifiers.contains(.option)
@@ -85,21 +73,14 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
                 return nil
             }
 
-            guard let action = AppFeatureTabKeyRouter.action(
+            guard AppFeatureTabKeyRouter.matches(
                 keyCode: event.keyCode,
                 charactersIgnoringModifiers: event.charactersIgnoringModifiers,
-                hasShift: relevantModifiers.contains(.shift),
-                hasDisqualifyingModifiers: hasDisqualifyingModifiers
+                hasModifiers: !relevantModifiers.isEmpty
             ) else {
                 return event
             }
-
-            switch action {
-            case .next:
-                onNext()
-            case .previous:
-                onPrevious()
-            }
+            onNext()
             return nil
         }
     }
