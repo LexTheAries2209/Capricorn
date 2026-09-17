@@ -162,6 +162,14 @@ struct CapricornSettingsView: View {
         preferences.language
     }
 
+    private var nextFeatureShortcutDisplay: String {
+        preferences.usesPlainTabForFeatureSwitching ? "⌃⇥ / ⇥" : "⌃⇥"
+    }
+
+    private var previousFeatureShortcutDisplay: String {
+        preferences.usesPlainTabForFeatureSwitching ? "⌃⇧⇥ / ⇧⇥" : "⌃⇧⇥"
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             Form {
@@ -183,6 +191,14 @@ struct CapricornSettingsView: View {
                 Text(language.t("When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section(language.t("Keyboard Shortcuts")) {
+                shortcutRow(language.t("Open Settings"), keys: "` / ~ / · / ～")
+                shortcutRow(language.t("Refresh disks and SMART data"), keys: "⌘R")
+                shortcutRow(language.t("Save SMART Snapshot CSV"), keys: "⌘S")
+                shortcutRow(language.t("Next feature page"), keys: nextFeatureShortcutDisplay)
+                shortcutRow(language.t("Previous feature page"), keys: previousFeatureShortcutDisplay)
             }
 
             Section(language.t("Disk Actions")) {
@@ -451,6 +467,14 @@ struct CapricornSettingsView: View {
         case .loaded: .green
         case .installedNotLoaded: .orange
         case .notInstalled, .inconclusive: .secondary
+        }
+    }
+
+    private func shortcutRow(_ title: String, keys: String) -> some View {
+        LabeledContent(title) {
+            Text(keys)
+                .monospaced()
+                .foregroundStyle(.secondary)
         }
     }
 
