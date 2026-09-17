@@ -175,13 +175,6 @@ struct CapricornSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(language.t("Keyboard Shortcuts")) {
-                shortcutRow(language.t("Open Settings"), keys: "` / ~ / · / ～")
-                shortcutRow(language.t("Refresh disks and SMART data"), keys: "⌘R")
-                shortcutRow(language.t("Save SMART Snapshot CSV"), keys: "⌘S")
-                shortcutRow(language.t("Switch feature pages in order"), keys: "Tab")
-            }
-
             Section(language.t("Disk Actions")) {
                 Toggle(language.t("Show Check and Repair in Disk Actions"), isOn: $preferences.showsCheckAndRepairActions)
                 Text(language.t("When disabled, Check and Repair is hidden from the disk action menu."))
@@ -302,6 +295,13 @@ struct CapricornSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
+            }
+
+            Section(language.t("Keyboard Shortcuts")) {
+                shortcutRow(language.t("Open Settings"), keys: "` / ~ / · / ～")
+                shortcutRow(language.t("Refresh disks and SMART data"), keys: "⌘R")
+                shortcutRow(language.t("Save SMART Snapshot CSV"), keys: "⌘S")
+                shortcutRow(language.t("Switch feature pages in order"), keys: "Tab")
             }
 
             Section(language.t("History Database")) {
