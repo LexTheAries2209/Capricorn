@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.7.0`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.7.1`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v2.7.0.md](docs/releases/v2.7.0.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v2.7.1.md](docs/releases/v2.7.1.md)
 
 ---
 
@@ -20,11 +20,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.7.0-macOS.zip`。
-2. 解压后把 `Capricorn V2.7.0.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.7.1-macOS.zip`。
+2. 解压后把 `Capricorn V2.7.1.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V2.7.0 的中文发布说明见 [docs/releases/v2.7.0.zh-CN.md](docs/releases/v2.7.0.zh-CN.md)。
+V2.7.1 的中文发布说明见 [docs/releases/v2.7.1.zh-CN.md](docs/releases/v2.7.1.zh-CN.md)。
 
 典型用途：
 
@@ -59,6 +59,7 @@ V2.7.0 的中文发布说明见 [docs/releases/v2.7.0.zh-CN.md](docs/releases/v2
 - NVMe 累计读取量和写入量会把 macOS 原生与 `smartctl` 的 Data Units 转换为 TB，并保留原始 units 计数。
 - macOS 原生 SMART 优先，内置 `smartctl` 获取更完整的 ATA/NVMe 数据；不会搜索或使用外部工具。
 - 对 SD/SDXC 读卡器和网络卷显示有限支持说明，避免把无 SMART 数据误判为硬盘故障。
+- 对符合条件但暂时没有 SMART 数据的 USB-SATA 设备始终显示 SAT SMART Drive 引导；驱动文件已安装并加载时直接显示绿色状态，不要求当前连接的外置设备触发匹配。
 - 支持默认、峰值/NVMe、真实场景、演示和自定义测速配置。
 - 自定义测速最多 4 个测试项目组，可选择 SEQ/RND、块大小、Q、T 和混合测试。
 - 每个测速配置可以选择同步或异步引擎；自定义配置可选择循环。
@@ -86,7 +87,7 @@ V2.7.0 的中文发布说明见 [docs/releases/v2.7.0.zh-CN.md](docs/releases/v2
 - 急救会阻断 SMART 故障、系统盘、内置盘、网络卷、虚拟盘、只读卷、锁定卷和 NTFS；NTFS 仅提供 Windows CHKDSK 指引。
 - Shell 命令取消时会终止对应子进程，并区分启动失败、非零退出和主动取消。
 - 设置页支持虚拟磁盘显示、序列号脱敏、普通 Tab 切页、内置 `smartctl` 版本与源项目入口、历史数据库位置打开、自动刷新、检查与修复菜单和 SMART 自检界面，并完整支持简体中文。序列号脱敏默认关闭；开启后只保留前四位，其余显示为 `*`，内部身份匹配仍使用完整值。
-- 应用菜单只保留系统 `Settings…` 设置入口；另支持 `Command-R` 刷新、`Control-Tab` / `Control-Shift-Tab` 切换功能页，普通 `Tab` 切页可在设置中关闭。
+- 应用菜单只保留系统 `Settings…` 设置入口，并显示反引号/波浪号键快捷键；物理按键在不同输入法下均可打开设置。另支持 `Command-R` 刷新、`Control-Tab` / `Control-Shift-Tab` 切换功能页，普通 `Tab` 切页可在设置中关闭。
 - 应用启动时静默检查 GitHub 最新稳定版；设置页和应用菜单提供手动检查、重试、打开 Releases 和查看发布说明入口，不会主动弹出更新提醒。
 - 界面支持较小窗口和自适应控制栏、指标卡布局，宽表格保留水平滚动。
 - SwiftData 历史记录使用版本化 Schema、独立 `CapricornHistory` 存储目录和统一 Repository，保存失败会显示明确错误。
@@ -146,7 +147,7 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 
 - `Version = 2.6`
 - `Build = 3`
-- `Display Name = Capricorn V2.7.0`
+- `Display Name = Capricorn V2.6.3`
 
 ### 当前限制
 
@@ -166,11 +167,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v2.7.0-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V2.7.0.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v2.7.1-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V2.7.1.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V2.7.0 are available at [docs/releases/v2.7.0.en.md](docs/releases/v2.7.0.en.md).
+English release notes for V2.7.1 are available at [docs/releases/v2.7.1.en.md](docs/releases/v2.7.1.en.md).
 
 Common use cases:
 
@@ -205,6 +206,7 @@ Common use cases:
 - Converts native macOS and `smartctl` NVMe Data Units Read/Written values to TB while retaining the raw unit count.
 - Uses native macOS SMART first, with bundled `smartctl` for deeper ATA/NVMe data; no external tool is selected or searched.
 - Displays limited-support messages for SD/SDXC readers and network volumes instead of treating missing SMART as a drive failure.
+- Always shows SAT SMART Drive guidance for eligible USB-SATA devices with unavailable SMART data. An installed and loaded driver is shown in green without requiring a currently attached external device to trigger a match.
 - Includes Default, Peak/NVMe, RealWorld, Demo, and Custom benchmark profiles.
 - Custom benchmarks support up to 4 test groups with SEQ/RND, block size, Q, T, and mixed-test choices.
 - Each profile can use a synchronous or asynchronous engine; Custom can also run in loop mode.
@@ -233,7 +235,7 @@ Common use cases:
 - Blocks First Aid for failing SMART health, system/internal disks, network or virtual volumes, read-only/locked volumes, and NTFS; NTFS shows Windows CHKDSK guidance only.
 - Cancelling a shell command terminates its child process and distinguishes launch failures, non-zero exits, and user cancellation.
 - Settings cover virtual-drive visibility, serial-number redaction, plain-Tab navigation, the bundled `smartctl` version and smartmontools project link, history-database reveal, automatic refresh, the Check and Repair menu, and the SMART self-test interface, with complete Simplified Chinese content. Redaction is off by default; when enabled, only the first four characters remain visible while internal identity matching still uses the complete serial.
-- The application menu keeps only the system `Settings…` command. Capricorn also supports `Command-R` to refresh and `Control-Tab` / `Control-Shift-Tab` to switch feature pages; plain-Tab switching can be disabled.
+- The application menu keeps only the system `Settings…` command and shows the grave/tilde key shortcut. The physical key opens Settings across input sources. Capricorn also supports `Command-R` to refresh and `Control-Tab` / `Control-Shift-Tab` to switch feature pages; plain-Tab switching can be disabled.
 - Responsive controls and metric grids support smaller windows while wide tables keep horizontal scrolling.
 - SwiftData history uses a versioned schema, a dedicated `CapricornHistory` storage directory, and a repository boundary with explicit save errors.
 - Provides Simplified Chinese and English UI text.
@@ -292,7 +294,7 @@ Example:
 
 - `Version = 2.6`
 - `Build = 3`
-- `Display Name = Capricorn V2.7.0`
+- `Display Name = Capricorn V2.6.3`
 
 ### Current Limitations
 
