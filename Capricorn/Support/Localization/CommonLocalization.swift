@@ -300,7 +300,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "records removed.": "条记录已删除。",
         "Unable to clear the history database.": "无法清理历史数据库。",
         "Do not wake sleeping disks for SMART refresh": "SMART 刷新时不唤醒休眠硬盘",
-        "When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up. Active disks continue to refresh normally.": "当 ATA 或 SCSI 硬盘处于待机或睡眠状态时，Capricorn 会保留上一次 SMART 数据，而不会让硬盘启动旋转。活动硬盘仍会正常刷新。",
+        "When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up.": "当 ATA 或 SCSI 硬盘处于待机或睡眠状态时，Capricorn 会保留上一次 SMART 数据，而不会让硬盘启动旋转。",
         "Automatic detection": "自动检测",
         "Choose…": "选择…",
         "Automatic": "自动",

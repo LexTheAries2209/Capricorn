@@ -923,6 +923,7 @@ final class CapricornTests: XCTestCase {
             "When disabled, self-test status, records, and controls are hidden in Overview and SMART.": "关闭后，概览和 SMART 界面不会显示自检状态、记录或测试控制。",
             "SMART Refresh": "SMART 刷新",
             "Do not wake sleeping disks for SMART refresh": "SMART 刷新时不唤醒休眠硬盘",
+            "When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up.": "当 ATA 或 SCSI 硬盘处于待机或睡眠状态时，Capricorn 会保留上一次 SMART 数据，而不会让硬盘启动旋转。",
             "Automatic detection": "自动检测",
             "Choose…": "选择…",
             "Automatic": "自动",

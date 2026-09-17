@@ -232,12 +232,10 @@ struct CapricornSettingsView: View {
                     .foregroundStyle(.secondary)
 
                 Toggle(language.t("Do not wake sleeping disks for SMART refresh"), isOn: $preferences.avoidWakingSleepingDisks)
-                Text(language.t("When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up. Active disks continue to refresh normally."))
+                Text(language.t("When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
 
-            Section(language.t("SMART Diagnostics")) {
                 Toggle(language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
                 Text(language.t("When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART."))
                     .font(.caption)
@@ -246,59 +244,6 @@ struct CapricornSettingsView: View {
                 if preferences.showsSmartSelfTestInterface {
                     Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)
                     Text(language.t("System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section(language.t("History Database")) {
-                LabeledContent(language.t("Location")) {
-                    Text(historyDatabaseDirectoryURL?.path ?? language.t("Unavailable"))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                }
-
-                LabeledContent(language.t("Database Usage")) {
-                    Text("\(historyDatabaseSizeText) · \(historyRecordCount) \(language.t("Records"))")
-                        .monospacedDigit()
-                }
-
-                HStack {
-                    Button {
-                        openHistoryDatabaseLocation()
-                    } label: {
-                        Label(language.t("Open History Database Location"), systemImage: "folder")
-                    }
-                    .disabled(historyDatabaseDirectoryURL == nil)
-
-                    Spacer(minLength: 12)
-
-                    Button(role: .destructive) {
-                        historyDatabaseClearResult = nil
-                        historyDatabaseClearError = nil
-                        pendingHistoryDatabaseStatistics = currentHistoryDatabaseStatistics
-                        isConfirmingHistoryDatabaseClear = true
-                    } label: {
-                        Label(language.t("Clear History Database"), systemImage: "trash")
-                    }
-                    .foregroundStyle(.red)
-                }
-
-                if let historyDatabaseLocationError {
-                    Label(historyDatabaseLocationError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-
-                if let historyDatabaseClearError {
-                    Label(historyDatabaseClearError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-
-                if let historyDatabaseClearResult {
-                    Label(historyDatabaseClearResult, systemImage: "checkmark.circle.fill")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -375,6 +320,59 @@ struct CapricornSettingsView: View {
                     Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(.orange)
+                }
+            }
+
+            Section(language.t("History Database")) {
+                LabeledContent(language.t("Location")) {
+                    Text(historyDatabaseDirectoryURL?.path ?? language.t("Unavailable"))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+
+                LabeledContent(language.t("Database Usage")) {
+                    Text("\(historyDatabaseSizeText) · \(historyRecordCount) \(language.t("Records"))")
+                        .monospacedDigit()
+                }
+
+                HStack {
+                    Button {
+                        openHistoryDatabaseLocation()
+                    } label: {
+                        Label(language.t("Open History Database Location"), systemImage: "folder")
+                    }
+                    .disabled(historyDatabaseDirectoryURL == nil)
+
+                    Spacer(minLength: 12)
+
+                    Button(role: .destructive) {
+                        historyDatabaseClearResult = nil
+                        historyDatabaseClearError = nil
+                        pendingHistoryDatabaseStatistics = currentHistoryDatabaseStatistics
+                        isConfirmingHistoryDatabaseClear = true
+                    } label: {
+                        Label(language.t("Clear History Database"), systemImage: "trash")
+                    }
+                    .foregroundStyle(.red)
+                }
+
+                if let historyDatabaseLocationError {
+                    Label(historyDatabaseLocationError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                if let historyDatabaseClearError {
+                    Label(historyDatabaseClearError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                if let historyDatabaseClearResult {
+                    Label(historyDatabaseClearResult, systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
