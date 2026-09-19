@@ -180,7 +180,7 @@ extension SATSMARTDriverGuidance {
         case .activationRequired:
             "SAT SMART Drive Needs Attention"
         case .samsungT5DriverConflict:
-            "Driver Conflict May Block SMART"
+            "Driver Conflict"
         case .usbNVMeSMARTUnavailable:
             "USB-NVMe SMART May Be Unavailable"
         }
