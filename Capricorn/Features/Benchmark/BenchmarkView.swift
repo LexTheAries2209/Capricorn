@@ -380,22 +380,20 @@ struct BenchmarkView: View {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .bottom, spacing: 10) {
                     benchmarkPickerControls
-                    Spacer(minLength: 12)
-                    benchmarkActionControls
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    ScrollView(.horizontal) {
-                        HStack(alignment: .bottom, spacing: 10) {
-                            benchmarkPickerControls
-                        }
-                    }
-                    .scrollIndicators(.visible)
-
-                    HStack(spacing: 10) {
-                        benchmarkActionControls
+                ScrollView(.horizontal) {
+                    HStack(alignment: .bottom, spacing: 10) {
+                        benchmarkPickerControls
                     }
                 }
+                .scrollIndicators(.visible)
+            }
+
+            // Keep benchmark actions on a dedicated second row, even when the
+            // window is wide enough for the configuration controls to fit.
+            HStack(spacing: 10) {
+                benchmarkActionControls
             }
 
             smallBlockEfficiencyControls
