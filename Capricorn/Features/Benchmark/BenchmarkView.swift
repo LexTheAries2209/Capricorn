@@ -1188,7 +1188,7 @@ struct DiskActivityChartView: View {
             switch self {
             case .compact: 92
             case .expanded: 220
-            case .mini: 58
+            case .mini: 72
             }
         }
 
@@ -1222,6 +1222,7 @@ struct DiskActivityChartView: View {
     let samples: [DiskActivitySample]
     let current: DiskActivitySample?
     let style: Style
+    var showsHeader = true
     @Environment(\.appLanguage) private var language
 
     private var readSpeed: Double {
@@ -1230,6 +1231,14 @@ struct DiskActivityChartView: View {
 
     private var writeSpeed: Double {
         current?.writeMegabytesPerSecond ?? 0
+    }
+
+    private var accessibilityReadSpeed: Double {
+        showsHeader ? readSpeed : samples.map(\.readMegabytesPerSecond).max() ?? 0
+    }
+
+    private var accessibilityWriteSpeed: Double {
+        showsHeader ? writeSpeed : samples.map(\.writeMegabytesPerSecond).max() ?? 0
     }
 
     private var chartData: ChartData {
@@ -1246,16 +1255,18 @@ struct DiskActivityChartView: View {
     var body: some View {
         let preparedChartData = chartData
         VStack(alignment: .leading, spacing: 6) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    chartTitle
-                    Spacer(minLength: 8)
-                    chartLegend
-                }
+            if showsHeader {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        chartTitle
+                        Spacer(minLength: 8)
+                        chartLegend
+                    }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    chartTitle
-                    chartLegend
+                    VStack(alignment: .leading, spacing: 4) {
+                        chartTitle
+                        chartLegend
+                    }
                 }
             }
 
@@ -1280,8 +1291,9 @@ struct DiskActivityChartView: View {
                     xAxisLabels(preparedChartData.xTicks)
                 }
             }
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(title))
-            .accessibilityValue(Text("\(language.operationTitle(.read)) \(DiskActivityFormatter.speed(readSpeed)), \(language.operationTitle(.write)) \(DiskActivityFormatter.speed(writeSpeed))"))
+            .accessibilityValue(Text("\(language.operationTitle(.read)) \(DiskActivityFormatter.speed(accessibilityReadSpeed)), \(language.operationTitle(.write)) \(DiskActivityFormatter.speed(accessibilityWriteSpeed))"))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -53,6 +53,14 @@ struct HistoryReportView: View {
         HistoryVisibility.hidden(benchmarkHistory)
     }
 
+    private var visibleBenchmarkChartOwnerIDs: Set<UUID> {
+        BenchmarkHistoryChartPolicy.activityOwnerIDs(in: visibleBenchmarkHistory)
+    }
+
+    private var hiddenBenchmarkChartOwnerIDs: Set<UUID> {
+        BenchmarkHistoryChartPolicy.activityOwnerIDs(in: hiddenBenchmarkHistory)
+    }
+
     private var visibleActivityHistory: [DiskActivityHistoryRecord] {
         HistoryVisibility.visible(activityHistory)
     }
@@ -294,7 +302,11 @@ struct HistoryReportView: View {
             action: { hideAllHistory(visibleBenchmarkHistory) }
         ) {
             historyRows(visibleBenchmarkHistory) { item in
-                benchmarkHistoryRow(item, isHidden: false)
+                benchmarkHistoryRow(
+                    item,
+                    isHidden: false,
+                    showsActivityChart: visibleBenchmarkChartOwnerIDs.contains(item.id)
+                )
             }
         }
     }
@@ -438,7 +450,11 @@ struct HistoryReportView: View {
                     Text(language.t("Benchmark Runs"))
                         .font(.subheadline.bold())
                     ForEach(hiddenBenchmarkHistory) { item in
-                        benchmarkHistoryRow(item, isHidden: true)
+                        benchmarkHistoryRow(
+                            item,
+                            isHidden: true,
+                            showsActivityChart: hiddenBenchmarkChartOwnerIDs.contains(item.id)
+                        )
                         Divider()
                     }
                 }
@@ -515,7 +531,11 @@ struct HistoryReportView: View {
         }
     }
 
-    private func benchmarkHistoryRow(_ item: BenchmarkHistoryRecord, isHidden: Bool) -> some View {
+    private func benchmarkHistoryRow(
+        _ item: BenchmarkHistoryRecord,
+        isHidden: Bool,
+        showsActivityChart: Bool
+    ) -> some View {
         let activitySamples = item.activitySamples
         let visibilityAction = {
             if isHidden {
@@ -524,13 +544,13 @@ struct HistoryReportView: View {
                 hideHistory(item)
             }
         }
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 10) {
             ViewThatFits(in: .horizontal) {
-                HStack {
+                HStack(alignment: .center, spacing: 10) {
                     benchmarkHistoryIdentity(item)
-                        .fixedSize(horizontal: true, vertical: false)
                     Spacer(minLength: 8)
                     Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
+                        .font(.subheadline.weight(.semibold))
                         .monospacedDigit()
                         .fixedSize(horizontal: true, vertical: false)
                     historyVisibilityButton(isHidden: isHidden, action: visibilityAction)
@@ -540,6 +560,7 @@ struct HistoryReportView: View {
                     benchmarkHistoryIdentity(item)
                     HStack {
                         Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
+                            .font(.subheadline.weight(.semibold))
                             .monospacedDigit()
                         Spacer(minLength: 8)
                         historyVisibilityButton(isHidden: isHidden, action: visibilityAction)
@@ -547,22 +568,27 @@ struct HistoryReportView: View {
                 }
             }
 
-            if !activitySamples.isEmpty {
+            if showsActivityChart, !activitySamples.isEmpty {
                 DiskActivityChartView(
-                    title: language.t("Saved Benchmark Activity"),
+                    title: language.t("Benchmark Runs"),
                     samples: activitySamples,
                     current: activitySamples.last,
-                    style: .mini
+                    style: .mini,
+                    showsHeader: false
                 )
+                .padding(.top, 2)
             }
         }
     }
 
     private func benchmarkHistoryIdentity(_ item: BenchmarkHistoryRecord) -> some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 3) {
             Text("\(item.testLabel) \(language.operationTitle(item.operation))")
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Text(item.measuredAt.formatted(date: .abbreviated, time: .standard))
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
         }
     }
@@ -720,5 +746,20 @@ struct HistoryReportView: View {
 enum HistorySelfTestVisibilityPolicy {
     static func showsReports(for snapshot: SmartSnapshot?) -> Bool {
         snapshot?.attributes.isEmpty == false
+    }
+}
+
+enum BenchmarkHistoryChartPolicy {
+    static func activityOwnerIDs(in records: [BenchmarkHistoryRecord]) -> Set<UUID> {
+        var uniqueSamples: [[DiskActivitySample]] = []
+        var ownerIDs: Set<UUID> = []
+
+        for record in records {
+            let samples = record.activitySamples
+            guard !samples.isEmpty, !uniqueSamples.contains(samples) else { continue }
+            uniqueSamples.append(samples)
+            ownerIDs.insert(record.id)
+        }
+        return ownerIDs
     }
 }
