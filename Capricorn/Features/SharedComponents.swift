@@ -125,13 +125,15 @@ struct SATSMARTDriverGuidanceView: View {
                 }
             }
 
-            Spacer(minLength: 12)
+            if guidance.showsSATSettingsAction {
+                Spacer(minLength: 12)
 
-            Button(action: openSettings) {
-                Label(language.t("Open SAT SMART Drive Settings"), systemImage: "gearshape")
+                Button(action: openSettings) {
+                    Label(language.t("Open SAT SMART Drive Settings"), systemImage: "gearshape")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.orange)
         }
     }
 }
@@ -157,11 +159,13 @@ struct SATSMARTDriverGuidanceUnavailableView: View {
             }
             .multilineTextAlignment(.center)
         } actions: {
-            Button(action: openSettings) {
-                Label(language.t("Open SAT SMART Drive Settings"), systemImage: "gearshape")
+            if guidance.showsSATSettingsAction {
+                Button(action: openSettings) {
+                    Label(language.t("Open SAT SMART Drive Settings"), systemImage: "gearshape")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.orange)
         }
     }
 }
@@ -173,6 +177,10 @@ extension SATSMARTDriverGuidance {
             "SAT SMART Drive May Be Required"
         case .activationRequired:
             "SAT SMART Drive Needs Attention"
+        case .samsungT5DriverConflict:
+            "Samsung T5 Driver Conflict May Block SMART"
+        case .usbNVMeSMARTUnavailable:
+            "USB-NVMe SMART May Be Unavailable"
         }
     }
 
@@ -182,6 +190,10 @@ extension SATSMARTDriverGuidance {
             "This USB storage device did not return SMART data. Installing SAT SMART Drive may provide more health information; support depends on the drive and enclosure."
         case .activationRequired:
             "SAT SMART Drive files are installed, but the driver is not active. Check macOS approval or restart, then recheck it in Settings."
+        case .samsungT5DriverConflict:
+            "SAT SMART Drive is installed, but this Samsung Portable SSD T5 still did not return SMART data. Samsung's driver may conflict with SAT SMART Drive; removing the Samsung driver may restore SMART access."
+        case .usbNVMeSMARTUnavailable:
+            "SAT SMART Drive is installed, but this USB-NVMe drive still did not return SMART data. SAT SMART Drive targets SATA bridges; some USB-NVMe bridges cannot expose SMART data on macOS."
         }
     }
 
@@ -200,6 +212,29 @@ extension SATSMARTDriverGuidance {
                 "Check macOS approval or restart",
                 "Then recheck it in Settings"
             ]
+        case .samsungT5DriverConflict:
+            [
+                "SAT SMART Drive is installed",
+                "This Samsung Portable SSD T5 still did not return SMART data",
+                "Samsung's driver may conflict with SAT SMART Drive",
+                "Removing the Samsung driver may restore SMART access"
+            ]
+        case .usbNVMeSMARTUnavailable:
+            [
+                "SAT SMART Drive is installed",
+                "This USB-NVMe drive still did not return SMART data",
+                "SAT SMART Drive targets SATA bridges",
+                "Some USB-NVMe bridges cannot expose SMART data on macOS"
+            ]
+        }
+    }
+
+    var showsSATSettingsAction: Bool {
+        switch self {
+        case .installationSuggested, .activationRequired:
+            true
+        case .samsungT5DriverConflict, .usbNVMeSMARTUnavailable:
+            false
         }
     }
 }

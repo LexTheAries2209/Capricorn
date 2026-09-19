@@ -22,6 +22,8 @@ struct SATSMARTDriverStatus: Equatable, Sendable {
 enum SATSMARTDriverGuidance: Equatable, Sendable {
     case installationSuggested
     case activationRequired
+    case samsungT5DriverConflict
+    case usbNVMeSMARTUnavailable
 }
 
 enum SATSMARTDriverGuidancePolicy {
@@ -37,8 +39,21 @@ enum SATSMARTDriverGuidancePolicy {
               !drive.isNetwork,
               !drive.isVirtual,
               !drive.isMemoryCard,
-              drive.protocolName.localizedCaseInsensitiveContains("USB"),
-              !identifiesNVMe(drive: drive, diagnostics: snapshot.smartctlDiagnostics) else {
+              drive.protocolName.localizedCaseInsensitiveContains("USB") else {
+            return nil
+        }
+
+        let isSATInstalled = driverStatus.state == .installedNotLoaded || driverStatus.state == .loaded
+        if isSATInstalled {
+            if identifiesSamsungPortableSSDT5(drive) {
+                return .samsungT5DriverConflict
+            }
+            if identifiesNVMe(drive: drive, diagnostics: snapshot.smartctlDiagnostics) {
+                return .usbNVMeSMARTUnavailable
+            }
+        }
+
+        guard !identifiesNVMe(drive: drive, diagnostics: snapshot.smartctlDiagnostics) else {
             return nil
         }
 
@@ -49,6 +64,24 @@ enum SATSMARTDriverGuidancePolicy {
             return .activationRequired
         case .loaded:
             return nil
+        }
+    }
+
+    private static func identifiesSamsungPortableSSDT5(_ drive: DriveDevice) -> Bool {
+        if drive.catalogMatch?.recordID == "samsung-portable-t5" {
+            return true
+        }
+
+        let values = [
+            drive.displayName,
+            drive.mediaName,
+            drive.model,
+            drive.usbDevice?.productName
+        ]
+            .compactMap { $0?.uppercased() }
+
+        return values.contains { value in
+            value.contains("PORTABLE SSD T5") && !value.contains("PORTABLE SSD T5 EVO")
         }
     }
 
