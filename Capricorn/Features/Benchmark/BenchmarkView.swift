@@ -25,6 +25,15 @@ private enum BenchmarkAlert: Identifiable {
     }
 }
 
+// Match the popup columns to their rendered macOS control widths so the
+// visible gaps align with the segmented controls that fill their frames.
+private enum BenchmarkControlLayout {
+    static let spacing: CGFloat = 10
+    static let profileWidth: CGFloat = 122
+    static let runCountWidth: CGFloat = 56
+    static let fileSizeWidth: CGFloat = 90
+}
+
 struct BenchmarkView: View {
     let drive: DriveDevice
     var viewModel: AppModel
@@ -388,12 +397,12 @@ struct BenchmarkView: View {
     private var benchmarkControls: some View {
         VStack(alignment: .leading, spacing: 10) {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .bottom, spacing: 10) {
+                HStack(alignment: .bottom, spacing: BenchmarkControlLayout.spacing) {
                     benchmarkPickerControls
                 }
 
                 ScrollView(.horizontal) {
-                    HStack(alignment: .bottom, spacing: 10) {
+                    HStack(alignment: .bottom, spacing: BenchmarkControlLayout.spacing) {
                         benchmarkPickerControls
                     }
                 }
@@ -431,14 +440,14 @@ struct BenchmarkView: View {
             Text(language.t("Profile"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(width: 154, alignment: .leading)
+                .frame(width: BenchmarkControlLayout.profileWidth, alignment: .leading)
             Picker("", selection: $selectedProfileID) {
                 ForEach(BenchmarkProfile.presets) { profile in
                     Text(language.profileName(profile)).tag(profile.id)
                 }
             }
             .labelsHidden()
-            .frame(width: 154, alignment: .leading)
+            .frame(width: BenchmarkControlLayout.profileWidth, alignment: .leading)
             .disabled(viewModel.isBenchmarking)
         }
 
@@ -446,14 +455,14 @@ struct BenchmarkView: View {
             Text(language.t("Runs"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
+                .frame(width: BenchmarkControlLayout.runCountWidth, alignment: .leading)
             Picker("", selection: $selectedRunCount) {
                 ForEach(BenchmarkProfile.runCountOptions, id: \.self) { count in
                     Text("\(count)").tag(count)
                 }
             }
             .labelsHidden()
-            .frame(width: 72, alignment: .leading)
+            .frame(width: BenchmarkControlLayout.runCountWidth, alignment: .leading)
             .disabled(viewModel.isBenchmarking || selectedProfileIsLooping)
         }
 
@@ -461,7 +470,7 @@ struct BenchmarkView: View {
             Text(language.t("Test Size"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(width: 112, alignment: .leading)
+                .frame(width: BenchmarkControlLayout.fileSizeWidth, alignment: .leading)
             Picker("", selection: $selectedFileSizeBytes) {
                 ForEach(BenchmarkProfile.fileSizeOptions, id: \.self) { size in
                     Text(formatBenchmarkFileSize(size))
@@ -470,7 +479,7 @@ struct BenchmarkView: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 112, alignment: .leading)
+            .frame(width: BenchmarkControlLayout.fileSizeWidth, alignment: .leading)
             .disabled(viewModel.isBenchmarking)
         }
 
