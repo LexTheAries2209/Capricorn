@@ -25,13 +25,18 @@ private enum BenchmarkAlert: Identifiable {
     }
 }
 
-// Match the popup columns to their rendered macOS control widths so the
-// visible gaps align with the segmented controls that fill their frames.
+// Match each column to its rendered macOS control width so the visible gaps
+// stay consistent across popup and segmented pickers.
 private enum BenchmarkControlLayout {
-    static let spacing: CGFloat = 10
+    static let horizontalSpacing: CGFloat = 15
+    static let verticalSpacing: CGFloat = 12
     static let profileWidth: CGFloat = 122
     static let runCountWidth: CGFloat = 56
     static let fileSizeWidth: CGFloat = 90
+    static let operationWidth: CGFloat = 180
+    static let engineWidth: CGFloat = 96
+    static let dataPatternWidth: CGFloat = 122
+    static let trimmedAverageWidth: CGFloat = 96
 }
 
 struct BenchmarkView: View {
@@ -395,14 +400,14 @@ struct BenchmarkView: View {
     }
 
     private var benchmarkControls: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: BenchmarkControlLayout.verticalSpacing) {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .bottom, spacing: BenchmarkControlLayout.spacing) {
+                HStack(alignment: .bottom, spacing: BenchmarkControlLayout.horizontalSpacing) {
                     benchmarkPickerControls
                 }
 
                 ScrollView(.horizontal) {
-                    HStack(alignment: .bottom, spacing: BenchmarkControlLayout.spacing) {
+                    HStack(alignment: .bottom, spacing: BenchmarkControlLayout.horizontalSpacing) {
                         benchmarkPickerControls
                     }
                 }
@@ -487,7 +492,7 @@ struct BenchmarkView: View {
             Text(language.t("Read / Write"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(width: 180, alignment: .leading)
+                .frame(width: BenchmarkControlLayout.operationWidth, alignment: .leading)
             Picker("", selection: $selectedOperationSelectionRaw) {
                 Text(language.benchmarkOperationSelectionTitle(.readOnly)).tag(BenchmarkOperationSelection.readOnly.rawValue)
                 Text(language.benchmarkOperationSelectionTitle(.writeOnly)).tag(BenchmarkOperationSelection.writeOnly.rawValue)
@@ -495,7 +500,7 @@ struct BenchmarkView: View {
             }
             .labelsHidden()
             .pickerStyle(.segmented)
-            .frame(width: 180, height: 28, alignment: .leading)
+            .frame(width: BenchmarkControlLayout.operationWidth, height: 28, alignment: .leading)
             .disabled(viewModel.isBenchmarking)
         }
 
@@ -503,14 +508,14 @@ struct BenchmarkView: View {
             Text(language.t("Engine"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(width: 116, alignment: .leading)
+                .frame(width: BenchmarkControlLayout.engineWidth, alignment: .leading)
             Picker("", selection: selectedEngineBinding) {
                 Text(language.t("Sync")).tag(BenchmarkEngine.synchronous)
                 Text(language.t("Async")).tag(BenchmarkEngine.asyncQueue)
             }
             .labelsHidden()
             .pickerStyle(.segmented)
-            .frame(width: 116, height: 28, alignment: .leading)
+            .frame(width: BenchmarkControlLayout.engineWidth, height: 28, alignment: .leading)
             .help(language.t("Async uses POSIX AIO queue depth; Sync uses worker threads with blocking file I/O."))
             .disabled(viewModel.isBenchmarking)
         }
@@ -519,7 +524,7 @@ struct BenchmarkView: View {
             Text(language.t("Data Pattern"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(width: 142, alignment: .leading)
+                .frame(width: BenchmarkControlLayout.dataPatternWidth, alignment: .leading)
             Picker("", selection: $selectedDataPatternRaw) {
                 ForEach(BenchmarkDataPattern.allCases) { pattern in
                     Text(language.benchmarkDataPatternTitle(pattern)).tag(pattern.rawValue)
@@ -527,7 +532,7 @@ struct BenchmarkView: View {
             }
             .labelsHidden()
             .pickerStyle(.segmented)
-            .frame(width: 142, alignment: .leading)
+            .frame(width: BenchmarkControlLayout.dataPatternWidth, alignment: .leading)
             .disabled(viewModel.isBenchmarking)
         }
 
@@ -535,14 +540,14 @@ struct BenchmarkView: View {
             Text(language.t("Trim Outliers"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(width: 116, alignment: .leading)
+                .frame(width: BenchmarkControlLayout.trimmedAverageWidth, alignment: .leading)
             Picker("", selection: $usesTrimmedAverage) {
                 Text(language.t("Off")).tag(false)
                 Text(language.t("On")).tag(true)
             }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 116, height: 28, alignment: .leading)
+                .frame(width: BenchmarkControlLayout.trimmedAverageWidth, height: 28, alignment: .leading)
                 .help(language.t("Run two extra measured passes, discard fastest and slowest, then average the rest."))
                 .disabled(viewModel.isBenchmarking || selectedProfileIsLooping)
         }
