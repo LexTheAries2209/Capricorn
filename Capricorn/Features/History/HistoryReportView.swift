@@ -21,7 +21,8 @@ struct HistoryReportView: View {
     @State private var reportError: String?
     private let historyScrollThreshold = 10
     private let historyRowHeight: CGFloat = 58
-    private let historyPanelMinimumWidth: CGFloat = 380
+    // Keeps the three-panel row until the default sidebar puts the window near 1,200 points wide.
+    private let historyPanelMinimumWidth: CGFloat = 277
 
     private var visibleSmartHistory: [SmartHistoryRecord] {
         HistoryVisibility.visible(smartHistory)
