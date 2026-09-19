@@ -271,7 +271,7 @@ struct HistoryReportView: View {
             title: language.t("SMART Snapshots"),
             symbol: "clock",
             count: visibleSmartHistory.count,
-            emptyText: hiddenSmartHistory.isEmpty ? language.t("No saved snapshots yet.") : language.t("No visible snapshots. Hidden snapshots can be restored below."),
+            emptyText: language.t("No snapshots are currently visible."),
             actionTitle: language.t("Hide All"),
             actionSymbol: "eye.slash",
             action: { hideAllHistory(visibleSmartHistory) }
