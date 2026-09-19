@@ -4850,6 +4850,35 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(record.volumeUUIDs, ["BENCHMARK-VOLUME"])
     }
 
+    func testBenchmarkHistoryChartPolicyKeepsOneOwnerForDuplicateSamples() {
+        let drive = Self.fixtureDrive()
+        let result = Self.fixtureBenchmarkResult(for: drive)
+        let samples = [
+            DiskActivitySample(
+                timestamp: Date(timeIntervalSince1970: 1_000),
+                readMegabytesPerSecond: 1_200,
+                writeMegabytesPerSecond: 300
+            )
+        ]
+        let first = BenchmarkHistoryRecord(drive: drive, result: result, activitySamples: samples)
+        let duplicate = BenchmarkHistoryRecord(drive: drive, result: result, activitySamples: samples)
+        let unique = BenchmarkHistoryRecord(
+            drive: drive,
+            result: result,
+            activitySamples: [
+                DiskActivitySample(
+                    timestamp: Date(timeIntervalSince1970: 2_000),
+                    readMegabytesPerSecond: 600,
+                    writeMegabytesPerSecond: 900
+                )
+            ]
+        )
+
+        let ownerIDs = BenchmarkHistoryChartPolicy.activityOwnerIDs(in: [first, duplicate, unique])
+
+        XCTAssertEqual(ownerIDs, [first.id, unique.id])
+    }
+
     func testDiskActivitySampleCodersReadLegacySampleArrays() throws {
         let sample = DiskActivitySample(
             timestamp: Date(timeIntervalSince1970: 1_000),
