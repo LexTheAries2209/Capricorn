@@ -127,7 +127,6 @@ struct OverviewView: View {
                     }
 
                     if let satDriverGuidance {
-                        Divider()
                         SATSMARTDriverGuidanceView(
                             guidance: satDriverGuidance,
                             openSettings: openSATDriverSettings
