@@ -4850,9 +4850,16 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(record.volumeUUIDs, ["BENCHMARK-VOLUME"])
     }
 
-    func testBenchmarkHistoryChartPolicyKeepsOneOwnerForDuplicateSamples() {
+    func testBenchmarkHistoryGroupingPolicyKeepsLegacyDuplicateSamplesInOneRun() {
         let drive = Self.fixtureDrive()
-        let result = Self.fixtureBenchmarkResult(for: drive)
+        var firstResult = Self.fixtureBenchmarkResult(for: drive)
+        firstResult.measuredAt = Date(timeIntervalSince1970: 1_002)
+        var duplicateResult = firstResult
+        duplicateResult.id = UUID()
+        duplicateResult.measuredAt = Date(timeIntervalSince1970: 1_001)
+        var uniqueResult = firstResult
+        uniqueResult.id = UUID()
+        uniqueResult.measuredAt = Date(timeIntervalSince1970: 1_000)
         let samples = [
             DiskActivitySample(
                 timestamp: Date(timeIntervalSince1970: 1_000),
@@ -4860,11 +4867,11 @@ final class CapricornTests: XCTestCase {
                 writeMegabytesPerSecond: 300
             )
         ]
-        let first = BenchmarkHistoryRecord(drive: drive, result: result, activitySamples: samples)
-        let duplicate = BenchmarkHistoryRecord(drive: drive, result: result, activitySamples: samples)
+        let first = BenchmarkHistoryRecord(drive: drive, result: firstResult, activitySamples: samples)
+        let duplicate = BenchmarkHistoryRecord(drive: drive, result: duplicateResult, activitySamples: samples)
         let unique = BenchmarkHistoryRecord(
             drive: drive,
-            result: result,
+            result: uniqueResult,
             activitySamples: [
                 DiskActivitySample(
                     timestamp: Date(timeIntervalSince1970: 2_000),
@@ -4874,9 +4881,38 @@ final class CapricornTests: XCTestCase {
             ]
         )
 
-        let ownerIDs = BenchmarkHistoryChartPolicy.activityOwnerIDs(in: [first, duplicate, unique])
+        let groups = BenchmarkHistoryGroupingPolicy.groups(in: [unique, duplicate, first])
 
-        XCTAssertEqual(ownerIDs, [first.id, unique.id])
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertEqual(groups[0].records.map(\.id), [first.id, duplicate.id])
+        XCTAssertEqual(groups[0].activitySamples, samples)
+        XCTAssertEqual(groups[1].records.map(\.id), [unique.id])
+    }
+
+    func testBenchmarkHistoryGroupingPolicyPlacesRunChartBeforeSavedResults() {
+        let drive = Self.fixtureDrive()
+        var latestResult = Self.fixtureBenchmarkResult(for: drive)
+        latestResult.measuredAt = Date(timeIntervalSince1970: 2_003)
+        latestResult.testLabel = "SEQ1MiB Q1T1"
+        var earlierResult = latestResult
+        earlierResult.id = UUID()
+        earlierResult.measuredAt = Date(timeIntervalSince1970: 2_002)
+        earlierResult.testLabel = "SEQ1MiB Q8T1"
+        let samples = [
+            DiskActivitySample(
+                timestamp: Date(timeIntervalSince1970: 2_000),
+                readMegabytesPerSecond: 1_500,
+                writeMegabytesPerSecond: 800
+            )
+        ]
+        let latest = BenchmarkHistoryRecord(drive: drive, result: latestResult, activitySamples: samples)
+        let earlier = BenchmarkHistoryRecord(drive: drive, result: earlierResult)
+
+        let groups = BenchmarkHistoryGroupingPolicy.groups(in: [earlier, latest])
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].activitySamples, samples)
+        XCTAssertEqual(groups[0].records.map(\.id), [latest.id, earlier.id])
     }
 
     func testDiskActivitySampleCodersReadLegacySampleArrays() throws {
