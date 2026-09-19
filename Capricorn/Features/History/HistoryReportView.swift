@@ -641,27 +641,72 @@ struct HistoryReportView: View {
     }
 
     private func activityHistoryRow(_ item: DiskActivityHistoryRecord, isHidden: Bool) -> some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(item.endedAt.formatted(date: .abbreviated, time: .standard))
-                Text("\(DiskActivityChartScale.formatDuration(item.durationSeconds)) · \(item.sampleCount) \(language.t("samples")) · \(item.sampleInterval.title)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 1) {
-                Text("\(language.operationTitle(.read)) \(DiskActivityFormatter.speed(item.peakReadMegabytesPerSecond))")
-                Text("\(language.operationTitle(.write)) \(DiskActivityFormatter.speed(item.peakWriteMegabytesPerSecond))")
-            }
-            .font(.caption.monospacedDigit())
-            historyVisibilityButton(isHidden: isHidden) {
-                if isHidden {
-                    restoreHistory(item)
-                } else {
-                    hideHistory(item)
+        let samples = item.samples
+
+        return VStack(alignment: .leading, spacing: 10) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 10) {
+                    activityHistoryIdentity(item)
+                    Spacer(minLength: 8)
+                    activityHistoryPeaks(item)
+                    historyVisibilityButton(isHidden: isHidden) {
+                        if isHidden {
+                            restoreHistory(item)
+                        } else {
+                            hideHistory(item)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    activityHistoryIdentity(item)
+                    HStack(alignment: .center, spacing: 10) {
+                        activityHistoryPeaks(item)
+                        Spacer(minLength: 8)
+                        historyVisibilityButton(isHidden: isHidden) {
+                            if isHidden {
+                                restoreHistory(item)
+                            } else {
+                                hideHistory(item)
+                            }
+                        }
+                    }
                 }
             }
+
+            if !samples.isEmpty {
+                DiskActivityChartView(
+                    title: language.t("Live Activity History"),
+                    samples: samples,
+                    current: samples.last,
+                    style: .mini,
+                    showsHeader: false
+                )
+                .padding(.top, 2)
+            }
         }
+    }
+
+    private func activityHistoryIdentity(_ item: DiskActivityHistoryRecord) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(item.endedAt.formatted(date: .abbreviated, time: .standard))
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+            Text("\(DiskActivityChartScale.formatDuration(item.durationSeconds)) · \(item.sampleCount) \(language.t("samples")) · \(item.sampleInterval.title)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private func activityHistoryPeaks(_ item: DiskActivityHistoryRecord) -> some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text("\(language.operationTitle(.read)) \(DiskActivityFormatter.speed(item.peakReadMegabytesPerSecond))")
+            Text("\(language.operationTitle(.write)) \(DiskActivityFormatter.speed(item.peakWriteMegabytesPerSecond))")
+        }
+        .font(.caption.monospacedDigit())
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func historyVisibilityButton(isHidden: Bool, action: @escaping () -> Void) -> some View {
