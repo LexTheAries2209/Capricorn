@@ -943,10 +943,21 @@ final class CapricornTests: XCTestCase {
             "Open SAT SMART Drive Settings": "前往 SAT SMART Drive 设置",
             "Install SAT SMART Drive": "安装SAT SMART Drive",
             "SAT SMART Drive May Be Required": "可能需要 SAT SMART Drive",
+            "Samsung T5 Driver Conflict May Block SMART": "三星 T5 驱动冲突可能阻止 SMART 读取",
+            "USB-NVMe SMART May Be Unavailable": "USB-NVMe SMART 可能无法读取",
             "This USB storage device did not return SMART data. Installing SAT SMART Drive may provide more health information; support depends on the drive and enclosure.": "此 USB 存储设备未返回 SMART 数据。安装 SAT SMART Drive 可能提供更多健康信息，实际支持情况取决于硬盘和硬盘盒。",
+            "SAT SMART Drive is installed, but this Samsung Portable SSD T5 still did not return SMART data. Samsung's driver may conflict with SAT SMART Drive; removing the Samsung driver may restore SMART access.": "SAT SMART Drive 已安装，但这块三星 Portable SSD T5 仍未返回 SMART 数据。三星驱动可能与 SAT SMART Drive 冲突；移除三星驱动后可能恢复 SMART 读取。",
+            "SAT SMART Drive is installed, but this USB-NVMe drive still did not return SMART data. SAT SMART Drive targets SATA bridges; some USB-NVMe bridges cannot expose SMART data on macOS.": "SAT SMART Drive 已安装，但这块 USB-NVMe 硬盘仍未返回 SMART 数据。SAT SMART Drive 适用于 SATA 桥接器；部分 USB-NVMe 桥接器在 macOS 上可能无法提供 SMART 数据。",
             "This USB storage device did not return SMART data": "此 USB 存储设备未返回 SMART 数据",
             "Installing SAT SMART Drive may provide more health information": "安装 SAT SMART Drive 可能提供更多健康信息",
             "Support depends on the drive and enclosure": "实际支持情况取决于硬盘和硬盘盒",
+            "SAT SMART Drive is installed": "SAT SMART Drive 已安装",
+            "This Samsung Portable SSD T5 still did not return SMART data": "这块三星 Portable SSD T5 仍未返回 SMART 数据",
+            "Samsung's driver may conflict with SAT SMART Drive": "三星驱动可能与 SAT SMART Drive 冲突",
+            "Removing the Samsung driver may restore SMART access": "移除三星驱动后可能恢复 SMART 读取",
+            "This USB-NVMe drive still did not return SMART data": "这块 USB-NVMe 硬盘仍未返回 SMART 数据",
+            "SAT SMART Drive targets SATA bridges": "SAT SMART Drive 适用于 SATA 桥接器",
+            "Some USB-NVMe bridges cannot expose SMART data on macOS": "部分 USB-NVMe 桥接器在 macOS 上可能无法提供 SMART 数据",
             "SAT SMART Drive files are installed": "SAT SMART Drive 文件已安装",
             "The driver is not active": "驱动尚未启用",
             "Check macOS approval or restart": "请检查 macOS 授权或重新启动",
@@ -984,6 +995,28 @@ final class CapricornTests: XCTestCase {
                 "Then recheck it in Settings"
             ]
         )
+        XCTAssertEqual(
+            SATSMARTDriverGuidance.samsungT5DriverConflict.smartMessageLineKeys,
+            [
+                "SAT SMART Drive is installed",
+                "This Samsung Portable SSD T5 still did not return SMART data",
+                "Samsung's driver may conflict with SAT SMART Drive",
+                "Removing the Samsung driver may restore SMART access"
+            ]
+        )
+        XCTAssertEqual(
+            SATSMARTDriverGuidance.usbNVMeSMARTUnavailable.smartMessageLineKeys,
+            [
+                "SAT SMART Drive is installed",
+                "This USB-NVMe drive still did not return SMART data",
+                "SAT SMART Drive targets SATA bridges",
+                "Some USB-NVMe bridges cannot expose SMART data on macOS"
+            ]
+        )
+        XCTAssertTrue(SATSMARTDriverGuidance.installationSuggested.showsSATSettingsAction)
+        XCTAssertTrue(SATSMARTDriverGuidance.activationRequired.showsSATSettingsAction)
+        XCTAssertFalse(SATSMARTDriverGuidance.samsungT5DriverConflict.showsSATSettingsAction)
+        XCTAssertFalse(SATSMARTDriverGuidance.usbNVMeSMARTUnavailable.showsSATSettingsAction)
     }
 
     @MainActor
@@ -2861,6 +2894,73 @@ final class CapricornTests: XCTestCase {
             .activationRequired
         )
         XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: drive, snapshot: snapshot, driverStatus: loaded))
+    }
+
+    func testSATDriverGuidanceExplainsSamsungT5ConflictAndUSBConnectedNVMeLimits() {
+        let installed = SATSMARTDriverStatus(
+            state: .installedNotLoaded,
+            version: "0.10.3",
+            kextPath: "/Library/Extensions/SATSMARTDriver.kext",
+            pluginPath: "/Library/Extensions/SATSMARTLib.plugin",
+            message: "SAT SMART Driver files are installed."
+        )
+        var loaded = installed
+        loaded.state = .loaded
+
+        var catalogT5 = Self.externalCatalogDrive(model: "MU-PA1T0R", protocolName: "USB")
+        catalogT5.smartStatusRaw = nil
+        var unavailable = SmartSnapshot.unavailable(for: catalogT5, reason: "SMART unavailable.")
+        XCTAssertEqual(
+            SATSMARTDriverGuidancePolicy.guidance(for: catalogT5, snapshot: unavailable, driverStatus: loaded),
+            .samsungT5DriverConflict
+        )
+        XCTAssertEqual(
+            SATSMARTDriverGuidancePolicy.guidance(for: catalogT5, snapshot: unavailable, driverStatus: installed),
+            .samsungT5DriverConflict
+        )
+
+        var namedT5 = Self.externalCatalogDrive(model: "Samsung Portable SSD T5", protocolName: "USB")
+        namedT5.smartStatusRaw = nil
+        XCTAssertEqual(
+            SATSMARTDriverGuidancePolicy.guidance(
+                for: namedT5,
+                snapshot: SmartSnapshot.unavailable(for: namedT5, reason: "SMART unavailable."),
+                driverStatus: loaded
+            ),
+            .samsungT5DriverConflict
+        )
+
+        var t5EVO = Self.externalCatalogDrive(model: "Samsung Portable SSD T5 EVO", protocolName: "USB")
+        t5EVO.smartStatusRaw = nil
+        XCTAssertNil(
+            SATSMARTDriverGuidancePolicy.guidance(
+                for: t5EVO,
+                snapshot: SmartSnapshot.unavailable(for: t5EVO, reason: "SMART unavailable."),
+                driverStatus: loaded
+            )
+        )
+
+        var usbNVMe = Self.externalCatalogDrive(model: "USB NVMe SSD", protocolName: "USB-NVMe")
+        usbNVMe.smartStatusRaw = nil
+        XCTAssertEqual(
+            SATSMARTDriverGuidancePolicy.guidance(
+                for: usbNVMe,
+                snapshot: SmartSnapshot.unavailable(for: usbNVMe, reason: "SMART unavailable."),
+                driverStatus: loaded
+            ),
+            .usbNVMeSMARTUnavailable
+        )
+
+        usbNVMe.protocolName = "USB"
+        unavailable = SmartSnapshot.unavailable(for: usbNVMe, reason: "SMART unavailable.")
+        unavailable.smartctlDiagnostics = SmartctlDiagnostics(deviceType: "sntrealtek", protocolName: "NVMe")
+        XCTAssertEqual(
+            SATSMARTDriverGuidancePolicy.guidance(for: usbNVMe, snapshot: unavailable, driverStatus: loaded),
+            .usbNVMeSMARTUnavailable
+        )
+
+        unavailable.smartStatusRaw = "PASSED"
+        XCTAssertNil(SATSMARTDriverGuidancePolicy.guidance(for: usbNVMe, snapshot: unavailable, driverStatus: loaded))
     }
 
     func testSATDriverStatusIsLoadedWithoutRequiringAnIOKitDeviceMatch() throws {
