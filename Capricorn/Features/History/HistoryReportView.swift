@@ -53,12 +53,20 @@ struct HistoryReportView: View {
         HistoryVisibility.hidden(benchmarkHistory)
     }
 
-    private var visibleBenchmarkChartOwnerIDs: Set<UUID> {
-        BenchmarkHistoryChartPolicy.activityOwnerIDs(in: visibleBenchmarkHistory)
+    private var benchmarkHistoryGroups: [BenchmarkHistoryGroup] {
+        BenchmarkHistoryGroupingPolicy.groups(in: benchmarkHistory)
     }
 
-    private var hiddenBenchmarkChartOwnerIDs: Set<UUID> {
-        BenchmarkHistoryChartPolicy.activityOwnerIDs(in: hiddenBenchmarkHistory)
+    private var visibleBenchmarkHistoryGroups: [BenchmarkHistoryGroup] {
+        benchmarkHistoryGroups.compactMap { group in
+            group.retainingRecords { $0.hiddenAt == nil }
+        }
+    }
+
+    private var hiddenBenchmarkHistoryGroups: [BenchmarkHistoryGroup] {
+        benchmarkHistoryGroups.compactMap { group in
+            group.retainingRecords { $0.hiddenAt != nil }
+        }
     }
 
     private var visibleActivityHistory: [DiskActivityHistoryRecord] {
@@ -301,13 +309,7 @@ struct HistoryReportView: View {
             actionSymbol: "eye.slash",
             action: { hideAllHistory(visibleBenchmarkHistory) }
         ) {
-            historyRows(visibleBenchmarkHistory) { item in
-                benchmarkHistoryRow(
-                    item,
-                    isHidden: false,
-                    showsActivityChart: visibleBenchmarkChartOwnerIDs.contains(item.id)
-                )
-            }
+            benchmarkHistoryGroupRows(visibleBenchmarkHistoryGroups, isHidden: false)
         }
     }
 
@@ -449,14 +451,7 @@ struct HistoryReportView: View {
                 if !hiddenBenchmarkHistory.isEmpty {
                     Text(language.t("Benchmark Runs"))
                         .font(.subheadline.bold())
-                    ForEach(hiddenBenchmarkHistory) { item in
-                        benchmarkHistoryRow(
-                            item,
-                            isHidden: true,
-                            showsActivityChart: hiddenBenchmarkChartOwnerIDs.contains(item.id)
-                        )
-                        Divider()
-                    }
+                    benchmarkHistoryGroupRows(hiddenBenchmarkHistoryGroups, isHidden: true)
                 }
 
                 if !hiddenActivityHistory.isEmpty {
@@ -531,12 +526,49 @@ struct HistoryReportView: View {
         }
     }
 
-    private func benchmarkHistoryRow(
-        _ item: BenchmarkHistoryRecord,
-        isHidden: Bool,
-        showsActivityChart: Bool
+    private func benchmarkHistoryGroupRows(
+        _ groups: [BenchmarkHistoryGroup],
+        isHidden: Bool
     ) -> some View {
-        let activitySamples = item.activitySamples
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                benchmarkHistoryGroup(group, isHidden: isHidden)
+                    .padding(.vertical, 8)
+                if index < groups.count - 1 {
+                    Divider()
+                        .padding(.vertical, 4)
+                }
+            }
+        }
+    }
+
+    private func benchmarkHistoryGroup(
+        _ group: BenchmarkHistoryGroup,
+        isHidden: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !group.activitySamples.isEmpty {
+                DiskActivityChartView(
+                    title: language.t("Benchmark Runs"),
+                    samples: group.activitySamples,
+                    current: group.activitySamples.last,
+                    style: .mini,
+                    showsHeader: false
+                )
+                .padding(.bottom, 8)
+            }
+
+            ForEach(Array(group.records.enumerated()), id: \.element.id) { index, item in
+                benchmarkHistoryRow(item, isHidden: isHidden)
+                    .padding(.vertical, 7)
+                if index < group.records.count - 1 {
+                    Divider()
+                }
+            }
+        }
+    }
+
+    private func benchmarkHistoryRow(_ item: BenchmarkHistoryRecord, isHidden: Bool) -> some View {
         let visibilityAction = {
             if isHidden {
                 restoreHistory(item)
@@ -544,39 +576,26 @@ struct HistoryReportView: View {
                 hideHistory(item)
             }
         }
-        return VStack(alignment: .leading, spacing: 10) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 10) {
-                    benchmarkHistoryIdentity(item)
-                    Spacer(minLength: 8)
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 10) {
+                benchmarkHistoryIdentity(item)
+                Spacer(minLength: 8)
+                Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .fixedSize(horizontal: true, vertical: false)
+                historyVisibilityButton(isHidden: isHidden, action: visibilityAction)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                benchmarkHistoryIdentity(item)
+                HStack {
                     Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
                         .font(.subheadline.weight(.semibold))
                         .monospacedDigit()
-                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 8)
                     historyVisibilityButton(isHidden: isHidden, action: visibilityAction)
                 }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    benchmarkHistoryIdentity(item)
-                    HStack {
-                        Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
-                            .font(.subheadline.weight(.semibold))
-                            .monospacedDigit()
-                        Spacer(minLength: 8)
-                        historyVisibilityButton(isHidden: isHidden, action: visibilityAction)
-                    }
-                }
-            }
-
-            if showsActivityChart, !activitySamples.isEmpty {
-                DiskActivityChartView(
-                    title: language.t("Benchmark Runs"),
-                    samples: activitySamples,
-                    current: activitySamples.last,
-                    style: .mini,
-                    showsHeader: false
-                )
-                .padding(.top, 2)
             }
         }
     }
@@ -794,17 +813,73 @@ enum HistorySelfTestVisibilityPolicy {
     }
 }
 
-enum BenchmarkHistoryChartPolicy {
-    static func activityOwnerIDs(in records: [BenchmarkHistoryRecord]) -> Set<UUID> {
-        var uniqueSamples: [[DiskActivitySample]] = []
-        var ownerIDs: Set<UUID> = []
+struct BenchmarkHistoryGroup: Identifiable {
+    let id: UUID
+    let records: [BenchmarkHistoryRecord]
+    let activitySamples: [DiskActivitySample]
 
-        for record in records {
-            let samples = record.activitySamples
-            guard !samples.isEmpty, !uniqueSamples.contains(samples) else { continue }
-            uniqueSamples.append(samples)
-            ownerIDs.insert(record.id)
+    func retainingRecords(
+        where predicate: (BenchmarkHistoryRecord) -> Bool
+    ) -> BenchmarkHistoryGroup? {
+        let retainedRecords = records.filter(predicate)
+        guard !retainedRecords.isEmpty else { return nil }
+        return BenchmarkHistoryGroup(
+            id: id,
+            records: retainedRecords,
+            activitySamples: activitySamples
+        )
+    }
+}
+
+enum BenchmarkHistoryGroupingPolicy {
+    static func groups(in records: [BenchmarkHistoryRecord]) -> [BenchmarkHistoryGroup] {
+        let sortedRecords = records.sorted {
+            if $0.measuredAt == $1.measuredAt {
+                return $0.id.uuidString > $1.id.uuidString
+            }
+            return $0.measuredAt > $1.measuredAt
         }
-        return ownerIDs
+        var groups: [BenchmarkHistoryGroup] = []
+        var groupID: UUID?
+        var groupRecords: [BenchmarkHistoryRecord] = []
+        var groupSamples: [DiskActivitySample] = []
+
+        func appendCurrentGroup() {
+            guard let groupID, !groupRecords.isEmpty else { return }
+            groups.append(
+                BenchmarkHistoryGroup(
+                    id: groupID,
+                    records: groupRecords,
+                    activitySamples: groupSamples
+                )
+            )
+        }
+
+        // New saves put samples on the newest result; legacy saves repeated the
+        // same samples on every result, so only a different sample set starts a batch.
+        for record in sortedRecords {
+            let samples = record.activitySamples
+            let startsNewGroup = !samples.isEmpty
+                && !groupRecords.isEmpty
+                && (groupSamples.isEmpty || samples != groupSamples)
+
+            if startsNewGroup {
+                appendCurrentGroup()
+                groupID = nil
+                groupRecords = []
+                groupSamples = []
+            }
+
+            if groupID == nil {
+                groupID = record.id
+            }
+            if groupSamples.isEmpty, !samples.isEmpty {
+                groupSamples = samples
+            }
+            groupRecords.append(record)
+        }
+
+        appendCurrentGroup()
+        return groups
     }
 }
