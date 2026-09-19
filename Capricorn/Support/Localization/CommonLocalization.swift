@@ -482,7 +482,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "SAT SMART Drive is an optional third-party component for compatible USB-SATA devices. Capricorn does not install, load, or change system security settings.": "SAT SMART Drive 是适用于兼容 USB-SATA 设备的可选第三方组件。Capricorn 不会安装、加载驱动或修改系统安全设置。",
         "SAT SMART Drive May Be Required": "可能需要 SAT SMART Drive",
         "SAT SMART Drive Needs Attention": "SAT SMART Drive 需要处理",
-        "Samsung T5 Driver Conflict May Block SMART": "三星 T5 驱动冲突可能阻止 SMART 读取",
+        "Driver Conflict May Block SMART": "驱动冲突可能阻止 SMART 读取",
         "USB-NVMe SMART May Be Unavailable": "USB-NVMe SMART 可能无法读取",
         "This USB storage device did not return SMART data. Installing SAT SMART Drive may provide more health information; support depends on the drive and enclosure.": "此 USB 存储设备未返回 SMART 数据。安装 SAT SMART Drive 可能提供更多健康信息，实际支持情况取决于硬盘和硬盘盒。",
         "SAT SMART Drive files are installed, but the driver is not active. Check macOS approval or restart, then recheck it in Settings.": "SAT SMART Drive 文件已安装，但驱动尚未启用。请检查 macOS 授权或重新启动，然后在设置中重新检测。",

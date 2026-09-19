@@ -147,6 +147,8 @@ struct SATSMARTDriverGuidanceUnavailableView: View {
         ContentUnavailableView {
             Label {
                 Text(language.t(guidance.titleKey))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             } icon: {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
@@ -178,7 +180,7 @@ extension SATSMARTDriverGuidance {
         case .activationRequired:
             "SAT SMART Drive Needs Attention"
         case .samsungT5DriverConflict:
-            "Samsung T5 Driver Conflict May Block SMART"
+            "Driver Conflict May Block SMART"
         case .usbNVMeSMARTUnavailable:
             "USB-NVMe SMART May Be Unavailable"
         }
