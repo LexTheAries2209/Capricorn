@@ -943,7 +943,7 @@ final class CapricornTests: XCTestCase {
             "Open SAT SMART Drive Settings": "前往 SAT SMART Drive 设置",
             "Install SAT SMART Drive": "安装SAT SMART Drive",
             "SAT SMART Drive May Be Required": "可能需要 SAT SMART Drive",
-            "Driver Conflict May Block SMART": "驱动冲突可能阻止 SMART 读取",
+            "Driver Conflict": "驱动冲突",
             "USB-NVMe SMART May Be Unavailable": "USB-NVMe SMART 可能无法读取",
             "This USB storage device did not return SMART data. Installing SAT SMART Drive may provide more health information; support depends on the drive and enclosure.": "此 USB 存储设备未返回 SMART 数据。安装 SAT SMART Drive 可能提供更多健康信息，实际支持情况取决于硬盘和硬盘盒。",
             "SAT SMART Drive is installed, but this Samsung Portable SSD T5 still did not return SMART data. Samsung's driver may conflict with SAT SMART Drive; removing the Samsung driver may restore SMART access.": "SAT SMART Drive 已安装，但这块三星 Portable SSD T5 仍未返回 SMART 数据。三星驱动可能与 SAT SMART Drive 冲突；移除三星驱动后可能恢复 SMART 读取。",
