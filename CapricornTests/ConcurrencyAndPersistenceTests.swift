@@ -635,6 +635,48 @@ extension CapricornTests {
     }
 
     @MainActor
+    func testHistoryRepositoryStoresBenchmarkActivitySamplesOncePerSave() throws {
+        let container = try ModelContainerFactory.makeInMemory()
+        let repository = HistoryRepository(modelContext: container.mainContext)
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(
+                deviceIdentifier: "disk0s2",
+                name: "Data",
+                mountPoint: "/System/Volumes/Data",
+                sizeBytes: drive.sizeBytes,
+                isWritable: true,
+                isSystem: false,
+                volumeUUID: "benchmark-session-volume"
+            )
+        ]
+        var earlier = Self.fixtureBenchmarkResult(for: drive)
+        earlier.testLabel = "Earlier"
+        earlier.measuredAt = Date(timeIntervalSince1970: 1_000)
+        var later = earlier
+        later.id = UUID()
+        later.testLabel = "Later"
+        later.measuredAt = Date(timeIntervalSince1970: 1_001)
+        let samples = [
+            DiskActivitySample(
+                timestamp: Date(timeIntervalSince1970: 999),
+                readMegabytesPerSecond: 1_200,
+                writeMegabytesPerSecond: 300
+            )
+        ]
+
+        let records = try repository.saveBenchmarks(
+            drive: drive,
+            results: [earlier, later],
+            activitySamples: samples
+        )
+
+        XCTAssertEqual(records.filter { !$0.activitySamples.isEmpty }.count, 1)
+        XCTAssertEqual(records.first { !$0.activitySamples.isEmpty }?.testLabel, "Later")
+        XCTAssertTrue(records.allSatisfy { $0.volumeUUIDs == ["BENCHMARK-SESSION-VOLUME"] })
+    }
+
+    @MainActor
     func testDiskCheckHistoryPersistsLatestReportBySerialAndClearsWithDriveHistory() throws {
         let container = try ModelContainerFactory.makeInMemory()
         let repository = HistoryRepository(modelContext: container.mainContext)

@@ -213,8 +213,15 @@ final class HistoryRepository {
         results: [BenchmarkResult],
         activitySamples: [DiskActivitySample]
     ) throws -> [BenchmarkHistoryRecord] {
-        let records = results.map {
-            BenchmarkHistoryRecord(drive: drive, result: $0, activitySamples: activitySamples)
+        let activityOwnerIndex = results.indices.max {
+            results[$0].measuredAt < results[$1].measuredAt
+        }
+        let records = results.enumerated().map { index, result in
+            BenchmarkHistoryRecord(
+                drive: drive,
+                result: result,
+                activitySamples: index == activityOwnerIndex ? activitySamples : []
+            )
         }
         records.forEach(modelContext.insert)
         try modelContext.save()
