@@ -1626,6 +1626,25 @@ enum BenchmarkOperation: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum BenchmarkOperationSelection: String, Codable, CaseIterable, Identifiable, Sendable {
+    case readOnly
+    case writeOnly
+    case readWrite
+
+    var id: String { rawValue }
+
+    func includes(_ operation: BenchmarkOperation) -> Bool {
+        switch self {
+        case .readOnly:
+            operation == .read
+        case .writeOnly:
+            operation == .write
+        case .readWrite:
+            true
+        }
+    }
+}
+
 enum BenchmarkDataPattern: String, Codable, CaseIterable, Identifiable, Sendable {
     case random
     case zeroFill
@@ -2080,7 +2099,8 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
         dataPattern: BenchmarkDataPattern,
         usesTrimmedAverage: Bool = defaultUsesTrimmedAverage,
         usesSmallBlockEfficiency: Bool = false,
-        smallBlockFileSizePercent requestedSmallBlockFileSizePercent: Int = defaultSmallBlockFileSizePercent
+        smallBlockFileSizePercent requestedSmallBlockFileSizePercent: Int = defaultSmallBlockFileSizePercent,
+        operationSelection: BenchmarkOperationSelection = .readWrite
     ) -> BenchmarkProfile {
         let isLooping = executionMode == .loopUntilCancelled
         let safeRuns = isLooping ? 1 : min(max(requestedRuns, Self.runCountOptions.first ?? 1), Self.runCountOptions.last ?? 9)
@@ -2098,15 +2118,16 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
             .first { $0.hasPrefix("rows-") }
         let engineFingerprint = engine == .synchronous ? nil : "engine-\(engine.rawValue)"
         let smallBlockFingerprint = appliesSmallBlockEfficiency ? "small-\(safeSmallBlockFileSizePercent)" : nil
+        let operationFingerprint = operationSelection == .readWrite ? nil : "ops-\(operationSelection.rawValue)"
         if isLooping {
             let loopFingerprint = "loop-s\(safeFileSizeBytes)-\(dataPattern.rawValue)"
-            fingerprint = [rowFingerprint, loopFingerprint, engineFingerprint, smallBlockFingerprint].compactMap { $0 }.joined(separator: "-")
+            fingerprint = [rowFingerprint, loopFingerprint, engineFingerprint, smallBlockFingerprint, operationFingerprint].compactMap { $0 }.joined(separator: "-")
         } else {
             let averageMode = safeUsesTrimmedAverage ? "trim" : "plain"
             let runFingerprint = "r\(safeRuns)-s\(safeFileSizeBytes)-\(dataPattern.rawValue)-\(averageMode)"
-            fingerprint = [rowFingerprint, runFingerprint, engineFingerprint, smallBlockFingerprint].compactMap { $0 }.joined(separator: "-")
+            fingerprint = [rowFingerprint, runFingerprint, engineFingerprint, smallBlockFingerprint, operationFingerprint].compactMap { $0 }.joined(separator: "-")
         }
-        let configuredTests = tests.map { test in
+        let configuredTests = tests.filter { operationSelection.includes($0.operation) }.map { test in
             var configuredTest = test
             let baseTestID = test.id.components(separatedBy: "@").first ?? test.id
             configuredTest.id = "\(baseTestID)@\(fingerprint)"

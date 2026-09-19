@@ -3892,6 +3892,51 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(profile.id.contains("plain"))
     }
 
+    func testBenchmarkOperationSelectionFiltersConfiguredTests() {
+        let readOnly = BenchmarkProfile.realWorld.configured(
+            runs: 1,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            operationSelection: .readOnly
+        )
+        let writeOnly = BenchmarkProfile.realWorld.configured(
+            runs: 1,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            operationSelection: .writeOnly
+        )
+        let readWrite = BenchmarkProfile.realWorld.configured(
+            runs: 1,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random
+        )
+
+        XCTAssertFalse(readOnly.tests.isEmpty)
+        XCTAssertTrue(readOnly.tests.allSatisfy { $0.operation == .read })
+        XCTAssertTrue(writeOnly.tests.allSatisfy { $0.operation == .write })
+        XCTAssertTrue(readWrite.tests.contains { $0.operation == .mixed })
+        XCTAssertFalse(readOnly.tests.contains { $0.operation == .mixed })
+        XCTAssertFalse(writeOnly.tests.contains { $0.operation == .mixed })
+        XCTAssertTrue(readOnly.id.contains("ops-readOnly"))
+        XCTAssertTrue(writeOnly.id.contains("ops-writeOnly"))
+    }
+
+    func testBenchmarkReadWriteSelectionPreservesLegacyConfiguration() {
+        let legacy = BenchmarkProfile.default.configured(
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random
+        )
+        let explicitReadWrite = BenchmarkProfile.default.configured(
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            operationSelection: .readWrite
+        )
+
+        XCTAssertEqual(explicitReadWrite, legacy)
+    }
+
     func testSmallBlockEfficiencyScalesOnlySupportedBlockSizes() throws {
         let fileSize: Int64 = 2 * 1_024 * 1_024 * 1_024
         let rows = [4_096, 16_384, 65_536, 131_072].enumerated().map { index, blockSize in
