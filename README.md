@@ -10,6 +10,8 @@ Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、S
 
 Bilingual release notes / 双语发布说明：[docs/releases/v2.7.3.md](docs/releases/v2.7.3.md)
 
+Complete release log / 完整更新记录：[CHANGELOG.md](CHANGELOG.md)
+
 ---
 
 ## 中文说明
