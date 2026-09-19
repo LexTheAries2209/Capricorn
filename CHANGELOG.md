@@ -4,6 +4,24 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.7.4 - 2026-09-19
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.7.4) | [Release Notes / 发布说明](docs/releases/v2.7.4.md)
+
+### 中文
+
+- 测速新增仅读取、仅写入和读写选择，并重新整理操作区间距和按钮位置。
+- 测速历史按一次任务分组，在组顶部只显示一张活动曲线，下面列出该次保存的测速结果，同时兼容旧版重复曲线数据。
+- 实时活动历史显示已保存的折线图，并将历史三栏布局的折行阈值调整到约 1200 pt。
+- 精简 SMART 快照空状态文案，并统一测速与实时活动历史的紧凑视觉层级。
+
+### English
+
+- Adds read-only, write-only, and read-and-write benchmark selection and refines control spacing and action placement.
+- Groups Benchmark History by run with one activity chart above that run's saved results, including compatibility for legacy duplicate chart data.
+- Shows saved charts in Live Activity History and keeps the three-panel History layout down to about 1200 pt.
+- Simplifies the empty SMART snapshot message and aligns benchmark and Live Activity history presentation.
+
 ## V2.7.3 - 2026-09-19
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.7.3) | [Release Notes / 发布说明](docs/releases/v2.7.3.md)
