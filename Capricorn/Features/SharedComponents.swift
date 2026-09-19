@@ -121,7 +121,8 @@ struct SATSMARTDriverGuidanceView: View {
                     Text(language.t(guidance.messageKey))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(guidance.keepsMessageLinesSingleLine ? 1 : nil)
+                        .minimumScaleFactor(0.75)
                 }
             }
 
@@ -157,6 +158,8 @@ struct SATSMARTDriverGuidanceUnavailableView: View {
             VStack(spacing: 2) {
                 ForEach(guidance.smartMessageLineKeys, id: \.self) { lineKey in
                     Text(language.t(lineKey))
+                        .lineLimit(guidance.keepsMessageLinesSingleLine ? 1 : nil)
+                        .minimumScaleFactor(0.75)
                 }
             }
             .multilineTextAlignment(.center)
@@ -193,9 +196,9 @@ extension SATSMARTDriverGuidance {
         case .activationRequired:
             "SAT SMART Drive files are installed, but the driver is not active. Check macOS approval or restart, then recheck it in Settings."
         case .samsungT5DriverConflict:
-            "SAT SMART Drive is installed, but this Samsung Portable SSD T5 still did not return SMART data. Samsung's driver may conflict with SAT SMART Drive; removing the Samsung driver may restore SMART access."
+            "Samsung's driver may conflict with SAT SMART Drive; removing the Samsung driver may restore SMART access."
         case .usbNVMeSMARTUnavailable:
-            "SAT SMART Drive is installed, but this USB-NVMe drive still did not return SMART data. SAT SMART Drive targets SATA bridges; some USB-NVMe bridges cannot expose SMART data on macOS."
+            "Some USB-NVMe bridges cannot expose SMART data on macOS"
         }
     }
 
@@ -216,16 +219,11 @@ extension SATSMARTDriverGuidance {
             ]
         case .samsungT5DriverConflict:
             [
-                "SAT SMART Drive is installed",
-                "This Samsung Portable SSD T5 still did not return SMART data",
                 "Samsung's driver may conflict with SAT SMART Drive",
                 "Removing the Samsung driver may restore SMART access"
             ]
         case .usbNVMeSMARTUnavailable:
             [
-                "SAT SMART Drive is installed",
-                "This USB-NVMe drive still did not return SMART data",
-                "SAT SMART Drive targets SATA bridges",
                 "Some USB-NVMe bridges cannot expose SMART data on macOS"
             ]
         }
@@ -237,6 +235,15 @@ extension SATSMARTDriverGuidance {
             true
         case .samsungT5DriverConflict, .usbNVMeSMARTUnavailable:
             false
+        }
+    }
+
+    var keepsMessageLinesSingleLine: Bool {
+        switch self {
+        case .installationSuggested, .activationRequired:
+            false
+        case .samsungT5DriverConflict, .usbNVMeSMARTUnavailable:
+            true
         }
     }
 }
