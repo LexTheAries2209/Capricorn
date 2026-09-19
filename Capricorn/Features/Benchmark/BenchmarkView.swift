@@ -29,7 +29,7 @@ private enum BenchmarkAlert: Identifiable {
 // stay consistent across popup and segmented pickers.
 private enum BenchmarkControlLayout {
     static let horizontalSpacing: CGFloat = 15
-    static let verticalSpacing: CGFloat = 12
+    static let verticalSpacing: CGFloat = 15
     static let profileWidth: CGFloat = 122
     static let runCountWidth: CGFloat = 56
     static let fileSizeWidth: CGFloat = 90
