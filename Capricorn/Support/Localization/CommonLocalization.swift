@@ -528,6 +528,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Profile": "配置",
         "Runs": "测试次数",
         "Test Size": "测试文件大小",
+        "Read / Write": "读写方式",
         "Data Pattern": "数据模式",
         "Custom Test Groups": "自定义测试项目组",
         "Each group creates read/write tests; mixed adds a 30% write / 70% read item.": "每个项目组会生成读取/写入测试；开启混合会额外添加约 30% 写入 / 70% 读取的混合项。",
