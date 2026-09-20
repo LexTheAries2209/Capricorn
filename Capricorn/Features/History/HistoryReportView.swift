@@ -506,24 +506,148 @@ struct HistoryReportView: View {
     }
 
     private func smartHistoryRow(_ item: SmartHistoryRecord, isHidden: Bool) -> some View {
-        HStack {
-            HealthBadge(status: item.health, compact: true)
-            VStack(alignment: .leading) {
-                Text(item.capturedAt.formatted(date: .abbreviated, time: .standard))
+        let summary = SmartHistorySummary(snapshot: item.snapshot)
+
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Label(language.healthBadgeTitle(item.health, compact: true), systemImage: item.health.symbolName)
+                    .font(.caption.bold())
+                    .foregroundStyle(item.health.tint)
+
+                Text(item.capturedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                historyVisibilityButton(isHidden: isHidden) {
+                    if isHidden {
+                        restoreHistory(item)
+                    } else {
+                        hideHistory(item)
+                    }
+                }
+            }
+
+            if summary.hasHealthMetrics {
+                HStack(spacing: 14) {
+                    if let life = summary.lifeRemainingPercent {
+                        smartHistoryMetric(
+                            title: language.t("Life"),
+                            value: "\(life)%",
+                            valueTint: smartHistoryLifeTint(life)
+                        )
+                    }
+                    if let errors = summary.mediaErrors {
+                        smartHistoryMetric(
+                            title: language.t("Errors"),
+                            value: errors.formatted(),
+                            valueTint: errors > 0 ? .red : .primary
+                        )
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+
+            if summary.hasUsageMetrics {
+                smartHistoryUsageMetrics(summary)
+            } else if !summary.hasHealthMetrics {
                 Text(language.statusMessage(item.summary))
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            Spacer()
-            historyVisibilityButton(isHidden: isHidden) {
-                if isHidden {
-                    restoreHistory(item)
-                } else {
-                    hideHistory(item)
-                }
+        }
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+    }
+
+    private func smartHistoryMetric(
+        title: String,
+        value: String,
+        valueTint: Color
+    ) -> some View {
+        HStack(spacing: 3) {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .fontWeight(.semibold)
+                .foregroundStyle(valueTint)
+        }
+        .font(.caption2)
+        .monospacedDigit()
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func smartHistoryUsageMetrics(_ summary: SmartHistorySummary) -> some View {
+        ViewThatFits(in: .horizontal) {
+            smartHistoryUsageLine(summary, compact: false)
+            smartHistoryUsageLine(summary, compact: true)
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .monospacedDigit()
+        .lineLimit(1)
+    }
+
+    private func smartHistoryUsageLine(
+        _ summary: SmartHistorySummary,
+        compact: Bool
+    ) -> some View {
+        HStack(spacing: compact ? 5 : 4) {
+            if let dataRead = summary.dataRead {
+                smartHistoryUsageItem(
+                    title: language.t("Read"),
+                    showsTitle: !compact,
+                    value: dataRead,
+                    symbol: "arrow.down.to.line"
+                )
+            }
+            if summary.dataRead != nil, summary.dataWritten != nil {
+                Text("·")
+            }
+            if let dataWritten = summary.dataWritten {
+                smartHistoryUsageItem(
+                    title: language.t("Write"),
+                    showsTitle: !compact,
+                    value: dataWritten,
+                    symbol: "arrow.up.to.line"
+                )
+            }
+            if summary.dataRead != nil || summary.dataWritten != nil {
+                Spacer(minLength: 5)
+            }
+            if let hours = summary.powerOnHours {
+                Label("\(hours.formatted()) h", systemImage: "timer")
+                    .fixedSize(horizontal: true, vertical: false)
+                    .help(language.t("Power-On Hours"))
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func smartHistoryUsageItem(
+        title: String,
+        showsTitle: Bool,
+        value: String,
+        symbol: String
+    ) -> some View {
+        HStack(spacing: 3) {
+            if showsTitle {
+                Text(title)
+            } else {
+                Image(systemName: symbol)
+            }
+            Text(value)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .help(title)
+    }
+
+    private func smartHistoryLifeTint(_ life: Int) -> Color {
+        if life <= 10 { return .red }
+        if life <= 20 { return .orange }
+        return .primary
     }
 
     private func benchmarkHistoryGroupRows(

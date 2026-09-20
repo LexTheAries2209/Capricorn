@@ -357,6 +357,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Used": "已用",
         "Available": "可用",
         "Temperature": "温度",
+        "Life": "寿命",
+        "Errors": "错误",
         "Life Remaining": "剩余寿命",
         "Power-On Hours": "通电小时",
         "Media Errors": "介质错误",
