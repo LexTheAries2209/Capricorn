@@ -2098,8 +2098,9 @@ final class CapricornTests: XCTestCase {
         drive.deviceNode = "//lex@nas.local/Media"
         drive.protocolName = "SMB"
 
+        let smartctlRunner = SequencedCommandRunner(results: [])
         let nativeSnapshotValue = await NativeSmartProvider().snapshot(for: drive)
-        let smartctlSnapshotValue = await SmartctlSmartProvider().snapshot(for: drive)
+        let smartctlSnapshotValue = await Self.testSmartctlProvider(runner: smartctlRunner).snapshot(for: drive)
         let nativeSnapshot = try XCTUnwrap(nativeSnapshotValue)
         let smartctlSnapshot = try XCTUnwrap(smartctlSnapshotValue)
 
@@ -2107,6 +2108,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(smartctlSnapshot.health, .unavailable)
         XCTAssertEqual(nativeSnapshot.summary, "Network volumes do not expose local SMART data.")
         XCTAssertEqual(smartctlSnapshot.summary, "Network volumes do not expose local SMART data.")
+        XCTAssertTrue(smartctlRunner.calls.isEmpty)
     }
 
     func testNetworkAndMemoryCardUnavailableProvidersUseFailurePresentation() {
@@ -2153,8 +2155,9 @@ final class CapricornTests: XCTestCase {
         drive.isSolidState = false
         drive.smartStatusRaw = "Verified"
 
+        let smartctlRunner = SequencedCommandRunner(results: [])
         let nativeSnapshotValue = await NativeSmartProvider().snapshot(for: drive)
-        let smartctlSnapshotValue = await SmartctlSmartProvider().snapshot(for: drive)
+        let smartctlSnapshotValue = await Self.testSmartctlProvider(runner: smartctlRunner).snapshot(for: drive)
         let nativeSnapshot = try XCTUnwrap(nativeSnapshotValue)
         let smartctlSnapshot = try XCTUnwrap(smartctlSnapshotValue)
 
@@ -2162,6 +2165,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(smartctlSnapshot.health, .unavailable)
         XCTAssertEqual(nativeSnapshot.summary, "SD cards do not expose standard SMART health data on macOS.")
         XCTAssertEqual(smartctlSnapshot.summary, "SD cards do not expose standard SMART health data on macOS.")
+        XCTAssertTrue(smartctlRunner.calls.isEmpty)
     }
 
     func testSmartctlNVMeParserExtractsHealthFields() {

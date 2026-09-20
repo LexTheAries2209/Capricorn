@@ -544,6 +544,9 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     }
 
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot? {
+        if let unsupported = unsupportedSnapshot(for: drive) {
+            return unsupported
+        }
         let target = await resolvedTargetDescriptors(for: [drive])[drive.id]
         return await snapshot(for: drive, resolvedTargetDescriptor: target)
     }
@@ -556,11 +559,8 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     }
 
     func snapshot(for drive: DriveDevice, resolvedTargetDescriptor: SmartctlTargetDescriptor?) async -> SmartSnapshot? {
-        if drive.isNetwork {
-            return SmartSnapshot.unavailable(for: drive, reason: "Network volumes do not expose local SMART data.")
-        }
-        if drive.isMemoryCard {
-            return SmartSnapshot.unavailable(for: drive, reason: "SD cards do not expose standard SMART health data on macOS.")
+        if let unsupported = unsupportedSnapshot(for: drive) {
+            return unsupported
         }
 
         guard let executable = resolvedExecutable() else {
@@ -736,7 +736,8 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     }
 
     func resolvedTargetDescriptors(for drives: [DriveDevice]) async -> [String: SmartctlTargetDescriptor] {
-        guard !drives.isEmpty,
+        let supportedDrives = drives.filter { !$0.isNetwork && !$0.isMemoryCard }
+        guard !supportedDrives.isEmpty,
               let executable = resolvedExecutable(),
               let result = try? await commandCoordinator.run({ [self] in
                   try await self.runner.run(
@@ -752,7 +753,7 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             return [:]
         }
 
-        return drives.reduce(into: [:]) { targets, drive in
+        return supportedDrives.reduce(into: [:]) { targets, drive in
             let directMatch = devices.first(where: {
                 $0.name == drive.deviceNode
                     || $0.name.hasSuffix("/\(drive.bsdName)")
@@ -777,6 +778,16 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
                 openError: scanned?.openError ?? resolved.openError
             )
         }
+    }
+
+    private func unsupportedSnapshot(for drive: DriveDevice) -> SmartSnapshot? {
+        if drive.isNetwork {
+            return SmartSnapshot.unavailable(for: drive, reason: "Network volumes do not expose local SMART data.")
+        }
+        if drive.isMemoryCard {
+            return SmartSnapshot.unavailable(for: drive, reason: "SD cards do not expose standard SMART health data on macOS.")
+        }
+        return nil
     }
 
     func smartReadArguments(
