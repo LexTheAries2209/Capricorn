@@ -1859,6 +1859,20 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testSmartHistoryReportPayloadPreservesSavedSnapshot() {
+        let drive = Self.fixtureDrive()
+        let snapshot = Self.fixtureSnapshot(for: drive)
+        let record = SmartHistoryRecord(drive: drive, snapshot: snapshot)
+        let payload = SmartHistoryReportPayload(record: record)
+
+        XCTAssertEqual(payload.recordID, record.id)
+        XCTAssertEqual(payload.driveName, drive.displayName)
+        XCTAssertEqual(payload.capturedAt, snapshot.capturedAt)
+        XCTAssertEqual(payload.snapshot, snapshot)
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("View Full SMART Report"), "查看完整SMART报告")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("SMART Snapshot Report"), "SMART 快照报告")
+    }
+
     func testDriveFeatureTabsCycleThroughFiveModules() {
         XCTAssertEqual(DriveFeatureTab.allCases, [.overview, .smart, .benchmark, .liveActivity, .history])
         XCTAssertEqual(DriveFeatureTab.next(after: .overview), .smart)

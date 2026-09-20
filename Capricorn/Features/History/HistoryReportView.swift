@@ -13,6 +13,7 @@ struct HistoryReportView: View {
     let activityHistory: [DiskActivityHistoryRecord]
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
+    @Environment(\.openWindow) private var openWindow
     @State private var showHiddenHistory = false
     @State private var showClearCurrentDriveConfirmation = false
     @State private var showClearHiddenHistoryConfirmation = false
@@ -516,6 +517,18 @@ struct HistoryReportView: View {
                     .lineLimit(1)
 
                 Spacer(minLength: 4)
+
+                Button {
+                    openWindow(value: SmartHistoryReportPayload(record: item))
+                } label: {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .frame(width: 18, height: 18)
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .foregroundStyle(.secondary)
+                .help(language.t("View Full SMART Report"))
+                .accessibilityLabel(language.t("View Full SMART Report"))
 
                 historyVisibilityButton(isHidden: isHidden) {
                     if isHidden {

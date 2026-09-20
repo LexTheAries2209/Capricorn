@@ -63,6 +63,14 @@ struct CapricornApp: App {
             }
         }
 
+        WindowGroup(language.t("SMART Snapshot Report"), for: SmartHistoryReportPayload.self) { $payload in
+            if let payload {
+                SmartHistoryReportWindow(payload: payload)
+                    .environment(\.appLanguage, language)
+            }
+        }
+        .defaultSize(width: 860, height: 680)
+
         MenuBarExtra("Capricorn", systemImage: menuBarSymbol) {
             VStack(alignment: .leading, spacing: 8) {
                 Label(menuBarSummary, systemImage: menuBarSymbol)
