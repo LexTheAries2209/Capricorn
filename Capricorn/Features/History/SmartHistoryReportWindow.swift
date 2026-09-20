@@ -80,7 +80,9 @@ struct SmartHistoryReportWindow: View {
     }
 
     private func snapshotSummary(_ snapshot: SmartSnapshot) -> some View {
-        InfoPanel(title: language.t("Snapshot Summary"), symbol: "waveform.path.ecg") {
+        let historySummary = SmartHistorySummary(snapshot: snapshot)
+
+        return InfoPanel(title: language.t("Snapshot Summary"), symbol: "waveform.path.ecg") {
             VStack(alignment: .leading, spacing: 12) {
                 Text(language.statusMessage(snapshot.summary))
                     .font(.subheadline)
@@ -107,8 +109,11 @@ struct SmartHistoryReportWindow: View {
                     if let errors = snapshot.mediaErrors {
                         reportMetric(language.t("Media Errors"), errors.formatted(), "exclamationmark.triangle")
                     }
-                    if let shutdowns = snapshot.unsafeShutdowns {
-                        reportMetric(language.t("Unsafe Shutdowns"), shutdowns.formatted(), "bolt.trianglebadge.exclamationmark")
+                    if let dataRead = historySummary.dataRead {
+                        reportMetric(language.t("Total Read"), dataRead, "arrow.down.circle")
+                    }
+                    if let dataWritten = historySummary.dataWritten {
+                        reportMetric(language.t("Total Written"), dataWritten, "arrow.up.circle")
                     }
                 }
             }

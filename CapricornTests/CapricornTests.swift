@@ -6023,6 +6023,8 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Read"), "读取")
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Write"), "写入")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Total Read"), "累计读取量")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Total Written"), "累计写入量")
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("h"), "小时")
 
         let chinese = SmartHistoryTimestampFormatter.string(

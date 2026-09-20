@@ -361,6 +361,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Errors": "错误",
         "Read": "读取",
         "Write": "写入",
+        "Total Read": "累计读取量",
+        "Total Written": "累计写入量",
         "h": "小时",
         "Life Remaining": "剩余寿命",
         "Power-On Hours": "通电小时",
