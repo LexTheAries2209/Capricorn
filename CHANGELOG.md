@@ -4,6 +4,24 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.7.5 - 2026-09-20
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.7.5) | [Release Notes / 发布说明](docs/releases/v2.7.5.md)
+
+### 中文
+
+- SMART 历史摘要增加寿命、介质错误、累计读写量和通电时间，并支持在独立窗口查看完整报告与再次导出 CSV。
+- SMART 页面新增独立“保存到历史”操作；保存 CSV 仍会同步保存当前快照到历史。
+- 测速历史按共享曲线整组隐藏、恢复和删除，并修正紧凑图表速度刻度的对齐显示。
+- 设置新增默认关闭的历史逐条删除功能，可在二次确认后永久删除可见或已隐藏记录。
+
+### English
+
+- Expands SMART History summaries with life, media errors, cumulative reads and writes, and power-on time, plus full report windows and CSV export.
+- Adds a separate Save to History action on SMART while Save CSV continues to store the snapshot in History.
+- Hides, restores, and deletes Benchmark History by the run sharing one chart, with corrected compact speed-axis labels.
+- Adds a default-off per-record history deletion setting with confirmation for visible and hidden records.
+
 ## V2.7.4 - 2026-09-19
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.7.4) | [Release Notes / 发布说明](docs/releases/v2.7.4.md)
