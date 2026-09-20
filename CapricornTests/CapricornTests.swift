@@ -13,6 +13,10 @@ final class CapricornTests: XCTestCase {
             "XCInjectBundleInto": "/tmp/Capricorn.app/Contents/MacOS/Capricorn"
         ]))
         XCTAssertFalse(ApplicationRuntime.isTestProcess(environment: ["CI": "true"]))
+        XCTAssertFalse(ApplicationRuntime.shouldRunAutomaticStartupTasks(environment: [
+            "CAPRICORN_DISABLE_STARTUP_TASKS": "true"
+        ]))
+        XCTAssertTrue(ApplicationRuntime.shouldRunAutomaticStartupTasks(environment: [:]))
     }
 
     func testLifeRemainingBatterySymbolUsesNativeHealthBands() {
