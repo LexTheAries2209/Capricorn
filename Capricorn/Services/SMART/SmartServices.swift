@@ -507,6 +507,10 @@ actor SmartctlCommandCoordinator {
 }
 
 final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable {
+    static let scanTimeout: TimeInterval = 15
+    static let readTimeout: TimeInterval = 30
+    static let versionTimeout: TimeInterval = 10
+
     let providerName = "smartctl"
     private let runner: CommandRunning
     private let fileManager: FileManager
@@ -686,7 +690,8 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         let result = try await commandCoordinator.run { [self] in
             try await self.runner.run(
                 executable.path,
-                arguments: self.smartReadArguments(for: drive, target: target, fallback: fallback, executable: executable)
+                arguments: self.smartReadArguments(for: drive, target: target, fallback: fallback, executable: executable),
+                timeout: Self.readTimeout
             )
         }
         var snapshot = SmartctlParser.parseSnapshot(
@@ -739,7 +744,8 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
                       arguments: self.argumentsAddingDriveDatabase(
                           [self.avoidsWakingSleepingDisks() ? "--scan" : "--scan-open", "--json"],
                           executable: executable
-                      )
+                      ),
+                      timeout: Self.scanTimeout
                   )
               }),
               let devices = SmartctlParser.parseScan(result.stdout) else {
@@ -840,7 +846,11 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         }
         do {
             let result = try await commandCoordinator.run { [self] in
-                try await self.runner.run(executable.path, arguments: ["--version"])
+                try await self.runner.run(
+                    executable.path,
+                    arguments: ["--version"],
+                    timeout: Self.versionTimeout
+                )
             }
             let output = [result.stdoutString, result.stderrString].joined(separator: "\n")
             let version = Self.smartctlVersion(in: output)
@@ -1015,7 +1025,11 @@ final class SmartSelfTestService: @unchecked Sendable {
 
     private func runReadOnly(executable: String, arguments: [String]) async throws -> CommandResult {
         let result = try await commandCoordinator.run { [self] in
-            try await self.runner.run(executable, arguments: arguments)
+            try await self.runner.run(
+                executable,
+                arguments: arguments,
+                timeout: SmartctlSmartProvider.readTimeout
+            )
         }
         guard SmartctlParser.requiresAdministrator(result) else {
             return result
@@ -1135,7 +1149,11 @@ final class SmartErrorLogService: @unchecked Sendable {
 
     private func runReadOnly(executable: String, arguments: [String]) async throws -> CommandResult {
         let result = try await commandCoordinator.run { [self] in
-            try await self.runner.run(executable, arguments: arguments)
+            try await self.runner.run(
+                executable,
+                arguments: arguments,
+                timeout: SmartctlSmartProvider.readTimeout
+            )
         }
         guard SmartctlParser.requiresAdministrator(result) else {
             return result
