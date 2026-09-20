@@ -5,6 +5,16 @@ import SwiftUI
 @testable import Capricorn
 
 final class CapricornTests: XCTestCase {
+    func testApplicationRuntimeDetectsXCTestHostEnvironment() {
+        XCTAssertTrue(ApplicationRuntime.isTestProcess(environment: [
+            "XCTestConfigurationFilePath": "/tmp/Capricorn.xctestconfiguration"
+        ]))
+        XCTAssertTrue(ApplicationRuntime.isTestProcess(environment: [
+            "XCInjectBundleInto": "/tmp/Capricorn.app/Contents/MacOS/Capricorn"
+        ]))
+        XCTAssertFalse(ApplicationRuntime.isTestProcess(environment: ["CI": "true"]))
+    }
+
     func testLifeRemainingBatterySymbolUsesNativeHealthBands() {
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: nil), "battery.50percent")
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 100), "battery.100percent")
