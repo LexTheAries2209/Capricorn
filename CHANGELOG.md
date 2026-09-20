@@ -11,14 +11,14 @@ This file records every public Capricorn release. Entries are listed newest firs
 ### 中文
 
 - 测试宿主启动时不再执行真实磁盘刷新、事件监控或更新检查，避免自动化测试被系统 I/O 和网络副作用拖住。
-- SMART 测试使用隔离的命令协调器，并为扫描、读取和版本查询增加明确超时，确保异常命令能释放队列。
+- SMART 测试使用隔离的命令协调器，并为扫描、读取和版本查询增加明确超时；网络卷与存储卡会在设备扫描前直接返回不支持，确保异常路径不会占住队列。
 - GitHub Actions 质量工作流改为仅在 `Main` 推送和拉取请求运行，取消重复标签构建，并为所有任务增加并发取消与最长执行时间。
 - 完整测试增至 319 项，严格并发和 Swift 6 兼容性构建继续通过。
 
 ### English
 
 - Prevents the test host from starting real disk refresh, event monitoring, or update checks, avoiding automation stalls caused by system I/O and network side effects.
-- Isolates SMART test command coordination and adds explicit scan, read, and version timeouts so failed commands release the queue.
+- Isolates SMART test command coordination and adds explicit scan, read, and version timeouts. Network volumes and memory cards now return unsupported before device scanning so exceptional paths cannot occupy the queue.
 - Runs the GitHub Actions quality workflow only for `Main` pushes and pull requests, removes duplicate tag builds, and adds concurrency cancellation plus job time limits.
 - Expands the full suite to 319 passing tests while retaining successful strict-concurrency and Swift 6 compatibility builds.
 
