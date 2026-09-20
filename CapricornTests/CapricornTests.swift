@@ -1850,7 +1850,9 @@ final class CapricornTests: XCTestCase {
     }
 
     func testSmartSnapshotHistoryActionUsesSimplifiedChineseCopy() {
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Choose Folder"), "选择文件夹")
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Save to History"), "保存到历史")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Save CSV"), "保存CSV")
         XCTAssertEqual(
             AppLanguage.simplifiedChinese.t("Save SMART Snapshot to History"),
             "将 SMART 快照保存到历史"

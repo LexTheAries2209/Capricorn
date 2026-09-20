@@ -97,8 +97,9 @@ struct SmartAttributesView: View {
             Button {
                 _ = chooseSnapshotExportFolder()
             } label: {
-                Label(language.t(snapshotExportFolderPath.isEmpty ? "Choose Storage Folder" : "Change Storage Folder"), systemImage: "folder.badge.gearshape")
+                Label(language.t("Choose Folder"), systemImage: "folder.badge.gearshape")
             }
+            .help(language.t(snapshotExportFolderPath.isEmpty ? "Choose Storage Folder" : "Change Storage Folder"))
             if !snapshotExportFolderPath.isEmpty {
                 Button {
                     snapshotExportFolderPath = ""
@@ -117,7 +118,7 @@ struct SmartAttributesView: View {
             Button {
                 saveSnapshotCSV()
             } label: {
-                Label(language.t("Save SMART Snapshot CSV"), systemImage: "tray.and.arrow.down")
+                Label(language.t("Save CSV"), systemImage: "tray.and.arrow.down")
             }
             .keyboardShortcut(
                 AppCommandShortcut.saveSmartSnapshotKeyEquivalent,
