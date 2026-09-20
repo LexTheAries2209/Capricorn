@@ -4704,6 +4704,21 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(yTicks[1], 500.0 / 9.0, accuracy: 0.0001)
     }
 
+    func testDiskActivityChartAxisLabelsStayEvenlySpacedWhenCondensed() {
+        XCTAssertEqual(
+            DiskActivityChartAxisLabelPolicy.visibleIndices(tickCount: 10, maximumLabelCount: 4),
+            [0, 3, 6, 9]
+        )
+        XCTAssertEqual(
+            DiskActivityChartAxisLabelPolicy.visibleIndices(tickCount: 10, maximumLabelCount: 5),
+            [0, 2, 5, 7, 9]
+        )
+        XCTAssertEqual(
+            DiskActivityChartAxisLabelPolicy.visibleIndices(tickCount: 10, maximumLabelCount: 10),
+            Array(0..<10)
+        )
+    }
+
     func testBenchmarkActivityPanelKeepsChartVisibleOutsideBenchmark() {
         XCTAssertTrue(BenchmarkActivityPanelState.showsChart(isNetworkDrive: false))
         XCTAssertTrue(BenchmarkActivityPanelState.showsChart(isNetworkDrive: true))

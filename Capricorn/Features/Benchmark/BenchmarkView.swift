@@ -1208,6 +1208,14 @@ struct DiskActivityChartView: View {
             }
         }
 
+        var maximumYAxisLabelCount: Int {
+            switch self {
+            case .compact: 5
+            case .expanded: 10
+            case .mini: 4
+            }
+        }
+
     }
 
     private struct ChartData {
@@ -1224,6 +1232,7 @@ struct DiskActivityChartView: View {
     let style: Style
     var showsHeader = true
     @Environment(\.appLanguage) private var language
+    private static let plotVerticalInset: CGFloat = 7
 
     private var readSpeed: Double {
         current?.readMegabytesPerSecond ?? 0
@@ -1281,7 +1290,7 @@ struct DiskActivityChartView: View {
                         context.fill(background, with: .color(Color(nsColor: .controlBackgroundColor)))
                         context.stroke(background, with: .color(Color(nsColor: .separatorColor).opacity(0.45)), lineWidth: 1)
 
-                        let plotRect = rect.insetBy(dx: 8, dy: 7)
+                        let plotRect = rect.insetBy(dx: 8, dy: Self.plotVerticalInset)
                         drawGrid(in: plotRect, context: context, chartData: preparedChartData)
                         drawSeries(\.readMegabytesPerSecond, color: .blue, in: plotRect, context: context, chartData: preparedChartData)
                         drawSeries(\.writeMegabytesPerSecond, color: .green, in: plotRect, context: context, chartData: preparedChartData)
@@ -1313,14 +1322,29 @@ struct DiskActivityChartView: View {
     }
 
     private func yAxisLabels(_ yTicks: [Double]) -> some View {
-        VStack(spacing: 0) {
-            ForEach(Array(yTicks.reversed()), id: \.self) { tick in
-                Text(DiskActivityFormatter.speed(tick))
-                    .font(style.font.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-                    .frame(maxHeight: .infinity, alignment: .center)
+        GeometryReader { geometry in
+            let labelIndices = DiskActivityChartAxisLabelPolicy.visibleIndices(
+                tickCount: yTicks.count,
+                maximumLabelCount: style.maximumYAxisLabelCount
+            )
+            let plotHeight = max(0, geometry.size.height - Self.plotVerticalInset * 2)
+
+            ZStack(alignment: .topLeading) {
+                ForEach(labelIndices, id: \.self) { index in
+                    let fraction = yTicks.count > 1
+                        ? CGFloat(index) / CGFloat(yTicks.count - 1)
+                        : 0.5
+                    Text(DiskActivityFormatter.speed(yTicks[index]))
+                        .font(style.font.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                        .frame(width: geometry.size.width, alignment: .trailing)
+                        .position(
+                            x: geometry.size.width / 2,
+                            y: Self.plotVerticalInset + plotHeight * (1 - fraction)
+                        )
+                }
             }
         }
     }
@@ -1412,6 +1436,24 @@ struct DiskActivityChartView: View {
         path.move(to: CGPoint(x: rect.minX, y: y))
         path.addLine(to: CGPoint(x: rect.maxX, y: y))
         context.stroke(path, with: .color(color.opacity(0.35)), lineWidth: 1)
+    }
+}
+
+enum DiskActivityChartAxisLabelPolicy {
+    static func visibleIndices(tickCount: Int, maximumLabelCount: Int) -> [Int] {
+        guard tickCount > 0, maximumLabelCount > 0 else { return [] }
+        guard tickCount > maximumLabelCount else {
+            return Array(0..<tickCount)
+        }
+        guard maximumLabelCount > 1 else { return [tickCount - 1] }
+
+        let finalIndex = tickCount - 1
+        return (0..<maximumLabelCount).map { position in
+            Int(
+                (Double(position) * Double(finalIndex) / Double(maximumLabelCount - 1))
+                    .rounded()
+            )
+        }
     }
 }
 
