@@ -5946,6 +5946,28 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(summary.dataWritten, "12.4 TB")
     }
 
+    func testSmartHistoryLabelsAndTimestampFollowAppLanguage() {
+        let date = Date(timeIntervalSince1970: 1_779_000_000)
+
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Read"), "读取")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Write"), "写入")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("h"), "小时")
+
+        let chinese = SmartHistoryTimestampFormatter.string(
+            for: date,
+            language: .simplifiedChinese
+        )
+        let english = SmartHistoryTimestampFormatter.string(
+            for: date,
+            language: .english
+        )
+
+        XCTAssertTrue(chinese.contains("月"))
+        XCTAssertTrue(chinese.contains("日"))
+        XCTAssertFalse(chinese.contains("Sep"))
+        XCTAssertNotEqual(chinese, english)
+    }
+
     func testHistoryVisibilitySeparatesVisibleAndHiddenBenchmarkRecords() {
         let drive = Self.fixtureDrive()
         let visible = BenchmarkHistoryRecord(drive: drive, result: Self.fixtureBenchmarkResult(for: drive))

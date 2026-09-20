@@ -514,7 +514,7 @@ struct HistoryReportView: View {
                     .font(.caption.bold())
                     .foregroundStyle(item.health.tint)
 
-                Text(item.capturedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
+                Text(SmartHistoryTimestampFormatter.string(for: item.capturedAt, language: language))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -584,6 +584,7 @@ struct HistoryReportView: View {
             smartHistoryUsageLine(summary, compact: false)
             smartHistoryUsageLine(summary, compact: true)
         }
+        .id(language.rawValue)
         .font(.caption2)
         .foregroundStyle(.secondary)
         .monospacedDigit()
@@ -618,7 +619,7 @@ struct HistoryReportView: View {
                 Spacer(minLength: 5)
             }
             if let hours = summary.powerOnHours {
-                Label("\(hours.formatted()) h", systemImage: "timer")
+                Label("\(hours.formatted()) \(language.t("h"))", systemImage: "timer")
                     .fixedSize(horizontal: true, vertical: false)
                     .help(language.t("Power-On Hours"))
             }
@@ -934,6 +935,19 @@ struct HistoryReportView: View {
 enum HistorySelfTestVisibilityPolicy {
     static func showsReports(for snapshot: SmartSnapshot?) -> Bool {
         snapshot?.attributes.isEmpty == false
+    }
+}
+
+enum SmartHistoryTimestampFormatter {
+    static func string(for date: Date, language: AppLanguage) -> String {
+        date.formatted(
+            .dateTime
+                .month(.abbreviated)
+                .day()
+                .hour()
+                .minute()
+                .locale(Locale(identifier: language.localeIdentifier))
+        )
     }
 }
 
