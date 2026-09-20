@@ -46,11 +46,11 @@ struct HistoryReportView: View {
     }
 
     private var visibleBenchmarkHistory: [BenchmarkHistoryRecord] {
-        HistoryVisibility.visible(benchmarkHistory)
+        visibleBenchmarkHistoryGroups.flatMap(\.records)
     }
 
     private var hiddenBenchmarkHistory: [BenchmarkHistoryRecord] {
-        HistoryVisibility.hidden(benchmarkHistory)
+        hiddenBenchmarkHistoryGroups.flatMap(\.records)
     }
 
     private var benchmarkHistoryGroups: [BenchmarkHistoryGroup] {
@@ -58,15 +58,11 @@ struct HistoryReportView: View {
     }
 
     private var visibleBenchmarkHistoryGroups: [BenchmarkHistoryGroup] {
-        benchmarkHistoryGroups.compactMap { group in
-            group.retainingRecords { $0.hiddenAt == nil }
-        }
+        benchmarkHistoryGroups.filter { !$0.isHidden }
     }
 
     private var hiddenBenchmarkHistoryGroups: [BenchmarkHistoryGroup] {
-        benchmarkHistoryGroups.compactMap { group in
-            group.retainingRecords { $0.hiddenAt != nil }
-        }
+        benchmarkHistoryGroups.filter(\.isHidden)
     }
 
     private var visibleActivityHistory: [DiskActivityHistoryRecord] {
@@ -303,8 +299,8 @@ struct HistoryReportView: View {
         historyPanel(
             title: language.t("Benchmark Runs"),
             symbol: "chart.xyaxis.line",
-            count: visibleBenchmarkHistory.count,
-            emptyText: hiddenBenchmarkHistory.isEmpty ? language.t("No saved benchmark results yet.") : language.t("No visible benchmark results. Hidden benchmark results can be restored below."),
+            count: visibleBenchmarkHistoryGroups.count,
+            emptyText: hiddenBenchmarkHistoryGroups.isEmpty ? language.t("No saved benchmark results yet.") : language.t("No visible benchmark results. Hidden benchmark results can be restored below."),
             actionTitle: language.t("Hide All"),
             actionSymbol: "eye.slash",
             action: { hideAllHistory(visibleBenchmarkHistory) }
@@ -672,6 +668,30 @@ struct HistoryReportView: View {
         isHidden: Bool
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Label(
+                    group.measuredAt.formatted(date: .abbreviated, time: .shortened),
+                    systemImage: "square.stack.3d.down.right"
+                )
+                    .font(.caption.weight(.semibold))
+                Text("·")
+                Text("\(group.records.count) \(language.t("Results"))")
+                    .font(.caption)
+                Spacer(minLength: 8)
+                historyVisibilityButton(
+                    isHidden: isHidden,
+                    label: language.t(isHidden ? "Restore benchmark group" : "Hide benchmark group")
+                ) {
+                    if isHidden {
+                        restoreAllHistory(group.records)
+                    } else {
+                        hideAllHistory(group.records)
+                    }
+                }
+            }
+            .foregroundStyle(.secondary)
+            .padding(.bottom, 8)
+
             if !group.activitySamples.isEmpty {
                 DiskActivityChartView(
                     title: language.t("Benchmark Runs"),
@@ -684,7 +704,7 @@ struct HistoryReportView: View {
             }
 
             ForEach(Array(group.records.enumerated()), id: \.element.id) { index, item in
-                benchmarkHistoryRow(item, isHidden: isHidden)
+                benchmarkHistoryRow(item)
                     .padding(.vertical, 7)
                 if index < group.records.count - 1 {
                     Divider()
@@ -693,15 +713,8 @@ struct HistoryReportView: View {
         }
     }
 
-    private func benchmarkHistoryRow(_ item: BenchmarkHistoryRecord, isHidden: Bool) -> some View {
-        let visibilityAction = {
-            if isHidden {
-                restoreHistory(item)
-            } else {
-                hideHistory(item)
-            }
-        }
-        return ViewThatFits(in: .horizontal) {
+    private func benchmarkHistoryRow(_ item: BenchmarkHistoryRecord) -> some View {
+        ViewThatFits(in: .horizontal) {
             HStack(alignment: .center, spacing: 10) {
                 benchmarkHistoryIdentity(item)
                 Spacer(minLength: 8)
@@ -709,18 +722,13 @@ struct HistoryReportView: View {
                     .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
                     .fixedSize(horizontal: true, vertical: false)
-                historyVisibilityButton(isHidden: isHidden, action: visibilityAction)
             }
 
             VStack(alignment: .leading, spacing: 6) {
                 benchmarkHistoryIdentity(item)
-                HStack {
-                    Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
-                        .font(.subheadline.weight(.semibold))
-                        .monospacedDigit()
-                    Spacer(minLength: 8)
-                    historyVisibilityButton(isHidden: isHidden, action: visibilityAction)
-                }
+                Text(String(format: "%.2f MB/s", item.bestMegabytesPerSecond))
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
             }
         }
     }
@@ -853,16 +861,21 @@ struct HistoryReportView: View {
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    private func historyVisibilityButton(isHidden: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func historyVisibilityButton(
+        isHidden: Bool,
+        label: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        let accessibilityLabel = label ?? language.t(isHidden ? "Restore" : "Hide from history")
+        return Button(action: action) {
             Image(systemName: isHidden ? "arrow.uturn.backward" : "eye.slash")
                 .frame(width: 18, height: 18)
         }
         .buttonStyle(.borderless)
         .controlSize(.small)
         .foregroundStyle(.secondary)
-        .help(language.t(isHidden ? "Restore" : "Hide from history"))
-        .accessibilityLabel(language.t(isHidden ? "Restore" : "Hide from history"))
+        .help(accessibilityLabel)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     private func hideHistory<T: HistoryDisplayRecord>(_ item: T) {
@@ -884,6 +897,14 @@ struct HistoryReportView: View {
     private func hideAllHistory<T: HistoryDisplayRecord>(_ records: [T]) {
         do {
             try HistoryRepository(modelContext: modelContext).hideAll(records)
+        } catch {
+            reportError = language.t("Could not update history.")
+        }
+    }
+
+    private func restoreAllHistory<T: HistoryDisplayRecord>(_ records: [T]) {
+        do {
+            try HistoryRepository(modelContext: modelContext).restoreAll(records)
         } catch {
             reportError = language.t("Could not update history.")
         }
@@ -922,8 +943,12 @@ struct HistoryReportView: View {
     }
 
     private func clearHiddenDriveHistory() {
+        let repository = HistoryRepository(modelContext: modelContext)
         do {
-            _ = try HistoryRepository(modelContext: modelContext).clearHiddenHistory(for: drive)
+            // Older versions allowed individual benchmark rows to be hidden.
+            // Mark every record in those mixed groups before clearing them.
+            try repository.hideAll(hiddenBenchmarkHistory)
+            _ = try repository.clearHiddenHistory(for: drive)
             reportError = nil
         } catch {
             reportError = language.t("Could not clear history.")
@@ -1023,16 +1048,14 @@ struct BenchmarkHistoryGroup: Identifiable {
     let records: [BenchmarkHistoryRecord]
     let activitySamples: [DiskActivitySample]
 
-    func retainingRecords(
-        where predicate: (BenchmarkHistoryRecord) -> Bool
-    ) -> BenchmarkHistoryGroup? {
-        let retainedRecords = records.filter(predicate)
-        guard !retainedRecords.isEmpty else { return nil }
-        return BenchmarkHistoryGroup(
-            id: id,
-            records: retainedRecords,
-            activitySamples: activitySamples
-        )
+    var measuredAt: Date {
+        records.first?.measuredAt ?? .distantPast
+    }
+
+    /// A legacy partially hidden batch is treated as hidden so it can only be
+    /// restored or cleared as the complete chart-sharing result set.
+    var isHidden: Bool {
+        records.contains { $0.hiddenAt != nil }
     }
 }
 

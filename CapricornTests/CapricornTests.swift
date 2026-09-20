@@ -4923,6 +4923,39 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(groups[0].records.map(\.id), [latest.id, earlier.id])
     }
 
+    func testBenchmarkHistoryGroupUsesOneVisibilityStateForSharedChartResults() {
+        let drive = Self.fixtureDrive()
+        var latestResult = Self.fixtureBenchmarkResult(for: drive)
+        latestResult.measuredAt = Date(timeIntervalSince1970: 3_002)
+        var earlierResult = latestResult
+        earlierResult.id = UUID()
+        earlierResult.measuredAt = Date(timeIntervalSince1970: 3_001)
+        let samples = [
+            DiskActivitySample(
+                timestamp: Date(timeIntervalSince1970: 3_000),
+                readMegabytesPerSecond: 900,
+                writeMegabytesPerSecond: 700
+            )
+        ]
+        let latest = BenchmarkHistoryRecord(drive: drive, result: latestResult, activitySamples: samples)
+        let earlier = BenchmarkHistoryRecord(drive: drive, result: earlierResult)
+        let group = BenchmarkHistoryGroupingPolicy.groups(in: [earlier, latest])[0]
+
+        XCTAssertFalse(group.isHidden)
+        HistoryVisibility.hide(earlier, at: Date(timeIntervalSince1970: 3_100))
+        XCTAssertTrue(group.isHidden)
+
+        HistoryVisibility.hideAll(group.records, at: Date(timeIntervalSince1970: 3_200))
+        XCTAssertTrue(group.records.allSatisfy { $0.hiddenAt != nil })
+
+        HistoryVisibility.restoreAll(group.records)
+        XCTAssertFalse(group.isHidden)
+        XCTAssertTrue(group.records.allSatisfy { $0.hiddenAt == nil })
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Results"), "项结果")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Hide benchmark group"), "隐藏整组测速记录")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Restore benchmark group"), "恢复整组测速记录")
+    }
+
     func testDiskActivitySampleCodersReadLegacySampleArrays() throws {
         let sample = DiskActivitySample(
             timestamp: Date(timeIntervalSince1970: 1_000),
