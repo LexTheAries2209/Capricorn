@@ -4,6 +4,24 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.7.6 - 2026-09-20
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.7.6) | [Release Notes / 发布说明](docs/releases/v2.7.6.md)
+
+### 中文
+
+- 测试宿主启动时不再执行真实磁盘刷新、事件监控或更新检查，避免自动化测试被系统 I/O 和网络副作用拖住。
+- SMART 测试使用隔离的命令协调器，并为扫描、读取和版本查询增加明确超时，确保异常命令能释放队列。
+- GitHub Actions 质量工作流改为仅在 `Main` 推送和拉取请求运行，取消重复标签构建，并为所有任务增加并发取消与最长执行时间。
+- 完整测试增至 319 项，严格并发和 Swift 6 兼容性构建继续通过。
+
+### English
+
+- Prevents the test host from starting real disk refresh, event monitoring, or update checks, avoiding automation stalls caused by system I/O and network side effects.
+- Isolates SMART test command coordination and adds explicit scan, read, and version timeouts so failed commands release the queue.
+- Runs the GitHub Actions quality workflow only for `Main` pushes and pull requests, removes duplicate tag builds, and adds concurrency cancellation plus job time limits.
+- Expands the full suite to 319 passing tests while retaining successful strict-concurrency and Swift 6 compatibility builds.
+
 ## V2.7.5 - 2026-09-20
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.7.5) | [Release Notes / 发布说明](docs/releases/v2.7.5.md)
