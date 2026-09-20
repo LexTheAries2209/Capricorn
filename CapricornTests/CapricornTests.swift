@@ -6312,12 +6312,14 @@ final class CapricornTests: XCTestCase {
     static func testSmartctlProvider(
         runner: any CommandRunning = StaticCommandRunner(stdout: ""),
         ioServiceTargetResolver: any SmartctlIOServiceTargetResolving = StaticSmartctlTargetResolver(descriptor: nil),
-        avoidsWakingSleepingDisks: @escaping @Sendable () -> Bool = { true }
+        avoidsWakingSleepingDisks: @escaping @Sendable () -> Bool = { true },
+        commandCoordinator: SmartctlCommandCoordinator = SmartctlCommandCoordinator()
     ) -> SmartctlSmartProvider {
         SmartctlSmartProvider(
             runner: runner,
             bundledExecutableURL: URL(fileURLWithPath: "/usr/bin/true"),
             bundledDriveDatabaseURL: URL(fileURLWithPath: #filePath),
+            commandCoordinator: commandCoordinator,
             ioServiceTargetResolver: ioServiceTargetResolver,
             avoidsWakingSleepingDisks: avoidsWakingSleepingDisks
         )
@@ -6778,28 +6780,28 @@ private final class SequencedCommandRunner: CommandRunning, @unchecked Sendable 
         var arguments: [String]
     }
 
-    private let lock = NSLock()
-    private var recordedCalls: [Call] = []
-    private var results: [CommandResult]
+    private struct State {
+        var recordedCalls: [Call] = []
+        var results: [CommandResult]
+    }
+
+    private let state: LockedState<State>
 
     init(results: [CommandResult]) {
-        self.results = results
+        state = LockedState(State(results: results))
     }
 
     var calls: [Call] {
-        lock.lock()
-        defer { lock.unlock() }
-        return recordedCalls
+        state.withLock { $0.recordedCalls }
     }
 
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
-        lock.lock()
-        recordedCalls.append(Call(executable: executable, arguments: arguments))
-        let result = results.isEmpty
-            ? CommandResult(stdout: Data(), stderr: Data(), terminationStatus: 0)
-            : results.removeFirst()
-        lock.unlock()
-        return result
+        state.withLock { state in
+            state.recordedCalls.append(Call(executable: executable, arguments: arguments))
+            return state.results.isEmpty
+                ? CommandResult(stdout: Data(), stderr: Data(), terminationStatus: 0)
+                : state.results.removeFirst()
+        }
     }
 }
 
