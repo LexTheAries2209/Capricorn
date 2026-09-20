@@ -112,12 +112,14 @@ struct ContentView: View {
                 startupPreference: preferences.representativeVolumeStartupPreference,
                 encodedPreferences: representativeVolumePreferencesJSON
             )
+            guard !ApplicationRuntime.isRunningTests else { return }
             viewModel.startDriveSystemEventMonitoring()
             viewModel.showVirtualDisks = preferences.showVirtualDisks
             await viewModel.refreshIfNeeded()
             restoreDiskCheckReports()
         }
         .task(id: preferences.automaticRefreshInterval) {
+            guard !ApplicationRuntime.isRunningTests else { return }
             await viewModel.runAutomaticRefresh(every: preferences.automaticRefreshInterval)
         }
         .onChange(of: viewModel.showVirtualDisks) {
