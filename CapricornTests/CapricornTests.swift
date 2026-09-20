@@ -3383,6 +3383,30 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(runner.calls[1].arguments.contains("-t"))
     }
 
+    func testSmartctlProviderBoundsScanAndReadCommandsWithTimeouts() async {
+        let path = "IOService:/AppleARMPE/IONVMeController/IONVMeBlockStorageDevice@1"
+        let scan = """
+        {"devices":[{"name":"\(path)","type":"nvme","protocol":"NVMe"}]}
+        """
+        let runner = TimeoutRecordingCommandRunner(results: [
+            CommandResult(stdout: Data(scan.utf8), stderr: Data(), terminationStatus: 0),
+            CommandResult(stdout: Data(Self.smartctlNVMeFixture.utf8), stderr: Data(), terminationStatus: 0)
+        ])
+        let provider = Self.testSmartctlProvider(
+            runner: runner,
+            ioServiceTargetResolver: StaticSmartctlTargetResolver(
+                descriptor: SmartctlTargetDescriptor(path: path, type: "nvme")
+            )
+        )
+
+        _ = await provider.snapshot(for: Self.fixtureDrive())
+
+        XCTAssertEqual(runner.timeouts, [
+            SmartctlSmartProvider.scanTimeout,
+            SmartctlSmartProvider.readTimeout
+        ])
+    }
+
     func testSmartSelfTestServiceUsesShortTestCommandAndEstimatedDuration() async throws {
         let adminRunner = SequencedCommandRunner(results: [
             CommandResult(stdout: Data(Self.smartctlATACapabilityFixture.utf8), stderr: Data(), terminationStatus: 0),
@@ -6798,6 +6822,36 @@ private final class SequencedCommandRunner: CommandRunning, @unchecked Sendable 
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
         state.withLock { state in
             state.recordedCalls.append(Call(executable: executable, arguments: arguments))
+            return state.results.isEmpty
+                ? CommandResult(stdout: Data(), stderr: Data(), terminationStatus: 0)
+                : state.results.removeFirst()
+        }
+    }
+}
+
+private final class TimeoutRecordingCommandRunner: TimedCommandRunning, @unchecked Sendable {
+    private struct State {
+        var results: [CommandResult]
+        var timeouts: [TimeInterval] = []
+    }
+
+    private let state: LockedState<State>
+
+    init(results: [CommandResult]) {
+        state = LockedState(State(results: results))
+    }
+
+    var timeouts: [TimeInterval] {
+        state.withLock { $0.timeouts }
+    }
+
+    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        try await run(executable, arguments: arguments, timeout: 0)
+    }
+
+    func run(_ executable: String, arguments: [String], timeout: TimeInterval) async throws -> CommandResult {
+        state.withLock { state in
+            state.timeouts.append(timeout)
             return state.results.isEmpty
                 ? CommandResult(stdout: Data(), stderr: Data(), terminationStatus: 0)
                 : state.results.removeFirst()
