@@ -270,6 +270,21 @@ final class HistoryRepository {
         try modelContext.save()
     }
 
+    /// Permanently removes one record without moving it through hidden history.
+    func delete<T: PersistentModel>(_ record: T) throws {
+        modelContext.delete(record)
+        try modelContext.save()
+        CapricornLog.persistence.info("Individual history record deleted")
+    }
+
+    /// Benchmark results that share a saved chart are one history unit and are
+    /// deleted together to avoid leaving an incomplete run behind.
+    func delete<T: PersistentModel>(_ records: [T]) throws {
+        records.forEach(modelContext.delete)
+        try modelContext.save()
+        CapricornLog.persistence.info("History record group deleted: \(records.count) records")
+    }
+
     /// Removes the latest quick disk-check result for the selected drive.
     /// Quick checks are intentionally not part of hidden-history management.
     @discardableResult

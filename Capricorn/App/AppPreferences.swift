@@ -56,6 +56,7 @@ final class AppPreferences {
         static let redactSerialNumbers = "redactSerialNumbers"
         static let automaticRefreshIntervalMinutes = "automaticRefreshIntervalMinutes"
         static let showsCheckAndRepairActions = "showsCheckAndRepairActions"
+        static let showsIndividualHistoryDeletion = "showsIndividualHistoryDeletion"
         static let representativeVolumeStartupPreference = "representativeVolumeStartupPreference"
     }
 
@@ -102,6 +103,12 @@ final class AppPreferences {
         didSet { defaults.set(showsCheckAndRepairActions, forKey: Key.showsCheckAndRepairActions) }
     }
 
+    /// Individual history deletion is destructive and bypasses hidden-history
+    /// recovery, so its row actions remain opt-in.
+    var showsIndividualHistoryDeletion: Bool {
+        didSet { defaults.set(showsIndividualHistoryDeletion, forKey: Key.showsIndividualHistoryDeletion) }
+    }
+
     /// Controls the initial representative volume for each non-system drive.
     /// Manual sidebar changes remain active for the current application session.
     var representativeVolumeStartupPreference: RepresentativeVolumeStartupPreference {
@@ -121,6 +128,7 @@ final class AppPreferences {
             rawValue: defaults.integer(forKey: Key.automaticRefreshIntervalMinutes)
         ) ?? .off
         showsCheckAndRepairActions = defaults.bool(forKey: Key.showsCheckAndRepairActions)
+        showsIndividualHistoryDeletion = defaults.bool(forKey: Key.showsIndividualHistoryDeletion)
         representativeVolumeStartupPreference = RepresentativeVolumeStartupPreference(
             rawValue: defaults.string(forKey: Key.representativeVolumeStartupPreference) ?? ""
         ) ?? .largestCapacity
@@ -305,6 +313,14 @@ struct CapricornSettingsView: View {
             }
 
             Section(language.t("History Database")) {
+                Toggle(
+                    language.t("Show individual history delete buttons"),
+                    isOn: $preferences.showsIndividualHistoryDeletion
+                )
+                Text(language.t("When enabled, visible and hidden history records can be permanently deleted after confirmation."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 LabeledContent(language.t("Location")) {
                     Text(historyDatabaseDirectoryURL?.path ?? language.t("Unavailable"))
                         .lineLimit(1)

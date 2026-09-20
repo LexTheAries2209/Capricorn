@@ -1026,6 +1026,72 @@ final class CapricornTests: XCTestCase {
         XCTAssertNil(defaults.string(forKey: "requestedSettingsDestination"))
     }
 
+    @MainActor
+    func testIndividualHistoryDeletionPreferenceDefaultsOffAndPersists() {
+        let suiteName = "CapricornTests.individualHistoryDeletion.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = AppPreferences(defaults: defaults)
+
+        XCTAssertFalse(preferences.showsIndividualHistoryDeletion)
+        preferences.showsIndividualHistoryDeletion = true
+
+        XCTAssertTrue(defaults.bool(forKey: AppPreferences.Key.showsIndividualHistoryDeletion))
+        XCTAssertTrue(AppPreferences(defaults: defaults).showsIndividualHistoryDeletion)
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Show individual history delete buttons"),
+            "在历史界面显示单独删除按钮"
+        )
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Delete permanently"), "永久删除")
+    }
+
+    @MainActor
+    func testHistoryRepositoryPermanentlyDeletesVisibleHiddenAndGroupedRecords() throws {
+        let container = try ModelContainerFactory.makeInMemory()
+        let context = ModelContext(container)
+        let repository = HistoryRepository(modelContext: context)
+        let drive = Self.fixtureDrive()
+
+        let visible = try repository.saveSmart(drive: drive, snapshot: Self.fixtureSnapshot(for: drive))
+        var laterSnapshot = Self.fixtureSnapshot(for: drive)
+        laterSnapshot.id = UUID()
+        laterSnapshot.capturedAt = laterSnapshot.capturedAt.addingTimeInterval(1)
+        let hidden = try repository.saveSmart(drive: drive, snapshot: laterSnapshot)
+        try repository.hide(hidden)
+
+        try repository.delete(visible)
+        var smartRecords = try context.fetch(FetchDescriptor<SmartHistoryRecord>())
+        XCTAssertEqual(smartRecords.map(\.id), [hidden.id])
+        XCTAssertNotNil(smartRecords[0].hiddenAt)
+
+        try repository.delete(hidden)
+        smartRecords = try context.fetch(FetchDescriptor<SmartHistoryRecord>())
+        XCTAssertTrue(smartRecords.isEmpty)
+
+        var readResult = Self.fixtureBenchmarkResult(for: drive)
+        readResult.measuredAt = Date(timeIntervalSince1970: 2_001)
+        var writeResult = readResult
+        writeResult.id = UUID()
+        writeResult.testID = "unit-write"
+        writeResult.operation = .write
+        writeResult.measuredAt = Date(timeIntervalSince1970: 2_002)
+        let benchmarkRecords = try repository.saveBenchmarks(
+            drive: drive,
+            results: [readResult, writeResult],
+            activitySamples: [
+                DiskActivitySample(
+                    timestamp: Date(timeIntervalSince1970: 2_000),
+                    readMegabytesPerSecond: 100,
+                    writeMegabytesPerSecond: 200
+                )
+            ]
+        )
+        try repository.hideAll(benchmarkRecords)
+
+        try repository.delete(benchmarkRecords)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<BenchmarkHistoryRecord>()).isEmpty)
+    }
+
     func testContinueMonitoringIsLocalized() {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Continue Monitoring"), "继续监控")
     }

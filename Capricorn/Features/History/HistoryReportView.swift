@@ -14,11 +14,13 @@ struct HistoryReportView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @Environment(\.openWindow) private var openWindow
+    @AppStorage(AppPreferences.Key.showsIndividualHistoryDeletion) private var showsIndividualHistoryDeletion = false
     @State private var showHiddenHistory = false
     @State private var showClearCurrentDriveConfirmation = false
     @State private var showClearHiddenHistoryConfirmation = false
     @State private var showClearQuickDiskCheckConfirmation = false
     @State private var showClearDiagnosticCacheConfirmation = false
+    @State private var pendingHistoryDeletion: HistoryDeletionRequest?
     @State private var reportError: String?
     private let historyScrollThreshold = 10
     private let historyRowHeight: CGFloat = 58
@@ -203,6 +205,22 @@ struct HistoryReportView: View {
             Button(language.t("Cancel"), role: .cancel) {}
         } message: {
             Text(language.t("This clears the selected drive's cached self-test and error-log diagnostics without deleting history records."))
+        }
+        .confirmationDialog(
+            language.t(pendingHistoryDeletion?.titleKey ?? "Delete History Record?"),
+            isPresented: pendingHistoryDeletionConfirmation
+        ) {
+            Button(language.t("Delete permanently"), role: .destructive) {
+                deletePendingHistory()
+            }
+            Button(language.t("Cancel"), role: .cancel) {
+                pendingHistoryDeletion = nil
+            }
+        } message: {
+            Text(language.t(
+                pendingHistoryDeletion?.messageKey
+                    ?? "This permanently deletes the selected history record without moving it to hidden records. This cannot be undone."
+            ))
         }
     }
 
@@ -537,6 +555,9 @@ struct HistoryReportView: View {
                         hideHistory(item)
                     }
                 }
+                historyDeleteButton {
+                    pendingHistoryDeletion = .smart(item)
+                }
             }
 
             if summary.hasHealthMetrics {
@@ -701,6 +722,9 @@ struct HistoryReportView: View {
                         hideAllHistory(group.records)
                     }
                 }
+                historyDeleteButton {
+                    pendingHistoryDeletion = .benchmarkGroup(group.records)
+                }
             }
             .foregroundStyle(.secondary)
             .padding(.bottom, 8)
@@ -777,6 +801,9 @@ struct HistoryReportView: View {
                     hideHistory(item)
                 }
             }
+            historyDeleteButton {
+                pendingHistoryDeletion = .selfTest(item)
+            }
         }
     }
 
@@ -802,6 +829,9 @@ struct HistoryReportView: View {
                 }
             }
             Spacer()
+            historyDeleteButton {
+                pendingHistoryDeletion = .diskCheck(item)
+            }
         }
     }
 
@@ -821,6 +851,9 @@ struct HistoryReportView: View {
                             hideHistory(item)
                         }
                     }
+                    historyDeleteButton {
+                        pendingHistoryDeletion = .activity(item)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -834,6 +867,9 @@ struct HistoryReportView: View {
                             } else {
                                 hideHistory(item)
                             }
+                        }
+                        historyDeleteButton {
+                            pendingHistoryDeletion = .activity(item)
                         }
                     }
                 }
@@ -889,6 +925,58 @@ struct HistoryReportView: View {
         .foregroundStyle(.secondary)
         .help(accessibilityLabel)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private func historyDeleteButton(action: @escaping () -> Void) -> some View {
+        if showsIndividualHistoryDeletion {
+            Button(role: .destructive, action: action) {
+                Image(systemName: "trash")
+                    .frame(width: 18, height: 18)
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .foregroundStyle(.red)
+            .help(language.t("Delete permanently"))
+            .accessibilityLabel(language.t("Delete permanently"))
+        }
+    }
+
+    private var pendingHistoryDeletionConfirmation: Binding<Bool> {
+        Binding(
+            get: { pendingHistoryDeletion != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingHistoryDeletion = nil
+                }
+            }
+        )
+    }
+
+    private func deletePendingHistory() {
+        guard let pendingHistoryDeletion else { return }
+        let repository = HistoryRepository(modelContext: modelContext)
+
+        do {
+            switch pendingHistoryDeletion {
+            case let .smart(record):
+                try repository.delete(record)
+            case let .selfTest(record):
+                try repository.delete(record)
+            case let .diskCheck(record):
+                try repository.delete(record)
+                viewModel.clearDiskCheckReport(for: drive)
+            case let .benchmarkGroup(records):
+                try repository.delete(records)
+            case let .activity(record):
+                try repository.delete(record)
+            }
+            reportError = nil
+        } catch {
+            reportError = language.t("Could not delete history record.")
+        }
+
+        self.pendingHistoryDeletion = nil
     }
 
     private func hideHistory<T: HistoryDisplayRecord>(_ item: T) {
@@ -968,6 +1056,32 @@ struct HistoryReportView: View {
         }
     }
 
+}
+
+private enum HistoryDeletionRequest {
+    case smart(SmartHistoryRecord)
+    case selfTest(SmartSelfTestHistoryRecord)
+    case diskCheck(DiskCheckHistoryRecord)
+    case benchmarkGroup([BenchmarkHistoryRecord])
+    case activity(DiskActivityHistoryRecord)
+
+    var titleKey: String {
+        switch self {
+        case .benchmarkGroup:
+            "Delete Benchmark Group?"
+        default:
+            "Delete History Record?"
+        }
+    }
+
+    var messageKey: String {
+        switch self {
+        case .benchmarkGroup:
+            "This permanently deletes every result sharing this benchmark chart. This cannot be undone."
+        default:
+            "This permanently deletes the selected history record without moving it to hidden records. This cannot be undone."
+        }
+    }
 }
 
 enum HistorySelfTestVisibilityPolicy {
