@@ -34,7 +34,7 @@ struct CapricornApp: App {
             ContentView(viewModel: viewModel, preferences: preferences)
                 .frame(minWidth: 1050, minHeight: 680)
                 .task {
-                    guard !ApplicationRuntime.isRunningTests else { return }
+                    guard ApplicationRuntime.allowsAutomaticStartupTasks else { return }
                     await updateChecker.checkQuietlyAtLaunch()
                 }
         }

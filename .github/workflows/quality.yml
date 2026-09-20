@@ -2,12 +2,22 @@ name: Quality
 
 on:
   push:
+    branches:
+      - Main
   pull_request:
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   tests:
     name: Full tests
     runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      CAPRICORN_DISABLE_STARTUP_TASKS: "1"
+      NSUnbufferedIO: "YES"
     steps:
       - uses: actions/checkout@v4
       - name: Test
@@ -22,6 +32,7 @@ jobs:
   strict-concurrency:
     name: Strict concurrency
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Build with strict concurrency
@@ -38,6 +49,7 @@ jobs:
   swift-6:
     name: Swift 6 compatibility
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Build in Swift 6 mode
