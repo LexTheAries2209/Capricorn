@@ -1849,6 +1849,14 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testSmartSnapshotHistoryActionUsesSimplifiedChineseCopy() {
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Save to History"), "保存到历史")
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Save SMART Snapshot to History"),
+            "将 SMART 快照保存到历史"
+        )
+    }
+
     func testDriveFeatureTabsCycleThroughFiveModules() {
         XCTAssertEqual(DriveFeatureTab.allCases, [.overview, .smart, .benchmark, .liveActivity, .history])
         XCTAssertEqual(DriveFeatureTab.next(after: .overview), .smart)

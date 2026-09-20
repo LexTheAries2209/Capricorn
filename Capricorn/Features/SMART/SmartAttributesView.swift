@@ -43,53 +43,9 @@ struct SmartAttributesView: View {
             )
 
             HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(language.t("SMART Attributes"))
-                        .font(.title2.bold())
-                    snapshotStorageSummary
-                    if let nativeStatus = snapshot?.providerStatuses.first(where: {
-                        $0.name.caseInsensitiveCompare("Native macOS") == .orderedSame
-                            && $0.state == .limited
-                    }) {
-                        Label(language.statusMessage(nativeStatus.message), systemImage: "clock.arrow.circlepath")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if let saveMessage {
-                        Label(language.statusMessage(saveMessage), systemImage: saveMessageIsWarning ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(saveMessageIsWarning ? Color.orange : Color.secondary)
-                            .lineLimit(2)
-                    }
-                }
+                snapshotHeaderDetails
                 Spacer()
-                HStack(spacing: 8) {
-                    HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
-                    Button {
-                        chooseSnapshotExportFolder()
-                    } label: {
-                        Label(language.t(snapshotExportFolderPath.isEmpty ? "Choose Storage Folder" : "Change Storage Folder"), systemImage: "folder.badge.gearshape")
-                    }
-                    if !snapshotExportFolderPath.isEmpty {
-                        Button {
-                            snapshotExportFolderPath = ""
-                        } label: {
-                            Image(systemName: "xmark.circle")
-                        }
-                        .help(language.t("Clear Storage Folder"))
-                    }
-                    Button {
-                        saveMessage = saveSnapshot(snapshotExportFolderPath.isEmpty ? nil : snapshotExportFolderPath)
-                    } label: {
-                        Label(language.t("Save SMART Snapshot CSV"), systemImage: "tray.and.arrow.down")
-                    }
-                    .keyboardShortcut(
-                        AppCommandShortcut.saveSmartSnapshotKeyEquivalent,
-                        modifiers: AppCommandShortcut.saveSmartSnapshot.modifiers
-                    )
-                    .disabled(snapshot == nil)
-                    .help(language.t("Save SMART Snapshot CSV (Command-S)"))
-                }
+                snapshotActions
             }
 
             primarySmartContent
@@ -103,7 +59,7 @@ struct SmartAttributesView: View {
                     viewModel: viewModel,
                     selfTestHistory: selfTestHistory,
                     exportFolderPath: snapshotExportFolderPath.isEmpty ? nil : snapshotExportFolderPath,
-                    chooseExportFolder: chooseSnapshotExportFolder,
+                    chooseExportFolder: { _ = chooseSnapshotExportFolder() },
                     exportSelfTestHistory: exportSelfTestHistory,
                     exportErrorLog: exportErrorLog,
                     saveMessage: $saveMessage
@@ -111,6 +67,65 @@ struct SmartAttributesView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var snapshotHeaderDetails: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(language.t("SMART Attributes"))
+                .font(.title2.bold())
+            snapshotStorageSummary
+            if let nativeStatus = snapshot?.providerStatuses.first(where: {
+                $0.name.caseInsensitiveCompare("Native macOS") == .orderedSame
+                    && $0.state == .limited
+            }) {
+                Label(language.statusMessage(nativeStatus.message), systemImage: "clock.arrow.circlepath")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let saveMessage {
+                Label(language.statusMessage(saveMessage), systemImage: saveMessageIsWarning ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(saveMessageIsWarning ? Color.orange : Color.secondary)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private var snapshotActions: some View {
+        HStack(spacing: 8) {
+            HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
+            Button {
+                _ = chooseSnapshotExportFolder()
+            } label: {
+                Label(language.t(snapshotExportFolderPath.isEmpty ? "Choose Storage Folder" : "Change Storage Folder"), systemImage: "folder.badge.gearshape")
+            }
+            if !snapshotExportFolderPath.isEmpty {
+                Button {
+                    snapshotExportFolderPath = ""
+                } label: {
+                    Image(systemName: "xmark.circle")
+                }
+                .help(language.t("Clear Storage Folder"))
+            }
+            Button {
+                saveMessage = saveSnapshot(nil)
+            } label: {
+                Label(language.t("Save to History"), systemImage: "clock.arrow.circlepath")
+            }
+            .disabled(snapshot == nil)
+            .help(language.t("Save SMART Snapshot to History"))
+            Button {
+                saveSnapshotCSV()
+            } label: {
+                Label(language.t("Save SMART Snapshot CSV"), systemImage: "tray.and.arrow.down")
+            }
+            .keyboardShortcut(
+                AppCommandShortcut.saveSmartSnapshotKeyEquivalent,
+                modifiers: AppCommandShortcut.saveSmartSnapshot.modifiers
+            )
+            .disabled(snapshot == nil)
+            .help(language.t("Save SMART Snapshot CSV (Command-S)"))
+        }
     }
 
     @ViewBuilder
@@ -157,7 +172,19 @@ struct SmartAttributesView: View {
         .foregroundStyle(.secondary)
     }
 
-    private func chooseSnapshotExportFolder() {
+    private func saveSnapshotCSV() {
+        let exportFolderPath: String
+        if snapshotExportFolderPath.isEmpty {
+            guard let selectedFolderPath = chooseSnapshotExportFolder() else { return }
+            exportFolderPath = selectedFolderPath
+        } else {
+            exportFolderPath = snapshotExportFolderPath
+        }
+        saveMessage = saveSnapshot(exportFolderPath)
+    }
+
+    @discardableResult
+    private func chooseSnapshotExportFolder() -> String? {
         let panel = NSOpenPanel()
         panel.title = language.t("Choose Storage Folder")
         panel.message = language.t("Choose an optional folder for exported SMART reports.")
@@ -172,8 +199,9 @@ struct SmartAttributesView: View {
             panel.directoryURL = URL(fileURLWithPath: fallback, isDirectory: true)
         }
 
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
         snapshotExportFolderPath = url.path
+        return url.path
     }
 
     @ViewBuilder

@@ -507,6 +507,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "SAT SMART Driver is loaded.": "SAT SMART Driver 已加载。",
         "SAT SMART Driver files are installed.": "SAT SMART Driver 文件已安装。",
         "SAT did not return a SMART payload.": "SAT 未返回有效 SMART 数据。",
+        "Save SMART Snapshot to History": "将 SMART 快照保存到历史",
         "Save SMART Snapshot CSV": "保存 SMART 快照 CSV",
         "Save SMART Snapshot CSV (Command-S)": "保存 SMART 快照 CSV（Command-S）",
         "Choose Storage Folder": "选择存储文件夹",
