@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
+import AppKit
 import SwiftUI
 
 struct SmartHistoryReportPayload: Codable, Hashable {
     let recordID: UUID
+    let drive: DriveDevice
     let driveName: String
     let capturedAt: Date
     let health: HealthStatus
     let summary: String
     let snapshot: SmartSnapshot?
 
-    init(record: SmartHistoryRecord) {
+    init(record: SmartHistoryRecord, drive: DriveDevice) {
         recordID = record.id
+        self.drive = drive
         driveName = record.driveName
         capturedAt = record.capturedAt
         health = record.health
@@ -22,6 +25,17 @@ struct SmartHistoryReportPayload: Codable, Hashable {
 struct SmartHistoryReportWindow: View {
     let payload: SmartHistoryReportPayload
     @Environment(\.appLanguage) private var language
+    @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
+    @AppStorage("smartSnapshotExportFolder") private var snapshotExportFolderPath = ""
+    @State private var saveMessage: String?
+
+    private var saveMessageIsWarning: Bool {
+        guard let saveMessage else { return false }
+        return saveMessage.localizedCaseInsensitiveContains("failed")
+            || saveMessage.localizedCaseInsensitiveContains("unavailable")
+            || saveMessage.contains("失败")
+            || saveMessage.contains("不可用")
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -53,30 +67,140 @@ struct SmartHistoryReportWindow: View {
     }
 
     private var reportHeader: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(payload.driveName)
-                    .font(.title2.bold())
-                Label(
-                    payload.capturedAt.formatted(
-                        .dateTime
-                            .year()
-                            .month(.abbreviated)
-                            .day()
-                            .hour()
-                            .minute()
-                            .second()
-                            .locale(Locale(identifier: language.localeIdentifier))
-                    ),
-                    systemImage: "clock"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(payload.driveName)
+                        .font(.title2.bold())
+                    Label(
+                        payload.capturedAt.formatted(
+                            .dateTime
+                                .year()
+                                .month(.abbreviated)
+                                .day()
+                                .hour()
+                                .minute()
+                                .second()
+                                .locale(Locale(identifier: language.localeIdentifier))
+                        ),
+                        systemImage: "clock"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+                HealthBadge(status: payload.health, compact: true)
             }
-            Spacer()
-            HealthBadge(status: payload.health, compact: true)
+
+            HStack(spacing: 8) {
+                Button {
+                    _ = chooseSnapshotExportFolder()
+                } label: {
+                    Label(language.t("Choose Folder"), systemImage: "folder.badge.gearshape")
+                }
+                .help(language.t(snapshotExportFolderPath.isEmpty ? "Choose Storage Folder" : "Change Storage Folder"))
+
+                if !snapshotExportFolderPath.isEmpty {
+                    Button {
+                        snapshotExportFolderPath = ""
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                    }
+                    .help(language.t("Clear Storage Folder"))
+                }
+
+                Button {
+                    saveSnapshotCSV()
+                } label: {
+                    Label(language.t("Save CSV"), systemImage: "tray.and.arrow.down")
+                }
+                .disabled(payload.snapshot == nil)
+                .help(language.t("Save SMART Snapshot CSV"))
+
+                if let saveMessage {
+                    Label(
+                        saveMessage,
+                        systemImage: saveMessageIsWarning ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(saveMessageIsWarning ? Color.orange : Color.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                } else if !snapshotExportFolderPath.isEmpty {
+                    Text(snapshotExportFolderPath)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer(minLength: 0)
+            }
         }
         .padding(20)
+    }
+
+    private func saveSnapshotCSV() {
+        guard let snapshot = payload.snapshot else { return }
+
+        let exportFolderPath: String
+        if snapshotExportFolderPath.isEmpty {
+            guard let selectedFolderPath = chooseSnapshotExportFolder() else { return }
+            exportFolderPath = selectedFolderPath
+        } else {
+            exportFolderPath = snapshotExportFolderPath
+        }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: exportFolderPath, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            saveMessage = language.t("The selected folder is unavailable.")
+            return
+        }
+
+        let fileURL = URL(fileURLWithPath: exportFolderPath, isDirectory: true)
+            .appendingPathComponent(
+                ReportExporter.smartSnapshotFileName(
+                    drive: payload.drive,
+                    date: snapshot.capturedAt,
+                    language: language
+                )
+            )
+
+        do {
+            let report = ReportExporter.smartSnapshotCSVReport(
+                drive: payload.drive,
+                snapshot: snapshot,
+                language: language,
+                redactSerialNumbers: redactSerialNumbers
+            )
+            try report.write(to: fileURL, atomically: true, encoding: .utf8)
+            saveMessage = "\(language.t("CSV saved:")) \(fileURL.lastPathComponent)"
+        } catch {
+            saveMessage = "\(language.t("CSV export failed:")) \(error.localizedDescription)"
+        }
+    }
+
+    @discardableResult
+    private func chooseSnapshotExportFolder() -> String? {
+        let panel = NSOpenPanel()
+        panel.title = language.t("Choose Storage Folder")
+        panel.message = language.t("Choose an optional folder for exported SMART snapshot CSV files.")
+        panel.prompt = language.t("Use Folder")
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        if !snapshotExportFolderPath.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: snapshotExportFolderPath, isDirectory: true)
+        } else if let fallback = payload.drive.benchmarkMountPoint {
+            panel.directoryURL = URL(fileURLWithPath: fallback, isDirectory: true)
+        }
+
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        snapshotExportFolderPath = url.path
+        saveMessage = nil
+        return url.path
     }
 
     private func snapshotSummary(_ snapshot: SmartSnapshot) -> some View {

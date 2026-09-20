@@ -519,7 +519,7 @@ struct HistoryReportView: View {
                 Spacer(minLength: 4)
 
                 Button {
-                    openWindow(value: SmartHistoryReportPayload(record: item))
+                    openWindow(value: SmartHistoryReportPayload(record: item, drive: drive))
                 } label: {
                     Image(systemName: "doc.text.magnifyingglass")
                         .frame(width: 18, height: 18)

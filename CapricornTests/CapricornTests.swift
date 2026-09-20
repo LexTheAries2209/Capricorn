@@ -1859,18 +1859,23 @@ final class CapricornTests: XCTestCase {
         )
     }
 
-    func testSmartHistoryReportPayloadPreservesSavedSnapshot() {
+    func testSmartHistoryReportPayloadPreservesSavedSnapshot() throws {
         let drive = Self.fixtureDrive()
         let snapshot = Self.fixtureSnapshot(for: drive)
         let record = SmartHistoryRecord(drive: drive, snapshot: snapshot)
-        let payload = SmartHistoryReportPayload(record: record)
+        let payload = SmartHistoryReportPayload(record: record, drive: drive)
 
         XCTAssertEqual(payload.recordID, record.id)
+        XCTAssertEqual(payload.drive, drive)
         XCTAssertEqual(payload.driveName, drive.displayName)
         XCTAssertEqual(payload.capturedAt, snapshot.capturedAt)
         XCTAssertEqual(payload.snapshot, snapshot)
+        let encoded = try JSONEncoder().encode(payload)
+        XCTAssertEqual(try JSONDecoder().decode(SmartHistoryReportPayload.self, from: encoded), payload)
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("View Full SMART Report"), "查看完整SMART报告")
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("SMART Snapshot Report"), "SMART 快照报告")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("CSV saved:"), "CSV 已保存：")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("CSV export failed:"), "CSV 导出失败：")
     }
 
     func testDriveFeatureTabsCycleThroughFiveModules() {
