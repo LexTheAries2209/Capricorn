@@ -813,6 +813,73 @@ enum HistorySelfTestVisibilityPolicy {
     }
 }
 
+struct SmartHistorySummary: Equatable {
+    let lifeRemainingPercent: Int?
+    let mediaErrors: Int64?
+    let dataRead: String?
+    let dataWritten: String?
+    let powerOnHours: Int?
+
+    init(snapshot: SmartSnapshot?) {
+        lifeRemainingPercent = snapshot?.lifeRemainingPercent
+        mediaErrors = snapshot?.mediaErrors
+        dataRead = Self.dataAmount(in: snapshot?.attributes ?? [], direction: .read)
+        dataWritten = Self.dataAmount(in: snapshot?.attributes ?? [], direction: .written)
+        powerOnHours = snapshot?.powerOnHours
+    }
+
+    var hasHealthMetrics: Bool {
+        lifeRemainingPercent != nil || mediaErrors != nil
+    }
+
+    var hasUsageMetrics: Bool {
+        dataRead != nil || dataWritten != nil || powerOnHours != nil
+    }
+
+    private enum DataDirection {
+        case read
+        case written
+
+        var names: Set<String> {
+            switch self {
+            case .read:
+                ["data units read", "total lbas read"]
+            case .written:
+                ["data units written", "total lbas written"]
+            }
+        }
+    }
+
+    private static func dataAmount(
+        in attributes: [SmartAttribute],
+        direction: DataDirection
+    ) -> String? {
+        guard let attribute = attributes.first(where: {
+            direction.names.contains(normalizedName($0.name))
+        }) else {
+            return nil
+        }
+
+        let amount = attribute.rawValue
+            .components(separatedBy: " (")
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let amount, amount.rangeOfCharacter(from: .letters) != nil else {
+            return nil
+        }
+        return amount
+    }
+
+    private static func normalizedName(_ name: String) -> String {
+        name
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .lowercased()
+            .split(separator: " ")
+            .joined(separator: " ")
+    }
+}
+
 struct BenchmarkHistoryGroup: Identifiable {
     let id: UUID
     let records: [BenchmarkHistoryRecord]

@@ -5877,6 +5877,75 @@ final class CapricornTests: XCTestCase {
         XCTAssertNotNil(hidden.hiddenAt)
     }
 
+    func testSmartHistorySummaryExtractsSavedHealthAndUsageMetrics() {
+        let drive = Self.fixtureDrive()
+        var snapshot = Self.fixtureSnapshot(for: drive)
+        snapshot.attributes = [
+            SmartAttribute(
+                id: "nvme.data_units_read",
+                name: "Data Units Read",
+                rawValue: "92.29 TB (180246471 units)",
+                current: nil,
+                worst: nil,
+                threshold: nil,
+                status: .good,
+                source: "Fixture"
+            ),
+            SmartAttribute(
+                id: "nvme.data_units_written",
+                name: "Data Units Written",
+                rawValue: "43.95 TB (85848679 units)",
+                current: nil,
+                worst: nil,
+                threshold: nil,
+                status: .good,
+                source: "Fixture"
+            )
+        ]
+
+        let record = SmartHistoryRecord(drive: drive, snapshot: snapshot)
+        let summary = SmartHistorySummary(snapshot: record.snapshot)
+
+        XCTAssertEqual(summary.lifeRemainingPercent, 98)
+        XCTAssertEqual(summary.mediaErrors, 0)
+        XCTAssertEqual(summary.dataRead, "92.29 TB")
+        XCTAssertEqual(summary.dataWritten, "43.95 TB")
+        XCTAssertEqual(summary.powerOnHours, 120)
+        XCTAssertTrue(summary.hasHealthMetrics)
+        XCTAssertTrue(summary.hasUsageMetrics)
+    }
+
+    func testSmartHistorySummarySupportsATADataCountersAndRejectsRawBlocks() {
+        var snapshot = Self.fixtureSnapshot(for: Self.fixtureDrive())
+        snapshot.attributes = [
+            SmartAttribute(
+                id: "0xF1",
+                name: "Total_LBAs_Written",
+                rawValue: "12.4 TB (24218750000 LBA, 512 B/LBA)",
+                current: nil,
+                worst: nil,
+                threshold: nil,
+                status: .good,
+                source: "Fixture"
+            ),
+            SmartAttribute(
+                id: "0xF2",
+                name: "Total_LBAs_Read",
+                rawValue: "24218750000",
+                current: nil,
+                worst: nil,
+                threshold: nil,
+                status: .good,
+                source: "Fixture"
+            )
+        ]
+
+        let summary = SmartHistorySummary(snapshot: snapshot)
+
+        XCTAssertNil(summary.dataRead)
+        XCTAssertEqual(summary.dataWritten, "12.4 TB")
+    }
+
     func testHistoryVisibilitySeparatesVisibleAndHiddenBenchmarkRecords() {
         let drive = Self.fixtureDrive()
         let visible = BenchmarkHistoryRecord(drive: drive, result: Self.fixtureBenchmarkResult(for: drive))

@@ -36,6 +36,15 @@ final class SmartHistoryRecord {
         HealthStatus(rawValue: healthRaw) ?? .unavailable
     }
 
+    var snapshot: SmartSnapshot? {
+        guard let encodedSnapshot else { return nil }
+        return HistoryPayloadCoders.decode(
+            SmartSnapshot.self,
+            from: encodedSnapshot,
+            decoder: .dit
+        )?.value
+    }
+
     var volumeUUIDs: [String] {
         guard let encodedSnapshot else { return [] }
         return HistoryPayloadCoders.decode(
