@@ -4,7 +4,7 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
-## V2.7.6 - 2026-09-20
+## V2.7.6 - 2026-09-21
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.7.6) | [Release Notes / 发布说明](docs/releases/v2.7.6.md)
 
