@@ -5316,6 +5316,66 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: foreignFile), Data("foreign workload".utf8))
     }
 
+    func testTemporaryRunLeaseCleansOnlyExpiredUnlockedRuns() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        let target = root.appendingPathComponent("target", isDirectory: true)
+        let leases = root.appendingPathComponent("leases", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let now = Date(timeIntervalSince1970: 10_000)
+        let oldDate = now.addingTimeInterval(-TemporaryRunLease.staleFileAge - 1)
+        let abandonedRunID = UUID().uuidString
+        let activeRunID = UUID().uuidString
+        let freshRunID = UUID().uuidString
+        let mixedAgeRunID = UUID().uuidString
+        let orphanedRunID = UUID().uuidString
+
+        let abandonedLease = try TemporaryRunLease(kind: .benchmark, runID: abandonedRunID, leaseDirectoryURL: leases)
+        abandonedLease.release(removingLeaseFile: false)
+        let activeLease = try TemporaryRunLease(kind: .benchmark, runID: activeRunID, leaseDirectoryURL: leases)
+        let freshLease = try TemporaryRunLease(kind: .benchmark, runID: freshRunID, leaseDirectoryURL: leases)
+        freshLease.release(removingLeaseFile: false)
+        let mixedAgeLease = try TemporaryRunLease(kind: .benchmark, runID: mixedAgeRunID, leaseDirectoryURL: leases)
+        mixedAgeLease.release(removingLeaseFile: false)
+        let orphanedLease = try TemporaryRunLease(kind: .benchmark, runID: orphanedRunID, leaseDirectoryURL: leases)
+        let orphanedLeaseURL = orphanedLease.fileURL
+        orphanedLease.release(removingLeaseFile: false)
+
+        let abandonedFile = target.appendingPathComponent("Capricorn-\(abandonedRunID)-write-run0-retained.tmp")
+        let activeFile = target.appendingPathComponent("Capricorn-\(activeRunID)-read-run0-retained.tmp")
+        let freshFile = target.appendingPathComponent("Capricorn-\(freshRunID)-write-run0-retained.tmp")
+        let mixedAgeOldFile = target.appendingPathComponent("Capricorn-\(mixedAgeRunID)-write-run0-retained.tmp")
+        let mixedAgeFreshFile = target.appendingPathComponent("Capricorn-\(mixedAgeRunID)-read-run0-retained.tmp")
+        try Data("abandoned".utf8).write(to: abandonedFile)
+        try Data("active".utf8).write(to: activeFile)
+        try Data("fresh".utf8).write(to: freshFile)
+        try Data("mixed old".utf8).write(to: mixedAgeOldFile)
+        try Data("mixed fresh".utf8).write(to: mixedAgeFreshFile)
+        for file in [abandonedFile, activeFile, mixedAgeOldFile] {
+            try FileManager.default.setAttributes([.modificationDate: oldDate], ofItemAtPath: file.path)
+        }
+        try FileManager.default.setAttributes([.modificationDate: oldDate], ofItemAtPath: mixedAgeLease.fileURL.path)
+        try FileManager.default.setAttributes([.modificationDate: oldDate], ofItemAtPath: orphanedLeaseURL.path)
+
+        TemporaryRunLease.cleanupStaleFiles(
+            in: target,
+            kind: .benchmark,
+            leaseDirectoryURL: leases,
+            now: now
+        )
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: abandonedFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: activeFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: freshFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mixedAgeOldFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mixedAgeFreshFile.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: abandonedLease.fileURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mixedAgeLease.fileURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphanedLeaseURL.path))
+        activeLease.release(removingLeaseFile: true)
+    }
+
 
 
 

@@ -168,16 +168,19 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
 
     private let fileManager: FileManager
     private let fileEventHandler: WorkloadFileEventHandler?
+    private let temporaryRunLeaseDirectoryURL: URL?
     private let lock = NSLock()
     private var cancelled = false
     private let workloadFilePrefix = "Capricorn-Activity-"
 
     init(
         fileManager: FileManager = .default,
-        fileEventHandler: WorkloadFileEventHandler? = nil
+        fileEventHandler: WorkloadFileEventHandler? = nil,
+        temporaryRunLeaseDirectoryURL: URL? = nil
     ) {
         self.fileManager = fileManager
         self.fileEventHandler = fileEventHandler
+        self.temporaryRunLeaseDirectoryURL = temporaryRunLeaseDirectoryURL
     }
 
     func cancel() {
@@ -222,6 +225,26 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
             throw BenchmarkError.ioFailed("Workload target folder must be on the selected drive.")
         }
 
+        let runID = UUID().uuidString
+        let runLease = try TemporaryRunLease(
+            kind: .activity,
+            runID: runID,
+            leaseDirectoryURL: temporaryRunLeaseDirectoryURL,
+            fileManager: fileManager
+        )
+        var preparedReadFile: DiskActivityWorkloadOpenFile?
+        defer {
+            preparedReadFile?.closeAndRemove()
+            cleanupWorkloadFiles(in: targetURL, runID: runID)
+            runLease.release(removingLeaseFile: true)
+        }
+        TemporaryRunLease.cleanupStaleFiles(
+            in: targetURL,
+            kind: .activity,
+            leaseDirectoryURL: temporaryRunLeaseDirectoryURL,
+            fileManager: fileManager
+        )
+
         let available = DiskActivityWorkloadStorageValidator.availableCapacity(for: targetURL)
         let required = DiskActivityWorkloadStorageValidator.requiredSpace(
             fileSizeBytes: configuration.fileSizeBytes,
@@ -229,13 +252,6 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         )
         if available > 0, available < required {
             throw BenchmarkError.insufficientSpace(required: required, available: available)
-        }
-
-        let runID = UUID().uuidString
-        var preparedReadFile: DiskActivityWorkloadOpenFile?
-        defer {
-            preparedReadFile?.closeAndRemove()
-            cleanupWorkloadFiles(in: targetURL, runID: runID)
         }
 
         var loopIndex = 1

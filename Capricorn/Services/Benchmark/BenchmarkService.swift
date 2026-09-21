@@ -302,6 +302,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private let passIntervalSeconds: TimeInterval
     private let operationSleeper: OperationSleeper
     private let fileEventHandler: BenchmarkFileEventHandler?
+    private let temporaryRunLeaseDirectoryURL: URL?
     private let lock = NSLock()
     private var cancelled = false
     private let benchmarkFilePrefix = "Capricorn-"
@@ -311,13 +312,15 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         operationIntervalSeconds: TimeInterval = 5,
         passIntervalSeconds: TimeInterval = 1,
         operationSleeper: OperationSleeper? = nil,
-        fileEventHandler: BenchmarkFileEventHandler? = nil
+        fileEventHandler: BenchmarkFileEventHandler? = nil,
+        temporaryRunLeaseDirectoryURL: URL? = nil
     ) {
         self.fileManager = fileManager
         self.operationIntervalSeconds = operationIntervalSeconds
         self.passIntervalSeconds = passIntervalSeconds
         self.operationSleeper = operationSleeper ?? Self.defaultOperationSleeper
         self.fileEventHandler = fileEventHandler
+        self.temporaryRunLeaseDirectoryURL = temporaryRunLeaseDirectoryURL
     }
 
     func cancel() {
@@ -361,15 +364,28 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             throw BenchmarkError.volumeNotWritable(volumePath)
         }
 
+        let runID = UUID().uuidString
+        let runLease = try TemporaryRunLease(
+            kind: .benchmark,
+            runID: runID,
+            leaseDirectoryURL: temporaryRunLeaseDirectoryURL,
+            fileManager: fileManager
+        )
+        defer {
+            cleanupBenchmarkFiles(in: volumeURL, runID: runID)
+            runLease.release(removingLeaseFile: true)
+        }
+        TemporaryRunLease.cleanupStaleFiles(
+            in: volumeURL,
+            kind: .benchmark,
+            leaseDirectoryURL: temporaryRunLeaseDirectoryURL,
+            fileManager: fileManager
+        )
+
         let requiredSpace = BenchmarkStorageValidator.requiredSpace(for: profile)
         let available = BenchmarkStorageValidator.availableCapacity(for: volumeURL)
         if available > 0, available < requiredSpace {
             throw BenchmarkError.insufficientSpace(required: requiredSpace, available: available)
-        }
-
-        let runID = UUID().uuidString
-        defer {
-            cleanupBenchmarkFiles(in: volumeURL, runID: runID)
         }
 
         if profile.executionMode == .loopUntilCancelled {
@@ -1398,6 +1414,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private let passIntervalSeconds: TimeInterval
     private let operationSleeper: OperationSleeper
     private let fileEventHandler: BenchmarkFileEventHandler?
+    private let temporaryRunLeaseDirectoryURL: URL?
     private let lock = NSLock()
     private var cancelled = false
     private let benchmarkFilePrefix = "Capricorn-"
@@ -1407,13 +1424,15 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         operationIntervalSeconds: TimeInterval = 5,
         passIntervalSeconds: TimeInterval = 1,
         operationSleeper: OperationSleeper? = nil,
-        fileEventHandler: BenchmarkFileEventHandler? = nil
+        fileEventHandler: BenchmarkFileEventHandler? = nil,
+        temporaryRunLeaseDirectoryURL: URL? = nil
     ) {
         self.fileManager = fileManager
         self.operationIntervalSeconds = operationIntervalSeconds
         self.passIntervalSeconds = passIntervalSeconds
         self.operationSleeper = operationSleeper ?? Self.defaultOperationSleeper
         self.fileEventHandler = fileEventHandler
+        self.temporaryRunLeaseDirectoryURL = temporaryRunLeaseDirectoryURL
     }
 
     func cancel() {
@@ -1457,15 +1476,28 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             throw BenchmarkError.volumeNotWritable(volumePath)
         }
 
+        let runID = UUID().uuidString
+        let runLease = try TemporaryRunLease(
+            kind: .benchmark,
+            runID: runID,
+            leaseDirectoryURL: temporaryRunLeaseDirectoryURL,
+            fileManager: fileManager
+        )
+        defer {
+            cleanupBenchmarkFiles(in: volumeURL, runID: runID)
+            runLease.release(removingLeaseFile: true)
+        }
+        TemporaryRunLease.cleanupStaleFiles(
+            in: volumeURL,
+            kind: .benchmark,
+            leaseDirectoryURL: temporaryRunLeaseDirectoryURL,
+            fileManager: fileManager
+        )
+
         let requiredSpace = BenchmarkStorageValidator.requiredSpace(for: profile)
         let available = BenchmarkStorageValidator.availableCapacity(for: volumeURL)
         if available > 0, available < requiredSpace {
             throw BenchmarkError.insufficientSpace(required: requiredSpace, available: available)
-        }
-
-        let runID = UUID().uuidString
-        defer {
-            cleanupBenchmarkFiles(in: volumeURL, runID: runID)
         }
 
         if profile.executionMode == .loopUntilCancelled {
