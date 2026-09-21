@@ -222,7 +222,6 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
             throw BenchmarkError.ioFailed("Workload target folder must be on the selected drive.")
         }
 
-        cleanupWorkloadFiles(in: targetURL)
         let available = DiskActivityWorkloadStorageValidator.availableCapacity(for: targetURL)
         let required = DiskActivityWorkloadStorageValidator.requiredSpace(
             fileSizeBytes: configuration.fileSizeBytes,
@@ -232,13 +231,13 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
             throw BenchmarkError.insufficientSpace(required: required, available: available)
         }
 
+        let runID = UUID().uuidString
         var preparedReadFile: DiskActivityWorkloadOpenFile?
         defer {
             preparedReadFile?.closeAndRemove()
-            cleanupWorkloadFiles(in: targetURL)
+            cleanupWorkloadFiles(in: targetURL, runID: runID)
         }
 
-        let runID = UUID().uuidString
         var loopIndex = 1
 
         repeat {
@@ -577,9 +576,11 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         return DiskActivityWorkloadOpenFile(url: url, fd: fd, fileManager: fileManager)
     }
 
-    private func cleanupWorkloadFiles(in url: URL) {
+    private func cleanupWorkloadFiles(in url: URL, runID: String) {
         guard let contents = try? fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) else { return }
-        for file in contents where file.lastPathComponent.hasPrefix(workloadFilePrefix) {
+        // Other app instances may use the same target folder, so cleanup must remain run-scoped.
+        let runPrefix = "\(workloadFilePrefix)\(runID)-"
+        for file in contents where file.lastPathComponent.hasPrefix(runPrefix) {
             try? fileManager.removeItem(at: file)
         }
     }

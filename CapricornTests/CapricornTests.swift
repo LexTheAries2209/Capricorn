@@ -5292,6 +5292,30 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(leftovers.isEmpty)
     }
 
+    func testDiskActivityWorkloadRunnerPreservesFilesFromOtherRunIDs() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let foreignFile = root.appendingPathComponent("Capricorn-Activity-foreign-run-write-loop1-retained.tmp")
+        try Data("foreign workload".utf8).write(to: foreignFile)
+        let drive = Self.fixtureDrive(mountedAt: root.path)
+
+        try await NativeDiskActivityWorkloadRunner().run(
+            configuration: DiskActivityWorkloadConfiguration(
+                targetFolderURL: root,
+                operation: .write,
+                fileSizeOption: .gib32,
+                fileSizeBytes: 16_384,
+                loopEnabled: false
+            ),
+            drive: drive,
+            progress: { _ in }
+        )
+
+        XCTAssertEqual(try Data(contentsOf: foreignFile), Data("foreign workload".utf8))
+    }
+
 
 
 
@@ -5618,6 +5642,47 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(names.allSatisfy { $0.contains("write-run") })
     }
 
+    func testBenchmarkRunnerPreservesFilesFromOtherRunIDs() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let foreignBenchmarkFile = root.appendingPathComponent("Capricorn-foreign-run-write-run0-retained.tmp")
+        let foreignWorkloadFile = root.appendingPathComponent("Capricorn-Activity-foreign-run-retained.tmp")
+        try Data("foreign benchmark".utf8).write(to: foreignBenchmarkFile)
+        try Data("foreign workload".utf8).write(to: foreignWorkloadFile)
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+        let test = BenchmarkTest(
+            id: "unit-write",
+            label: "SEQ1M Q1T1",
+            accessPattern: .sequential,
+            operation: .write,
+            blockSizeBytes: 4_096,
+            queueDepth: 1,
+            threads: 1,
+            durationSeconds: 0.001,
+            testSizeBytes: 16_384,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 100
+        )
+        let profile = BenchmarkProfile(id: "unit", name: "Unit", testFileSizeBytes: 16_384, runs: 1, tests: [test])
+
+        _ = try await NativeBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0).run(
+            profile: profile,
+            drive: drive,
+            volumePath: root.path,
+            progress: { _ in },
+            result: { _ in }
+        )
+
+        XCTAssertEqual(try Data(contentsOf: foreignBenchmarkFile), Data("foreign benchmark".utf8))
+        XCTAssertEqual(try Data(contentsOf: foreignWorkloadFile), Data("foreign workload".utf8))
+    }
+
     func testBenchmarkRunnerReusesPreparedFileForReadPasses() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -5796,6 +5861,51 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(results.first?.bytesTransferred, 65_536)
         XCTAssertEqual(names.count, 1)
         XCTAssertTrue(names.first?.contains("read-run0") == true)
+    }
+
+    func testAsyncQueueBenchmarkRunnerPreservesFilesFromOtherRunIDs() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let foreignFile = root.appendingPathComponent("Capricorn-foreign-async-run-write-run0-retained.tmp")
+        try Data("foreign async benchmark".utf8).write(to: foreignFile)
+
+        var drive = Self.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "unit", name: "Unit", mountPoint: root.path, sizeBytes: 1_000_000, isWritable: true, isSystem: false)
+        ]
+        let test = BenchmarkTest(
+            id: "async-write",
+            label: "SEQ4K Q2T1",
+            accessPattern: .sequential,
+            operation: .write,
+            blockSizeBytes: 4_096,
+            queueDepth: 2,
+            threads: 1,
+            durationSeconds: 0.001,
+            testSizeBytes: 16_384,
+            dataPattern: .zeroFill,
+            writePercentForMixed: 100
+        )
+        let profile = BenchmarkProfile(
+            id: "async-unit",
+            name: "Async Unit",
+            testFileSizeBytes: 16_384,
+            runs: 1,
+            engine: .asyncQueue,
+            tests: [test]
+        )
+
+        _ = try await AsyncQueueBenchmarkRunner(operationIntervalSeconds: 0, passIntervalSeconds: 0).run(
+            profile: profile,
+            drive: drive,
+            volumePath: root.path,
+            progress: { _ in },
+            result: { _ in }
+        )
+
+        XCTAssertEqual(try Data(contentsOf: foreignFile), Data("foreign async benchmark".utf8))
     }
 
     func testAsyncQueueBenchmarkRunnerLoopPublishesLatestPassAndStopsWithoutWaiting() async throws {

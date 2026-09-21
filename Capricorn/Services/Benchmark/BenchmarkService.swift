@@ -305,7 +305,6 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
     private let benchmarkFilePrefix = "Capricorn-"
-    private let legacyBenchmarkFilePrefixes = [".dit-benchmark-"]
 
     init(
         fileManager: FileManager = .default,
@@ -368,9 +367,9 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             throw BenchmarkError.insufficientSpace(required: requiredSpace, available: available)
         }
 
-        cleanupBenchmarkFiles(in: volumeURL)
+        let runID = UUID().uuidString
         defer {
-            cleanupBenchmarkFiles(in: volumeURL)
+            cleanupBenchmarkFiles(in: volumeURL, runID: runID)
         }
 
         if profile.executionMode == .loopUntilCancelled {
@@ -379,6 +378,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 drive: drive,
                 volumePath: volumePath,
                 volumeURL: volumeURL,
+                runID: runID,
                 progress: progress,
                 result: result
             )
@@ -386,7 +386,6 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
         let measuredRuns = BenchmarkMeasurementReducer.measuredRunCount(for: profile.runs, usesTrimmedAverage: profile.usesTrimmedAverage)
         let totalSteps = profile.tests.count * (measuredRuns + 1)
-        let runID = UUID().uuidString
         var completedSteps = 0
         var results: [BenchmarkResult] = []
 
@@ -435,12 +434,12 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         drive: DriveDevice,
         volumePath: String,
         volumeURL: URL,
+        runID: String,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         result: @escaping @Sendable (BenchmarkResult) -> Void
     ) throws -> [BenchmarkResult] {
         let orderedTests = profile.tests
         let totalSteps = max(1, orderedTests.count)
-        let runID = UUID().uuidString
         var latestResultsByTestID: [String: BenchmarkResult] = [:]
         var preparedReadFiles: [String: BenchmarkOpenFile] = [:]
         var loopIndex = 1
@@ -1187,10 +1186,11 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         return try body(file.fd)
     }
 
-    private func cleanupBenchmarkFiles(in url: URL) {
+    private func cleanupBenchmarkFiles(in url: URL, runID: String) {
         guard let contents = try? fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) else { return }
-        let removablePrefixes = [benchmarkFilePrefix] + legacyBenchmarkFilePrefixes
-        for file in contents where removablePrefixes.contains(where: { file.lastPathComponent.hasPrefix($0) }) {
+        // Other app instances may use the same target folder, so cleanup must remain run-scoped.
+        let runPrefix = "\(benchmarkFilePrefix)\(runID)-"
+        for file in contents where file.lastPathComponent.hasPrefix(runPrefix) {
             try? fileManager.removeItem(at: file)
         }
     }
@@ -1401,7 +1401,6 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
     private let benchmarkFilePrefix = "Capricorn-"
-    private let legacyBenchmarkFilePrefixes = [".dit-benchmark-"]
 
     init(
         fileManager: FileManager = .default,
@@ -1464,9 +1463,9 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             throw BenchmarkError.insufficientSpace(required: requiredSpace, available: available)
         }
 
-        cleanupBenchmarkFiles(in: volumeURL)
+        let runID = UUID().uuidString
         defer {
-            cleanupBenchmarkFiles(in: volumeURL)
+            cleanupBenchmarkFiles(in: volumeURL, runID: runID)
         }
 
         if profile.executionMode == .loopUntilCancelled {
@@ -1475,6 +1474,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 drive: drive,
                 volumePath: volumePath,
                 volumeURL: volumeURL,
+                runID: runID,
                 progress: progress,
                 result: result
             )
@@ -1485,7 +1485,6 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         let totalSteps = profile.tests.count * (measuredRuns + 1)
         var completedSteps = 0
         var results: [BenchmarkResult] = []
-        let runID = UUID().uuidString
 
         for (index, test) in orderedTests.enumerated() {
             try checkCancelled()
@@ -1532,12 +1531,12 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         drive: DriveDevice,
         volumePath: String,
         volumeURL: URL,
+        runID: String,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         result: @escaping @Sendable (BenchmarkResult) -> Void
     ) throws -> [BenchmarkResult] {
         let orderedTests = orderedTestsByProfileRows(profile.tests)
         let totalSteps = max(1, orderedTests.count)
-        let runID = UUID().uuidString
         var latestResultsByTestID: [String: BenchmarkResult] = [:]
         var preparedReadFiles: [String: BenchmarkOpenFile] = [:]
         var loopIndex = 1
@@ -1623,10 +1622,11 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         return try body(file.fd)
     }
 
-    private func cleanupBenchmarkFiles(in url: URL) {
+    private func cleanupBenchmarkFiles(in url: URL, runID: String) {
         guard let contents = try? fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) else { return }
-        let removablePrefixes = [benchmarkFilePrefix] + legacyBenchmarkFilePrefixes
-        for file in contents where removablePrefixes.contains(where: { file.lastPathComponent.hasPrefix($0) }) {
+        // Other app instances may use the same target folder, so cleanup must remain run-scoped.
+        let runPrefix = "\(benchmarkFilePrefix)\(runID)-"
+        for file in contents where file.lastPathComponent.hasPrefix(runPrefix) {
             try? fileManager.removeItem(at: file)
         }
     }
