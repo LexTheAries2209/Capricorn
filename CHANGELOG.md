@@ -4,6 +4,24 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.8.0 - 2026-09-21
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.8.0) | [Release Notes / 发布说明](docs/releases/v2.8.0.md)
+
+### 中文
+
+- 新增跨 Capricorn 进程共享的物理硬盘操作锁；开发版与正式版使用同一套锁，避免多个实例同时对同一硬盘执行互斥操作。
+- 测速、实时活动负载、SMART 自检、磁盘检查/急救、装载、卸载、推出、重命名和网络卷断开均在实际执行前检查冲突；发现冲突时弹窗显示占用操作与进程，不会继续执行。
+- 保留现有 runID 隔离，并把临时文件清理限制在当前运行；超过一小时且确认没有活跃租约的崩溃残留会在新任务开始前清理。
+- 硬盘锁只协调 Capricorn 自身，不锁定系统设备，也不阻止 Finder、其他测速工具或系统服务访问硬盘。
+
+### English
+
+- Adds a physical-disk operation lock shared by all Capricorn processes, including development and release builds, so multiple instances cannot start conflicting operations on the same disk.
+- Benchmarking, Live Activity workloads, SMART self-tests, disk checks/First Aid, mount, unmount, eject, rename, and network-volume disconnect operations check for conflicts before execution. Conflicts show the owning operation and process and do not proceed.
+- Preserves runID isolation and limits temporary-file cleanup to the active run. Crash leftovers older than one hour are removed before a new task only when no active lease exists.
+- The lock coordinates Capricorn only. It does not lock the system device or prevent Finder, other benchmark tools, or system services from accessing the disk.
+
 ## V2.7.6 - 2026-09-21
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.7.6) | [Release Notes / 发布说明](docs/releases/v2.7.6.md)
