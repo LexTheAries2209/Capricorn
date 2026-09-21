@@ -2,6 +2,26 @@
 import Foundation
 @testable import Capricorn
 
+struct AlwaysConflictingDiskOperationLockCoordinator: DiskOperationLocking {
+    var activeOperation: DiskOperationKind = .benchmark
+
+    func acquire(for drive: DriveDevice, operation: DiskOperationKind) throws -> DiskOperationLease {
+        throw DiskOperationLockError.conflict(DiskOperationLockConflict(
+            requestedOperation: operation,
+            driveName: drive.displayName,
+            diskIdentifier: DiskOperationLockCoordinator.lockIdentifier(for: drive),
+            owner: DiskOperationLockOwner(
+                operation: activeOperation,
+                driveName: drive.displayName,
+                diskIdentifier: DiskOperationLockCoordinator.lockIdentifier(for: drive),
+                processIdentifier: 42,
+                executableName: "Capricorn",
+                startedAt: Date(timeIntervalSince1970: 1_000)
+            )
+        ))
+    }
+}
+
 @MainActor
 enum AsyncTestWaiter {
     static func wait(

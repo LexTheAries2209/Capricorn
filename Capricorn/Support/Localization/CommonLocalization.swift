@@ -27,6 +27,33 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         return Self.zhHans[key] ?? key
     }
 
+    func diskOperationLockMessage(_ notice: DiskOperationLockNotice) -> String {
+        if let failureMessage = notice.failureMessage {
+            switch self {
+            case .english:
+                return "Capricorn could not verify exclusive access before starting \(notice.requestedOperation.title) on \(notice.driveName). \(failureMessage)"
+            case .simplifiedChinese:
+                return "Capricorn 在 \(notice.driveName) 上开始“\(t(notice.requestedOperation.title))”前，无法验证独占访问状态。\(failureMessage)"
+            }
+        }
+
+        guard let owner = notice.conflictOwner else {
+            switch self {
+            case .english:
+                return "Another Capricorn process is already using \(notice.driveName). Wait for that operation to finish, then try again."
+            case .simplifiedChinese:
+                return "另一个 Capricorn 进程正在使用 \(notice.driveName)。请等待该操作结束后重试。"
+            }
+        }
+
+        switch self {
+        case .english:
+            return "Cannot start \(notice.requestedOperation.title) on \(notice.driveName) because \(owner.executableName) is running \(owner.operation.title) on the same physical disk (PID \(owner.processIdentifier)). Wait for it to finish, then try again."
+        case .simplifiedChinese:
+            return "无法在 \(notice.driveName) 上开始“\(t(notice.requestedOperation.title))”，因为 \(owner.executableName) 正在同一块物理硬盘上执行“\(t(owner.operation.title))”（PID \(owner.processIdentifier)）。请等待该操作结束后重试。"
+        }
+    }
+
     func smartSelfTestKindTitle(_ kind: SmartSelfTestKind) -> String {
         return switch kind {
         case .short: t("Quick")
@@ -471,6 +498,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Open Files Using Disk": "占用此硬盘的程序",
         "These processes currently have files open on the selected disk.": "这些进程当前在所选硬盘上打开了文件。",
         "Disk Action Failed": "硬盘操作失败",
+        "Disk Operation Conflict": "硬盘操作冲突",
+        "Disk Lock Unavailable": "硬盘锁不可用",
         "No Occupying Processes": "未发现占用程序",
         "No process with open files was reported for this disk.": "系统未报告有进程正在打开此硬盘上的文件。",
         "Program": "程序",

@@ -106,6 +106,10 @@ struct ContentView: View {
                 }
             )
             .frame(width: 0, height: 0)
+            DiskOperationLockAlertPresenter(
+                notice: $viewModel.diskOperationLockNotice,
+                language: language
+            )
         }
         .task {
             viewModel.configureRepresentativeVolumes(
@@ -1241,6 +1245,23 @@ private struct DriveDetailView: View {
             .tag(DriveFeatureTab.history)
         }
         .padding(18)
+    }
+}
+
+private struct DiskOperationLockAlertPresenter: View {
+    @Binding var notice: DiskOperationLockNotice?
+    let language: AppLanguage
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .alert(item: $notice) { notice in
+                Alert(
+                    title: Text(language.t(notice.failureMessage == nil ? "Disk Operation Conflict" : "Disk Lock Unavailable")),
+                    message: Text(language.diskOperationLockMessage(notice)),
+                    dismissButton: .default(Text(language.t("OK")))
+                )
+            }
     }
 }
 

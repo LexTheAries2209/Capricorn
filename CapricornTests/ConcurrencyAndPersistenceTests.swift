@@ -249,6 +249,37 @@ extension CapricornTests {
     }
 
     @MainActor
+    func testLiveActivityWorkloadDiskLockConflictStopsBeforeStarting() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let drive = Self.fixtureDrive(mountedAt: root.path)
+        let model = DITViewModel(
+            liveActivityWorkloadRunner: FakeDiskActivityWorkloadRunner(),
+            diskOperationLockCoordinator: AlwaysConflictingDiskOperationLockCoordinator(activeOperation: .benchmark)
+        )
+        model.drives = [drive]
+
+        model.startLiveActivityWorkload(
+            configuration: DiskActivityWorkloadConfiguration(
+                targetFolderURL: root,
+                operation: .write,
+                fileSizeOption: .gib32,
+                fileSizeBytes: 16_384,
+                loopEnabled: true
+            ),
+            drive: drive,
+            interval: .tenth
+        )
+
+        XCTAssertFalse(model.isLiveActivityWorkloadRunning)
+        XCTAssertFalse(model.isLiveActivityMonitoring)
+        XCTAssertEqual(model.diskOperationLockNotice?.requestedOperation, .activityWorkload)
+        XCTAssertEqual(model.diskOperationLockNotice?.conflictOwner?.operation, .benchmark)
+    }
+
+    @MainActor
     func testLiveActivityWorkloadIgnoresLateProgressFromCancelledRunAfterRestart() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

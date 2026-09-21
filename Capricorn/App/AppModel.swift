@@ -68,6 +68,7 @@ final class AppModel {
     var smartErrorLogReports: [String: SmartErrorLogReport] = [:]
     var smartErrorLogMessage: String?
     var completedSmartSelfTest: SmartSelfTestCompletion?
+    var diskOperationLockNotice: DiskOperationLockNotice?
     private(set) var diskCheckReportsByDrive: [String: DiskCheckReport] = [:]
     private var representativeVolumePreferences = RepresentativeVolumePreferences()
     private var activeRepresentativeVolumeIDsByDrive: [String: String] = [:]
@@ -289,6 +290,7 @@ final class AppModel {
     private let openFileService: DiskOpenFileService
     private let diskCheckService: DiskCheckService
     private let diskFirstAidService: DiskFirstAidRunning
+    private let diskOperationLockCoordinator: DiskOperationLocking
     private let notificationCoordinator: NotificationCoordinator
     private let driveSystemEventMonitor: DriveSystemEventMonitoring
     private let driveSystemEventDebounceNanoseconds: UInt64
@@ -308,6 +310,7 @@ final class AppModel {
     private var firstAidEventTask: Task<Void, Never>?
     private var activeFirstAidRunID: UUID?
     private var activeFirstAidPreparationID: UUID?
+    private var activeFirstAidDiskLease: DiskOperationLease?
     private var hasRequestedNotificationAuthorization = false
     private var lastBenchmarkProgressPublishedAt: Date?
     private var smartSelfTestTask: Task<Void, Never>?
@@ -315,6 +318,7 @@ final class AppModel {
     private var smartErrorLogCapabilityTasks: [String: Task<Void, Never>] = [:]
     private var smartErrorLogReadTasks: [String: Task<Void, Never>] = [:]
     private var smartSelfTestRunID: UUID?
+    private var activeSmartSelfTestDiskLease: DiskOperationLease?
 
     init(
         inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(),
@@ -329,6 +333,7 @@ final class AppModel {
         openFileService: DiskOpenFileService = DiskOpenFileService(),
         diskCheckService: DiskCheckService = DiskCheckService(),
         diskFirstAidService: DiskFirstAidRunning = DiskFirstAidService(),
+        diskOperationLockCoordinator: DiskOperationLocking = DiskOperationLockCoordinator(),
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator(),
         smartSelfTestService: SmartSelfTestService = SmartSelfTestService(),
         smartErrorLogService: SmartErrorLogService = SmartErrorLogService(),
@@ -353,6 +358,7 @@ final class AppModel {
         self.openFileService = openFileService
         self.diskCheckService = diskCheckService
         self.diskFirstAidService = diskFirstAidService
+        self.diskOperationLockCoordinator = diskOperationLockCoordinator
         self.notificationCoordinator = notificationCoordinator
         self.driveSystemEventMonitor = driveSystemEventMonitor
         self.driveSystemEventDebounceNanoseconds = driveSystemEventDebounceNanoseconds
@@ -696,6 +702,8 @@ final class AppModel {
             benchmarkError = "The selected folder must be writable and on the selected drive."
             return
         }
+        guard let diskLease = acquireDiskOperationLock(for: drive, operation: .benchmark) else { return }
+        defer { diskLease.release() }
 
         benchmarkError = nil
         CapricornLog.benchmark.info("Benchmark session started")
@@ -786,6 +794,11 @@ final class AppModel {
 
     func performDiskAction(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async {
         guard !diskOperations.isFirstAidBlocking else { return }
+        guard let operation = diskOperationKind(for: action),
+              let diskLease = acquireDiskOperationLock(for: drive, operation: operation) else {
+            return
+        }
+        defer { diskLease.release() }
         CapricornLog.diskOperations.info("Disk operation started: \(action.rawValue, privacy: .public)")
         selectedDriveID = drive.id
         refreshMessage = "Running disk action..."
@@ -832,6 +845,9 @@ final class AppModel {
             refreshMessage = "System-disk self-tests are disabled in Settings."
             return
         }
+        let operation: DiskOperationKind = mode == .ordinary ? .quickCheck : .detailedCheck
+        guard let diskLease = acquireDiskOperationLock(for: drive, operation: operation) else { return }
+        defer { diskLease.release() }
         refreshMessage = "Checking disk..."
         publishDiskCheckReport(DiskCheckReport(
             mode: mode,
@@ -968,6 +984,8 @@ final class AppModel {
 
     func closeFirstAid() {
         guard !firstAidState.isRepairing, firstAidState != .refreshing else { return }
+        activeFirstAidDiskLease?.release()
+        activeFirstAidDiskLease = nil
         firstAidEventTask = nil
         activeFirstAidRunID = nil
         activeFirstAidPreparationID = nil
@@ -987,6 +1005,12 @@ final class AppModel {
         guard let plan = firstAidPlan,
               plan.blockedReason == nil,
               !firstAidSelectedTargetIDs.isEmpty else { return }
+        guard let drive = drives.first(where: { $0.id == plan.driveID }) else {
+            firstAidError = "The selected physical disk is no longer available."
+            return
+        }
+        guard let diskLease = acquireDiskOperationLock(for: drive, operation: .firstAid) else { return }
+        activeFirstAidDiskLease = diskLease
 
         var runPlan = plan
         runPlan.selectedTargetIDs = firstAidSelectedTargetIDs
@@ -1016,6 +1040,8 @@ final class AppModel {
                 }
             } catch {
                 guard let self, self.activeFirstAidRunID == runPlan.id else { return }
+                self.activeFirstAidDiskLease?.release()
+                self.activeFirstAidDiskLease = nil
                 self.firstAidError = error.localizedDescription
                 self.firstAidState = .completed
                 self.refreshMessage = "First Aid failed."
@@ -1056,6 +1082,8 @@ final class AppModel {
                 guard let self, self.activeFirstAidRunID == runID else { return }
                 await self.refresh(allowDuringFirstAid: true)
                 guard self.activeFirstAidRunID == runID else { return }
+                self.activeFirstAidDiskLease?.release()
+                self.activeFirstAidDiskLease = nil
                 self.firstAidState = .completed
                 self.activeFirstAidRunID = nil
                 self.firstAidEventTask = nil
@@ -1103,6 +1131,42 @@ final class AppModel {
             return true
         case .mount, .inspectOpenFiles, .checkLog, .detailedCheck, .firstAid, .rename, .revealInFinder, .refresh:
             return false
+        }
+    }
+
+    private func acquireDiskOperationLock(
+        for drive: DriveDevice,
+        operation: DiskOperationKind
+    ) -> DiskOperationLease? {
+        do {
+            return try diskOperationLockCoordinator.acquire(for: drive, operation: operation)
+        } catch let DiskOperationLockError.conflict(conflict) {
+            diskOperationLockNotice = DiskOperationLockNotice(
+                requestedOperation: operation,
+                driveName: drive.displayName,
+                conflictOwner: conflict.owner,
+                failureMessage: nil
+            )
+        } catch {
+            diskOperationLockNotice = DiskOperationLockNotice(
+                requestedOperation: operation,
+                driveName: drive.displayName,
+                conflictOwner: nil,
+                failureMessage: error.localizedDescription
+            )
+        }
+        return nil
+    }
+
+    private func diskOperationKind(for action: DiskSidebarAction) -> DiskOperationKind? {
+        switch action {
+        case .mount: .mount
+        case .unmount: .unmount
+        case .forceUnmount: .forceUnmount
+        case .eject: .eject
+        case .rename: .rename
+        case .disconnect: .disconnect
+        case .inspectOpenFiles, .checkLog, .detailedCheck, .firstAid, .revealInFinder, .refresh: nil
         }
     }
 
@@ -1193,6 +1257,7 @@ final class AppModel {
             liveActivityWorkloadError = "Workload target folder must be on the selected drive."
             return
         }
+        guard let diskLease = acquireDiskOperationLock(for: drive, operation: .activityWorkload) else { return }
 
         liveActivityDriveID = drive.id
         liveActivityWorkloadError = nil
@@ -1230,6 +1295,7 @@ final class AppModel {
         }
         liveActivityWorkloadEventTask = eventTask
         liveActivityWorkloadTask = Task { [weak self] in
+            defer { diskLease.release() }
             do {
                 try await runner.run(configuration: configuration, drive: drive) { progress in
                     eventContinuation.yield(.progress(progress))
@@ -1650,6 +1716,8 @@ final class AppModel {
             smartSelfTestMessage = message
             return
         }
+        guard let diskLease = acquireDiskOperationLock(for: drive, operation: .smartSelfTest) else { return }
+        activeSmartSelfTestDiskLease = diskLease
         smartSelfTestTask?.cancel()
         smartSelfTestDriveID = drive.id
         let runID = UUID()
@@ -1702,17 +1770,23 @@ final class AppModel {
                     if self.smartSelfTestSession.isActive {
                         self.smartSelfTestSession = .failed("Self-test polling timed out.")
                     }
+                    self.activeSmartSelfTestDiskLease?.release()
+                    self.activeSmartSelfTestDiskLease = nil
                     self.smartSelfTestTask = nil
                 }
             } catch is CancellationError {
                 await MainActor.run { [weak self] in
                     guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
+                    self.activeSmartSelfTestDiskLease?.release()
+                    self.activeSmartSelfTestDiskLease = nil
                     self.smartSelfTestSession = .idle
                     self.smartSelfTestTask = nil
                 }
             } catch {
                 await MainActor.run { [weak self] in
                     guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
+                    self.activeSmartSelfTestDiskLease?.release()
+                    self.activeSmartSelfTestDiskLease = nil
                     self.smartSelfTestSession = .failed(error.localizedDescription)
                     self.smartSelfTestMessage = error.localizedDescription
                     self.smartSelfTestTask = nil
@@ -1748,6 +1822,8 @@ final class AppModel {
                             report: report
                         )
                     }
+                    self.activeSmartSelfTestDiskLease?.release()
+                    self.activeSmartSelfTestDiskLease = nil
                     self.smartSelfTestSession = .idle
                     self.smartSelfTestMessage = nil
                     self.smartSelfTestTask = nil
@@ -1755,6 +1831,8 @@ final class AppModel {
             } catch {
                 await MainActor.run { [weak self] in
                     guard let self, self.smartSelfTestRunID == runID else { return }
+                    self.activeSmartSelfTestDiskLease?.release()
+                    self.activeSmartSelfTestDiskLease = nil
                     self.smartSelfTestSession = .failed(error.localizedDescription)
                     self.smartSelfTestMessage = error.localizedDescription
                     self.smartSelfTestTask = nil

@@ -5,6 +5,8 @@ import Foundation
 enum DiskOperationKind: String, Codable, Sendable {
     case benchmark
     case activityWorkload
+    case smartSelfTest
+    case quickCheck
     case detailedCheck
     case firstAid
     case mount
@@ -17,7 +19,9 @@ enum DiskOperationKind: String, Codable, Sendable {
     var title: String {
         switch self {
         case .benchmark: "Benchmark"
-        case .activityWorkload: "Live Activity Workload"
+        case .activityWorkload: "Large File Workload"
+        case .smartSelfTest: "SMART Self-Tests"
+        case .quickCheck: "Quick Disk Check"
         case .detailedCheck: "System Check"
         case .firstAid: "First Aid"
         case .mount: "Mount"
@@ -44,6 +48,14 @@ struct DiskOperationLockConflict: Error, Equatable, Sendable {
     var driveName: String
     var diskIdentifier: String
     var owner: DiskOperationLockOwner?
+}
+
+struct DiskOperationLockNotice: Identifiable, Equatable, Sendable {
+    let id = UUID()
+    var requestedOperation: DiskOperationKind
+    var driveName: String
+    var conflictOwner: DiskOperationLockOwner?
+    var failureMessage: String?
 }
 
 enum DiskOperationLockError: Error, LocalizedError {

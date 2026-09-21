@@ -4312,6 +4312,41 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(error, "The selected folder must be writable and on the selected drive.")
     }
 
+    func testBenchmarkDiskLockConflictStopsBeforeRunnerAndPublishesNotice() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let drive = Self.fixtureDrive(mountedAt: root.path)
+        let runner = ImmediateBenchmarkRunner()
+        let model = await MainActor.run {
+            let model = DITViewModel(
+                benchmarkRunner: runner,
+                diskOperationLockCoordinator: AlwaysConflictingDiskOperationLockCoordinator(activeOperation: .firstAid)
+            )
+            model.drives = [drive]
+            model.selectedDriveID = drive.id
+            return model
+        }
+
+        let started = await MainActor.run {
+            model.startBenchmark(profile: .default, volumePath: root.path)
+        }
+        XCTAssertTrue(started)
+        let conflictPublished = await AsyncTestWaiter.wait {
+            await MainActor.run { model.diskOperationLockNotice != nil }
+        }
+
+        XCTAssertTrue(conflictPublished)
+        XCTAssertEqual(runner.runCount, 0)
+        let state = await MainActor.run {
+            (model.isBenchmarking, model.diskOperationLockNotice)
+        }
+        XCTAssertFalse(state.0)
+        XCTAssertEqual(state.1?.requestedOperation, .benchmark)
+        XCTAssertEqual(state.1?.conflictOwner?.operation, .firstAid)
+    }
+
     func testBenchmarkProfileConfigurationSeparatesResultIDs() {
         let random = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .random)
         let zeroFill = BenchmarkProfile.default.configured(runs: 3, fileSizeBytes: BenchmarkProfile.defaultTestSize, dataPattern: .zeroFill)
