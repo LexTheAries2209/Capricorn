@@ -3355,7 +3355,8 @@ final class CapricornTests: XCTestCase {
         let service = SmartSelfTestService(
             smartctlProvider: provider,
             runner: adminRunner,
-            administratorRunner: adminRunner
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
         )
 
         do {
@@ -3435,7 +3436,8 @@ final class CapricornTests: XCTestCase {
         let service = SmartSelfTestService(
             smartctlProvider: provider,
             runner: adminRunner,
-            administratorRunner: adminRunner
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
         )
 
         let result = try await service.start(kind: SmartSelfTestKind.short, drive: Self.fixtureDrive())
@@ -3453,7 +3455,8 @@ final class CapricornTests: XCTestCase {
         let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: ""))
         let service = SmartSelfTestService(
             smartctlProvider: provider,
-            administratorRunner: adminRunner
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
         )
         let model = AppModel(
             smartSelfTestService: service,
@@ -3480,11 +3483,13 @@ final class CapricornTests: XCTestCase {
         let model = AppModel(
             smartSelfTestService: SmartSelfTestService(
                 smartctlProvider: provider,
-                administratorRunner: adminRunner
+                administratorRunner: adminRunner,
+                commandCoordinator: SmartctlCommandCoordinator()
             ),
             smartErrorLogService: SmartErrorLogService(
                 smartctlProvider: provider,
-                administratorRunner: adminRunner
+                administratorRunner: adminRunner,
+                commandCoordinator: SmartctlCommandCoordinator()
             )
         )
         let drive = Self.fixtureDrive()
