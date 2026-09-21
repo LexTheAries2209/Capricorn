@@ -27,6 +27,10 @@ jobs:
           -scheme Capricorn
           -destination 'platform=macOS'
           -derivedDataPath DerivedData
+          -parallel-testing-enabled NO
+          -test-timeouts-enabled YES
+          -default-test-execution-time-allowance 60
+          -maximum-test-execution-time-allowance 60
           CODE_SIGNING_ALLOWED=NO
 
   strict-concurrency:
