@@ -5376,6 +5376,42 @@ final class CapricornTests: XCTestCase {
         activeLease.release(removingLeaseFile: true)
     }
 
+    func testDiskOperationLockConflictsOnSamePhysicalDiskAndAllowsDifferentDisks() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let coordinator = DiskOperationLockCoordinator(lockDirectoryURL: root)
+        var firstDrive = Self.fixtureDrive()
+        firstDrive.bsdName = "disk7"
+        firstDrive.deviceNode = "/dev/disk7"
+        firstDrive.displayName = "Test SSD"
+        var samePhysicalDisk = firstDrive
+        samePhysicalDisk.bsdName = "disk7s2"
+        samePhysicalDisk.deviceNode = "/dev/disk7s2"
+        var otherDrive = firstDrive
+        otherDrive.bsdName = "disk8"
+        otherDrive.deviceNode = "/dev/disk8"
+
+        let benchmarkLease = try coordinator.acquire(for: firstDrive, operation: .benchmark)
+        let otherDiskLease = try coordinator.acquire(for: otherDrive, operation: .activityWorkload)
+
+        XCTAssertThrowsError(try coordinator.acquire(for: samePhysicalDisk, operation: .firstAid)) { error in
+            guard case let DiskOperationLockError.conflict(conflict) = error else {
+                return XCTFail("Expected a disk-operation lock conflict, got \(error)")
+            }
+            XCTAssertEqual(conflict.requestedOperation, .firstAid)
+            XCTAssertEqual(conflict.diskIdentifier, "disk7")
+            XCTAssertEqual(conflict.owner?.operation, .benchmark)
+            XCTAssertEqual(conflict.owner?.driveName, "Test SSD")
+        }
+
+        benchmarkLease.release()
+        let retryLease = try coordinator.acquire(for: samePhysicalDisk, operation: .firstAid)
+        retryLease.release()
+        otherDiskLease.release()
+    }
+
 
 
 
