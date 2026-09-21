@@ -3191,10 +3191,18 @@ final class CapricornTests: XCTestCase {
     }
 
     func testSmartctlUsesBundledExecutableByDefault() async throws {
+        let runner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(Self.smartctlNVMeFixture.utf8),
+                stderr: Data(),
+                terminationStatus: 0
+            )
+        ])
         let provider = SmartctlSmartProvider(
-            runner: StaticCommandRunner(stdout: Self.smartctlNVMeFixture),
+            runner: runner,
             bundledExecutableURL: URL(fileURLWithPath: "/usr/bin/true"),
-            bundledDriveDatabaseURL: URL(fileURLWithPath: #filePath)
+            bundledDriveDatabaseURL: URL(fileURLWithPath: #filePath),
+            commandCoordinator: SmartctlCommandCoordinator()
         )
 
         XCTAssertEqual(provider.resolvedExecutable()?.path, "/usr/bin/true")
@@ -3214,6 +3222,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(snapshot.smartctlDiagnostics?.executableOrigin, SmartctlExecutableOrigin.bundled.rawValue)
         XCTAssertEqual(snapshot.smartctlDiagnostics?.version, BundledSmartctlMetadata.version)
         XCTAssertEqual(snapshot.smartctlDiagnostics?.driveDatabaseVersion, BundledSmartctlMetadata.driveDatabaseVersion)
+        XCTAssertEqual(runner.calls.count, 1)
     }
 
     func testSmartctlUsesOnlyBundledExecutable() {
