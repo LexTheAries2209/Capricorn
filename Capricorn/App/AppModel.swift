@@ -1895,7 +1895,7 @@ final class AppModel {
                     self.completedSmartSelfTest = SmartSelfTestCompletion(
                         id: UUID(),
                         drive: drive,
-                        state: .failed,
+                        state: .unknown,
                         report: nil,
                         message: error.localizedDescription,
                         completedAt: Date()

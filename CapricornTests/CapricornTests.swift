@@ -3800,6 +3800,8 @@ final class CapricornTests: XCTestCase {
         )
         XCTAssertEqual(cache.lastStoredRecord?.status, .unavailable)
         XCTAssertNil(cache.lastStoredRecord?.selfTestCapability)
+        XCTAssertEqual(model.completedSmartSelfTest?.state, .unknown)
+        XCTAssertNil(model.completedSmartSelfTest?.report)
     }
 
     @MainActor
