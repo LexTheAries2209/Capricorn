@@ -167,11 +167,14 @@ struct ContentView: View {
             }
         }
         .onChange(of: viewModel.completedSmartSelfTest?.id) {
-            guard let completion = viewModel.completedSmartSelfTest else { return }
+            guard let completion = viewModel.completedSmartSelfTest,
+                  let report = completion.report else {
+                return
+            }
             do {
                 try HistoryRepository(modelContext: modelContext).saveSelfTestReport(
                     drive: completion.drive,
-                    report: completion.report
+                    report: report
                 )
             } catch {
                 viewModel.smartSelfTestMessage = UserFacingError.message(

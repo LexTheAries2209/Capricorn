@@ -1191,6 +1191,38 @@ enum SmartSelfTestSessionState: Equatable, Sendable {
     }
 }
 
+enum SmartSelfTestCompletionState: String, Equatable, Sendable {
+    case passed
+    case failed
+    case aborted
+    case disconnected
+    case unknown
+}
+
+struct SmartSelfTestStartRequest: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let drive: DriveDevice
+    let kind: SmartSelfTestKind
+    let estimatedDurationSeconds: Int?
+
+    init(
+        id: UUID = UUID(),
+        drive: DriveDevice,
+        kind: SmartSelfTestKind,
+        estimatedDurationSeconds: Int?
+    ) {
+        self.id = id
+        self.drive = drive
+        self.kind = kind
+        self.estimatedDurationSeconds = estimatedDurationSeconds
+    }
+}
+
+enum SmartSelfTestPresentation: Equatable, Sendable {
+    case confirmation(SmartSelfTestStartRequest)
+    case monitor
+}
+
 struct SmartSelfTestProgress: Equatable, Sendable {
     var kind: SmartSelfTestKind
     var startedAt: Date

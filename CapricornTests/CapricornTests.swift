@@ -3657,6 +3657,33 @@ final class CapricornTests: XCTestCase {
     }
 
     @MainActor
+    func testSmartSelfTestRequestPresentsConfirmationBeforeStarting() {
+        let model = AppModel()
+        var drive = Self.fixtureDrive()
+        drive.isInternal = false
+        drive.isRemovable = true
+        drive.isSystemDisk = false
+        model.smartSelfTestCapabilities[drive.id] = .supported(SmartSelfTestCapability(
+            shortSupported: true,
+            longSupported: true,
+            message: "Self-test capability confirmed.",
+            shortPollingMinutes: 3,
+            longPollingMinutes: 45
+        ))
+
+        model.requestSmartSelfTest(kind: .short, drive: drive)
+
+        guard case let .confirmation(request) = model.smartSelfTestPresentation else {
+            return XCTFail("Expected a self-test confirmation request.")
+        }
+        XCTAssertEqual(request.drive, drive)
+        XCTAssertEqual(request.kind, .short)
+        XCTAssertEqual(request.estimatedDurationSeconds, 180)
+        XCTAssertEqual(model.smartSelfTestSession, .idle)
+        XCTAssertNil(model.smartSelfTestProgress)
+    }
+
+    @MainActor
     func testSystemDiskSelfTestIsAlwaysBlocked() {
         let adminRunner = SequencedCommandRunner(results: [])
         let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: ""))
