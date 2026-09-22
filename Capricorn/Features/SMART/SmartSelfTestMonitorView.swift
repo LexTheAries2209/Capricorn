@@ -147,7 +147,7 @@ private struct SmartSelfTestMonitorView: View {
 
     private var monitorHeight: CGFloat {
         if isActive {
-            return 430
+            return 380
         }
         if viewModel.completedSmartSelfTest != nil {
             return 330
