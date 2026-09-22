@@ -2269,16 +2269,18 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
     }
 
-    func testHistorySelfTestVisibilityTracksCurrentSMARTAttributes() {
-        let drive = Self.fixtureDrive()
+    func testHistoryDiagnosticVisibilityExcludesSystemDisks() {
+        var drive = Self.fixtureDrive()
+        drive.isSystemDisk = false
         let unavailable = SmartSnapshot.unavailable(for: drive, reason: "No SMART data.")
 
-        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: nil))
-        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: unavailable))
+        XCTAssertTrue(HistoryDiagnosticVisibilityPolicy.showsQuickDiskCheck(for: drive))
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: nil))
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: unavailable))
 
         var recovered = unavailable
         recovered.smartStatusRaw = "PASSED"
-        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: recovered))
 
         let attribute = SmartAttribute(
             id: "temperature.current",
@@ -2291,13 +2293,17 @@ final class CapricornTests: XCTestCase {
             source: "Fixture"
         )
         recovered.attributes = [attribute]
-        XCTAssertTrue(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+        XCTAssertTrue(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: recovered))
 
         recovered.attributes = []
-        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: recovered))
 
         recovered.attributes = [attribute]
-        XCTAssertTrue(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+        XCTAssertTrue(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: recovered))
+
+        drive.isSystemDisk = true
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsQuickDiskCheck(for: drive))
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: recovered))
     }
 
     func testSmartErrorLogPresentationSeparatesHistoricalCountFromReadDetails() {

@@ -48,6 +48,10 @@ struct HistoryReportView: View {
         diskCheckHistory
     }
 
+    private var showsQuickDiskCheck: Bool {
+        HistoryDiagnosticVisibilityPolicy.showsQuickDiskCheck(for: drive)
+    }
+
     private var visibleBenchmarkHistory: [BenchmarkHistoryRecord] {
         visibleBenchmarkHistoryGroups.flatMap(\.records)
     }
@@ -77,7 +81,7 @@ struct HistoryReportView: View {
     }
 
     private var showsSelfTestReports: Bool {
-        HistorySelfTestVisibilityPolicy.showsReports(for: snapshot)
+        HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: snapshot)
     }
 
     private var hasHiddenHistory: Bool {
@@ -89,15 +93,15 @@ struct HistoryReportView: View {
 
     private var visibleHistoryCount: Int {
         visibleSmartHistory.count
-            + visibleSelfTestHistory.count
-            + visibleDiskCheckHistory.count
+            + (showsSelfTestReports ? visibleSelfTestHistory.count : 0)
+            + (showsQuickDiskCheck ? visibleDiskCheckHistory.count : 0)
             + visibleBenchmarkHistory.count
             + visibleActivityHistory.count
     }
 
     private var hiddenHistoryCount: Int {
         hiddenSmartHistory.count
-            + hiddenSelfTestHistory.count
+            + (showsSelfTestReports ? hiddenSelfTestHistory.count : 0)
             + hiddenBenchmarkHistory.count
             + hiddenActivityHistory.count
     }
@@ -122,18 +126,20 @@ struct HistoryReportView: View {
                         .foregroundStyle(.red)
                 }
 
-                historyPanel(
-                    title: language.t("Quick Disk Check"),
-                    symbol: "doc.text.magnifyingglass",
-                    count: visibleDiskCheckHistory.count,
-                    emptyText: language.t("No saved quick disk checks yet."),
-                    actionTitle: language.t("Clear Result"),
-                    actionSymbol: "trash",
-                    bottomPadding: 8,
-                    action: { showClearQuickDiskCheckConfirmation = true }
-                ) {
-                    historyRows(visibleDiskCheckHistory) { item in
-                        diskCheckHistoryRow(item)
+                if showsQuickDiskCheck {
+                    historyPanel(
+                        title: language.t("Quick Disk Check"),
+                        symbol: "doc.text.magnifyingglass",
+                        count: visibleDiskCheckHistory.count,
+                        emptyText: language.t("No saved quick disk checks yet."),
+                        actionTitle: language.t("Clear Result"),
+                        actionSymbol: "trash",
+                        bottomPadding: 8,
+                        action: { showClearQuickDiskCheckConfirmation = true }
+                    ) {
+                        historyRows(visibleDiskCheckHistory) { item in
+                            diskCheckHistoryRow(item)
+                        }
                     }
                 }
 
@@ -1015,7 +1021,9 @@ struct HistoryReportView: View {
         let repository = HistoryRepository(modelContext: modelContext)
         do {
             try repository.restoreAll(hiddenSmartHistory)
-            try repository.restoreAll(hiddenSelfTestHistory)
+            if showsSelfTestReports {
+                try repository.restoreAll(hiddenSelfTestHistory)
+            }
             try repository.restoreAll(hiddenBenchmarkHistory)
             try repository.restoreAll(hiddenActivityHistory)
         } catch {
@@ -1084,9 +1092,13 @@ private enum HistoryDeletionRequest {
     }
 }
 
-enum HistorySelfTestVisibilityPolicy {
-    static func showsReports(for snapshot: SmartSnapshot?) -> Bool {
-        snapshot?.attributes.isEmpty == false
+enum HistoryDiagnosticVisibilityPolicy {
+    static func showsQuickDiskCheck(for drive: DriveDevice) -> Bool {
+        !drive.isSystemDisk
+    }
+
+    static func showsSelfTestReports(for drive: DriveDevice, snapshot: SmartSnapshot?) -> Bool {
+        !drive.isSystemDisk && snapshot?.attributes.isEmpty == false
     }
 }
 
