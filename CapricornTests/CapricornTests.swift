@@ -1135,6 +1135,12 @@ final class CapricornTests: XCTestCase {
             AppLanguage.simplifiedChinese.statusMessage(SmartSelfTestService.macOSNativeNVMeUnavailableMessage),
             "macOS 上的 smartctl 无法发送设备自检命令 0x14。"
         )
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Estimated Completion"), "预计完成时间")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Last Status Update"), "最近状态刷新")
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("The drive has not reported percentage progress. Status refreshes every 5 seconds."),
+            "硬盘尚未报告百分比进度，状态每 5 秒刷新一次。"
+        )
     }
 
     func testSidebarStatusMessagesAreLocalized() {
@@ -2413,6 +2419,47 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(snapshot.selfTestReport?.entries.first?.lifetimeHours, 456)
     }
 
+    func testSmartctlNVMeSelfTestParserConvertsCompletionToRemainingProgress() {
+        let fixture = """
+        {
+          "smartctl": {"exit_status": 0},
+          "smart_status": {"passed": true},
+          "nvme_smart_health_information_log": {"temperature": 300, "percentage_used": 1},
+          "nvme_self_test_log": {
+            "current_self_test_operation": "Short self-test in progress",
+            "current_self_test_completion_percent": 37,
+            "self_test_results": []
+          }
+        }
+        """
+        let snapshot = SmartctlParser.parseSnapshot(
+            Data(fixture.utf8),
+            drive: Self.fixtureDrive(),
+            providerName: "smartctl",
+            exitStatus: 0
+        )
+
+        XCTAssertEqual(snapshot.selfTestReport?.state, .running)
+        XCTAssertEqual(snapshot.selfTestReport?.currentKind, .short)
+        XCTAssertEqual(snapshot.selfTestReport?.currentRemainingPercent, 63)
+    }
+
+    func testSmartSelfTestProgressClampsDevicePercentages() {
+        var progress = SmartSelfTestProgress(
+            kind: .short,
+            startedAt: Date(timeIntervalSince1970: 100),
+            estimatedDurationSeconds: 120,
+            remainingPercent: 80,
+            lastStatusUpdateAt: nil
+        )
+
+        XCTAssertEqual(progress.completedPercent, 20)
+        progress.remainingPercent = 120
+        XCTAssertEqual(progress.completedPercent, 0)
+        progress.remainingPercent = -10
+        XCTAssertEqual(progress.completedPercent, 100)
+    }
+
     func testSmartctlATAAndNVMeErrorLogsParseStructuredEntries() throws {
         let ataResult = CommandResult(
             stdout: Data(Self.smartctlATAErrorLogFixture.utf8),
@@ -3510,6 +3557,26 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(adminRunner.calls[0].arguments.contains("-c"))
         XCTAssertTrue(adminRunner.calls[1].arguments.contains("-t"))
         XCTAssertTrue(adminRunner.calls[1].arguments.contains("short"))
+    }
+
+    func testSmartSelfTestServiceFallsBackToCapabilityPollingDuration() async throws {
+        let adminRunner = SequencedCommandRunner(results: [
+            CommandResult(stdout: Data(Self.smartctlATACapabilityFixture.utf8), stderr: Data(), terminationStatus: 0),
+            CommandResult(stdout: Data("{}".utf8), stderr: Data(), terminationStatus: 0)
+        ])
+        let provider = Self.testSmartctlProvider(
+            runner: StaticCommandRunner(stdout: #"{"devices":[{"name":"/dev/disk0","type":"sat","protocol":"ATA"}]}"#)
+        )
+        let service = SmartSelfTestService(
+            smartctlProvider: provider,
+            runner: adminRunner,
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+
+        let result = try await service.start(kind: .short, drive: Self.fixtureDrive())
+
+        XCTAssertEqual(result.estimatedDurationSeconds, 120)
     }
 
     @MainActor

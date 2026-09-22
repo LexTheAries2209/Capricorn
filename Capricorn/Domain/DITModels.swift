@@ -1188,10 +1188,24 @@ enum SmartSelfTestSessionState: Equatable, Sendable {
     }
 }
 
+struct SmartSelfTestProgress: Equatable, Sendable {
+    var kind: SmartSelfTestKind
+    var startedAt: Date
+    var estimatedDurationSeconds: Int?
+    var remainingPercent: Int?
+    var lastStatusUpdateAt: Date?
+
+    var completedPercent: Int? {
+        remainingPercent.map { 100 - min(100, max(0, $0)) }
+    }
+}
+
 struct SmartSelfTestCapability: Codable, Equatable, Sendable {
     var shortSupported: Bool
     var longSupported: Bool
     var message: String
+    var shortPollingMinutes: Int? = nil
+    var longPollingMinutes: Int? = nil
 
     func supports(_ kind: SmartSelfTestKind) -> Bool {
         switch kind {
@@ -1199,6 +1213,15 @@ struct SmartSelfTestCapability: Codable, Equatable, Sendable {
         case .long: longSupported
         case .vendor, .unknown: false
         }
+    }
+
+    func estimatedDurationSeconds(for kind: SmartSelfTestKind) -> Int? {
+        let minutes: Int? = switch kind {
+        case .short: shortPollingMinutes
+        case .long: longPollingMinutes
+        case .vendor, .unknown: nil
+        }
+        return minutes.map { max(0, $0) * 60 }
     }
 }
 

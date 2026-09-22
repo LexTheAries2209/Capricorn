@@ -993,6 +993,7 @@ final class SmartSelfTestService: @unchecked Sendable {
         return SmartSelfTestStartResult(
             message: Self.combinedMessage(result),
             estimatedDurationSeconds: Self.estimatedDuration(in: Self.combinedMessage(result))
+                ?? capability.estimatedDurationSeconds(for: kind)
         )
     }
 
@@ -1232,7 +1233,9 @@ enum SmartctlParser {
             return SmartSelfTestCapability(
                 shortSupported: false,
                 longSupported: false,
-                message: "SMART self-test capability could not be confirmed."
+                message: "SMART self-test capability could not be confirmed.",
+                shortPollingMinutes: polling.int("short"),
+                longPollingMinutes: polling.int("extended") ?? polling.int("long")
             )
         }
 
@@ -1243,7 +1246,9 @@ enum SmartctlParser {
             longSupported: longSupported,
             message: shortSupported || longSupported
                 ? "Self-test capability confirmed."
-                : "SMART self-test capability could not be confirmed."
+                : "SMART self-test capability could not be confirmed.",
+            shortPollingMinutes: polling.int("short"),
+            longPollingMinutes: polling.int("extended") ?? polling.int("long")
         )
     }
 
@@ -1587,7 +1592,9 @@ enum SmartctlParser {
 
         let nvmeLog = root.dictionary("nvme_self_test_log")
         if !nvmeLog.isEmpty {
-            currentRemaining = nvmeLog.int("current_self_test_completion_percent") ?? currentRemaining
+            if let completed = nvmeLog.int("current_self_test_completion_percent") {
+                currentRemaining = 100 - min(100, max(0, completed))
+            }
             let operation = nvmeLog.valueDescription("current_self_test_operation")
             let resultItems = nvmeLog.arrayOfDictionaries("self_test_results")
             if resultItems.isEmpty, let result = nvmeLog["self_test_result"] as? [String: Any] {

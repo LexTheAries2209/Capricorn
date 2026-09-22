@@ -414,6 +414,12 @@ struct SmartDiagnosticsPanel: View {
                 }
             }
 
+            if isActiveForDrive, let progress = viewModel.smartSelfTestProgress {
+                Divider()
+                selfTestProgressView(progress)
+                Divider()
+            }
+
             if let latestEntry = report?.latestEntry {
                 selfTestEntryRow(latestEntry)
             }
@@ -610,6 +616,9 @@ struct SmartDiagnosticsPanel: View {
         if controlsUnavailable {
             return language.t("Self-tests require smartctl support for this drive.")
         }
+        if isActiveForDrive, let progress = viewModel.smartSelfTestProgress {
+            return activeProgressDetail(progress)
+        }
         switch capabilityState {
         case .unknown:
             return language.t("Self-test support has not been checked yet.")
@@ -731,6 +740,152 @@ struct SmartDiagnosticsPanel: View {
     private var sessionRemainingPercent: Int? {
         guard case let .running(_, remainingPercent) = viewModel.smartSelfTestSession else { return nil }
         return remainingPercent
+    }
+
+    private func selfTestProgressView(_ progress: SmartSelfTestProgress) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Label(activeProgressTitle(progress), systemImage: activeProgressSymbol)
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    if let completed = progress.completedPercent {
+                        Text("\(completed)%")
+                            .font(.system(.body, design: .monospaced).weight(.semibold))
+                    }
+                }
+
+                if let completed = progress.completedPercent {
+                    ProgressView(value: Double(completed), total: 100)
+                        .progressViewStyle(.linear)
+                } else {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                }
+
+                Text(activeProgressDetail(progress))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Grid(alignment: .leading, horizontalSpacing: 28, verticalSpacing: 8) {
+                    GridRow {
+                        progressMetric(
+                            title: language.t("Test Type"),
+                            value: selfTestName(progress.kind),
+                            symbol: progress.kind == .short ? "hare" : "tortoise"
+                        )
+                        progressMetric(
+                            title: language.t("Elapsed"),
+                            value: formattedDuration(timeline.date.timeIntervalSince(progress.startedAt)),
+                            symbol: "timer"
+                        )
+                    }
+                    GridRow {
+                        progressMetric(
+                            title: language.t("Estimated Completion"),
+                            value: estimatedCompletionText(progress, now: timeline.date),
+                            symbol: "calendar.badge.clock"
+                        )
+                        progressMetric(
+                            title: language.t("Last Status Update"),
+                            value: progress.lastStatusUpdateAt.map(formattedTime) ?? language.t("Waiting for first update"),
+                            symbol: "arrow.clockwise"
+                        )
+                    }
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func progressMetric(title: String, value: String, symbol: String) -> some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: symbol)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.caption)
+                    .lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var activeProgressSymbol: String {
+        switch viewModel.smartSelfTestSession {
+        case .starting: "paperplane"
+        case .running: "waveform.path.ecg"
+        case .stopping: "stop.circle"
+        case .idle, .failed: "hourglass"
+        }
+    }
+
+    private func activeProgressTitle(_ progress: SmartSelfTestProgress) -> String {
+        let phase = switch viewModel.smartSelfTestSession {
+        case .starting: language.t("Starting")
+        case .running: language.t("Running")
+        case .stopping: language.t("Stopping")
+        case .idle, .failed: language.t("Current Status")
+        }
+        return "\(selfTestName(progress.kind)) · \(phase)"
+    }
+
+    private func activeProgressDetail(_ progress: SmartSelfTestProgress) -> String {
+        switch viewModel.smartSelfTestSession {
+        case .starting:
+            return language.t("Sending the self-test command to the drive.")
+        case .stopping:
+            return language.t("Waiting for the drive to stop the self-test.")
+        case .running:
+            if let completed = progress.completedPercent,
+               let remaining = progress.remainingPercent {
+                return "\(language.t("Completed")): \(completed)% · \(language.t("Remaining")): \(remaining)%"
+            }
+            return language.t("The drive has not reported percentage progress. Status refreshes every 5 seconds.")
+        case .idle, .failed:
+            return language.t("Self-Test Status Unknown")
+        }
+    }
+
+    private func selfTestName(_ kind: SmartSelfTestKind) -> String {
+        switch language {
+        case .english: "\(kindTitle(kind)) self-test"
+        case .simplifiedChinese: "\(kindTitle(kind))自检"
+        }
+    }
+
+    private func formattedDuration(_ interval: TimeInterval) -> String {
+        let totalSeconds = max(0, Int(interval))
+        let hours = totalSeconds / 3_600
+        let minutes = (totalSeconds % 3_600) / 60
+        let seconds = totalSeconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    private func estimatedCompletionText(_ progress: SmartSelfTestProgress, now: Date) -> String {
+        guard let seconds = progress.estimatedDurationSeconds else {
+            return language.t("Not reported by drive")
+        }
+        let completion = progress.startedAt.addingTimeInterval(TimeInterval(seconds))
+        if now > completion, case .running = viewModel.smartSelfTestSession {
+            return "\(formattedTime(completion)) · \(language.t("Waiting for drive"))"
+        }
+        return formattedTime(completion)
+    }
+
+    private func formattedTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: language.localeIdentifier)
+        formatter.timeStyle = .medium
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
     }
 
     private func selfTestEntryRow(_ entry: SmartSelfTestEntry) -> some View {

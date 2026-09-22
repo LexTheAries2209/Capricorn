@@ -61,6 +61,7 @@ final class AppModel {
     var showVirtualDisks = false
     var selectedFeatureTab: DriveFeatureTab = .overview
     var smartSelfTestSession: SmartSelfTestSessionState = .idle
+    var smartSelfTestProgress: SmartSelfTestProgress?
     var smartSelfTestDriveID: String?
     var smartSelfTestMessage: String?
     var smartSelfTestCapabilities: [String: SmartSelfTestCapabilityState] = [:]
@@ -1418,6 +1419,7 @@ final class AppModel {
 
         if smartSelfTestDriveID == drive.id {
             smartSelfTestSession = .idle
+            smartSelfTestProgress = nil
             smartSelfTestDriveID = nil
             smartSelfTestMessage = nil
         }
@@ -1723,6 +1725,13 @@ final class AppModel {
         let runID = UUID()
         smartSelfTestRunID = runID
         smartSelfTestMessage = nil
+        smartSelfTestProgress = SmartSelfTestProgress(
+            kind: kind,
+            startedAt: Date(),
+            estimatedDurationSeconds: capability.estimatedDurationSeconds(for: kind),
+            remainingPercent: nil,
+            lastStatusUpdateAt: nil
+        )
         smartSelfTestSession = .starting(kind)
         let service = smartSelfTestService
         let snapshotService = smartSnapshotService
@@ -1733,7 +1742,8 @@ final class AppModel {
                 await MainActor.run {
                     guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
                     self.smartSelfTestSession = .running(kind, remainingPercent: nil)
-                    self.smartSelfTestMessage = start.message.isEmpty ? nil : start.message
+                    self.smartSelfTestProgress?.estimatedDurationSeconds = start.estimatedDurationSeconds
+                    self.smartSelfTestMessage = nil
                 }
 
                 let target = await service.targetDescriptor(for: drive)
@@ -1745,11 +1755,14 @@ final class AppModel {
                         guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
                         self.snapshots[drive.id] = snapshot
                         let report = snapshot.selfTestReport
+                        self.smartSelfTestProgress?.lastStatusUpdateAt = Date()
                         if let report, report.state == .running {
+                            self.smartSelfTestProgress?.remainingPercent = report.currentRemainingPercent
                             self.smartSelfTestSession = .running(kind, remainingPercent: report.currentRemainingPercent)
                         } else if let report, report.state.isTerminal,
                                   self.selfTestReportChanged(report, from: baselineReport) {
                             self.smartSelfTestSession = .idle
+                            self.smartSelfTestProgress = nil
                             self.smartSelfTestMessage = nil
                             self.completedSmartSelfTest = SmartSelfTestCompletion(
                                 id: UUID(),
@@ -1769,6 +1782,7 @@ final class AppModel {
                     guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
                     if self.smartSelfTestSession.isActive {
                         self.smartSelfTestSession = .failed("Self-test polling timed out.")
+                        self.smartSelfTestProgress = nil
                     }
                     self.activeSmartSelfTestDiskLease?.release()
                     self.activeSmartSelfTestDiskLease = nil
@@ -1780,6 +1794,7 @@ final class AppModel {
                     self.activeSmartSelfTestDiskLease?.release()
                     self.activeSmartSelfTestDiskLease = nil
                     self.smartSelfTestSession = .idle
+                    self.smartSelfTestProgress = nil
                     self.smartSelfTestTask = nil
                 }
             } catch {
@@ -1795,6 +1810,7 @@ final class AppModel {
                         )
                     }
                     self.smartSelfTestSession = .failed(error.localizedDescription)
+                    self.smartSelfTestProgress = nil
                     self.smartSelfTestMessage = error.localizedDescription
                     self.smartSelfTestTask = nil
                 }
@@ -1832,6 +1848,7 @@ final class AppModel {
                     self.activeSmartSelfTestDiskLease?.release()
                     self.activeSmartSelfTestDiskLease = nil
                     self.smartSelfTestSession = .idle
+                    self.smartSelfTestProgress = nil
                     self.smartSelfTestMessage = nil
                     self.smartSelfTestTask = nil
                 }
@@ -1841,6 +1858,7 @@ final class AppModel {
                     self.activeSmartSelfTestDiskLease?.release()
                     self.activeSmartSelfTestDiskLease = nil
                     self.smartSelfTestSession = .failed(error.localizedDescription)
+                    self.smartSelfTestProgress = nil
                     self.smartSelfTestMessage = error.localizedDescription
                     self.smartSelfTestTask = nil
                 }
