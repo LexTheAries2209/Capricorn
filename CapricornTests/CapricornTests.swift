@@ -3371,6 +3371,69 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(adminRunner.calls[0].arguments.contains("-t"))
     }
 
+    func testSmartSelfTestServiceRejectsReadOnlyUSBNVMeBridgeTransports() async {
+        for targetType in ["sntasmedia", "sntrealtek"] {
+            let scan = """
+            {"devices":[{"name":"/dev/disk9","type":"\(targetType)","protocol":"NVMe"}]}
+            """
+            let adminRunner = SequencedCommandRunner(results: [
+                CommandResult(stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8), stderr: Data(), terminationStatus: 0)
+            ])
+            let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: scan))
+            let service = SmartSelfTestService(
+                smartctlProvider: provider,
+                runner: adminRunner,
+                administratorRunner: adminRunner,
+                commandCoordinator: SmartctlCommandCoordinator()
+            )
+            var drive = Self.fixtureDrive()
+            drive.bsdName = "disk9"
+            drive.deviceNode = "/dev/disk9"
+            drive.protocolName = "USB"
+            drive.isInternal = false
+            drive.isRemovable = true
+            drive.isSystemDisk = false
+
+            do {
+                _ = try await service.start(kind: .short, drive: drive)
+                XCTFail("Expected \(targetType) to reject Device Self-test command 0x14")
+            } catch {
+                XCTAssertEqual(error.localizedDescription, SmartSelfTestService.macOSNativeNVMeUnavailableMessage)
+            }
+
+            XCTAssertEqual(adminRunner.calls.count, 1)
+            XCTAssertTrue(adminRunner.calls[0].arguments.contains("-c"))
+            XCTAssertFalse(adminRunner.calls[0].arguments.contains("-t"))
+        }
+    }
+
+    func testSmartSelfTestServiceAllowsJMicronNVMeBridgeCommandPassthrough() async throws {
+        let scan = #"{"devices":[{"name":"/dev/disk9","type":"sntjmicron","protocol":"NVMe"}]}"#
+        let adminRunner = SequencedCommandRunner(results: [
+            CommandResult(stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8), stderr: Data(), terminationStatus: 0),
+            CommandResult(stdout: Data("Please wait 2 minutes for test to complete.".utf8), stderr: Data(), terminationStatus: 0)
+        ])
+        let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: scan))
+        let service = SmartSelfTestService(
+            smartctlProvider: provider,
+            runner: adminRunner,
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+        var drive = Self.fixtureDrive()
+        drive.bsdName = "disk9"
+        drive.deviceNode = "/dev/disk9"
+        drive.protocolName = "USB"
+        drive.isInternal = false
+        drive.isRemovable = true
+        drive.isSystemDisk = false
+
+        _ = try await service.start(kind: .short, drive: drive)
+
+        XCTAssertEqual(adminRunner.calls.count, 2)
+        XCTAssertTrue(adminRunner.calls[1].arguments.contains("-t"))
+    }
+
     func testMacOSNativeNVMeSnapshotKeepsReadOnlySmartctlAccess() async throws {
         let path = "IOService:/AppleARMPE/IONVMeController/IONVMeBlockStorageDevice@1"
         let scan = """
@@ -3474,6 +3537,67 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertEqual(model.smartSelfTestSession, .failed("System-disk self-tests are disabled in Settings."))
         XCTAssertTrue(adminRunner.calls.isEmpty)
+    }
+
+    @MainActor
+    func testSelfTestTransportRejectionDowngradesStaleSupportedCapability() async {
+        let scan = #"{"devices":[{"name":"/dev/disk99","type":"sntjmicron","protocol":"NVMe"}]}"#
+        let commandRunner = SequencedCommandRunner(results: [
+            CommandResult(stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8), stderr: Data(), terminationStatus: 0),
+            CommandResult(
+                stdout: Data(),
+                stderr: Data("NVMe Self-test cmd failed: NVMe admin command 0x14 is not supported".utf8),
+                terminationStatus: 1
+            )
+        ])
+        let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: scan))
+        let service = SmartSelfTestService(
+            smartctlProvider: provider,
+            runner: commandRunner,
+            administratorRunner: commandRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+        let cache = RecordingSmartDiagnosticsCapabilityCache()
+        let lockDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("CapricornTests-self-test-\(UUID().uuidString)", isDirectory: true)
+        let model = AppModel(
+            diskOperationLockCoordinator: DiskOperationLockCoordinator(lockDirectoryURL: lockDirectory),
+            smartSelfTestService: service,
+            smartDiagnosticsCapabilityCache: cache,
+            allowsSystemDiskSelfTests: { true }
+        )
+        var drive = Self.fixtureDrive()
+        drive.bsdName = "disk99"
+        drive.deviceNode = "/dev/disk99"
+        drive.protocolName = "USB"
+        drive.isInternal = false
+        drive.isRemovable = true
+        drive.isSystemDisk = false
+        drive.serialNumber = "RUNTIME-REJECTION"
+        let staleCapability = SmartSelfTestCapability(
+            shortSupported: true,
+            longSupported: true,
+            message: "Self-test capability confirmed."
+        )
+        model.drives = [drive]
+        model.smartSelfTestCapabilities[drive.id] = .supported(staleCapability)
+
+        model.startSmartSelfTest(kind: .short, drive: drive)
+        for _ in 0..<100 {
+            if case .failed = model.smartSelfTestSession { break }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(
+            model.smartSelfTestSession,
+            .failed(SmartSelfTestService.macOSNativeNVMeUnavailableMessage)
+        )
+        XCTAssertEqual(
+            model.smartSelfTestCapability(for: drive),
+            .unavailable(SmartSelfTestService.macOSNativeNVMeUnavailableMessage)
+        )
+        XCTAssertEqual(cache.lastStoredRecord?.status, .unavailable)
+        XCTAssertNil(cache.lastStoredRecord?.selfTestCapability)
     }
 
     @MainActor
@@ -7089,6 +7213,30 @@ private final class SequencedCommandRunner: CommandRunning, @unchecked Sendable 
                 ? CommandResult(stdout: Data(), stderr: Data(), terminationStatus: 0)
                 : state.results.removeFirst()
         }
+    }
+}
+
+private final class RecordingSmartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching {
+    var lastStoredRecord: SmartDiagnosticsFeatureCacheRecord?
+
+    func cachedEntry(
+        for drive: DriveDevice,
+        smartctlVersion: String?
+    ) -> SmartDiagnosticsCapabilityCacheEntry? {
+        nil
+    }
+
+    func store(
+        _ record: SmartDiagnosticsFeatureCacheRecord,
+        feature: SmartDiagnosticsFeature,
+        for drive: DriveDevice,
+        smartctlVersion: String?
+    ) {
+        lastStoredRecord = record
+    }
+
+    func remove(for drive: DriveDevice) {
+        lastStoredRecord = nil
     }
 }
 

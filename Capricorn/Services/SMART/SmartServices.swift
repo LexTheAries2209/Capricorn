@@ -984,7 +984,11 @@ final class SmartSelfTestService: @unchecked Sendable {
             try await self.administratorRunner.run(executable.path, arguments: arguments)
         }
         guard result.terminationStatus == 0 else {
-            throw SmartSelfTestServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
+            let message = SmartctlParser.commandFailureMessage(result)
+            if message == Self.macOSNativeNVMeUnavailableMessage {
+                throw SmartSelfTestServiceError.unsupported(message)
+            }
+            throw SmartSelfTestServiceError.commandFailed(message)
         }
         return SmartSelfTestStartResult(
             message: Self.combinedMessage(result),
@@ -1072,8 +1076,18 @@ final class SmartSelfTestService: @unchecked Sendable {
         drive: DriveDevice
     ) -> Bool {
 #if os(macOS)
-        if target?.type?.caseInsensitiveCompare("nvme") == .orderedSame {
-            return true
+        if let targetType = target?.type?.lowercased() {
+            if targetType == "nvme" {
+                return true
+            }
+            // ASMedia and Realtek USB-NVMe bridges expose Identify/Get Log
+            // data but reject the Device Self-test admin command (0x14).
+            if targetType.hasPrefix("sntasmedia") {
+                return true
+            }
+            if targetType.hasPrefix("sntrealtek") && !targetType.hasSuffix("/sat") {
+                return true
+            }
         }
         return target == nil && drive.protocolName.localizedCaseInsensitiveContains("nvme")
 #else

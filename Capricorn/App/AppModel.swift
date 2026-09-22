@@ -1787,6 +1787,13 @@ final class AppModel {
                     guard let self, self.smartSelfTestRunID == runID, self.smartSelfTestDriveID == drive.id else { return }
                     self.activeSmartSelfTestDiskLease?.release()
                     self.activeSmartSelfTestDiskLease = nil
+                    if self.isDefinitiveSelfTestUnsupported(error) {
+                        self.finishSelfTestCapabilityFailure(
+                            error,
+                            drive: drive,
+                            message: error.localizedDescription
+                        )
+                    }
                     self.smartSelfTestSession = .failed(error.localizedDescription)
                     self.smartSelfTestMessage = error.localizedDescription
                     self.smartSelfTestTask = nil
