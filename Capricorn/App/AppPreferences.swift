@@ -430,22 +430,27 @@ struct CapricornSettingsView: View {
             }
 
             Section {
-                Button(role: .destructive) {
-                    isConfirmingAllSettingsReset = true
-                } label: {
-                    Label(language.t("Reset All Settings"), systemImage: "arrow.counterclockwise")
-                }
-                .foregroundStyle(.red)
+                VStack(spacing: 14) {
+                    Button(role: .destructive) {
+                        isConfirmingAllSettingsReset = true
+                    } label: {
+                        Label(language.t("Reset All Settings"), systemImage: "arrow.counterclockwise")
+                    }
+                    .foregroundStyle(.red)
 
-                Text(language.t("Restores all settings and saved interface choices to their defaults. Disk caches and history records are preserved."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if let settingsResetResult {
-                    Label(settingsResetResult, systemImage: "checkmark.circle.fill")
+                    Text(language.t("Restores all settings and saved interface choices to their defaults. Disk caches and history records are preserved."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    if let settingsResetResult {
+                        Label(settingsResetResult, systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 2)
             }
         }
         .formStyle(.grouped)
