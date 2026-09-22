@@ -469,13 +469,13 @@ struct SmartDiagnosticsPanel: View {
             case let .supported(capability):
                 HStack(spacing: 8) {
                     Button {
-                        viewModel.startSmartSelfTest(kind: .short, drive: drive)
+                        viewModel.requestSmartSelfTest(kind: .short, drive: drive)
                     } label: {
                         Label(language.t("Quick Self-Test"), systemImage: "hare")
                     }
                     .disabled(controlsUnavailable || !capability.shortSupported)
                     Button {
-                        viewModel.startSmartSelfTest(kind: .long, drive: drive)
+                        viewModel.requestSmartSelfTest(kind: .long, drive: drive)
                     } label: {
                         Label(language.t("Full Self-Test"), systemImage: "tortoise")
                     }

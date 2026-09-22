@@ -167,21 +167,21 @@ struct ContentView: View {
             }
         }
         .onChange(of: viewModel.completedSmartSelfTest?.id) {
-            guard let completion = viewModel.completedSmartSelfTest,
-                  let report = completion.report else {
-                return
+            guard let completion = viewModel.completedSmartSelfTest else { return }
+            if let report = completion.report {
+                do {
+                    try HistoryRepository(modelContext: modelContext).saveSelfTestReport(
+                        drive: completion.drive,
+                        report: report
+                    )
+                } catch {
+                    viewModel.smartSelfTestMessage = UserFacingError.message(
+                        "Could not save self-test history.",
+                        error: error
+                    )
+                }
             }
-            do {
-                try HistoryRepository(modelContext: modelContext).saveSelfTestReport(
-                    drive: completion.drive,
-                    report: report
-                )
-            } catch {
-                viewModel.smartSelfTestMessage = UserFacingError.message(
-                    "Could not save self-test history.",
-                    error: error
-                )
-            }
+            viewModel.showSmartSelfTestMonitor()
         }
         .sheet(item: $viewModel.diskOpenFileInspection) { inspection in
             DiskOpenFileInspectionSheet(
@@ -239,6 +239,16 @@ struct ContentView: View {
             }
         )) {
             DiskFirstAidSheet(viewModel: viewModel, language: language)
+        }
+        .sheet(isPresented: Binding(
+            get: { viewModel.smartSelfTestPresentation != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.hideSmartSelfTestMonitor()
+                }
+            }
+        )) {
+            SmartSelfTestPresentationSheet(viewModel: viewModel, language: language)
         }
     }
 
