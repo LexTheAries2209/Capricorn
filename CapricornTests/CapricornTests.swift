@@ -961,6 +961,7 @@ final class CapricornTests: XCTestCase {
             "SMART Self-Test Monitor": "SMART 自检监视器",
             "Estimated Duration": "预计耗时",
             "Current Stage": "当前阶段",
+            "View Progress": "查看进度",
             "Hide Window": "隐藏窗口",
             "Abort SMART Self-Test?": "中止 SMART 自检？",
             "Do not disconnect or power off this drive while the self-test is running.": "自检运行期间，请勿断开硬盘或切断其电源。",
@@ -3692,6 +3693,29 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(request.estimatedDurationSeconds, 180)
         XCTAssertEqual(model.smartSelfTestSession, .idle)
         XCTAssertNil(model.smartSelfTestProgress)
+    }
+
+    @MainActor
+    func testHidingSmartSelfTestMonitorKeepsActiveSession() {
+        let model = AppModel()
+        model.smartSelfTestSession = .running(.short, remainingPercent: 63)
+        model.smartSelfTestProgress = SmartSelfTestProgress(
+            kind: .short,
+            startedAt: Date(),
+            estimatedDurationSeconds: 180,
+            remainingPercent: 63,
+            lastStatusUpdateAt: Date()
+        )
+        model.smartSelfTestPresentation = .monitor
+
+        model.hideSmartSelfTestMonitor()
+
+        XCTAssertNil(model.smartSelfTestPresentation)
+        XCTAssertEqual(model.smartSelfTestSession, .running(.short, remainingPercent: 63))
+        XCTAssertEqual(model.smartSelfTestProgress?.completedPercent, 37)
+
+        model.showSmartSelfTestMonitor()
+        XCTAssertEqual(model.smartSelfTestPresentation, .monitor)
     }
 
     @MainActor

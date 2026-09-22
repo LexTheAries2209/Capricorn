@@ -303,6 +303,7 @@ struct SmartDiagnosticsPanel: View {
     @State private var isExpanded = true
     @State private var showsSelfTestHistory = false
     @State private var showsErrorLog = false
+    @State private var isConfirmingSelfTestAbort = false
 
     private var report: SmartSelfTestReport? { snapshot?.selfTestReport }
     private var capabilityState: SmartSelfTestCapabilityState { viewModel.smartSelfTestCapability(for: drive) }
@@ -379,6 +380,14 @@ struct SmartDiagnosticsPanel: View {
                 )
             }
         }
+        .alert(language.t("Abort SMART Self-Test?"), isPresented: $isConfirmingSelfTestAbort) {
+            Button(language.t("Abort Self-Test"), role: .destructive) {
+                viewModel.abortSmartSelfTest()
+            }
+            Button(language.t("Keep Running"), role: .cancel) {}
+        } message: {
+            Text(language.t("Capricorn will ask the drive to stop its current self-test. Any progress made by this test will be lost."))
+        }
     }
 
     private var selfTestSection: some View {
@@ -414,9 +423,7 @@ struct SmartDiagnosticsPanel: View {
             }
 
             if isActiveForDrive, let progress = viewModel.smartSelfTestProgress {
-                Divider()
-                selfTestProgressView(progress)
-                Divider()
+                selfTestCompactStatus(progress)
             }
 
             if let latestEntry = report?.latestEntry {
@@ -458,12 +465,19 @@ struct SmartDiagnosticsPanel: View {
     @ViewBuilder
     private var selfTestControls: some View {
         if isActiveForDrive {
-            Button {
-                viewModel.abortSmartSelfTest()
-            } label: {
-                Label(language.t("Abort Self-Test"), systemImage: "stop.circle")
+            HStack(spacing: 8) {
+                Button {
+                    viewModel.showSmartSelfTestMonitor()
+                } label: {
+                    Label(language.t("View Progress"), systemImage: "waveform.path.ecg")
+                }
+                Button(role: .destructive) {
+                    isConfirmingSelfTestAbort = true
+                } label: {
+                    Label(language.t("Abort Self-Test"), systemImage: "stop.circle")
+                }
+                .disabled(viewModel.smartSelfTestSession == .stopping)
             }
-            .disabled(viewModel.smartSelfTestSession == .stopping)
         } else {
             switch capabilityState {
             case let .supported(capability):
@@ -473,13 +487,13 @@ struct SmartDiagnosticsPanel: View {
                     } label: {
                         Label(language.t("Quick Self-Test"), systemImage: "hare")
                     }
-                    .disabled(controlsUnavailable || !capability.shortSupported)
+                    .disabled(controlsUnavailable || viewModel.isSmartSelfTestActive || !capability.shortSupported)
                     Button {
                         viewModel.requestSmartSelfTest(kind: .long, drive: drive)
                     } label: {
                         Label(language.t("Full Self-Test"), systemImage: "tortoise")
                     }
-                    .disabled(controlsUnavailable || !capability.longSupported)
+                    .disabled(controlsUnavailable || viewModel.isSmartSelfTestActive || !capability.longSupported)
                 }
             case .checking:
                 ProgressView()
@@ -732,19 +746,22 @@ struct SmartDiagnosticsPanel: View {
         return remainingPercent
     }
 
-    private func selfTestProgressView(_ progress: SmartSelfTestProgress) -> some View {
+    private func selfTestCompactStatus(_ progress: SmartSelfTestProgress) -> some View {
         TimelineView(.periodic(from: .now, by: 1)) { timeline in
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 8) {
-                    Label(activeProgressTitle(progress), systemImage: activeProgressSymbol)
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    if let completed = progress.completedPercent {
-                        Text("\(completed)%")
-                            .font(.system(.body, design: .monospaced).weight(.semibold))
+                    Image(systemName: activeProgressSymbol)
+                        .foregroundStyle(.blue)
+                    Text(compactProgressSummary(progress, now: timeline.date))
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(2)
+                    Spacer(minLength: 8)
+                    if let updatedAt = progress.lastStatusUpdateAt {
+                        Text(formattedTime(updatedAt))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
                     }
                 }
-
                 if let completed = progress.completedPercent {
                     ProgressView(value: Double(completed), total: 100)
                         .progressViewStyle(.linear)
@@ -752,57 +769,11 @@ struct SmartDiagnosticsPanel: View {
                     ProgressView()
                         .progressViewStyle(.linear)
                 }
-
-                Text(activeProgressDetail(progress))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Grid(alignment: .leading, horizontalSpacing: 28, verticalSpacing: 8) {
-                    GridRow {
-                        progressMetric(
-                            title: language.t("Test Type"),
-                            value: selfTestName(progress.kind),
-                            symbol: progress.kind == .short ? "hare" : "tortoise"
-                        )
-                        progressMetric(
-                            title: language.t("Elapsed"),
-                            value: formattedDuration(timeline.date.timeIntervalSince(progress.startedAt)),
-                            symbol: "timer"
-                        )
-                    }
-                    GridRow {
-                        progressMetric(
-                            title: language.t("Estimated Completion"),
-                            value: estimatedCompletionText(progress, now: timeline.date),
-                            symbol: "calendar.badge.clock"
-                        )
-                        progressMetric(
-                            title: language.t("Last Status Update"),
-                            value: progress.lastStatusUpdateAt.map(formattedTime) ?? language.t("Waiting for first update"),
-                            symbol: "arrow.clockwise"
-                        )
-                    }
-                }
             }
-            .padding(.vertical, 2)
+            .padding(10)
+            .background(.blue.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-    }
-
-    private func progressMetric(title: String, value: String, symbol: String) -> some View {
-        HStack(alignment: .top, spacing: 7) {
-            Image(systemName: symbol)
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.caption)
-                    .lineLimit(2)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var activeProgressSymbol: String {
@@ -814,14 +785,19 @@ struct SmartDiagnosticsPanel: View {
         }
     }
 
-    private func activeProgressTitle(_ progress: SmartSelfTestProgress) -> String {
-        let phase = switch viewModel.smartSelfTestSession {
+    private func compactProgressSummary(_ progress: SmartSelfTestProgress, now: Date) -> String {
+        let phase: String = switch viewModel.smartSelfTestSession {
         case .starting: language.t("Starting")
         case .running: language.t("Running")
         case .stopping: language.t("Stopping")
-        case .idle, .failed: language.t("Current Status")
+        case .idle, .failed: language.t("Self-Test Status Unknown")
         }
-        return "\(selfTestName(progress.kind)) · \(phase)"
+        var parts = ["\(selfTestName(progress.kind)) · \(phase)"]
+        if let completed = progress.completedPercent {
+            parts.append("\(completed)%")
+        }
+        parts.append("\(language.t("Estimated Completion")): \(estimatedCompletionText(progress, now: now))")
+        return parts.joined(separator: " · ")
     }
 
     private func activeProgressDetail(_ progress: SmartSelfTestProgress) -> String {
@@ -846,17 +822,6 @@ struct SmartDiagnosticsPanel: View {
         case .english: "\(kindTitle(kind)) self-test"
         case .simplifiedChinese: "\(kindTitle(kind))自检"
         }
-    }
-
-    private func formattedDuration(_ interval: TimeInterval) -> String {
-        let totalSeconds = max(0, Int(interval))
-        let hours = totalSeconds / 3_600
-        let minutes = (totalSeconds % 3_600) / 60
-        let seconds = totalSeconds % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%02d:%02d", minutes, seconds)
     }
 
     private func estimatedCompletionText(_ progress: SmartSelfTestProgress, now: Date) -> String {

@@ -707,6 +707,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "SMART Self-Test Monitor": "SMART 自检监视器",
         "Estimated Duration": "预计耗时",
         "Current Stage": "当前阶段",
+        "View Progress": "查看进度",
         "Hide Window": "隐藏窗口",
         "Keep Running": "继续运行",
         "Abort SMART Self-Test?": "中止 SMART 自检？",
