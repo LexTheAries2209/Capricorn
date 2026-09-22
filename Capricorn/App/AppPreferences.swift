@@ -223,12 +223,10 @@ struct CapricornSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if preferences.showsSmartSelfTestInterface {
-                    Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)
-                    Text(language.t("System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)
+                Text(language.t("System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("SMART") {
