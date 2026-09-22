@@ -145,6 +145,16 @@ private struct SmartSelfTestMonitorView: View {
         viewModel.isSmartSelfTestActive
     }
 
+    private var monitorHeight: CGFloat {
+        if isActive {
+            return 430
+        }
+        if viewModel.completedSmartSelfTest != nil {
+            return 330
+        }
+        return 350
+    }
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { timeline in
             VStack(alignment: .leading, spacing: 20) {
@@ -181,8 +191,8 @@ private struct SmartSelfTestMonitorView: View {
                 }
             }
             .padding(24)
-            .frame(width: 620)
-            .frame(minHeight: 430)
+            .frame(width: 620, height: monitorHeight, alignment: .topLeading)
+            .animation(.easeInOut(duration: 0.2), value: monitorHeight)
         }
         .alert(language.t("Abort SMART Self-Test?"), isPresented: $isConfirmingAbort) {
             Button(language.t("Abort Self-Test"), role: .destructive) {
