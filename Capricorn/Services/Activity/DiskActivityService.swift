@@ -140,7 +140,8 @@ enum DiskActivityChartScale {
         ]
     }
 
-    static func yTicks(maxSpeed: Double, count: Int = 10) -> [Double] {
+    // Nine grid lines create eight equal intervals and keep alternating labels centered and symmetric.
+    static func yTicks(maxSpeed: Double, count: Int = 9) -> [Double] {
         let maximum = roundedMaximumSpeed(maxSpeed: maxSpeed)
         guard count > 1 else { return [maximum] }
         return (0..<count).map { index in

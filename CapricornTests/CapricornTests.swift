@@ -4876,24 +4876,24 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(DiskActivityChartScale.durationSeconds(for: samples), 90, accuracy: 0.0001)
         XCTAssertEqual(DiskActivityChartScale.xTicks(for: samples).map(\.label), ["0s", "45s", "1m30s"])
         let yTicks = DiskActivityChartScale.yTicks(maxSpeed: 432)
-        XCTAssertEqual(yTicks.count, 10)
+        XCTAssertEqual(yTicks.count, 9)
         XCTAssertEqual(yTicks.first ?? -1, 0, accuracy: 0.0001)
         XCTAssertEqual(yTicks.last ?? -1, 500, accuracy: 0.0001)
-        XCTAssertEqual(yTicks[1], 500.0 / 9.0, accuracy: 0.0001)
+        XCTAssertEqual(yTicks[1], 500.0 / 8.0, accuracy: 0.0001)
     }
 
     func testDiskActivityChartAxisLabelsStayEvenlySpacedWhenCondensed() {
         XCTAssertEqual(
-            DiskActivityChartAxisLabelPolicy.visibleIndices(tickCount: 10, maximumLabelCount: 4),
-            [0, 3, 6, 9]
+            DiskActivityChartAxisLabelPolicy.visibleIndices(tickCount: 9, maximumLabelCount: 4),
+            [0, 3, 5, 8]
         )
         XCTAssertEqual(
-            DiskActivityChartAxisLabelPolicy.visibleIndices(tickCount: 10, maximumLabelCount: 5),
-            [0, 2, 5, 7, 9]
+            DiskActivityChartAxisLabelPolicy.visibleIndices(tickCount: 9, maximumLabelCount: 5),
+            [0, 2, 4, 6, 8]
         )
         XCTAssertEqual(
-            DiskActivityChartAxisLabelPolicy.visibleIndices(tickCount: 10, maximumLabelCount: 10),
-            Array(0..<10)
+            DiskActivityChartAxisLabelPolicy.visibleIndices(tickCount: 9, maximumLabelCount: 10),
+            Array(0..<9)
         )
     }
 

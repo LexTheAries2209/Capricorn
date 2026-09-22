@@ -1212,7 +1212,7 @@ struct DiskActivityChartView: View {
         var maximumYAxisLabelCount: Int {
             switch self {
             case .compact: 5
-            case .expanded: 10
+            case .expanded: 5
             case .mini: 4
             }
         }
