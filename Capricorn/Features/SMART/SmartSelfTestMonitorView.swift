@@ -98,10 +98,16 @@ private struct SmartSelfTestConfirmationView: View {
 
     private func confirmationRow(title: String, value: String, symbol: String) -> some View {
         GridRow {
-            Label(title, systemImage: symbol)
+            HStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .frame(width: 22, alignment: .center)
+                Text(title)
+            }
+            .frame(width: 146, alignment: .leading)
                 .foregroundStyle(.secondary)
             Text(value)
                 .fontWeight(.medium)
+                .gridColumnAlignment(.leading)
         }
     }
 
