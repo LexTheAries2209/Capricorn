@@ -999,7 +999,7 @@ final class SmartSelfTestService: @unchecked Sendable {
     func abort(drive: DriveDevice) async throws {
         let executable = try executable(for: drive)
         let target = await targetDescriptor(for: drive)
-        if Self.usesMacOSNativeNVMeTransport(target: target, drive: drive) {
+        if Self.usesUnavailableNVMeSelfTestTransport(target: target, drive: drive) {
             throw SmartSelfTestServiceError.unsupported(Self.macOSNativeNVMeUnavailableMessage)
         }
         let arguments = smartctlProvider.commandArguments(
@@ -1032,7 +1032,7 @@ final class SmartSelfTestService: @unchecked Sendable {
         guard capability.shortSupported || capability.longSupported else {
             throw SmartSelfTestServiceError.unsupported(capability.message)
         }
-        if Self.usesMacOSNativeNVMeTransport(target: target, drive: drive) {
+        if Self.usesUnavailableNVMeSelfTestTransport(target: target, drive: drive) {
             throw SmartSelfTestServiceError.unsupported(Self.macOSNativeNVMeUnavailableMessage)
         }
         return capability
@@ -1071,7 +1071,7 @@ final class SmartSelfTestService: @unchecked Sendable {
         return executable
     }
 
-    private static func usesMacOSNativeNVMeTransport(
+    private static func usesUnavailableNVMeSelfTestTransport(
         target: SmartctlTargetDescriptor?,
         drive: DriveDevice
     ) -> Bool {
