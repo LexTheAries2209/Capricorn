@@ -401,7 +401,8 @@ struct BenchmarkView: View {
 
     private var benchmarkControls: some View {
         VStack(alignment: .leading, spacing: BenchmarkControlLayout.verticalSpacing) {
-            // Align from the title row because menu and segmented pickers have different intrinsic heights.
+            // The grid separates label baselines from control centers because popup and segmented
+            // pickers use different AppKit alignment rectangles.
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: BenchmarkControlLayout.horizontalSpacing) {
                     benchmarkPickerControls
@@ -440,118 +441,101 @@ struct BenchmarkView: View {
         }
     }
 
-    @ViewBuilder
     private var benchmarkPickerControls: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(language.t("Profile"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+        Grid(
+            alignment: .leading,
+            horizontalSpacing: BenchmarkControlLayout.horizontalSpacing,
+            verticalSpacing: 4
+        ) {
+            GridRow(alignment: .firstTextBaseline) {
+                benchmarkControlTitle("Profile", width: BenchmarkControlLayout.profileWidth)
+                benchmarkControlTitle("Runs", width: BenchmarkControlLayout.runCountWidth)
+                benchmarkControlTitle("Test Size", width: BenchmarkControlLayout.fileSizeWidth)
+                benchmarkControlTitle("Read / Write", width: BenchmarkControlLayout.operationWidth)
+                benchmarkControlTitle("Engine", width: BenchmarkControlLayout.engineWidth)
+                benchmarkControlTitle("Data Pattern", width: BenchmarkControlLayout.dataPatternWidth)
+                benchmarkControlTitle("Trim Outliers", width: BenchmarkControlLayout.trimmedAverageWidth)
+            }
+
+            GridRow(alignment: .center) {
+                Picker("", selection: $selectedProfileID) {
+                    ForEach(BenchmarkProfile.presets) { profile in
+                        Text(language.profileName(profile)).tag(profile.id)
+                    }
+                }
+                .labelsHidden()
                 .frame(width: BenchmarkControlLayout.profileWidth, alignment: .leading)
-            Picker("", selection: $selectedProfileID) {
-                ForEach(BenchmarkProfile.presets) { profile in
-                    Text(language.profileName(profile)).tag(profile.id)
-                }
-            }
-            .labelsHidden()
-            .frame(width: BenchmarkControlLayout.profileWidth, alignment: .leading)
-            .disabled(viewModel.isBenchmarking)
-        }
+                .disabled(viewModel.isBenchmarking)
 
-        VStack(alignment: .leading, spacing: 4) {
-            Text(language.t("Runs"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                Picker("", selection: $selectedRunCount) {
+                    ForEach(BenchmarkProfile.runCountOptions, id: \.self) { count in
+                        Text("\(count)").tag(count)
+                    }
+                }
+                .labelsHidden()
                 .frame(width: BenchmarkControlLayout.runCountWidth, alignment: .leading)
-            Picker("", selection: $selectedRunCount) {
-                ForEach(BenchmarkProfile.runCountOptions, id: \.self) { count in
-                    Text("\(count)").tag(count)
-                }
-            }
-            .labelsHidden()
-            .frame(width: BenchmarkControlLayout.runCountWidth, alignment: .leading)
-            .disabled(viewModel.isBenchmarking || selectedProfileIsLooping)
-        }
+                .disabled(viewModel.isBenchmarking || selectedProfileIsLooping)
 
-        VStack(alignment: .leading, spacing: 4) {
-            Text(language.t("Test Size"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                Picker("", selection: $selectedFileSizeBytes) {
+                    ForEach(BenchmarkProfile.fileSizeOptions, id: \.self) { size in
+                        Text(formatBenchmarkFileSize(size))
+                            .tag(Int(size))
+                            .disabled(!isFileSizeSelectable(size))
+                    }
+                }
+                .labelsHidden()
                 .frame(width: BenchmarkControlLayout.fileSizeWidth, alignment: .leading)
-            Picker("", selection: $selectedFileSizeBytes) {
-                ForEach(BenchmarkProfile.fileSizeOptions, id: \.self) { size in
-                    Text(formatBenchmarkFileSize(size))
-                        .tag(Int(size))
-                        .disabled(!isFileSizeSelectable(size))
+                .disabled(viewModel.isBenchmarking)
+
+                Picker("", selection: $selectedOperationSelectionRaw) {
+                    Text(language.benchmarkOperationSelectionTitle(.readOnly)).tag(BenchmarkOperationSelection.readOnly.rawValue)
+                    Text(language.benchmarkOperationSelectionTitle(.writeOnly)).tag(BenchmarkOperationSelection.writeOnly.rawValue)
+                    Text(language.benchmarkOperationSelectionTitle(.readWrite)).tag(BenchmarkOperationSelection.readWrite.rawValue)
                 }
-            }
-            .labelsHidden()
-            .frame(width: BenchmarkControlLayout.fileSizeWidth, alignment: .leading)
-            .disabled(viewModel.isBenchmarking)
-        }
-
-        VStack(alignment: .leading, spacing: 4) {
-            Text(language.t("Read / Write"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .frame(width: BenchmarkControlLayout.operationWidth, alignment: .leading)
-            Picker("", selection: $selectedOperationSelectionRaw) {
-                Text(language.benchmarkOperationSelectionTitle(.readOnly)).tag(BenchmarkOperationSelection.readOnly.rawValue)
-                Text(language.benchmarkOperationSelectionTitle(.writeOnly)).tag(BenchmarkOperationSelection.writeOnly.rawValue)
-                Text(language.benchmarkOperationSelectionTitle(.readWrite)).tag(BenchmarkOperationSelection.readWrite.rawValue)
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: BenchmarkControlLayout.operationWidth, height: 28, alignment: .leading)
-            .disabled(viewModel.isBenchmarking)
-        }
-
-        VStack(alignment: .leading, spacing: 4) {
-            Text(language.t("Engine"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .frame(width: BenchmarkControlLayout.engineWidth, alignment: .leading)
-            Picker("", selection: selectedEngineBinding) {
-                Text(language.t("Sync")).tag(BenchmarkEngine.synchronous)
-                Text(language.t("Async")).tag(BenchmarkEngine.asyncQueue)
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: BenchmarkControlLayout.engineWidth, height: 28, alignment: .leading)
-            .help(language.t("Async uses POSIX AIO queue depth; Sync uses worker threads with blocking file I/O."))
-            .disabled(viewModel.isBenchmarking)
-        }
-
-        VStack(alignment: .leading, spacing: 4) {
-            Text(language.t("Data Pattern"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .frame(width: BenchmarkControlLayout.dataPatternWidth, alignment: .leading)
-            Picker("", selection: $selectedDataPatternRaw) {
-                ForEach(BenchmarkDataPattern.allCases) { pattern in
-                    Text(language.benchmarkDataPatternTitle(pattern)).tag(pattern.rawValue)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: BenchmarkControlLayout.dataPatternWidth, alignment: .leading)
-            .disabled(viewModel.isBenchmarking)
-        }
-
-        VStack(alignment: .leading, spacing: 4) {
-            Text(language.t("Trim Outliers"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .frame(width: BenchmarkControlLayout.trimmedAverageWidth, alignment: .leading)
-            Picker("", selection: $usesTrimmedAverage) {
-                Text(language.t("Off")).tag(false)
-                Text(language.t("On")).tag(true)
-            }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: BenchmarkControlLayout.trimmedAverageWidth, height: 28, alignment: .leading)
+                .frame(width: BenchmarkControlLayout.operationWidth, alignment: .leading)
+                .disabled(viewModel.isBenchmarking)
+
+                Picker("", selection: selectedEngineBinding) {
+                    Text(language.t("Sync")).tag(BenchmarkEngine.synchronous)
+                    Text(language.t("Async")).tag(BenchmarkEngine.asyncQueue)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: BenchmarkControlLayout.engineWidth, alignment: .leading)
+                .help(language.t("Async uses POSIX AIO queue depth; Sync uses worker threads with blocking file I/O."))
+                .disabled(viewModel.isBenchmarking)
+
+                Picker("", selection: $selectedDataPatternRaw) {
+                    ForEach(BenchmarkDataPattern.allCases) { pattern in
+                        Text(language.benchmarkDataPatternTitle(pattern)).tag(pattern.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: BenchmarkControlLayout.dataPatternWidth, alignment: .leading)
+                .disabled(viewModel.isBenchmarking)
+
+                Picker("", selection: $usesTrimmedAverage) {
+                    Text(language.t("Off")).tag(false)
+                    Text(language.t("On")).tag(true)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: BenchmarkControlLayout.trimmedAverageWidth, alignment: .leading)
                 .help(language.t("Run two extra measured passes, discard fastest and slowest, then average the rest."))
                 .disabled(viewModel.isBenchmarking || selectedProfileIsLooping)
+            }
         }
+        .controlSize(.regular)
+    }
+
+    private func benchmarkControlTitle(_ key: String, width: CGFloat) -> some View {
+        Text(language.t(key))
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .frame(width: width, alignment: .leading)
     }
 
     @ViewBuilder
