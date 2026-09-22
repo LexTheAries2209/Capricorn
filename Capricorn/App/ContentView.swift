@@ -57,6 +57,7 @@ struct ContentView: View {
                     benchmarkHistory: benchmarkHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     allowSystemDiskSelfTests: allowSystemDiskSelfTests,
+                    showsQuickDiskCheck: preferences.showsCheckAndRepairActions,
                     satDriverGuidance: SATSMARTDriverGuidancePolicy.guidance(
                         for: drive,
                         snapshot: viewModel.snapshots[drive.id],
@@ -1178,6 +1179,7 @@ private struct DriveDetailView: View {
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
     let allowSystemDiskSelfTests: Bool
+    let showsQuickDiskCheck: Bool
     let satDriverGuidance: SATSMARTDriverGuidance?
     let openSATDriverSettings: () -> Void
     let saveSnapshot: (String?) -> String
@@ -1195,6 +1197,7 @@ private struct DriveDetailView: View {
                 diskCheckReport: viewModel.diskCheckReport(for: drive),
                 isDiskChecking: viewModel.isDiskChecking,
                 allowSystemDiskSelfTests: allowSystemDiskSelfTests,
+                showsQuickDiskCheck: showsQuickDiskCheck,
                 canRunQuickCheck: DiskSidebarActionPolicy.isEnabled(
                     .checkLog,
                     for: drive,

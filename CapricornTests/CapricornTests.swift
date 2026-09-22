@@ -929,6 +929,8 @@ final class CapricornTests: XCTestCase {
         let expectedTranslations = [
             "Settings": "设置",
             "Interface Display": "界面显示",
+            "Show Quick Check and Repair": "显示快速自检与修复",
+            "When disabled, Quick Disk Check is hidden from Overview and Check and Repair is hidden from Disk Actions.": "关闭后，概览页面将隐藏快速自检模块，硬盘操作菜单也不会显示“检查与修复”。",
             "Keyboard Shortcuts": "快捷键",
             "Switch feature pages in order": "按顺序切换功能页面",
             "Show SMART self-test status and controls": "显示 SMART 自检状态和测试功能",
@@ -2144,10 +2146,11 @@ final class CapricornTests: XCTestCase {
 
     func testOverviewQuickDiskCheckVisibilityExcludesNetworkDrives() {
         var drive = Self.fixtureDrive()
-        XCTAssertTrue(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive))
+        XCTAssertTrue(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive, isEnabled: true))
+        XCTAssertFalse(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive, isEnabled: false))
 
         drive.isNetwork = true
-        XCTAssertFalse(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive))
+        XCTAssertFalse(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive, isEnabled: true))
     }
 
     func testMemoryCardSmartProvidersReturnUnavailableReason() async throws {

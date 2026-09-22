@@ -9,6 +9,7 @@ struct OverviewView: View {
     let diskCheckReport: DiskCheckReport?
     let isDiskChecking: Bool
     let allowSystemDiskSelfTests: Bool
+    let showsQuickDiskCheck: Bool
     let canRunQuickCheck: Bool
     let runQuickCheck: () -> Void
     let satDriverGuidance: SATSMARTDriverGuidance?
@@ -134,7 +135,10 @@ struct OverviewView: View {
                     }
                 }
 
-                if OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive) {
+                if OverviewModuleVisibilityPolicy.showsQuickDiskCheck(
+                    for: drive,
+                    isEnabled: showsQuickDiskCheck
+                ) {
                     DiskCheckOverviewSummary(
                         report: diskCheckReport,
                         isRunning: isDiskChecking,
@@ -182,8 +186,8 @@ struct OverviewView: View {
 }
 
 enum OverviewModuleVisibilityPolicy {
-    static func showsQuickDiskCheck(for drive: DriveDevice) -> Bool {
-        !drive.isNetwork
+    static func showsQuickDiskCheck(for drive: DriveDevice, isEnabled: Bool) -> Bool {
+        isEnabled && !drive.isNetwork
     }
 }
 
