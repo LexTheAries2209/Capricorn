@@ -2,6 +2,7 @@
 import AppKit
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SmartAttributesView: View {
     let drive: DriveDevice
@@ -58,8 +59,6 @@ struct SmartAttributesView: View {
                     snapshot: snapshot,
                     viewModel: viewModel,
                     selfTestHistory: selfTestHistory,
-                    exportFolderPath: snapshotExportFolderPath.isEmpty ? nil : snapshotExportFolderPath,
-                    chooseExportFolder: { _ = chooseSnapshotExportFolder() },
                     exportSelfTestHistory: exportSelfTestHistory,
                     exportErrorLog: exportErrorLog,
                     saveMessage: $saveMessage
@@ -294,8 +293,6 @@ struct SmartDiagnosticsPanel: View {
     let snapshot: SmartSnapshot?
     let viewModel: AppModel
     let selfTestHistory: [SmartSelfTestHistoryRecord]
-    let exportFolderPath: String?
-    let chooseExportFolder: () -> Void
     let exportSelfTestHistory: ([SmartSelfTestHistoryRecord], String?, SmartDiagnosticsExportFormat) -> String
     let exportErrorLog: (SmartErrorLogReport, String?, SmartDiagnosticsExportFormat) -> String
     @Binding var saveMessage: String?
@@ -440,23 +437,15 @@ struct SmartDiagnosticsPanel: View {
 
                 Menu {
                     Button(language.t("Export CSV")) {
-                        saveMessage = exportSelfTestHistory(selfTestHistory, exportFolderPath, .csv)
+                        requestSelfTestHistoryExport(.csv)
                     }
                     Button(language.t("Export JSON")) {
-                        saveMessage = exportSelfTestHistory(selfTestHistory, exportFolderPath, .json)
+                        requestSelfTestHistoryExport(.json)
                     }
                 } label: {
                     Label(language.t("Export Self-Test History"), systemImage: "square.and.arrow.up")
                 }
                 .disabled(selfTestHistory.isEmpty)
-
-                if exportFolderPath == nil {
-                    Button {
-                        chooseExportFolder()
-                    } label: {
-                        Label(language.t("Choose Storage Folder"), systemImage: "folder")
-                    }
-                }
             }
             .controlSize(.small)
         }
@@ -544,10 +533,10 @@ struct SmartDiagnosticsPanel: View {
                     }
                     Menu {
                         Button(language.t("Export CSV")) {
-                            saveMessage = exportErrorLog(errorLogReport, exportFolderPath, .csv)
+                            requestErrorLogExport(.csv, report: errorLogReport)
                         }
                         Button(language.t("Export JSON")) {
-                            saveMessage = exportErrorLog(errorLogReport, exportFolderPath, .json)
+                            requestErrorLogExport(.json, report: errorLogReport)
                         }
                     } label: {
                         Label(language.t("Export Error Entries"), systemImage: "square.and.arrow.up")
@@ -558,18 +547,57 @@ struct SmartDiagnosticsPanel: View {
                             ? language.t("Export Error Entries")
                             : language.t("No parseable error details are available to export.")
                     )
-                    if exportFolderPath == nil {
-                        Button {
-                            chooseExportFolder()
-                        } label: {
-                            Image(systemName: "folder")
-                        }
-                        .help(language.t("Choose Storage Folder"))
-                    }
                 }
                 .controlSize(.small)
             }
         }
+    }
+
+    private func requestSelfTestHistoryExport(_ format: SmartDiagnosticsExportFormat) {
+        guard let fileURL = chooseDiagnosticsExportURL(
+            title: "Export Self-Test History",
+            kind: "self-test-history",
+            format: format
+        ) else {
+            return
+        }
+        saveMessage = exportSelfTestHistory(selfTestHistory, fileURL.path, format)
+    }
+
+    private func requestErrorLogExport(
+        _ format: SmartDiagnosticsExportFormat,
+        report: SmartErrorLogReport
+    ) {
+        guard let fileURL = chooseDiagnosticsExportURL(
+            title: "Export Error Entries",
+            kind: "smart-error-log",
+            format: format
+        ) else {
+            return
+        }
+        saveMessage = exportErrorLog(report, fileURL.path, format)
+    }
+
+    private func chooseDiagnosticsExportURL(
+        title: String,
+        kind: String,
+        format: SmartDiagnosticsExportFormat
+    ) -> URL? {
+        let panel = NSSavePanel()
+        panel.title = language.t(title)
+        panel.nameFieldStringValue = ReportExporter.smartDiagnosticsFileName(
+            drive: drive,
+            date: Date(),
+            language: language,
+            kind: kind,
+            format: format
+        )
+        panel.allowedContentTypes = [format == .csv ? .commaSeparatedText : .json]
+        panel.canCreateDirectories = true
+        panel.showsTagField = false
+
+        guard panel.runModal() == .OK else { return nil }
+        return panel.url
     }
 
     @ViewBuilder
