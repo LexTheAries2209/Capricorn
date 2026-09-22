@@ -3719,6 +3719,57 @@ final class CapricornTests: XCTestCase {
     }
 
     @MainActor
+    func testVirtualT7DemoProvidesSimulatedDriveAndCompletesSelfTest() async {
+        let model = AppModel.virtualT7Demo(stepNanoseconds: 1_000_000)
+        let drive = try! XCTUnwrap(model.drives.first)
+
+        XCTAssertEqual(drive.displayName, "Samsung Portable SSD T7")
+        XCTAssertEqual(drive.bsdName, "disk999")
+        XCTAssertTrue(drive.isVirtual)
+        guard case let .supported(capability) = model.smartSelfTestCapability(for: drive) else {
+            return XCTFail("Expected the virtual T7 to support SMART self-tests.")
+        }
+        XCTAssertTrue(capability.shortSupported)
+        XCTAssertTrue(capability.longSupported)
+
+        model.requestSmartSelfTest(kind: .short, drive: drive)
+        guard case let .confirmation(request) = model.smartSelfTestPresentation else {
+            return XCTFail("Expected a virtual self-test confirmation.")
+        }
+        model.confirmSmartSelfTest(request)
+
+        for _ in 0..<100 where model.completedSmartSelfTest == nil {
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+
+        XCTAssertEqual(model.completedSmartSelfTest?.state, .passed)
+        XCTAssertEqual(model.completedSmartSelfTest?.report?.latestEntry?.kind, .short)
+        XCTAssertEqual(model.smartSelfTestSession, .idle)
+        XCTAssertNil(model.smartSelfTestProgress)
+    }
+
+    @MainActor
+    func testVirtualT7DemoAbortProducesAbortedResult() async {
+        let model = AppModel.virtualT7Demo(stepNanoseconds: 1_000_000)
+        let drive = try! XCTUnwrap(model.drives.first)
+
+        model.requestSmartSelfTest(kind: .long, drive: drive)
+        guard case let .confirmation(request) = model.smartSelfTestPresentation else {
+            return XCTFail("Expected a virtual self-test confirmation.")
+        }
+        model.confirmSmartSelfTest(request)
+        model.abortSmartSelfTest()
+
+        for _ in 0..<100 where model.completedSmartSelfTest == nil {
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+
+        XCTAssertEqual(model.completedSmartSelfTest?.state, .aborted)
+        XCTAssertEqual(model.completedSmartSelfTest?.report?.state, .aborted)
+        XCTAssertEqual(model.smartSelfTestSession, .idle)
+    }
+
+    @MainActor
     func testSystemDiskSelfTestIsAlwaysBlocked() {
         let adminRunner = SequencedCommandRunner(results: [])
         let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: ""))

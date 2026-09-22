@@ -299,6 +299,8 @@ final class AppModel {
     private let notificationCoordinator: NotificationCoordinator
     private let driveSystemEventMonitor: DriveSystemEventMonitoring
     private let driveSystemEventDebounceNanoseconds: UInt64
+    private let virtualT7DemoMode: Bool
+    private let virtualT7DemoStepNanoseconds: UInt64
     private var diskActivityTask: Task<Void, Never>?
     private var liveActivityTask: Task<Void, Never>?
     private var activeLiveActivityMonitoringRunID: UUID?
@@ -342,7 +344,9 @@ final class AppModel {
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator(),
         smartSelfTestService: SmartSelfTestService = SmartSelfTestService(),
         smartErrorLogService: SmartErrorLogService = SmartErrorLogService(),
-        smartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching = SmartDiagnosticsCapabilityCache()
+        smartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching = SmartDiagnosticsCapabilityCache(),
+        virtualT7DemoMode: Bool = false,
+        virtualT7DemoStepNanoseconds: UInt64 = 1_000_000_000
     ) {
         self.smartSnapshotService = smartService
         self.smartSelfTestService = smartSelfTestService
@@ -363,6 +367,8 @@ final class AppModel {
         self.notificationCoordinator = notificationCoordinator
         self.driveSystemEventMonitor = driveSystemEventMonitor
         self.driveSystemEventDebounceNanoseconds = driveSystemEventDebounceNanoseconds
+        self.virtualT7DemoMode = virtualT7DemoMode
+        self.virtualT7DemoStepNanoseconds = virtualT7DemoStepNanoseconds
     }
 
     var selectedDrive: DriveDevice? {
@@ -1550,6 +1556,11 @@ final class AppModel {
 
     private func probeSmartSelfTestCapability(for drive: DriveDevice, force: Bool) {
         guard !drive.isSystemDisk else { return }
+        if virtualT7DemoMode {
+            smartSelfTestCapabilities[drive.id] = .supported(VirtualT7DemoFixture.selfTestCapability)
+            smartSelfTestMessage = nil
+            return
+        }
         if !force, smartSelfTestCapabilities[drive.id] != nil { return }
         smartSelfTestCapabilityTasks[drive.id]?.cancel()
         smartSelfTestCapabilities[drive.id] = .checking
@@ -1585,6 +1596,10 @@ final class AppModel {
 
     private func probeSmartErrorLogCapability(for drive: DriveDevice, force: Bool) {
         guard !drive.isSystemDisk else { return }
+        if virtualT7DemoMode {
+            smartErrorLogCapabilities[drive.id] = .unavailable("Virtual T7 demo does not query a controller error log.")
+            return
+        }
         if !force, smartErrorLogCapabilities[drive.id] != nil { return }
         smartErrorLogCapabilityTasks[drive.id]?.cancel()
         smartErrorLogCapabilities[drive.id] = .checking
@@ -1783,6 +1798,10 @@ final class AppModel {
             lastStatusUpdateAt: nil
         )
         smartSelfTestSession = .starting(kind)
+        if virtualT7DemoMode {
+            startVirtualT7DemoSelfTest(kind: kind, drive: drive, runID: runID)
+            return true
+        }
         let service = smartSelfTestService
         let snapshotService = smartSnapshotService
         let baselineReport = snapshots[drive.id]?.selfTestReport
@@ -1911,10 +1930,14 @@ final class AppModel {
         guard isSmartSelfTestActive, let driveID = smartSelfTestDriveID,
               let drive = drives.first(where: { $0.id == driveID }) else { return }
         smartSelfTestSession = .stopping
-        let service = smartSelfTestService
         smartSelfTestTask?.cancel()
         let runID = UUID()
         smartSelfTestRunID = runID
+        if virtualT7DemoMode {
+            abortVirtualT7DemoSelfTest(drive: drive, runID: runID)
+            return
+        }
+        let service = smartSelfTestService
         let snapshotService = smartSnapshotService
         let baselineReport = snapshots[drive.id]?.selfTestReport
         smartSelfTestTask = Task { [weak self] in
@@ -1965,6 +1988,89 @@ final class AppModel {
                     )
                     self.smartSelfTestTask = nil
                 }
+            }
+        }
+    }
+
+    private func startVirtualT7DemoSelfTest(
+        kind: SmartSelfTestKind,
+        drive: DriveDevice,
+        runID: UUID
+    ) {
+        let totalSteps = kind == .short ? 20 : 60
+        smartSelfTestProgress?.estimatedDurationSeconds = totalSteps
+        let stepNanoseconds = virtualT7DemoStepNanoseconds
+        smartSelfTestTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: min(stepNanoseconds, 400_000_000))
+                for step in 0...totalSteps {
+                    try Task.checkCancellation()
+                    let remainingPercent = max(0, 100 - Int((Double(step) / Double(totalSteps)) * 100))
+                    await MainActor.run { [weak self] in
+                        guard let self,
+                              self.smartSelfTestRunID == runID,
+                              self.smartSelfTestDriveID == drive.id else { return }
+                        self.smartSelfTestSession = .running(kind, remainingPercent: remainingPercent)
+                        self.smartSelfTestProgress?.remainingPercent = remainingPercent
+                        self.smartSelfTestProgress?.lastStatusUpdateAt = Date()
+                        self.snapshots[drive.id] = VirtualT7DemoFixture.snapshot(
+                            for: drive,
+                            selfTestReport: VirtualT7DemoFixture.runningReport(
+                                kind: kind,
+                                remainingPercent: remainingPercent
+                            )
+                        )
+                    }
+                    if step < totalSteps {
+                        try await Task.sleep(nanoseconds: stepNanoseconds)
+                    }
+                }
+
+                await MainActor.run { [weak self] in
+                    guard let self,
+                          self.smartSelfTestRunID == runID,
+                          self.smartSelfTestDriveID == drive.id else { return }
+                    let report = VirtualT7DemoFixture.passedReport(kind: kind)
+                    self.snapshots[drive.id] = VirtualT7DemoFixture.snapshot(for: drive, selfTestReport: report)
+                    self.completedSmartSelfTest = self.smartSelfTestCompletion(drive: drive, report: report)
+                    self.smartSelfTestSession = .idle
+                    self.smartSelfTestProgress = nil
+                    self.smartSelfTestMessage = nil
+                    self.activeSmartSelfTestDiskLease?.release()
+                    self.activeSmartSelfTestDiskLease = nil
+                    self.smartSelfTestTask = nil
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self, self.smartSelfTestRunID == runID else { return }
+                    self.smartSelfTestSession = .failed(error.localizedDescription)
+                    self.smartSelfTestProgress = nil
+                    self.smartSelfTestMessage = error.localizedDescription
+                    self.activeSmartSelfTestDiskLease?.release()
+                    self.activeSmartSelfTestDiskLease = nil
+                    self.smartSelfTestTask = nil
+                }
+            }
+        }
+    }
+
+    private func abortVirtualT7DemoSelfTest(drive: DriveDevice, runID: UUID) {
+        let stepNanoseconds = virtualT7DemoStepNanoseconds
+        smartSelfTestTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: min(stepNanoseconds, 400_000_000))
+            await MainActor.run { [weak self] in
+                guard let self, self.smartSelfTestRunID == runID else { return }
+                let report = VirtualT7DemoFixture.abortedReport()
+                self.snapshots[drive.id] = VirtualT7DemoFixture.snapshot(for: drive, selfTestReport: report)
+                self.completedSmartSelfTest = self.smartSelfTestCompletion(drive: drive, report: report)
+                self.smartSelfTestSession = .idle
+                self.smartSelfTestProgress = nil
+                self.smartSelfTestMessage = nil
+                self.activeSmartSelfTestDiskLease?.release()
+                self.activeSmartSelfTestDiskLease = nil
+                self.smartSelfTestTask = nil
             }
         }
     }
