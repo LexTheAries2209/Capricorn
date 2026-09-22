@@ -19,6 +19,10 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(ApplicationRuntime.shouldRunAutomaticStartupTasks(environment: [:]))
     }
 
+    func testNormalBuildDoesNotIdentifyAsVirtualT7Demo() {
+        XCTAssertFalse(ApplicationRuntime.isVirtualT7DemoBuild)
+    }
+
     func testLifeRemainingBatterySymbolUsesNativeHealthBands() {
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: nil), "battery.50percent")
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 100), "battery.100percent")
