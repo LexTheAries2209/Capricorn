@@ -401,13 +401,14 @@ struct BenchmarkView: View {
 
     private var benchmarkControls: some View {
         VStack(alignment: .leading, spacing: BenchmarkControlLayout.verticalSpacing) {
+            // Align from the title row because menu and segmented pickers have different intrinsic heights.
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .bottom, spacing: BenchmarkControlLayout.horizontalSpacing) {
+                HStack(alignment: .top, spacing: BenchmarkControlLayout.horizontalSpacing) {
                     benchmarkPickerControls
                 }
 
                 ScrollView(.horizontal) {
-                    HStack(alignment: .bottom, spacing: BenchmarkControlLayout.horizontalSpacing) {
+                    HStack(alignment: .top, spacing: BenchmarkControlLayout.horizontalSpacing) {
                         benchmarkPickerControls
                     }
                 }
