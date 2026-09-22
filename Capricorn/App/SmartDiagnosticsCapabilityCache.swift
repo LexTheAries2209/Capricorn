@@ -46,7 +46,7 @@ protocol SmartDiagnosticsCapabilityCaching: AnyObject {
 final class SmartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching {
     // v2 invalidates capability results saved before USB-NVMe bridge command
     // restrictions were included in self-test probing.
-    private static let defaultsKey = "smartDiagnosticsCapabilityCache.v2"
+    static let defaultsKey = "smartDiagnosticsCapabilityCache.v2"
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {

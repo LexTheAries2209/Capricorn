@@ -43,6 +43,55 @@ extension CapricornTests {
         XCTAssertEqual(reloaded.representativeVolumeStartupPreference, .lastSelected)
     }
 
+    @MainActor
+    func testResetAllSettingsPreservesDiskCacheAndHistory() throws {
+        let suiteName = "CapricornTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let cacheData = Data("preserved-cache".utf8)
+        defaults.set(cacheData, forKey: SmartDiagnosticsCapabilityCache.defaultsKey)
+        defaults.set(9, forKey: "benchmarkRunCount")
+        defaults.set("/Volumes/Benchmark", forKey: "benchmarkTargetFolder")
+        defaults.set("unknown persisted interface value", forKey: "futureInterfaceSetting")
+
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
+        preferences.showVirtualDisks = true
+        preferences.showsSmartSelfTestInterface = true
+        preferences.avoidWakingSleepingDisks = false
+        preferences.redactSerialNumbers = true
+        preferences.automaticRefreshInterval = .every15Minutes
+        preferences.showsCheckAndRepairActions = true
+        preferences.showsIndividualHistoryDeletion = true
+        preferences.representativeVolumeStartupPreference = .lastSelected
+
+        let container = try ModelContainerFactory.makeInMemory()
+        let drive = Self.fixtureDrive()
+        container.mainContext.insert(SmartHistoryRecord(drive: drive, snapshot: Self.fixtureSnapshot(for: drive)))
+        try container.mainContext.save()
+
+        preferences.resetAllSettings()
+
+        XCTAssertEqual(preferences.languageRawValue, AppPreferences.Defaults.language)
+        XCTAssertEqual(preferences.showVirtualDisks, AppPreferences.Defaults.showVirtualDisks)
+        XCTAssertEqual(preferences.showsSmartSelfTestInterface, AppPreferences.Defaults.showsSmartSelfTestInterface)
+        XCTAssertEqual(preferences.avoidWakingSleepingDisks, AppPreferences.Defaults.avoidWakingSleepingDisks)
+        XCTAssertEqual(preferences.redactSerialNumbers, AppPreferences.Defaults.redactSerialNumbers)
+        XCTAssertEqual(preferences.automaticRefreshInterval, AppPreferences.Defaults.automaticRefreshInterval)
+        XCTAssertEqual(preferences.showsCheckAndRepairActions, AppPreferences.Defaults.showsCheckAndRepairActions)
+        XCTAssertEqual(preferences.showsIndividualHistoryDeletion, AppPreferences.Defaults.showsIndividualHistoryDeletion)
+        XCTAssertEqual(
+            preferences.representativeVolumeStartupPreference,
+            AppPreferences.Defaults.representativeVolumeStartupPreference
+        )
+        XCTAssertEqual(defaults.data(forKey: SmartDiagnosticsCapabilityCache.defaultsKey), cacheData)
+        XCTAssertNil(defaults.object(forKey: "benchmarkRunCount"))
+        XCTAssertNil(defaults.object(forKey: "benchmarkTargetFolder"))
+        XCTAssertNil(defaults.object(forKey: "futureInterfaceSetting"))
+        XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<SmartHistoryRecord>()), 1)
+    }
+
     func testAutomaticRefreshIntervalsContainOnlySupportedChoices() {
         XCTAssertEqual(
             DiskAutomaticRefreshInterval.allCases.map(\.rawValue),
