@@ -490,8 +490,7 @@ enum DiskSidebarActionPolicy {
     static func isEnabled(
         _ action: DiskSidebarAction,
         for drive: DriveDevice,
-        targetVolume: DriveDevice.Volume? = nil,
-        allowSystemDiskSelfTests: Bool = false
+        targetVolume: DriveDevice.Volume? = nil
     ) -> Bool {
         if isProtectedSystemControlAction(action, for: drive) {
             return false
@@ -512,17 +511,17 @@ enum DiskSidebarActionPolicy {
         case .inspectOpenFiles:
             return drive.primaryMountPoint != nil
         case .checkLog:
-            let systemDiskIsAllowed = !drive.isSystemDisk || allowSystemDiskSelfTests
-            let protectedDiskIsAllowed = !isProtectedInternalSystemDisk(drive)
-                || (drive.isSystemDisk && allowSystemDiskSelfTests)
-            return systemDiskIsAllowed
-                && protectedDiskIsAllowed
+            return !drive.isSystemDisk
+                && !isProtectedInternalSystemDisk(drive)
                 && !drive.isNetwork
                 && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
         case .detailedCheck:
             return false
         case .firstAid:
-            return !drive.isNetwork && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
+            return !drive.isSystemDisk
+                && !isProtectedInternalSystemDisk(drive)
+                && !drive.isNetwork
+                && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
         case .rename:
             return !drive.isNetwork && !drive.isSystemDisk && RepresentativeVolumeResolver.fallbackVolume(for: drive) != nil
         case .revealInFinder:

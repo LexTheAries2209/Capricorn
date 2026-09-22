@@ -11,8 +11,8 @@ extension CapricornTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         defaults.set("/usr/bin/true", forKey: AppPreferences.Key.legacySmartctlPath)
+        defaults.set(true, forKey: AppPreferences.Key.legacyAllowSystemDiskSelfTests)
         let preferences = AppPreferences(defaults: defaults)
-        XCTAssertFalse(preferences.allowSystemDiskSelfTests)
         XCTAssertFalse(preferences.showsSmartSelfTestInterface)
         XCTAssertTrue(preferences.avoidWakingSleepingDisks)
         XCTAssertFalse(preferences.redactSerialNumbers)
@@ -22,7 +22,7 @@ extension CapricornTests {
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
         preferences.showVirtualDisks = true
         XCTAssertNil(defaults.string(forKey: AppPreferences.Key.legacySmartctlPath))
-        preferences.allowSystemDiskSelfTests = true
+        XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyAllowSystemDiskSelfTests))
         preferences.showsSmartSelfTestInterface = true
         preferences.avoidWakingSleepingDisks = false
         preferences.redactSerialNumbers = true
@@ -34,7 +34,7 @@ extension CapricornTests {
         XCTAssertEqual(reloaded.languageRawValue, AppLanguage.simplifiedChinese.rawValue)
         XCTAssertTrue(reloaded.showVirtualDisks)
         XCTAssertNil(defaults.string(forKey: AppPreferences.Key.legacySmartctlPath))
-        XCTAssertTrue(reloaded.allowSystemDiskSelfTests)
+        XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyAllowSystemDiskSelfTests))
         XCTAssertTrue(reloaded.showsSmartSelfTestInterface)
         XCTAssertFalse(reloaded.avoidWakingSleepingDisks)
         XCTAssertTrue(reloaded.redactSerialNumbers)

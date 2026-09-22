@@ -10,7 +10,6 @@ struct ContentView: View {
     @State private var preferences: AppPreferences
     @State private var showsDiskCheckReport = false
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
-    @AppStorage(AppPreferences.Key.allowSystemDiskSelfTests) private var allowSystemDiskSelfTests = false
     @AppStorage("representativeVolumeSelectionsByDrive") private var representativeVolumePreferencesJSON = ""
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistory: [SmartHistoryRecord]
@@ -56,7 +55,6 @@ struct ContentView: View {
                     diskCheckHistory: diskCheckHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     benchmarkHistory: benchmarkHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
                     activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
-                    allowSystemDiskSelfTests: allowSystemDiskSelfTests,
                     showsQuickDiskCheck: preferences.showsCheckAndRepairActions,
                     satDriverGuidance: SATSMARTDriverGuidancePolicy.guidance(
                         for: drive,
@@ -574,8 +572,7 @@ struct ContentView: View {
         guard DiskSidebarActionPolicy.isEnabled(
             action,
             for: drive,
-            targetVolume: viewModel.representativeVolume(for: drive),
-            allowSystemDiskSelfTests: allowSystemDiskSelfTests
+            targetVolume: viewModel.representativeVolume(for: drive)
         ) else { return true }
         if viewModel.isFirstAidBlocking { return true }
         if action == .firstAid {
@@ -1179,7 +1176,6 @@ private struct DriveDetailView: View {
     let diskCheckHistory: [DiskCheckHistoryRecord]
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
-    let allowSystemDiskSelfTests: Bool
     let showsQuickDiskCheck: Bool
     let satDriverGuidance: SATSMARTDriverGuidance?
     let openSATDriverSettings: () -> Void
@@ -1197,12 +1193,10 @@ private struct DriveDetailView: View {
                 snapshot: snapshot,
                 diskCheckReport: viewModel.diskCheckReport(for: drive),
                 isDiskChecking: viewModel.isDiskChecking,
-                allowSystemDiskSelfTests: allowSystemDiskSelfTests,
                 showsQuickDiskCheck: showsQuickDiskCheck,
                 canRunQuickCheck: DiskSidebarActionPolicy.isEnabled(
                     .checkLog,
-                    for: drive,
-                    allowSystemDiskSelfTests: allowSystemDiskSelfTests
+                    for: drive
                 )
                     && !viewModel.isDiskChecking
                     && !viewModel.isFirstAidBlocking

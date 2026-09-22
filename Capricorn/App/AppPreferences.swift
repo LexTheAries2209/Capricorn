@@ -50,7 +50,9 @@ final class AppPreferences {
         // Earlier builds allowed an external smartctl override. Keep the key
         // only long enough to clear it when the bundled-only policy is loaded.
         static let legacySmartctlPath = "smartctlPath"
-        static let allowSystemDiskSelfTests = "allowSystemDiskSelfTests"
+        // Earlier builds exposed a system-disk self-test override. The app no
+        // longer operates on system disks, so clear the persisted legacy key.
+        static let legacyAllowSystemDiskSelfTests = "allowSystemDiskSelfTests"
         static let showsSmartSelfTestInterface = "showsSmartSelfTestInterface"
         static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
         static let redactSerialNumbers = "redactSerialNumbers"
@@ -71,10 +73,6 @@ final class AppPreferences {
 
     var showVirtualDisks: Bool {
         didSet { defaults.set(showVirtualDisks, forKey: Key.showVirtualDisks) }
-    }
-
-    var allowSystemDiskSelfTests: Bool {
-        didSet { defaults.set(allowSystemDiskSelfTests, forKey: Key.allowSystemDiskSelfTests) }
     }
 
     /// SMART diagnostics include active self-tests and controller error logs.
@@ -120,7 +118,7 @@ final class AppPreferences {
         languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
         showVirtualDisks = defaults.bool(forKey: Key.showVirtualDisks)
         defaults.removeObject(forKey: Key.legacySmartctlPath)
-        allowSystemDiskSelfTests = defaults.bool(forKey: Key.allowSystemDiskSelfTests)
+        defaults.removeObject(forKey: Key.legacyAllowSystemDiskSelfTests)
         showsSmartSelfTestInterface = defaults.bool(forKey: Key.showsSmartSelfTestInterface)
         avoidWakingSleepingDisks = defaults.object(forKey: Key.avoidWakingSleepingDisks) as? Bool ?? true
         redactSerialNumbers = defaults.bool(forKey: Key.redactSerialNumbers)

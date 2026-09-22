@@ -715,10 +715,9 @@ final class DiskCheckService {
     func check(
         _ mode: DiskCheckMode,
         drive: DriveDevice,
-        allowSystemDisk: Bool = false,
         onUpdate: ((DiskCheckReport) async -> Void)? = nil
     ) async -> DiskCheckReport {
-        let plans = commandPlans(for: mode, drive: drive, allowSystemDisk: allowSystemDisk)
+        let plans = commandPlans(for: mode, drive: drive)
         var report = DiskCheckReport(
             mode: mode,
             driveID: drive.id,
@@ -919,8 +918,7 @@ final class DiskCheckService {
 
     private func commandPlans(
         for mode: DiskCheckMode,
-        drive: DriveDevice,
-        allowSystemDisk: Bool
+        drive: DriveDevice
     ) -> [CommandPlan] {
         guard !drive.isNetwork else {
             return [CommandPlan(
@@ -931,17 +929,16 @@ final class DiskCheckService {
             )]
         }
 
-        guard !drive.isSystemDisk || allowSystemDisk else {
+        guard !drive.isSystemDisk else {
             return [CommandPlan(
-                title: "System Disk Check Disabled",
+                title: "System Disk Check Unavailable",
                 executable: nil,
                 arguments: [drive.bsdName],
-                unsupportedMessage: "System-disk self-tests are disabled in Settings."
+                unsupportedMessage: "System disk checks are unavailable in Capricorn."
             )]
         }
 
-        guard !DiskSidebarActionPolicy.isProtectedInternalSystemDisk(drive)
-                || (drive.isSystemDisk && allowSystemDisk) else {
+        guard !DiskSidebarActionPolicy.isProtectedInternalSystemDisk(drive) else {
             return [CommandPlan(
                 title: "Protected System Disk",
                 executable: nil,

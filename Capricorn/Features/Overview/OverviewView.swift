@@ -8,7 +8,6 @@ struct OverviewView: View {
     let snapshot: SmartSnapshot?
     let diskCheckReport: DiskCheckReport?
     let isDiskChecking: Bool
-    let allowSystemDiskSelfTests: Bool
     let showsQuickDiskCheck: Bool
     let canRunQuickCheck: Bool
     let runQuickCheck: () -> Void
@@ -142,7 +141,6 @@ struct OverviewView: View {
                     DiskCheckOverviewSummary(
                         report: diskCheckReport,
                         isRunning: isDiskChecking,
-                        requiresSystemDiskPermission: drive.isSystemDisk && !allowSystemDiskSelfTests,
                         canRunQuickCheck: canRunQuickCheck,
                         runQuickCheck: runQuickCheck
                     )
@@ -223,7 +221,6 @@ private extension ProviderState {
 private struct DiskCheckOverviewSummary: View {
     let report: DiskCheckReport?
     let isRunning: Bool
-    let requiresSystemDiskPermission: Bool
     let canRunQuickCheck: Bool
     let runQuickCheck: () -> Void
     @Environment(\.appLanguage) private var language
@@ -241,21 +238,9 @@ private struct DiskCheckOverviewSummary: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if requiresSystemDiskPermission {
-                        Text(language.t("Enable system-disk checks in Settings before running Quick Disk Check."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
                 Spacer()
                 HStack(spacing: 8) {
-                    if requiresSystemDiskPermission {
-                        SettingsLink {
-                            Label(language.t("Settings"), systemImage: "gearshape")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
                     Button(action: runQuickCheck) {
                         Label(language.t("Run Quick Disk Check"), systemImage: "play.fill")
                     }

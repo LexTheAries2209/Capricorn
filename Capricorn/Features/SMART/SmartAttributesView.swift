@@ -300,7 +300,6 @@ struct SmartDiagnosticsPanel: View {
     let exportErrorLog: (SmartErrorLogReport, String?, SmartDiagnosticsExportFormat) -> String
     @Binding var saveMessage: String?
     @Environment(\.appLanguage) private var language
-    @AppStorage(AppPreferences.Key.allowSystemDiskSelfTests) private var allowSystemDiskSelfTests = false
     @State private var isExpanded = true
     @State private var showsSelfTestHistory = false
     @State private var showsErrorLog = false
@@ -330,7 +329,7 @@ struct SmartDiagnosticsPanel: View {
         return report?.state
     }
     private var controlsUnavailable: Bool {
-        drive.isNetwork || drive.isMemoryCard || (drive.isSystemDisk && !allowSystemDiskSelfTests)
+        drive.isNetwork || drive.isMemoryCard
     }
 
     private var cannotCompleteSelfTest: Bool {
@@ -491,18 +490,12 @@ struct SmartDiagnosticsPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             case .unknown, .unavailable:
-                if drive.isSystemDisk && !allowSystemDiskSelfTests {
-                    SettingsLink {
-                        Label(language.t("Settings"), systemImage: "gearshape")
-                    }
-                } else {
-                    Button {
-                        viewModel.checkSmartSelfTestCapability(for: drive)
-                    } label: {
-                        Label(language.t("Retry Self-Test Check"), systemImage: "checkmark.shield")
-                    }
-                    .disabled(controlsUnavailable)
+                Button {
+                    viewModel.checkSmartSelfTestCapability(for: drive)
+                } label: {
+                    Label(language.t("Retry Self-Test Check"), systemImage: "checkmark.shield")
                 }
+                .disabled(controlsUnavailable)
             }
         }
     }
@@ -610,9 +603,6 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var stateDescription: String {
-        if drive.isSystemDisk && !allowSystemDiskSelfTests {
-            return language.t("Enable system-disk self-tests in Settings only after confirming that a current backup is available.")
-        }
         if controlsUnavailable {
             return language.t("Self-tests require smartctl support for this drive.")
         }

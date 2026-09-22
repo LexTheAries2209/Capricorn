@@ -1157,7 +1157,8 @@ final class CapricornTests: XCTestCase {
             "Disk action completed.": "硬盘操作已完成。",
             "Inspecting open files...": "正在查看占用程序...",
             "Open file inspection completed.": "占用程序查看完成。",
-            "System-disk self-tests are disabled in Settings.": "设置中未允许系统盘执行自检。",
+            "System disk checks are unavailable in Capricorn.": "Capricorn 不对系统盘执行检查或修复。",
+            "SMART self-tests are unavailable for system disks in Capricorn.": "Capricorn 不对系统盘执行 SMART 自检。",
             "Checking disk...": "正在检查硬盘...",
             "Disk check completed.": "硬盘检查已完成。",
             "Stopping disk check...": "正在停止硬盘检查...",
@@ -1334,7 +1335,6 @@ final class CapricornTests: XCTestCase {
             "Quick Disk Check": "快速自检",
             "Run Quick Disk Check": "运行快速自检",
             "Clear Result": "清理结果",
-            "Enable system-disk checks in Settings before running Quick Disk Check.": "运行快速自检前，请先在设置中允许系统盘执行自检。",
             "SMART Self-Tests": "SMART 自检",
             "Disk Check In Progress": "硬盘检查进行中",
             "First Aid…": "急救…",
@@ -1439,7 +1439,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.actions(for: drive).contains(.firstAid))
-        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.firstAid, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.firstAid, for: drive))
     }
 
     func testDiskSidebarActionsIncludeReadOnlyCheckActionsForPhysicalDrives() {
@@ -1452,19 +1452,13 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
     }
 
-    func testSystemDiskQuickCheckRequiresSettingsPermission() {
+    func testSystemDiskCheckAndRepairActionsRemainDisabled() {
         var drive = Self.fixtureDrive(mountedAt: "/")
         drive.isInternal = true
         drive.isSystemDisk = true
 
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
-        XCTAssertTrue(
-            DiskSidebarActionPolicy.isEnabled(
-                .checkLog,
-                for: drive,
-                allowSystemDiskSelfTests: true
-            )
-        )
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.firstAid, for: drive))
     }
 
     func testDiskSidebarActionPolicyGroupsCheckAndRepairActions() {
@@ -1787,7 +1781,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(report.entries[0].stderr.contains("No native detailed checker"))
     }
 
-    func testDiskCheckServiceSkipsSystemDiskWhenSettingsPermissionIsDisabled() async throws {
+    func testDiskCheckServiceAlwaysSkipsSystemDisk() async throws {
         let runner = RecordingDiskCheckRunner()
         let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
         var drive = Self.fixtureDrive(mountedAt: "/")
@@ -1799,23 +1793,43 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(runner.calls.isEmpty)
         XCTAssertEqual(report.entries.count, 1)
         XCTAssertTrue(report.entries[0].hasIssue)
-        XCTAssertTrue(report.entries[0].stderr.contains("System-disk self-tests are disabled in Settings"))
+        XCTAssertTrue(report.entries[0].stderr.contains("System disk checks are unavailable in Capricorn"))
     }
 
-    func testDiskCheckServiceRunsSystemDiskVerificationWhenSettingsPermissionIsEnabled() async throws {
-        let runner = RecordingDiskCheckRunner(stdout: "Verified\n")
+    func testDiskCheckServiceSkipsDetailedChecksForSystemDisk() async throws {
+        let runner = RecordingDiskCheckRunner()
         let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
         var drive = Self.fixtureDrive(mountedAt: "/")
         drive.isInternal = true
         drive.isSystemDisk = true
 
-        let report = await service.check(.ordinary, drive: drive, allowSystemDisk: true)
+        let report = await service.check(.detailed, drive: drive)
 
-        XCTAssertEqual(runner.calls.map(\.arguments), [
-            ["verifyDisk", "disk0"],
-            ["verifyVolume", "/"]
-        ])
-        XCTAssertFalse(report.entries.contains(where: \.hasIssue))
+        XCTAssertTrue(runner.calls.isEmpty)
+        XCTAssertEqual(report.entries.count, 1)
+        XCTAssertTrue(report.entries[0].stderr.contains("System disk checks are unavailable in Capricorn"))
+    }
+
+    @MainActor
+    func testAppModelBlocksSystemDiskCheckAndFirstAidBeforeStartingServices() async {
+        let runner = RecordingDiskCheckRunner()
+        let model = AppModel(
+            diskCheckService: DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
+        )
+        var drive = Self.fixtureDrive(mountedAt: "/")
+        drive.isInternal = true
+        drive.isSystemDisk = true
+
+        await model.runDiskCheck(.ordinary, on: drive)
+
+        XCTAssertTrue(runner.calls.isEmpty)
+        XCTAssertFalse(model.isDiskChecking)
+        XCTAssertEqual(model.refreshMessage, "System disk checks are unavailable in Capricorn.")
+
+        await model.prepareFirstAid(on: drive)
+
+        XCTAssertEqual(model.firstAidState, .idle)
+        XCTAssertEqual(model.refreshMessage, "System disk checks are unavailable in Capricorn.")
     }
 
     func testDiskCheckServicePublishesProgressBeforeAndAfterEachCommand() async throws {
@@ -2590,6 +2604,7 @@ final class CapricornTests: XCTestCase {
     func testAppModelAutomaticallyProbesSelfTestCapabilityAfterDriveDiscovery() async {
         var drive = Self.fixtureDrive()
         drive.protocolName = "ATA"
+        drive.isSystemDisk = false
         let refreshService = StagedDriveRefreshService(
             discovery: DriveRefreshSnapshot(
                 drives: [drive],
@@ -2640,6 +2655,39 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(call?.arguments.contains("-c") == true)
         XCTAssertFalse(call?.arguments.contains("-t") == true)
         XCTAssertTrue(adminRunner.calls.isEmpty)
+    }
+
+    @MainActor
+    func testAppModelDoesNotProbeSystemDiskSelfTestCapabilityAfterDriveDiscovery() async {
+        var drive = Self.fixtureDrive(mountedAt: "/")
+        drive.protocolName = "NVMe"
+        drive.isInternal = true
+        drive.isSystemDisk = true
+        let refreshService = StagedDriveRefreshService(
+            discovery: DriveRefreshSnapshot(
+                drives: [drive],
+                snapshots: [drive.id: .refreshingNative(for: drive)]
+            ),
+            updateDelayNanoseconds: 0,
+            updates: []
+        )
+        let capabilityRunner = SequencedCommandRunner(results: [])
+        let model = AppModel(
+            refreshService: refreshService,
+            smartSelfTestService: SmartSelfTestService(
+                smartctlProvider: Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: "")),
+                runner: capabilityRunner,
+                administratorRunner: capabilityRunner,
+                commandCoordinator: SmartctlCommandCoordinator()
+            )
+        )
+
+        await model.refresh()
+        model.checkSmartSelfTestCapability(for: drive)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertTrue(capabilityRunner.calls.isEmpty)
+        XCTAssertEqual(model.smartSelfTestCapability(for: drive), .unknown)
     }
 
     func testSelfTestCapabilityPendingMessageIsLocalized() {
@@ -3598,7 +3646,7 @@ final class CapricornTests: XCTestCase {
     }
 
     @MainActor
-    func testSystemDiskSelfTestIsBlockedWhenPreferenceIsDisabled() {
+    func testSystemDiskSelfTestIsAlwaysBlocked() {
         let adminRunner = SequencedCommandRunner(results: [])
         let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: ""))
         let service = SmartSelfTestService(
@@ -3606,10 +3654,7 @@ final class CapricornTests: XCTestCase {
             administratorRunner: adminRunner,
             commandCoordinator: SmartctlCommandCoordinator()
         )
-        let model = AppModel(
-            smartSelfTestService: service,
-            allowsSystemDiskSelfTests: { false }
-        )
+        let model = AppModel(smartSelfTestService: service)
         var drive = Self.fixtureDrive()
         drive.isSystemDisk = true
         model.smartSelfTestCapabilities[drive.id] = .supported(SmartSelfTestCapability(
@@ -3620,7 +3665,7 @@ final class CapricornTests: XCTestCase {
 
         model.startSmartSelfTest(kind: .short, drive: drive)
 
-        XCTAssertEqual(model.smartSelfTestSession, .failed("System-disk self-tests are disabled in Settings."))
+        XCTAssertEqual(model.smartSelfTestSession, .failed("SMART self-tests are unavailable for system disks in Capricorn."))
         XCTAssertTrue(adminRunner.calls.isEmpty)
     }
 
@@ -3648,8 +3693,7 @@ final class CapricornTests: XCTestCase {
         let model = AppModel(
             diskOperationLockCoordinator: DiskOperationLockCoordinator(lockDirectoryURL: lockDirectory),
             smartSelfTestService: service,
-            smartDiagnosticsCapabilityCache: cache,
-            allowsSystemDiskSelfTests: { true }
+            smartDiagnosticsCapabilityCache: cache
         )
         var drive = Self.fixtureDrive()
         drive.bsdName = "disk99"

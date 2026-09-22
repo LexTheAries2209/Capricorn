@@ -283,7 +283,6 @@ final class AppModel {
     private let smartSelfTestService: SmartSelfTestService
     private let smartErrorLogService: SmartErrorLogService
     private let smartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching
-    private let allowsSystemDiskSelfTests: @Sendable () -> Bool
     private let benchmarkRunner: BenchmarkRunning
     private let diskActivityProvider: DiskActivityProviding
     private let liveActivityWorkloadRunner: DiskActivityWorkloadRunning
@@ -338,16 +337,12 @@ final class AppModel {
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator(),
         smartSelfTestService: SmartSelfTestService = SmartSelfTestService(),
         smartErrorLogService: SmartErrorLogService = SmartErrorLogService(),
-        smartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching = SmartDiagnosticsCapabilityCache(),
-        allowsSystemDiskSelfTests: @escaping @Sendable () -> Bool = {
-            UserDefaults.standard.bool(forKey: AppPreferences.Key.allowSystemDiskSelfTests)
-        }
+        smartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching = SmartDiagnosticsCapabilityCache()
     ) {
         self.smartSnapshotService = smartService
         self.smartSelfTestService = smartSelfTestService
         self.smartErrorLogService = smartErrorLogService
         self.smartDiagnosticsCapabilityCache = smartDiagnosticsCapabilityCache
-        self.allowsSystemDiskSelfTests = allowsSystemDiskSelfTests
         self.refreshService = refreshService ?? DriveRefreshService(
             inventoryProvider: inventoryProvider,
             smartService: smartService
@@ -619,7 +614,7 @@ final class AppModel {
     }
 
     private func startAutomaticSmartSelfTestCapabilityProbe(for drive: DriveDevice) {
-        guard !drive.isNetwork, !drive.isMemoryCard else { return }
+        guard !drive.isSystemDisk, !drive.isNetwork, !drive.isMemoryCard else { return }
         guard smartSelfTestCapabilities[drive.id] == nil else { return }
 
         // This is a read-only capability query (`smartctl -c --json`); it never
@@ -842,8 +837,8 @@ final class AppModel {
     func runDiskCheck(_ mode: DiskCheckMode, on drive: DriveDevice) async {
         guard !isDiskChecking, !diskOperations.isFirstAidBlocking else { return }
         selectedDriveID = drive.id
-        guard !drive.isSystemDisk || allowsSystemDiskSelfTests() else {
-            refreshMessage = "System-disk self-tests are disabled in Settings."
+        guard !drive.isSystemDisk else {
+            refreshMessage = "System disk checks are unavailable in Capricorn."
             return
         }
         let operation: DiskOperationKind = mode == .ordinary ? .quickCheck : .detailedCheck
@@ -857,11 +852,7 @@ final class AppModel {
             entries: []
         ))
         isDiskChecking = true
-        let finalReport = await diskCheckService.check(
-            mode,
-            drive: drive,
-            allowSystemDisk: allowsSystemDiskSelfTests()
-        ) { [weak self] report in
+        let finalReport = await diskCheckService.check(mode, drive: drive) { [weak self] report in
             await MainActor.run {
                 self?.publishDiskCheckReport(report)
             }
@@ -887,6 +878,11 @@ final class AppModel {
               !isDiskChecking,
               benchmarkSession.state == .idle,
               !isLiveActivityWorkloadRunning else { return }
+        guard !drive.isSystemDisk else {
+            selectedDriveID = drive.id
+            refreshMessage = "System disk checks are unavailable in Capricorn."
+            return
+        }
 
         selectedDriveID = drive.id
         let preparationID = UUID()
@@ -1437,15 +1433,17 @@ final class AppModel {
     }
 
     func checkSmartSelfTestCapability(for drive: DriveDevice) {
-        guard !isSmartSelfTestActive else { return }
+        guard !drive.isSystemDisk, !isSmartSelfTestActive else { return }
         probeSmartSelfTestCapability(for: drive, force: true)
     }
 
     func checkSmartErrorLogCapability(for drive: DriveDevice) {
+        guard !drive.isSystemDisk else { return }
         probeSmartErrorLogCapability(for: drive, force: true)
     }
 
     func readSmartErrorLog(for drive: DriveDevice) {
+        guard !drive.isSystemDisk else { return }
         smartErrorLogReadTasks[drive.id]?.cancel()
         smartErrorLogCapabilities[drive.id] = .checking
         smartErrorLogMessage = nil
@@ -1508,6 +1506,7 @@ final class AppModel {
     }
 
     private func restoreCachedSmartDiagnosticsCapabilities(for drive: DriveDevice) {
+        guard !drive.isSystemDisk else { return }
         let version = smartctlVersion(for: drive)
         guard let entry = smartDiagnosticsCapabilityCache.cachedEntry(
             for: drive,
@@ -1543,6 +1542,7 @@ final class AppModel {
     }
 
     private func probeSmartSelfTestCapability(for drive: DriveDevice, force: Bool) {
+        guard !drive.isSystemDisk else { return }
         if !force, smartSelfTestCapabilities[drive.id] != nil { return }
         smartSelfTestCapabilityTasks[drive.id]?.cancel()
         smartSelfTestCapabilities[drive.id] = .checking
@@ -1577,6 +1577,7 @@ final class AppModel {
     }
 
     private func probeSmartErrorLogCapability(for drive: DriveDevice, force: Bool) {
+        guard !drive.isSystemDisk else { return }
         if !force, smartErrorLogCapabilities[drive.id] != nil { return }
         smartErrorLogCapabilityTasks[drive.id]?.cancel()
         smartErrorLogCapabilities[drive.id] = .checking
@@ -1706,8 +1707,8 @@ final class AppModel {
     func startSmartSelfTest(kind: SmartSelfTestKind, drive: DriveDevice) {
         guard !isSmartSelfTestActive else { return }
         guard kind == .short || kind == .long else { return }
-        guard !drive.isSystemDisk || allowsSystemDiskSelfTests() else {
-            let message = "System-disk self-tests are disabled in Settings."
+        guard !drive.isSystemDisk else {
+            let message = "SMART self-tests are unavailable for system disks in Capricorn."
             smartSelfTestSession = .failed(message)
             smartSelfTestMessage = message
             return
