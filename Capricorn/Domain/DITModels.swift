@@ -472,6 +472,10 @@ enum DiskSidebarActionPolicy {
         }
     }
 
+    static func isCheckAndRepairMenuEnabled(for drive: DriveDevice) -> Bool {
+        !drive.isSystemDisk
+    }
+
     static func actionsOutsideCheckAndRepair(for drive: DriveDevice) -> [DiskSidebarAction] {
         actions(for: drive).filter {
             switch $0 {

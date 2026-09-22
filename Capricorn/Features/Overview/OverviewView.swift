@@ -187,7 +187,7 @@ struct OverviewView: View {
 
 enum OverviewModuleVisibilityPolicy {
     static func showsQuickDiskCheck(for drive: DriveDevice, isEnabled: Bool) -> Bool {
-        isEnabled && !drive.isNetwork
+        isEnabled && !drive.isNetwork && !drive.isSystemDisk
     }
 }
 

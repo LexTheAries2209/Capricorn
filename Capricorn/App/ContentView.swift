@@ -479,6 +479,7 @@ struct ContentView: View {
                 } label: {
                     Label(language.t("Check and Repair"), systemImage: "wrench.and.screwdriver")
                 }
+                .disabled(!DiskSidebarActionPolicy.isCheckAndRepairMenuEnabled(for: drive))
 
                 Divider()
             }

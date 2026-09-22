@@ -281,7 +281,7 @@ struct SmartAttributesView: View {
 
 enum SmartDiagnosticsVisibilityPolicy {
     static func showsPanel(for drive: DriveDevice, attributes: [SmartAttribute]) -> Bool {
-        !drive.isNetwork && !attributes.isEmpty
+        !drive.isNetwork && !drive.isSystemDisk && !attributes.isEmpty
     }
 
     static func showsErrorLogSection(for drive: DriveDevice) -> Bool {

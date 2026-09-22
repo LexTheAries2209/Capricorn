@@ -1480,6 +1480,11 @@ final class CapricornTests: XCTestCase {
             DiskSidebarActionPolicy.actionsOutsideCheckAndRepair(for: physicalDrive)
                 .contains(where: { [.checkLog, .firstAid].contains($0) })
         )
+        XCTAssertTrue(DiskSidebarActionPolicy.isCheckAndRepairMenuEnabled(for: physicalDrive))
+
+        var systemDrive = physicalDrive
+        systemDrive.isSystemDisk = true
+        XCTAssertFalse(DiskSidebarActionPolicy.isCheckAndRepairMenuEnabled(for: systemDrive))
 
         var networkDrive = physicalDrive
         networkDrive.isNetwork = true
@@ -2146,9 +2151,14 @@ final class CapricornTests: XCTestCase {
 
     func testOverviewQuickDiskCheckVisibilityExcludesNetworkDrives() {
         var drive = Self.fixtureDrive()
+        drive.isSystemDisk = false
         XCTAssertTrue(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive, isEnabled: true))
         XCTAssertFalse(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive, isEnabled: false))
 
+        drive.isSystemDisk = true
+        XCTAssertFalse(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive, isEnabled: true))
+
+        drive.isSystemDisk = false
         drive.isNetwork = true
         XCTAssertFalse(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive, isEnabled: true))
     }
@@ -2232,10 +2242,15 @@ final class CapricornTests: XCTestCase {
             source: "Fixture"
         )
         var drive = Self.fixtureDrive()
+        drive.isSystemDisk = false
 
         XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
         XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: []))
 
+        drive.isSystemDisk = true
+        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
+
+        drive.isSystemDisk = false
         drive.isNetwork = true
         XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
     }

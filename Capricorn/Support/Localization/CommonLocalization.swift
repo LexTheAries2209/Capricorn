@@ -305,8 +305,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "No saved self-test reports yet.": "尚无已保存的自检报告。",
         "No visible self-test reports. Hidden reports can be restored below.": "没有可见的自检报告。可在下方恢复已隐藏的报告。",
         "Test Type": "测试类型",
-        "Allow self-tests on the system disk": "允许系统盘执行自检",
-        "System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option.": "系统盘自检可能降低性能并增加持续存储负载。开启前请确保已有最新备份。",
         "SMART Refresh": "SMART 刷新",
         "Disk Refresh": "硬盘刷新",
         "Automatic disk refresh": "自动刷新硬盘",
