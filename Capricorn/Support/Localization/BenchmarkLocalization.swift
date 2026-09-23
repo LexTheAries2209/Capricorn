@@ -2,6 +2,11 @@
 import Foundation
 import SwiftUI
 
+struct BenchmarkConfirmationField: Equatable {
+    let title: String
+    let value: String
+}
+
 extension AppLanguage {
     func operationTitle(_ operation: BenchmarkOperation) -> String {
         switch self {
@@ -167,7 +172,7 @@ extension AppLanguage {
         }
     }
 
-    func benchmarkConfirmationConfiguration(
+    func benchmarkConfirmationFields(
         profile: BenchmarkProfile,
         runs: Int,
         fileSizeBytes: Int64,
@@ -176,29 +181,29 @@ extension AppLanguage {
         usesSmallBlockEfficiency: Bool = false,
         smallBlockFileSizePercent: Int = BenchmarkProfile.defaultSmallBlockFileSizePercent,
         operationSelection: BenchmarkOperationSelection = .readWrite
-    ) -> String {
+    ) -> [BenchmarkConfirmationField] {
         let safePercent = BenchmarkProfile.smallBlockFileSizePercentOptions.contains(smallBlockFileSizePercent)
             ? smallBlockFileSizePercent
             : BenchmarkProfile.defaultSmallBlockFileSizePercent
-        let englishSmallBlockState = usesSmallBlockEfficiency ? "\(safePercent)% for 4/16/64 KiB items" : "Off"
-        let chineseSmallBlockState = usesSmallBlockEfficiency ? "4/16/64 KiB 项目使用 \(safePercent)%" : "关闭"
-        if profile.executionMode == .loopUntilCancelled {
-            switch self {
-            case .english:
-                return "Benchmark settings\nProfile-\(profileName(profile)); engine-\(benchmarkEngineTitle(profile.engine)); operations-\(benchmarkOperationSelectionTitle(operationSelection)); runs-loop until stopped; test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-not used; small-block efficiency-\(englishSmallBlockState)"
-            case .simplifiedChinese:
-                return "测试配置\n配置-\(profileName(profile))；引擎-\(benchmarkEngineTitle(profile.engine))；测试方式-\(benchmarkOperationSelectionTitle(operationSelection))；测试次数-循环直到手动停止；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-不使用；提高小块文件测试效率-\(chineseSmallBlockState)"
-            }
+        let isLooping = profile.executionMode == .loopUntilCancelled
+        let smallBlockState: String
+        if usesSmallBlockEfficiency {
+            smallBlockState = self == .english
+                ? "4/16/64 KiB items use \(safePercent)%"
+                : "4/16/64 KiB 项目使用 \(safePercent)%"
+        } else {
+            smallBlockState = t("Off")
         }
-
-        switch self {
-        case .english:
-            let trimState = usesTrimmedAverage ? "On" : "Off"
-            return "Benchmark settings\nProfile-\(profileName(profile)); engine-\(benchmarkEngineTitle(profile.engine)); operations-\(benchmarkOperationSelectionTitle(operationSelection)); runs-\(runs); test size-\(formatBenchmarkFileSize(fileSizeBytes)); data pattern-\(benchmarkDataPatternTitle(dataPattern)); extra trimmed testing-\(trimState); small-block efficiency-\(englishSmallBlockState)"
-        case .simplifiedChinese:
-            let trimState = usesTrimmedAverage ? "开启" : "关闭"
-            return "测试配置\n配置-\(profileName(profile))；引擎-\(benchmarkEngineTitle(profile.engine))；测试方式-\(benchmarkOperationSelectionTitle(operationSelection))；测试次数-\(runs)；测试文件大小-\(formatBenchmarkFileSize(fileSizeBytes))；数据模式-\(benchmarkDataPatternTitle(dataPattern))；加量测试去极值-\(trimState)；提高小块文件测试效率-\(chineseSmallBlockState)"
-        }
+        return [
+            BenchmarkConfirmationField(title: t("Profile"), value: profileName(profile)),
+            BenchmarkConfirmationField(title: t("Engine"), value: benchmarkEngineTitle(profile.engine)),
+            BenchmarkConfirmationField(title: t("Read / Write"), value: benchmarkOperationSelectionTitle(operationSelection)),
+            BenchmarkConfirmationField(title: t("Runs"), value: isLooping ? t("Until stopped") : "\(runs)"),
+            BenchmarkConfirmationField(title: t("Test Size"), value: formatBenchmarkFileSize(fileSizeBytes)),
+            BenchmarkConfirmationField(title: t("Data Pattern"), value: benchmarkDataPatternTitle(dataPattern)),
+            BenchmarkConfirmationField(title: t("Trim Outliers"), value: isLooping ? t("Not used") : t(usesTrimmedAverage ? "On" : "Off")),
+            BenchmarkConfirmationField(title: t("Improve Small-Block Test Efficiency"), value: smallBlockState)
+        ]
     }
 
     func benchmarkFooter(testCount: Int, fileSize: Int64, runs: Int, dataPattern: BenchmarkDataPattern, usesTrimmedAverage: Bool, executionMode: BenchmarkExecutionMode = .finite, engine: BenchmarkEngine = .synchronous) -> String {

@@ -5943,7 +5943,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(efficientChinese.fileSize.contains("4 KiB、16 KiB 和 64 KiB"))
         XCTAssertTrue(efficientChinese.fileSize.contains("20%"))
 
-        let confirmation = AppLanguage.simplifiedChinese.benchmarkConfirmationConfiguration(
+        let confirmation = AppLanguage.simplifiedChinese.benchmarkConfirmationFields(
             profile: .default,
             runs: 3,
             fileSizeBytes: BenchmarkProfile.defaultTestSize,
@@ -5952,8 +5952,28 @@ final class CapricornTests: XCTestCase {
             usesSmallBlockEfficiency: true,
             smallBlockFileSizePercent: 20
         )
-        XCTAssertTrue(confirmation.contains("提高小块文件测试效率"))
-        XCTAssertTrue(confirmation.contains("4/16/64 KiB 项目使用 20%"))
+        XCTAssertEqual(confirmation.first?.title, "配置")
+        XCTAssertEqual(confirmation.first?.value, "默认")
+        XCTAssertEqual(confirmation.last?.title, "提高小块文件测试效率")
+        XCTAssertEqual(confirmation.last?.value, "4/16/64 KiB 项目使用 20%")
+        let englishConfirmation = AppLanguage.english.benchmarkConfirmationFields(
+            profile: .default,
+            runs: 3,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesTrimmedAverage: false
+        )
+        XCTAssertEqual(englishConfirmation[3].value, "3")
+        XCTAssertEqual(englishConfirmation.last?.value, "Off")
+        let loopingConfirmation = AppLanguage.simplifiedChinese.benchmarkConfirmationFields(
+            profile: .custom(rows: BenchmarkCustomRow.defaultRows, executionMode: .loopUntilCancelled),
+            runs: 9,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesTrimmedAverage: true
+        )
+        XCTAssertEqual(loopingConfirmation[3].value, "直到手动停止")
+        XCTAssertEqual(loopingConfirmation[6].value, "不使用")
 
         let asyncCustomChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
             profile: BenchmarkProfile.custom(rows: BenchmarkCustomRow.defaultRows, engine: .asyncQueue),

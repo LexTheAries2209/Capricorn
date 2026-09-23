@@ -3,26 +3,15 @@ import AppKit
 import SwiftData
 import SwiftUI
 
-private struct SingleBenchmarkRequest: Identifiable {
-    let rowLabel: String
+private struct SingleBenchmarkRequest {
     let displayLabel: String
     let profile: BenchmarkProfile
-
-    var id: String { rowLabel }
 }
 
-private enum BenchmarkAlert: Identifiable {
+private enum BenchmarkNotice {
+    case confirmFullTest
     case benchmarkInProgress
     case confirmSingleTest(SingleBenchmarkRequest)
-
-    var id: String {
-        switch self {
-        case .benchmarkInProgress:
-            "benchmark-in-progress"
-        case let .confirmSingleTest(request):
-            "confirm-single-\(request.id)"
-        }
-    }
 }
 
 // Match each column to its rendered macOS control width so the visible gaps
@@ -65,8 +54,7 @@ struct BenchmarkView: View {
     @AppStorage("benchmarkCustomEngine") private var customEngineRaw = BenchmarkEngine.synchronous.rawValue
     @AppStorage("benchmarkCustomExecutionMode") private var customExecutionModeRaw = BenchmarkExecutionMode.finite.rawValue
     @State private var selectedProfileID = BenchmarkProfile.default.id
-    @State private var confirmWrite = false
-    @State private var benchmarkAlert: BenchmarkAlert?
+    @State private var benchmarkNotice: BenchmarkNotice?
     private let progressContentLeadingInset: CGFloat = 6
 
     private var baseProfile: BenchmarkProfile {
@@ -305,14 +293,6 @@ struct BenchmarkView: View {
         targetFolderStatusIsReady && !targetFolderDriveMismatch ? .green : .orange
     }
 
-    private var benchmarkConfirmationMessage: String {
-        var message = "\(language.t("Write tests can temporarily use free space and stress storage."))\n\(language.benchmarkConfirmationConfiguration(profile: profile, runs: profile.runs, fileSizeBytes: profile.testFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: profile.usesTrimmedAverage, usesSmallBlockEfficiency: usesSmallBlockEfficiency, smallBlockFileSizePercent: selectedSmallBlockFileSizePercent, operationSelection: selectedOperationSelection))\n\(language.t("Write target folder:"))\n\(targetFolderPath)"
-        if targetFolderDriveMismatch {
-            message += "\n\(language.t("Benchmark will measure the target folder volume, not the selected drive."))"
-        }
-        return message
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -333,11 +313,13 @@ struct BenchmarkView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .disabled(benchmarkNotice != nil)
         .onAppear {
             prepareBenchmarkTarget()
             adjustSelectedFileSizeForTarget()
         }
         .onChange(of: drive.id) { _, _ in
+            benchmarkNotice = nil
             viewModel.benchmarkError = nil
             prepareBenchmarkTarget()
             adjustSelectedFileSizeForTarget()
@@ -360,16 +342,22 @@ struct BenchmarkView: View {
         .onChange(of: selectedOperationSelectionRaw) { _, _ in
             adjustSelectedFileSizeForTarget()
         }
-        .confirmationDialog(language.t("Benchmark writes a complete temporary test file to the selected target folder."), isPresented: $confirmWrite) {
-            Button(language.t("Run Benchmark"), role: .destructive) {
-                viewModel.startBenchmark(profile: profile, volumePath: targetFolderPath)
+        // Keep the confirmation in the benchmark view so its settings and target
+        // stay readable without macOS alert text wrapping or a second window.
+        .overlay {
+            if let benchmarkNotice {
+                GeometryReader { geometry in
+                    ZStack {
+                        Color.black.opacity(0.35)
+                            .ignoresSafeArea()
+                        benchmarkNoticeCard(for: benchmarkNotice)
+                            .frame(maxWidth: 560)
+                            .frame(maxHeight: max(180, geometry.size.height - 32))
+                            .padding(16)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
-            Button(language.t("Cancel"), role: .cancel) {}
-        } message: {
-            Text(benchmarkConfirmationMessage)
-        }
-        .alert(item: $benchmarkAlert) { alert in
-            benchmarkSystemAlert(alert)
         }
     }
 
@@ -851,60 +839,80 @@ struct BenchmarkView: View {
 
     private func requestBenchmarkStart() {
         guard validateTargetFolderForRun() else { return }
-        confirmWrite = true
+        benchmarkNotice = .confirmFullTest
     }
 
     private func requestSingleBenchmark(rowLabel: String) {
         guard !viewModel.isBenchmarking else {
-            benchmarkAlert = .benchmarkInProgress
+            benchmarkNotice = .benchmarkInProgress
             return
         }
         guard let singleProfile = profile.singleRunProfile(forRowLabel: rowLabel) else { return }
         guard validateTargetFolderForRun(profile: singleProfile) else { return }
 
-        benchmarkAlert = .confirmSingleTest(SingleBenchmarkRequest(
-            rowLabel: rowLabel,
+        benchmarkNotice = .confirmSingleTest(SingleBenchmarkRequest(
             displayLabel: BenchmarkResultMatrixView.displayLabel(rowLabel),
             profile: singleProfile
         ))
     }
 
-    private func benchmarkSystemAlert(_ alert: BenchmarkAlert) -> Alert {
-        switch alert {
+    @ViewBuilder
+    private func benchmarkNoticeCard(for notice: BenchmarkNotice) -> some View {
+        switch notice {
         case .benchmarkInProgress:
-            return Alert(
-                title: Text(language.t("Benchmark in Progress")),
-                message: Text(language.t("Please stop the current benchmark before running a single test.")),
-                dismissButton: .default(Text(language.t("OK")))
+            BenchmarkNoticeCard(
+                language: language,
+                title: language.t("Benchmark in Progress"),
+                message: language.t("Please stop the current benchmark before running a single test."),
+                fields: [],
+                onDismiss: { benchmarkNotice = nil }
             )
-        case let .confirmSingleTest(request):
-            return Alert(
-                title: Text(language.t("Run Single Test")),
-                message: Text(singleBenchmarkConfirmationMessage(for: request)),
-                primaryButton: .destructive(Text(language.t("Run Single Test"))) {
-                    let started = viewModel.startBenchmark(
-                        profile: request.profile,
-                        volumePath: targetFolderPath,
-                        resultUpdatePolicy: .mergeTests
-                    )
-                    if !started {
-                        Task { @MainActor in
-                            await Task.yield()
-                            benchmarkAlert = .benchmarkInProgress
+        case .confirmFullTest, .confirmSingleTest:
+            let request: SingleBenchmarkRequest? = if case let .confirmSingleTest(singleRequest) = notice {
+                singleRequest
+            } else {
+                nil
+            }
+            let runProfile = request?.profile ?? profile
+            BenchmarkNoticeCard(
+                language: language,
+                title: language.t(request == nil ? "Run Benchmark" : "Run Single Test"),
+                message: language.t("Benchmark writes a complete temporary test file to the selected target folder."),
+                warning: language.t(request == nil
+                    ? "Write tests can temporarily use free space and stress storage."
+                    : "Write tests create a temporary file and may increase storage wear."),
+                testItem: request?.displayLabel,
+                fields: language.benchmarkConfirmationFields(
+                    profile: runProfile,
+                    runs: runProfile.runs,
+                    fileSizeBytes: runProfile.testFileSizeBytes,
+                    dataPattern: selectedDataPattern,
+                    usesTrimmedAverage: runProfile.usesTrimmedAverage,
+                    usesSmallBlockEfficiency: usesSmallBlockEfficiency,
+                    smallBlockFileSizePercent: selectedSmallBlockFileSizePercent,
+                    operationSelection: selectedOperationSelection
+                ),
+                targetFolder: targetFolderPath,
+                targetMismatch: targetFolderDriveMismatch,
+                confirmTitle: language.t(request == nil ? "Run Benchmark" : "Run Single Test"),
+                onConfirm: {
+                    benchmarkNotice = nil
+                    if let request {
+                        let started = viewModel.startBenchmark(
+                            profile: request.profile,
+                            volumePath: targetFolderPath,
+                            resultUpdatePolicy: .mergeTests
+                        )
+                        if !started && viewModel.isBenchmarking {
+                            benchmarkNotice = .benchmarkInProgress
                         }
+                    } else {
+                        viewModel.startBenchmark(profile: runProfile, volumePath: targetFolderPath)
                     }
                 },
-                secondaryButton: .cancel(Text(language.t("Cancel")))
+                onDismiss: { benchmarkNotice = nil }
             )
         }
-    }
-
-    private func singleBenchmarkConfirmationMessage(for request: SingleBenchmarkRequest) -> String {
-        var message = "\(language.t("Write tests create a temporary file and may increase storage wear."))\n\(language.t("Test Item")): \(request.displayLabel)\n\(language.benchmarkConfirmationConfiguration(profile: request.profile, runs: 1, fileSizeBytes: request.profile.testFileSizeBytes, dataPattern: selectedDataPattern, usesTrimmedAverage: false, usesSmallBlockEfficiency: usesSmallBlockEfficiency, smallBlockFileSizePercent: selectedSmallBlockFileSizePercent, operationSelection: selectedOperationSelection))\n\(language.t("Write target folder:"))\n\(targetFolderPath)"
-        if targetFolderDriveMismatch {
-            message += "\n\(language.t("Benchmark will measure the target folder volume, not the selected drive."))"
-        }
-        return message
     }
 
     private func validateTargetFolderForRun(profile runProfile: BenchmarkProfile? = nil) -> Bool {
@@ -1131,6 +1139,149 @@ private struct CustomBenchmarkRowsEditor: View {
     private func removeRow(at index: Int) {
         guard rows.count > 1, rows.indices.contains(index) else { return }
         rows.remove(at: index)
+    }
+}
+
+private struct BenchmarkNoticeCard: View {
+    let language: AppLanguage
+    let title: String
+    let message: String
+    let warning: String?
+    let testItem: String?
+    let fields: [BenchmarkConfirmationField]
+    let targetFolder: String?
+    let targetMismatch: Bool
+    let confirmTitle: String?
+    let onConfirm: (() -> Void)?
+    let onDismiss: () -> Void
+
+    init(
+        language: AppLanguage,
+        title: String,
+        message: String,
+        warning: String? = nil,
+        testItem: String? = nil,
+        fields: [BenchmarkConfirmationField],
+        targetFolder: String? = nil,
+        targetMismatch: Bool = false,
+        confirmTitle: String? = nil,
+        onConfirm: (() -> Void)? = nil,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.language = language
+        self.title = title
+        self.message = message
+        self.warning = warning
+        self.testItem = testItem
+        self.fields = fields
+        self.targetFolder = targetFolder
+        self.targetMismatch = targetMismatch
+        self.confirmTitle = confirmTitle
+        self.onConfirm = onConfirm
+        self.onDismiss = onDismiss
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.title3.bold())
+            }
+            .padding(.bottom, 14)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text(message)
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let warning {
+                        Label(warning, systemImage: "info.circle")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let testItem {
+                        detailSection(language.t("Test Item")) {
+                            Text(testItem)
+                                .font(.body.weight(.medium))
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    if !fields.isEmpty {
+                        detailSection(language.t("Benchmark settings")) {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 205), spacing: 16)], alignment: .leading, spacing: 14) {
+                                ForEach(fields, id: \.title) { field in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(field.title)
+                                            .foregroundStyle(.secondary)
+                                        Text(field.value)
+                                            .fontWeight(.medium)
+                                            .textSelection(.enabled)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                            .font(.callout)
+                        }
+                    }
+
+                    if let targetFolder {
+                        detailSection(language.t("Write target folder")) {
+                            Text(targetFolder)
+                                .font(.callout.monospaced())
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if targetMismatch {
+                                Label(language.t("Benchmark will measure the target folder volume, not the selected drive."), systemImage: "exclamationmark.triangle")
+                                    .font(.callout)
+                                    .foregroundStyle(.orange)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Divider()
+                .padding(.vertical, 14)
+
+            HStack {
+                Spacer()
+                Button(language.t(confirmTitle == nil ? "OK" : "Cancel"), action: onDismiss)
+                    .keyboardShortcut(.cancelAction)
+                if let confirmTitle, let onConfirm {
+                    Button(confirmTitle, action: onConfirm)
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding(20)
+        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(.separator, lineWidth: 1)
+        }
+        .shadow(radius: 18, y: 8)
+        .accessibilityAddTraits(.isModal)
+    }
+
+    private func detailSection<Content: View>(_ heading: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(heading)
+                .font(.headline)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
