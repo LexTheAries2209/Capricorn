@@ -56,6 +56,9 @@ struct BenchmarkView: View {
     @AppStorage("benchmarkCustomExecutionMode") private var customExecutionModeRaw = BenchmarkExecutionMode.finite.rawValue
     @State private var selectedProfileID = BenchmarkProfile.default.id
     @State private var benchmarkNotice: BenchmarkNotice?
+    // Volume capacity can block the main thread; snapshot it for view updates,
+    // then query again during run validation so stale free space cannot start a test.
+    @State private var targetCapacitySnapshot: (path: String, bytes: Int64)?
     private let progressContentLeadingInset: CGFloat = 6
 
     private var baseProfile: BenchmarkProfile {
@@ -259,8 +262,8 @@ struct BenchmarkView: View {
     }
 
     private var targetFolderAvailableCapacity: Int64 {
-        guard targetFolderIsUsable, let targetFolderURL else { return 0 }
-        return BenchmarkStorageValidator.availableCapacity(for: targetFolderURL)
+        guard targetCapacitySnapshot?.path == targetFolderPath else { return 0 }
+        return targetCapacitySnapshot?.bytes ?? 0
     }
 
     private var selectedFileSizeHasSpace: Bool {
@@ -316,12 +319,14 @@ struct BenchmarkView: View {
         }
         .onAppear {
             prepareBenchmarkTarget()
+            refreshTargetCapacity()
             adjustSelectedFileSizeForTarget()
         }
         .onChange(of: drive.id) { _, _ in
             benchmarkNotice = nil
             viewModel.benchmarkError = nil
             prepareBenchmarkTarget()
+            refreshTargetCapacity()
             adjustSelectedFileSizeForTarget()
         }
         .onChange(of: viewModel.diskOperationLockNotice != nil) { _, hasLockNotice in
@@ -330,6 +335,7 @@ struct BenchmarkView: View {
             }
         }
         .onChange(of: targetFolderPath) { _, _ in
+            refreshTargetCapacity()
             adjustSelectedFileSizeForTarget()
         }
         .onChange(of: customExecutionModeRaw) { _, _ in
@@ -811,6 +817,7 @@ struct BenchmarkView: View {
         preferences.setSelection(selection, for: drive)
         targetPreferencesJSON = preferences.encoded()
         viewModel.benchmarkError = nil
+        refreshTargetCapacity()
         adjustSelectedFileSizeForTarget()
     }
 
@@ -942,7 +949,7 @@ struct BenchmarkView: View {
             return false
         }
 
-        guard !targetFolderDriveMismatch else {
+        guard BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(targetFolderPath, drive: drive) else {
             viewModel.benchmarkError = "The selected folder must be writable and on the selected drive."
             return false
         }
@@ -958,6 +965,9 @@ struct BenchmarkView: View {
         }
 
         let available = BenchmarkStorageValidator.availableCapacity(for: targetFolderURL)
+        if targetCapacitySnapshot?.path != targetFolderPath || targetCapacitySnapshot?.bytes != available {
+            targetCapacitySnapshot = (targetFolderPath, available)
+        }
         let validatedProfile = runProfile ?? profile
         let required = BenchmarkStorageValidator.requiredSpace(for: validatedProfile)
         guard BenchmarkStorageValidator.isRequiredSpaceAvailable(for: validatedProfile, availableCapacity: available) else {
@@ -992,6 +1002,18 @@ struct BenchmarkView: View {
         guard !isFileSizeSelectable(selectedSize) else { return }
         if let fallback = BenchmarkProfile.fileSizeOptions.last(where: { isFileSizeSelectable($0) }) {
             selectedFileSizeBytes = Int(fallback)
+        }
+    }
+
+    private func refreshTargetCapacity() {
+        guard targetFolderIsUsable, let targetFolderURL else {
+            targetCapacitySnapshot = nil
+            return
+        }
+        let path = targetFolderURL.path
+        let available = BenchmarkStorageValidator.availableCapacity(for: targetFolderURL)
+        if targetCapacitySnapshot?.path != path || targetCapacitySnapshot?.bytes != available {
+            targetCapacitySnapshot = (path, available)
         }
     }
 }
