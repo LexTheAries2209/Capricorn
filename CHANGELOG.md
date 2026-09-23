@@ -4,6 +4,26 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.9.0 - 2026-09-23
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.0) | [Release Notes / 发布说明](docs/releases/v2.9.0.md)
+
+### 中文
+
+- 修正 USB-NVMe SMART 自检能力判定与传输层提示，避免将仅能读取 SMART 的设备误报为可启动自检。
+- 为支持自检的非系统盘加入启动确认、可隐藏的进度监视器、紧凑状态条和完成结果，展示设备报告的进度、运行时间、预估完成时间及最近刷新状态；未知结果不再显示为通过。
+- 系统盘不再显示概览快速自检、SMART 诊断自检和对应历史区块，也不能从菜单或内部操作路径执行磁盘检查/自检。
+- 设置重整诊断显示选项，并加入保留硬盘缓存和历史数据库的“重置所有设置”二次确认操作。
+- SMART 诊断的自检历史 CSV/JSON 导出改为每次选择保存位置，不影响 SMART 快照导出。
+
+### English
+
+- Corrects USB-NVMe self-test capability reporting and transport guidance so SMART read access alone is not mistaken for self-test support.
+- Adds start confirmation, a hideable progress monitor, compact status, and completion results for supported non-system disks. Device-reported progress, elapsed time, estimated completion, and recent refresh state are shown; unknown results are not labeled passed.
+- Hides Overview quick checks, SMART diagnostic self-tests, and related history sections for system disks and blocks disk checks/self-tests through both UI and operation paths.
+- Reorganizes diagnostic display preferences and adds a confirmed Reset All Settings action that preserves disk caches and the history database.
+- Prompts for a CSV/JSON destination on every SMART diagnostics self-test history export without changing SMART snapshot exports.
+
 ## V2.8.1 - 2026-09-23
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.8.1) | [Release Notes / 发布说明](docs/releases/v2.8.1.md)

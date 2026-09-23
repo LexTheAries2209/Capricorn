@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for DIT-style disk inspection, SMART health c
 
 Capricorn 是一个本地 macOS 工具，用于 DIT 场景下的磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。它面向需要快速确认本机硬盘、外接 SSD、已挂载网络卷、存储卡和测速目标位置的工作流。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.8.1`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.9.0`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v2.8.1.md](docs/releases/v2.8.1.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v2.9.0.md](docs/releases/v2.9.0.md)
 
 Complete release log / 完整更新记录：[CHANGELOG.md](CHANGELOG.md)
 
@@ -22,11 +22,11 @@ Capricorn 不是完整的磁盘维修工具，也不会直接对裸设备写入�
 
 ### 下载和安装
 
-1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.8.1-macOS.zip`。
-2. 解压后把 `Capricorn V2.8.1.app` 放到 `Applications` 或你的本地工具目录。
+1. 前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.9.0-macOS.zip`。
+2. 解压后把 `Capricorn V2.9.0.app` 放到 `Applications` 或你的本地工具目录。
 3. 首次打开时，如果 macOS Gatekeeper 提示来自互联网下载的 App，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
-V2.8.1 的中文发布说明见 [docs/releases/v2.8.1.zh-CN.md](docs/releases/v2.8.1.zh-CN.md)。
+V2.9.0 的中文发布说明见 [docs/releases/v2.9.0.zh-CN.md](docs/releases/v2.9.0.zh-CN.md)。
 
 典型用途：
 
@@ -46,10 +46,11 @@ V2.8.1 的中文发布说明见 [docs/releases/v2.8.1.zh-CN.md](docs/releases/v2
 - 右键磁盘菜单支持安全的装载、卸载、强制卸载、推出、重命名、Finder 定位、刷新和网络卷断开操作。
 - 内置系统盘保护，避免从 Capricorn 对系统内置盘执行装载、卸载或推出操作。
 - 支持查看占用所选磁盘的进程，并在卸载、推出失败时显示可能占用磁盘的程序列表。
-- 在设置中开启“检查与修复”后，右键磁盘菜单会提供快速检查、深度检查和急救，并展示 `diskutil` 或 macOS 原生文件系统检查器的输出。
+- 在设置中开启“快速自检与修复”后，非系统盘右键菜单会提供快速检查、深度检查和急救，并展示 `diskutil` 或 macOS 原生文件系统检查器的输出。
 - SMART 页面显示健康状态、温度、寿命、通电小时、介质错误、不安全关机次数和数据来源。
 - 可在设置中按需显示 ATA、NVMe 和 SAT 设备的 SMART 自检状态、快速/完整自检、自动轮询、中止操作、最近记录和原始 smartctl 输出回退；该界面默认隐藏，概览仅在启用后显示最近一次设备自检摘要。
-- 启用自检界面后，操作会根据设备能力和传输层禁用不支持的目标；系统盘自检仍需在设置中单独允许，macOS NVMe 不支持的 admin command 不会被强行执行。
+- 启用自检界面后，非系统盘操作会根据设备能力和传输层禁用不支持的目标；系统盘不显示诊断自检控件，也不能在 Capricorn 中执行自检或检查。macOS NVMe 不支持的 admin command 不会被强行执行。
+- SMART 自检提供启动确认、可隐藏并重新打开的进度监视器、阶段与最近状态刷新、完成结果及中止确认；导出自检历史时每次选择 CSV 或 JSON 保存位置，不改变 SMART 快照导出。
 - smartctl 7.5 数据兼容性得到加强，保留诊断信息；默认避免为 SMART 刷新唤醒休眠磁盘，并在无法安全识别设备类型时保留上一份数据。
 - 设置仅显示内置 `smartctl` 的当前版本和 smartmontools 源项目入口；概览的数据来源会按实际读取结果显示 USB-SATA 或 USB-NVMe SMART 命令透传状态。
 - SMART 属性页支持独立纵向滚动、折叠历史自检记录和清除状态消息；常见外接 ATA 字段提供中文解释，Total LBAs Read/Written 会按逻辑块大小换算为可读容量，同时保留原始 LBA 信息。
@@ -172,11 +173,11 @@ Capricorn is not a full disk repair utility and does not write directly to raw d
 
 ### Download And Install
 
-1. Download `Capricorn-v2.8.1-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
-2. Unzip it and move `Capricorn V2.8.1.app` to `Applications` or your local tools folder.
+1. Download `Capricorn-v2.9.0-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest).
+2. Unzip it and move `Capricorn V2.9.0.app` to `Applications` or your local tools folder.
 3. On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
-English release notes for V2.8.1 are available at [docs/releases/v2.8.1.en.md](docs/releases/v2.8.1.en.md).
+English release notes for V2.9.0 are available at [docs/releases/v2.9.0.en.md](docs/releases/v2.9.0.en.md).
 
 Common use cases:
 
@@ -196,10 +197,11 @@ Common use cases:
 - Adds a drive context menu for safe mount, unmount, force unmount, eject, rename, Finder reveal, refresh, and network disconnect actions.
 - Protects internal system disks from mount, unmount, force-unmount, and eject operations initiated from Capricorn.
 - Shows processes with open files on a selected disk, including follow-up diagnostics when unmount or eject actions fail.
-- When Check and Repair is enabled in Settings, the drive context menu offers Quick Check, Deep Check, and First Aid, with output from `diskutil` or native macOS filesystem checkers where available.
+- When Quick Self-Test and Repair is enabled in Settings, the context menu for non-system disks offers Quick Check, Deep Check, and First Aid, with output from `diskutil` or native macOS filesystem checkers where available.
 - Shows SMART health, temperature, life remaining, power-on hours, media errors, unsafe shutdowns, and provider status.
 - Settings can reveal SMART self-test status, quick/full tests for supported ATA, NVMe, and SAT devices, automatic polling, abort, recent records, and raw smartctl fallback. This interface is hidden by default; Overview shows the latest device-reported self-test summary only when it is enabled.
-- When the self-test interface is enabled, unsupported operations remain disabled based on device capability and transport. System-disk self-tests require a separate Settings opt-in, and unsupported macOS NVMe admin commands are never forced.
+- When the self-test interface is enabled, unsupported operations remain disabled based on device capability and transport. System disks show no diagnostic self-test controls and cannot be self-tested or checked through Capricorn. Unsupported macOS NVMe admin commands are never forced.
+- SMART self-tests offer a start confirmation, a hideable/reopenable progress monitor, stage and last-refresh status, completion result, and abort confirmation. CSV/JSON self-test history exports choose a destination every time; SMART snapshot exports are unchanged.
 - Improves smartctl 7.5 compatibility and diagnostics, avoids waking sleeping disks by default for SMART refresh, and retains the previous snapshot when safe device identification is unavailable.
 - Settings show the current bundled smartctl version and link to the smartmontools source project. The Overview data-source panel reports USB-SATA or USB-NVMe SMART command passthrough from the actual read result.
 - SMART attributes have an independently scrolling table, collapsible self-test history, and dismissible status messages. Common external ATA fields have clearer localized explanations, while Total LBAs Read/Written values are converted using the reported logical block size without dropping the original LBA details.
