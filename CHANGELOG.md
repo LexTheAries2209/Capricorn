@@ -4,6 +4,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.9.1 - 2026-09-23
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.1) | [Release Notes / 发布说明](docs/releases/v2.9.1.md)
+
+### 中文
+
+- 测速运行与单项测试的确认提醒改为紧凑活动窗口，按字段展示配置、目标文件夹和写入风险，不再使用拥挤的系统提醒或覆盖整个测速页的遮罩。
+- 启动后在活动窗口显示测速进度、当前测试和取消操作；隐藏窗口不会停止测速，可从测速页重新打开。
+- 缓存界面显示用的目标卷可用容量，减少打开与取消窗口时的主线程重复查询；运行前仍实时核验目标、写入能力及剩余空间。
+
+### English
+
+- Replaces crowded system alerts and the full-page overlay with a compact benchmark activity sheet for full and single-test confirmation, grouping settings, target, and write warnings.
+- Shows progress, current test, and cancellation in the activity sheet after starting; hiding it does not stop the benchmark, and the sheet can be reopened.
+- Caches display-only volume capacity to avoid repeated main-thread queries during sheet transitions while retaining fresh target, write-access, and free-space checks before starting.
+
 ## V2.9.0 - 2026-09-23
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.0) | [Release Notes / 发布说明](docs/releases/v2.9.0.md)
