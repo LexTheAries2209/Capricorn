@@ -12,6 +12,7 @@ private enum BenchmarkNotice {
     case confirmFullTest
     case benchmarkInProgress
     case confirmSingleTest(SingleBenchmarkRequest)
+    case monitor
 }
 
 // Match each column to its rendered macOS control width so the visible gaps
@@ -313,7 +314,6 @@ struct BenchmarkView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .disabled(benchmarkNotice != nil)
         .onAppear {
             prepareBenchmarkTarget()
             adjustSelectedFileSizeForTarget()
@@ -323,6 +323,11 @@ struct BenchmarkView: View {
             viewModel.benchmarkError = nil
             prepareBenchmarkTarget()
             adjustSelectedFileSizeForTarget()
+        }
+        .onChange(of: viewModel.diskOperationLockNotice != nil) { _, hasLockNotice in
+            if hasLockNotice, case .monitor = benchmarkNotice {
+                benchmarkNotice = nil
+            }
         }
         .onChange(of: targetFolderPath) { _, _ in
             adjustSelectedFileSizeForTarget()
@@ -342,21 +347,14 @@ struct BenchmarkView: View {
         .onChange(of: selectedOperationSelectionRaw) { _, _ in
             adjustSelectedFileSizeForTarget()
         }
-        // Keep the confirmation in the benchmark view so its settings and target
-        // stay readable without macOS alert text wrapping or a second window.
-        .overlay {
+        // Follow the SMART self-test flow: confirmation changes into a progress
+        // monitor in the same sheet, without obscuring the whole benchmark page.
+        .sheet(isPresented: Binding(
+            get: { benchmarkNotice != nil },
+            set: { if !$0 { benchmarkNotice = nil } }
+        )) {
             if let benchmarkNotice {
-                GeometryReader { geometry in
-                    ZStack {
-                        Color.black.opacity(0.35)
-                            .ignoresSafeArea()
-                        benchmarkNoticeCard(for: benchmarkNotice)
-                            .frame(maxWidth: 560)
-                            .frame(maxHeight: max(180, geometry.size.height - 32))
-                            .padding(16)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+                benchmarkNoticeSheet(for: benchmarkNotice)
             }
         }
     }
@@ -535,6 +533,12 @@ struct BenchmarkView: View {
         }
         .buttonStyle(.borderedProminent)
         .disabled(!canRunBenchmark)
+
+        if viewModel.isBenchmarking {
+            Button(language.t("View Progress")) {
+                benchmarkNotice = .monitor
+            }
+        }
 
         Button {
             viewModel.cancelBenchmark()
@@ -857,12 +861,20 @@ struct BenchmarkView: View {
     }
 
     @ViewBuilder
-    private func benchmarkNoticeCard(for notice: BenchmarkNotice) -> some View {
+    private func benchmarkNoticeSheet(for notice: BenchmarkNotice) -> some View {
         switch notice {
+        case .monitor:
+            BenchmarkProgressSheet(
+                viewModel: viewModel,
+                language: language,
+                driveName: drive.catalogDisplayName,
+                onDismiss: { benchmarkNotice = nil }
+            )
         case .benchmarkInProgress:
-            BenchmarkNoticeCard(
+            BenchmarkConfirmationSheet(
                 language: language,
                 title: language.t("Benchmark in Progress"),
+                driveName: drive.catalogDisplayName,
                 message: language.t("Please stop the current benchmark before running a single test."),
                 fields: [],
                 onDismiss: { benchmarkNotice = nil }
@@ -874,9 +886,10 @@ struct BenchmarkView: View {
                 nil
             }
             let runProfile = request?.profile ?? profile
-            BenchmarkNoticeCard(
+            BenchmarkConfirmationSheet(
                 language: language,
                 title: language.t(request == nil ? "Run Benchmark" : "Run Single Test"),
+                driveName: drive.catalogDisplayName,
                 message: language.t("Benchmark writes a complete temporary test file to the selected target folder."),
                 warning: language.t(request == nil
                     ? "Write tests can temporarily use free space and stress storage."
@@ -896,18 +909,16 @@ struct BenchmarkView: View {
                 targetMismatch: targetFolderDriveMismatch,
                 confirmTitle: language.t(request == nil ? "Run Benchmark" : "Run Single Test"),
                 onConfirm: {
-                    benchmarkNotice = nil
                     if let request {
                         let started = viewModel.startBenchmark(
                             profile: request.profile,
                             volumePath: targetFolderPath,
                             resultUpdatePolicy: .mergeTests
                         )
-                        if !started && viewModel.isBenchmarking {
-                            benchmarkNotice = .benchmarkInProgress
-                        }
+                        benchmarkNotice = started ? .monitor : (viewModel.isBenchmarking ? .benchmarkInProgress : nil)
                     } else {
-                        viewModel.startBenchmark(profile: runProfile, volumePath: targetFolderPath)
+                        let started = viewModel.startBenchmark(profile: runProfile, volumePath: targetFolderPath)
+                        benchmarkNotice = started ? .monitor : nil
                     }
                 },
                 onDismiss: { benchmarkNotice = nil }
@@ -1142,9 +1153,10 @@ private struct CustomBenchmarkRowsEditor: View {
     }
 }
 
-private struct BenchmarkNoticeCard: View {
+private struct BenchmarkConfirmationSheet: View {
     let language: AppLanguage
     let title: String
+    let driveName: String
     let message: String
     let warning: String?
     let testItem: String?
@@ -1158,6 +1170,7 @@ private struct BenchmarkNoticeCard: View {
     init(
         language: AppLanguage,
         title: String,
+        driveName: String,
         message: String,
         warning: String? = nil,
         testItem: String? = nil,
@@ -1170,6 +1183,7 @@ private struct BenchmarkNoticeCard: View {
     ) {
         self.language = language
         self.title = title
+        self.driveName = driveName
         self.message = message
         self.warning = warning
         self.testItem = testItem
@@ -1182,106 +1196,177 @@ private struct BenchmarkNoticeCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 14) {
                 Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.title2)
                     .foregroundStyle(.orange)
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(.title3.bold())
+                    .frame(width: 32)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.title3.weight(.semibold))
+                    Text(driveName)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .padding(.bottom, 14)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text(message)
-                        .font(.body)
-                        .fixedSize(horizontal: false, vertical: true)
+            Text(message)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
 
-                    if let warning {
-                        Label(warning, systemImage: "info.circle")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+            if let testItem {
+                Label("\(language.t("Test Item")): \(testItem)", systemImage: "speedometer")
+                    .font(.callout.weight(.medium))
+            }
 
-                    if let testItem {
-                        detailSection(language.t("Test Item")) {
-                            Text(testItem)
-                                .font(.body.weight(.medium))
+            if !fields.isEmpty {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 12) {
+                    ForEach(fields, id: \.title) { field in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(field.title)
+                                .foregroundStyle(.secondary)
+                            Text(field.value)
+                                .fontWeight(.medium)
                                 .textSelection(.enabled)
                         }
-                    }
-
-                    if !fields.isEmpty {
-                        detailSection(language.t("Benchmark settings")) {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 205), spacing: 16)], alignment: .leading, spacing: 14) {
-                                ForEach(fields, id: \.title) { field in
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(field.title)
-                                            .foregroundStyle(.secondary)
-                                        Text(field.value)
-                                            .fontWeight(.medium)
-                                            .textSelection(.enabled)
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-                            .font(.callout)
-                        }
-                    }
-
-                    if let targetFolder {
-                        detailSection(language.t("Write target folder")) {
-                            Text(targetFolder)
-                                .font(.callout.monospaced())
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                            if targetMismatch {
-                                Label(language.t("Benchmark will measure the target folder volume, not the selected drive."), systemImage: "exclamationmark.triangle")
-                                    .font(.callout)
-                                    .foregroundStyle(.orange)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .font(.callout)
+                .padding(16)
+                .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
             }
 
-            Divider()
-                .padding(.vertical, 14)
+            if let targetFolder {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.t("Write target folder"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Text(targetFolder)
+                        .font(.callout.monospaced())
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .help(targetFolder)
+                    if targetMismatch {
+                        Label(language.t("Benchmark will measure the target folder volume, not the selected drive."), systemImage: "exclamationmark.triangle")
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            if let warning {
+                Label(warning, systemImage: "externaldrive.badge.exclamationmark")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            }
 
             HStack {
                 Spacer()
                 Button(language.t(confirmTitle == nil ? "OK" : "Cancel"), action: onDismiss)
                     .keyboardShortcut(.cancelAction)
                 if let confirmTitle, let onConfirm {
-                    Button(confirmTitle, action: onConfirm)
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.defaultAction)
+                    Button(action: onConfirm) {
+                        Label(confirmTitle, systemImage: "play.fill")
+                    }
+                    .keyboardShortcut(.defaultAction)
                 }
             }
         }
-        .padding(20)
-        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(.separator, lineWidth: 1)
-        }
-        .shadow(radius: 18, y: 8)
-        .accessibilityAddTraits(.isModal)
+        .padding(24)
+        .frame(width: 540)
+    }
+}
+
+private struct BenchmarkProgressSheet: View {
+    let viewModel: AppModel
+    let language: AppLanguage
+    let driveName: String
+    let onDismiss: () -> Void
+
+    private var isActive: Bool {
+        viewModel.isBenchmarking || (viewModel.benchmarkProgress == nil && viewModel.benchmarkError == nil)
     }
 
-    private func detailSection<Content: View>(_ heading: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(heading)
-                .font(.headline)
-            content()
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "speedometer")
+                    .font(.title2)
+                    .foregroundStyle(.blue)
+                    .frame(width: 32)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(language.t("Benchmark Progress"))
+                        .font(.title3.weight(.semibold))
+                    Text(driveName)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if isActive {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let progress = viewModel.benchmarkProgress {
+                        HStack {
+                            Text(language.progressLabel(progress.currentTestLabel))
+                                .font(.headline)
+                            Spacer()
+                            Text("\(Int(progress.fraction * 100))%")
+                                .font(.system(.title3, design: .monospaced).weight(.semibold))
+                        }
+                        ProgressView(value: progress.fraction)
+                        Text(language.statusMessage(progress.message))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        if progress.phaseTotalBytes > 0 {
+                            Text("\(formatBenchmarkFileSize(progress.phaseCompletedBytes)) / \(formatBenchmarkFileSize(progress.phaseTotalBytes))")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        ProgressView()
+                        Text(language.t("Starting"))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+            } else if let error = viewModel.benchmarkError {
+                Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            } else {
+                Label(language.t("Benchmark complete"), systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(.green)
+            }
+
+            HStack {
+                if isActive {
+                    Text(language.t("Hiding this window does not stop the benchmark."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(language.t(isActive ? "Hide Window" : "Close"), action: onDismiss)
+                    .keyboardShortcut(.cancelAction)
+                if isActive {
+                    Button(role: .destructive) {
+                        viewModel.cancelBenchmark()
+                    } label: {
+                        Label(language.t("Cancel"), systemImage: "stop.fill")
+                    }
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .padding(24)
+        .frame(width: 620)
     }
 }
 

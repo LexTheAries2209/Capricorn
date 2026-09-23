@@ -673,6 +673,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Benchmark writes a complete temporary test file to the selected target folder.": "测速会在所选目标文件夹中写入一个完整的临时测试文件。",
         "Benchmark configuration and write target": "测速配置与写入目标",
         "Benchmark settings": "测试配置",
+        "Benchmark Progress": "测速进度",
+        "Hiding this window does not stop the benchmark.": "隐藏窗口不会停止测速。",
         "Write target folder": "写入目标文件夹",
         "Write target folder:": "写入目标文件夹：",
         "Write tests can temporarily use free space and stress storage.": "写入测试会短暂占用可用空间并给存储带来压力。",

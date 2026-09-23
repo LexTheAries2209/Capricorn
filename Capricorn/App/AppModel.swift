@@ -677,6 +677,8 @@ final class AppModel {
         resultUpdatePolicy: BenchmarkResultUpdatePolicy = .replaceProfile
     ) -> Bool {
         guard benchmarkTask == nil, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return false }
+        benchmarkProgress = nil
+        benchmarkError = nil
         benchmarkTask = Task { [weak self] in
             await self?.runBenchmark(
                 profile: profile,
