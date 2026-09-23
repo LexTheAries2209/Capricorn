@@ -11,8 +11,15 @@ struct CapricornApp: App {
     private let modelContainer: ModelContainer
 
     init() {
+        #if CAPRICORN_VIRTUAL_T7_DEMO
+        UserDefaults.standard.set(true, forKey: AppPreferences.Key.showsSmartSelfTestInterface)
+        #endif
         let preferences = AppPreferences()
+        #if CAPRICORN_VIRTUAL_T7_DEMO
+        let viewModel = AppModel.virtualT7Demo()
+        #else
         let viewModel = AppModel()
+        #endif
         let updateChecker = AppUpdateChecker()
         viewModel.showVirtualDisks = preferences.showVirtualDisks
         _preferences = State(initialValue: preferences)

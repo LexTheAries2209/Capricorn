@@ -984,18 +984,23 @@ final class SmartSelfTestService: @unchecked Sendable {
             try await self.administratorRunner.run(executable.path, arguments: arguments)
         }
         guard result.terminationStatus == 0 else {
-            throw SmartSelfTestServiceError.commandFailed(SmartctlParser.commandFailureMessage(result))
+            let message = SmartctlParser.commandFailureMessage(result)
+            if message == Self.macOSNativeNVMeUnavailableMessage {
+                throw SmartSelfTestServiceError.unsupported(message)
+            }
+            throw SmartSelfTestServiceError.commandFailed(message)
         }
         return SmartSelfTestStartResult(
             message: Self.combinedMessage(result),
             estimatedDurationSeconds: Self.estimatedDuration(in: Self.combinedMessage(result))
+                ?? capability.estimatedDurationSeconds(for: kind)
         )
     }
 
     func abort(drive: DriveDevice) async throws {
         let executable = try executable(for: drive)
         let target = await targetDescriptor(for: drive)
-        if Self.usesMacOSNativeNVMeTransport(target: target, drive: drive) {
+        if Self.usesUnavailableNVMeSelfTestTransport(target: target, drive: drive) {
             throw SmartSelfTestServiceError.unsupported(Self.macOSNativeNVMeUnavailableMessage)
         }
         let arguments = smartctlProvider.commandArguments(
@@ -1028,7 +1033,7 @@ final class SmartSelfTestService: @unchecked Sendable {
         guard capability.shortSupported || capability.longSupported else {
             throw SmartSelfTestServiceError.unsupported(capability.message)
         }
-        if Self.usesMacOSNativeNVMeTransport(target: target, drive: drive) {
+        if Self.usesUnavailableNVMeSelfTestTransport(target: target, drive: drive) {
             throw SmartSelfTestServiceError.unsupported(Self.macOSNativeNVMeUnavailableMessage)
         }
         return capability
@@ -1067,13 +1072,23 @@ final class SmartSelfTestService: @unchecked Sendable {
         return executable
     }
 
-    private static func usesMacOSNativeNVMeTransport(
+    private static func usesUnavailableNVMeSelfTestTransport(
         target: SmartctlTargetDescriptor?,
         drive: DriveDevice
     ) -> Bool {
 #if os(macOS)
-        if target?.type?.caseInsensitiveCompare("nvme") == .orderedSame {
-            return true
+        if let targetType = target?.type?.lowercased() {
+            if targetType == "nvme" {
+                return true
+            }
+            // ASMedia and Realtek USB-NVMe bridges expose Identify/Get Log
+            // data but reject the Device Self-test admin command (0x14).
+            if targetType.hasPrefix("sntasmedia") {
+                return true
+            }
+            if targetType.hasPrefix("sntrealtek") && !targetType.hasSuffix("/sat") {
+                return true
+            }
         }
         return target == nil && drive.protocolName.localizedCaseInsensitiveContains("nvme")
 #else
@@ -1218,7 +1233,9 @@ enum SmartctlParser {
             return SmartSelfTestCapability(
                 shortSupported: false,
                 longSupported: false,
-                message: "SMART self-test capability could not be confirmed."
+                message: "SMART self-test capability could not be confirmed.",
+                shortPollingMinutes: polling.int("short"),
+                longPollingMinutes: polling.int("extended") ?? polling.int("long")
             )
         }
 
@@ -1229,7 +1246,9 @@ enum SmartctlParser {
             longSupported: longSupported,
             message: shortSupported || longSupported
                 ? "Self-test capability confirmed."
-                : "SMART self-test capability could not be confirmed."
+                : "SMART self-test capability could not be confirmed.",
+            shortPollingMinutes: polling.int("short"),
+            longPollingMinutes: polling.int("extended") ?? polling.int("long")
         )
     }
 
@@ -1573,7 +1592,9 @@ enum SmartctlParser {
 
         let nvmeLog = root.dictionary("nvme_self_test_log")
         if !nvmeLog.isEmpty {
-            currentRemaining = nvmeLog.int("current_self_test_completion_percent") ?? currentRemaining
+            if let completed = nvmeLog.int("current_self_test_completion_percent") {
+                currentRemaining = 100 - min(100, max(0, completed))
+            }
             let operation = nvmeLog.valueDescription("current_self_test_operation")
             let resultItems = nvmeLog.arrayOfDictionaries("self_test_results")
             if resultItems.isEmpty, let result = nvmeLog["self_test_result"] as? [String: Any] {

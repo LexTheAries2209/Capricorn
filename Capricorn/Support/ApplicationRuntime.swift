@@ -2,10 +2,15 @@
 import Foundation
 
 enum ApplicationRuntime {
+    #if CAPRICORN_VIRTUAL_T7_DEMO
+    static let isVirtualT7DemoBuild = true
+    #else
+    static let isVirtualT7DemoBuild = false
+    #endif
+
     static let isRunningTests = isTestProcess(environment: ProcessInfo.processInfo.environment)
-    static let allowsAutomaticStartupTasks = shouldRunAutomaticStartupTasks(
-        environment: ProcessInfo.processInfo.environment
-    )
+    static let allowsAutomaticStartupTasks = !isVirtualT7DemoBuild
+        && shouldRunAutomaticStartupTasks(environment: ProcessInfo.processInfo.environment)
 
     static func isTestProcess(environment: [String: String]) -> Bool {
         environment["XCTestConfigurationFilePath"] != nil

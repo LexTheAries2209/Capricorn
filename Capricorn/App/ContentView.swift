@@ -10,7 +10,6 @@ struct ContentView: View {
     @State private var preferences: AppPreferences
     @State private var showsDiskCheckReport = false
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
-    @AppStorage(AppPreferences.Key.allowSystemDiskSelfTests) private var allowSystemDiskSelfTests = false
     @AppStorage("representativeVolumeSelectionsByDrive") private var representativeVolumePreferencesJSON = ""
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistory: [SmartHistoryRecord]
@@ -47,43 +46,47 @@ struct ContentView: View {
             sidebar
         } detail: {
             if let drive = viewModel.selectedDrive {
+                let driveSnapshot = viewModel.snapshots[drive.id]
+                let driveSmartHistory = smartHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
+                let driveSelfTestHistory = selfTestHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
+                let driveDiskCheckHistory = diskCheckHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
+                let driveBenchmarkHistory = benchmarkHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
+                let driveActivityHistory = activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) }
+                let saveSnapshotAction: (String?) -> String = { exportFolderPath in
+                    saveSnapshot(drive: drive, exportFolderPath: exportFolderPath)
+                }
+                let exportSelfTestHistoryAction: ([SmartSelfTestHistoryRecord], String?, SmartDiagnosticsExportFormat) -> String = { records, filePath, format in
+                    exportSelfTestHistory(records: records, filePath: filePath, format: format)
+                }
+                let exportErrorLogAction: (SmartErrorLogReport, String?, SmartDiagnosticsExportFormat) -> String = { report, filePath, format in
+                    exportErrorLog(drive: drive, report: report, filePath: filePath, format: format)
+                }
+                let saveBenchmarkResultsAction: ([BenchmarkResult], [DiskActivitySample]) -> Void = { results, activitySamples in
+                    saveBenchmarkResults(drive: drive, results: results, activitySamples: activitySamples)
+                }
                 DriveDetailView(
                     drive: drive,
-                    snapshot: viewModel.snapshots[drive.id],
+                    snapshot: driveSnapshot,
                     viewModel: viewModel,
-                    smartHistory: smartHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
-                    selfTestHistory: selfTestHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
-                    diskCheckHistory: diskCheckHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
-                    benchmarkHistory: benchmarkHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
-                    activityHistory: activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) },
-                    allowSystemDiskSelfTests: allowSystemDiskSelfTests,
+                    smartHistory: driveSmartHistory,
+                    selfTestHistory: driveSelfTestHistory,
+                    diskCheckHistory: driveDiskCheckHistory,
+                    benchmarkHistory: driveBenchmarkHistory,
+                    activityHistory: driveActivityHistory,
+                    showsQuickDiskCheck: preferences.showsCheckAndRepairActions,
                     satDriverGuidance: SATSMARTDriverGuidancePolicy.guidance(
                         for: drive,
-                        snapshot: viewModel.snapshots[drive.id],
+                        snapshot: driveSnapshot,
                         driverStatus: preferences.satSMARTDriverStatus
                     ),
                     openSATDriverSettings: {
                         preferences.requestedSettingsDestination = .satSMARTDriver
                         openSettings()
                     },
-                    saveSnapshot: { exportFolderPath in saveSnapshot(drive: drive, exportFolderPath: exportFolderPath) },
-                    exportSelfTestHistory: { records, exportFolderPath, format in
-                        exportSelfTestHistory(
-                            drive: drive,
-                            records: records,
-                            exportFolderPath: exportFolderPath,
-                            format: format
-                        )
-                    },
-                    exportErrorLog: { report, exportFolderPath, format in
-                        exportErrorLog(
-                            drive: drive,
-                            report: report,
-                            exportFolderPath: exportFolderPath,
-                            format: format
-                        )
-                    },
-                    saveBenchmarkResults: { results, activitySamples in saveBenchmarkResults(drive: drive, results: results, activitySamples: activitySamples) }
+                    saveSnapshot: saveSnapshotAction,
+                    exportSelfTestHistory: exportSelfTestHistoryAction,
+                    exportErrorLog: exportErrorLogAction,
+                    saveBenchmarkResults: saveBenchmarkResultsAction
                 )
             } else {
                 ContentUnavailableView(
@@ -169,17 +172,20 @@ struct ContentView: View {
         }
         .onChange(of: viewModel.completedSmartSelfTest?.id) {
             guard let completion = viewModel.completedSmartSelfTest else { return }
-            do {
-                try HistoryRepository(modelContext: modelContext).saveSelfTestReport(
-                    drive: completion.drive,
-                    report: completion.report
-                )
-            } catch {
-                viewModel.smartSelfTestMessage = UserFacingError.message(
-                    "Could not save self-test history.",
-                    error: error
-                )
+            if let report = completion.report {
+                do {
+                    try HistoryRepository(modelContext: modelContext).saveSelfTestReport(
+                        drive: completion.drive,
+                        report: report
+                    )
+                } catch {
+                    viewModel.smartSelfTestMessage = UserFacingError.message(
+                        "Could not save self-test history.",
+                        error: error
+                    )
+                }
             }
+            viewModel.showSmartSelfTestMonitor()
         }
         .sheet(item: $viewModel.diskOpenFileInspection) { inspection in
             DiskOpenFileInspectionSheet(
@@ -228,16 +234,34 @@ struct ContentView: View {
                 )
             }
         }
-        .sheet(isPresented: Binding(
+        .sheet(isPresented: firstAidPresentationBinding) {
+            DiskFirstAidSheet(viewModel: viewModel, language: language)
+        }
+        .sheet(isPresented: smartSelfTestPresentationBinding) {
+            SmartSelfTestPresentationSheet(viewModel: viewModel, language: language)
+        }
+    }
+
+    private var firstAidPresentationBinding: Binding<Bool> {
+        Binding(
             get: { viewModel.diskOperations.isFirstAidPresented },
             set: { isPresented in
                 if !isPresented {
                     viewModel.closeFirstAid()
                 }
             }
-        )) {
-            DiskFirstAidSheet(viewModel: viewModel, language: language)
-        }
+        )
+    }
+
+    private var smartSelfTestPresentationBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.smartSelfTestPresentation != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.hideSmartSelfTestMonitor()
+                }
+            }
+        )
     }
 
     private func restoreDiskCheckReports() {
@@ -478,6 +502,7 @@ struct ContentView: View {
                 } label: {
                     Label(language.t("Check and Repair"), systemImage: "wrench.and.screwdriver")
                 }
+                .disabled(!DiskSidebarActionPolicy.isCheckAndRepairMenuEnabled(for: drive))
 
                 Divider()
             }
@@ -572,8 +597,7 @@ struct ContentView: View {
         guard DiskSidebarActionPolicy.isEnabled(
             action,
             for: drive,
-            targetVolume: viewModel.representativeVolume(for: drive),
-            allowSystemDiskSelfTests: allowSystemDiskSelfTests
+            targetVolume: viewModel.representativeVolume(for: drive)
         ) else { return true }
         if viewModel.isFirstAidBlocking { return true }
         if action == .firstAid {
@@ -658,27 +682,17 @@ struct ContentView: View {
     }
 
     private func exportSelfTestHistory(
-        drive: DriveDevice,
         records: [SmartSelfTestHistoryRecord],
-        exportFolderPath: String?,
+        filePath: String?,
         format: SmartDiagnosticsExportFormat
     ) -> String {
         guard !records.isEmpty else {
             return "No self-test history is available to export."
         }
-        guard let folderURL = validatedExportFolder(exportFolderPath) else {
-            return "Choose a storage folder before exporting."
+        guard let filePath, !filePath.isEmpty else {
+            return "Choose a file before exporting."
         }
-
-        let fileURL = folderURL.appendingPathComponent(
-            ReportExporter.smartDiagnosticsFileName(
-                drive: drive,
-                date: Date(),
-                language: language,
-                kind: "self-test-history",
-                format: format
-            )
-        )
+        let fileURL = URL(fileURLWithPath: filePath)
         do {
             switch format {
             case .csv:
@@ -699,22 +713,13 @@ struct ContentView: View {
     private func exportErrorLog(
         drive: DriveDevice,
         report: SmartErrorLogReport,
-        exportFolderPath: String?,
+        filePath: String?,
         format: SmartDiagnosticsExportFormat
     ) -> String {
-        guard let folderURL = validatedExportFolder(exportFolderPath) else {
-            return "Choose a storage folder before exporting."
+        guard let filePath, !filePath.isEmpty else {
+            return "Choose a file before exporting."
         }
-
-        let fileURL = folderURL.appendingPathComponent(
-            ReportExporter.smartDiagnosticsFileName(
-                drive: drive,
-                date: report.capturedAt,
-                language: language,
-                kind: "smart-error-log",
-                format: format
-            )
-        )
+        let fileURL = URL(fileURLWithPath: filePath)
         do {
             switch format {
             case .csv:
@@ -732,15 +737,6 @@ struct ContentView: View {
         }
     }
 
-    private func validatedExportFolder(_ exportFolderPath: String?) -> URL? {
-        guard let exportFolderPath, !exportFolderPath.isEmpty else { return nil }
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: exportFolderPath, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
-            return nil
-        }
-        return URL(fileURLWithPath: exportFolderPath, isDirectory: true)
-    }
 }
 
 private struct DiskActionFailureSheet: View {
@@ -1177,7 +1173,7 @@ private struct DriveDetailView: View {
     let diskCheckHistory: [DiskCheckHistoryRecord]
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
-    let allowSystemDiskSelfTests: Bool
+    let showsQuickDiskCheck: Bool
     let satDriverGuidance: SATSMARTDriverGuidance?
     let openSATDriverSettings: () -> Void
     let saveSnapshot: (String?) -> String
@@ -1194,11 +1190,10 @@ private struct DriveDetailView: View {
                 snapshot: snapshot,
                 diskCheckReport: viewModel.diskCheckReport(for: drive),
                 isDiskChecking: viewModel.isDiskChecking,
-                allowSystemDiskSelfTests: allowSystemDiskSelfTests,
+                showsQuickDiskCheck: showsQuickDiskCheck,
                 canRunQuickCheck: DiskSidebarActionPolicy.isEnabled(
                     .checkLog,
-                    for: drive,
-                    allowSystemDiskSelfTests: allowSystemDiskSelfTests
+                    for: drive
                 )
                     && !viewModel.isDiskChecking
                     && !viewModel.isFirstAidBlocking

@@ -19,6 +19,10 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(ApplicationRuntime.shouldRunAutomaticStartupTasks(environment: [:]))
     }
 
+    func testNormalBuildDoesNotIdentifyAsVirtualT7Demo() {
+        XCTAssertFalse(ApplicationRuntime.isVirtualT7DemoBuild)
+    }
+
     func testLifeRemainingBatterySymbolUsesNativeHealthBands() {
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: nil), "battery.50percent")
         XCTAssertEqual(LifeRemainingBatterySymbol.symbol(for: 100), "battery.100percent")
@@ -929,10 +933,17 @@ final class CapricornTests: XCTestCase {
         let expectedTranslations = [
             "Settings": "设置",
             "Interface Display": "界面显示",
+            "Show Quick Check and Repair": "显示快速自检与修复",
+            "When disabled, Quick Disk Check is hidden from Overview and Check and Repair is hidden from Disk Actions.": "关闭后，概览页面将隐藏快速自检模块，硬盘操作菜单也不会显示“检查与修复”。",
             "Keyboard Shortcuts": "快捷键",
             "Switch feature pages in order": "按顺序切换功能页面",
             "Show SMART self-test status and controls": "显示 SMART 自检状态和测试功能",
             "When disabled, self-test status, records, and controls are hidden in Overview and SMART.": "关闭后，概览和 SMART 界面不会显示自检状态、记录或测试控制。",
+            "Reset All Settings": "重置所有设置",
+            "Reset All Settings?": "确定重置所有设置？",
+            "Restores all settings and saved interface choices to their defaults. Disk caches and history records are preserved.": "将所有设置和已保存的界面选项恢复为默认值。硬盘缓存和历史记录会保留。",
+            "This resets settings and saved interface choices. Disk caches and history records will not be changed.": "这会重置设置和已保存的界面选项，但不会更改硬盘缓存和历史记录。",
+            "All settings were restored to their defaults.": "所有设置已恢复为默认值。",
             "SMART Refresh": "SMART 刷新",
             "Do not wake sleeping disks for SMART refresh": "SMART 刷新时不唤醒休眠硬盘",
             "When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up.": "当 ATA 或 SCSI 硬盘处于待机或睡眠状态时，Capricorn 会保留上一次 SMART 数据，而不会让硬盘启动旋转。",
@@ -949,6 +960,18 @@ final class CapricornTests: XCTestCase {
             "Open Settings": "打开设置",
             "Capricorn version and macOS user name": "Capricorn 版本和 macOS 用户名",
             "Unable to Complete Self-Test": "无法完成自检",
+            "Start SMART Self-Test?": "开始 SMART 自检？",
+            "Start Self-Test": "开始自检",
+            "SMART Self-Test Monitor": "SMART 自检监视器",
+            "Estimated Duration": "预计耗时",
+            "Current Stage": "当前阶段",
+            "View Progress": "查看进度",
+            "Hide Window": "隐藏窗口",
+            "Abort SMART Self-Test?": "中止 SMART 自检？",
+            "Do not disconnect or power off this drive while the self-test is running.": "自检运行期间，请勿断开硬盘或切断其电源。",
+            "You can hide the progress monitor and continue using Capricorn. Hiding it does not stop the self-test.": "你可以隐藏进度监视器并继续使用 Capricorn，隐藏窗口不会停止自检。",
+            "The SMART self-test completed successfully.": "SMART 自检已成功完成。",
+            "Drive Disconnected": "硬盘已断开",
             "No SMART error log entries were reported.": "未报告 SMART 错误条目。",
             "Used Capacity": "已用容量",
             "Available Capacity": "可用容量",
@@ -1135,6 +1158,12 @@ final class CapricornTests: XCTestCase {
             AppLanguage.simplifiedChinese.statusMessage(SmartSelfTestService.macOSNativeNVMeUnavailableMessage),
             "macOS 上的 smartctl 无法发送设备自检命令 0x14。"
         )
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Estimated Completion"), "预计完成时间")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Last Status Update"), "最近状态刷新")
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("The drive has not reported percentage progress. Status refreshes every 5 seconds."),
+            "硬盘尚未报告百分比进度，状态每 5 秒刷新一次。"
+        )
     }
 
     func testSidebarStatusMessagesAreLocalized() {
@@ -1149,7 +1178,8 @@ final class CapricornTests: XCTestCase {
             "Disk action completed.": "硬盘操作已完成。",
             "Inspecting open files...": "正在查看占用程序...",
             "Open file inspection completed.": "占用程序查看完成。",
-            "System-disk self-tests are disabled in Settings.": "设置中未允许系统盘执行自检。",
+            "System disk checks are unavailable in Capricorn.": "Capricorn 不对系统盘执行检查或修复。",
+            "SMART self-tests are unavailable for system disks in Capricorn.": "Capricorn 不对系统盘执行 SMART 自检。",
             "Checking disk...": "正在检查硬盘...",
             "Disk check completed.": "硬盘检查已完成。",
             "Stopping disk check...": "正在停止硬盘检查...",
@@ -1326,7 +1356,6 @@ final class CapricornTests: XCTestCase {
             "Quick Disk Check": "快速自检",
             "Run Quick Disk Check": "运行快速自检",
             "Clear Result": "清理结果",
-            "Enable system-disk checks in Settings before running Quick Disk Check.": "运行快速自检前，请先在设置中允许系统盘执行自检。",
             "SMART Self-Tests": "SMART 自检",
             "Disk Check In Progress": "硬盘检查进行中",
             "First Aid…": "急救…",
@@ -1431,7 +1460,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
         XCTAssertTrue(DiskSidebarActionPolicy.actions(for: drive).contains(.firstAid))
-        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.firstAid, for: drive))
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.firstAid, for: drive))
     }
 
     func testDiskSidebarActionsIncludeReadOnlyCheckActionsForPhysicalDrives() {
@@ -1444,19 +1473,13 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.detailedCheck, for: drive))
     }
 
-    func testSystemDiskQuickCheckRequiresSettingsPermission() {
+    func testSystemDiskCheckAndRepairActionsRemainDisabled() {
         var drive = Self.fixtureDrive(mountedAt: "/")
         drive.isInternal = true
         drive.isSystemDisk = true
 
         XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.checkLog, for: drive))
-        XCTAssertTrue(
-            DiskSidebarActionPolicy.isEnabled(
-                .checkLog,
-                for: drive,
-                allowSystemDiskSelfTests: true
-            )
-        )
+        XCTAssertFalse(DiskSidebarActionPolicy.isEnabled(.firstAid, for: drive))
     }
 
     func testDiskSidebarActionPolicyGroupsCheckAndRepairActions() {
@@ -1472,6 +1495,11 @@ final class CapricornTests: XCTestCase {
             DiskSidebarActionPolicy.actionsOutsideCheckAndRepair(for: physicalDrive)
                 .contains(where: { [.checkLog, .firstAid].contains($0) })
         )
+        XCTAssertTrue(DiskSidebarActionPolicy.isCheckAndRepairMenuEnabled(for: physicalDrive))
+
+        var systemDrive = physicalDrive
+        systemDrive.isSystemDisk = true
+        XCTAssertFalse(DiskSidebarActionPolicy.isCheckAndRepairMenuEnabled(for: systemDrive))
 
         var networkDrive = physicalDrive
         networkDrive.isNetwork = true
@@ -1774,7 +1802,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(report.entries[0].stderr.contains("No native detailed checker"))
     }
 
-    func testDiskCheckServiceSkipsSystemDiskWhenSettingsPermissionIsDisabled() async throws {
+    func testDiskCheckServiceAlwaysSkipsSystemDisk() async throws {
         let runner = RecordingDiskCheckRunner()
         let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
         var drive = Self.fixtureDrive(mountedAt: "/")
@@ -1786,23 +1814,43 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(runner.calls.isEmpty)
         XCTAssertEqual(report.entries.count, 1)
         XCTAssertTrue(report.entries[0].hasIssue)
-        XCTAssertTrue(report.entries[0].stderr.contains("System-disk self-tests are disabled in Settings"))
+        XCTAssertTrue(report.entries[0].stderr.contains("System disk checks are unavailable in Capricorn"))
     }
 
-    func testDiskCheckServiceRunsSystemDiskVerificationWhenSettingsPermissionIsEnabled() async throws {
-        let runner = RecordingDiskCheckRunner(stdout: "Verified\n")
+    func testDiskCheckServiceSkipsDetailedChecksForSystemDisk() async throws {
+        let runner = RecordingDiskCheckRunner()
         let service = DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
         var drive = Self.fixtureDrive(mountedAt: "/")
         drive.isInternal = true
         drive.isSystemDisk = true
 
-        let report = await service.check(.ordinary, drive: drive, allowSystemDisk: true)
+        let report = await service.check(.detailed, drive: drive)
 
-        XCTAssertEqual(runner.calls.map(\.arguments), [
-            ["verifyDisk", "disk0"],
-            ["verifyVolume", "/"]
-        ])
-        XCTAssertFalse(report.entries.contains(where: \.hasIssue))
+        XCTAssertTrue(runner.calls.isEmpty)
+        XCTAssertEqual(report.entries.count, 1)
+        XCTAssertTrue(report.entries[0].stderr.contains("System disk checks are unavailable in Capricorn"))
+    }
+
+    @MainActor
+    func testAppModelBlocksSystemDiskCheckAndFirstAidBeforeStartingServices() async {
+        let runner = RecordingDiskCheckRunner()
+        let model = AppModel(
+            diskCheckService: DiskCheckService(runner: runner, updateIntervalNanoseconds: 1_000_000)
+        )
+        var drive = Self.fixtureDrive(mountedAt: "/")
+        drive.isInternal = true
+        drive.isSystemDisk = true
+
+        await model.runDiskCheck(.ordinary, on: drive)
+
+        XCTAssertTrue(runner.calls.isEmpty)
+        XCTAssertFalse(model.isDiskChecking)
+        XCTAssertEqual(model.refreshMessage, "System disk checks are unavailable in Capricorn.")
+
+        await model.prepareFirstAid(on: drive)
+
+        XCTAssertEqual(model.firstAidState, .idle)
+        XCTAssertEqual(model.refreshMessage, "System disk checks are unavailable in Capricorn.")
     }
 
     func testDiskCheckServicePublishesProgressBeforeAndAfterEachCommand() async throws {
@@ -2138,10 +2186,16 @@ final class CapricornTests: XCTestCase {
 
     func testOverviewQuickDiskCheckVisibilityExcludesNetworkDrives() {
         var drive = Self.fixtureDrive()
-        XCTAssertTrue(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive))
+        drive.isSystemDisk = false
+        XCTAssertTrue(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive, isEnabled: true))
+        XCTAssertFalse(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive, isEnabled: false))
 
+        drive.isSystemDisk = true
+        XCTAssertFalse(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive, isEnabled: true))
+
+        drive.isSystemDisk = false
         drive.isNetwork = true
-        XCTAssertFalse(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive))
+        XCTAssertFalse(OverviewModuleVisibilityPolicy.showsQuickDiskCheck(for: drive, isEnabled: true))
     }
 
     func testMemoryCardSmartProvidersReturnUnavailableReason() async throws {
@@ -2223,24 +2277,31 @@ final class CapricornTests: XCTestCase {
             source: "Fixture"
         )
         var drive = Self.fixtureDrive()
+        drive.isSystemDisk = false
 
         XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
         XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: []))
 
+        drive.isSystemDisk = true
+        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
+
+        drive.isSystemDisk = false
         drive.isNetwork = true
         XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
     }
 
-    func testHistorySelfTestVisibilityTracksCurrentSMARTAttributes() {
-        let drive = Self.fixtureDrive()
+    func testHistoryDiagnosticVisibilityExcludesSystemDisks() {
+        var drive = Self.fixtureDrive()
+        drive.isSystemDisk = false
         let unavailable = SmartSnapshot.unavailable(for: drive, reason: "No SMART data.")
 
-        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: nil))
-        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: unavailable))
+        XCTAssertTrue(HistoryDiagnosticVisibilityPolicy.showsQuickDiskCheck(for: drive))
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: nil))
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: unavailable))
 
         var recovered = unavailable
         recovered.smartStatusRaw = "PASSED"
-        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: recovered))
 
         let attribute = SmartAttribute(
             id: "temperature.current",
@@ -2253,13 +2314,17 @@ final class CapricornTests: XCTestCase {
             source: "Fixture"
         )
         recovered.attributes = [attribute]
-        XCTAssertTrue(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+        XCTAssertTrue(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: recovered))
 
         recovered.attributes = []
-        XCTAssertFalse(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: recovered))
 
         recovered.attributes = [attribute]
-        XCTAssertTrue(HistorySelfTestVisibilityPolicy.showsReports(for: recovered))
+        XCTAssertTrue(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: recovered))
+
+        drive.isSystemDisk = true
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsQuickDiskCheck(for: drive))
+        XCTAssertFalse(HistoryDiagnosticVisibilityPolicy.showsSelfTestReports(for: drive, snapshot: recovered))
     }
 
     func testSmartErrorLogPresentationSeparatesHistoricalCountFromReadDetails() {
@@ -2413,6 +2478,47 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(snapshot.selfTestReport?.entries.first?.lifetimeHours, 456)
     }
 
+    func testSmartctlNVMeSelfTestParserConvertsCompletionToRemainingProgress() {
+        let fixture = """
+        {
+          "smartctl": {"exit_status": 0},
+          "smart_status": {"passed": true},
+          "nvme_smart_health_information_log": {"temperature": 300, "percentage_used": 1},
+          "nvme_self_test_log": {
+            "current_self_test_operation": "Short self-test in progress",
+            "current_self_test_completion_percent": 37,
+            "self_test_results": []
+          }
+        }
+        """
+        let snapshot = SmartctlParser.parseSnapshot(
+            Data(fixture.utf8),
+            drive: Self.fixtureDrive(),
+            providerName: "smartctl",
+            exitStatus: 0
+        )
+
+        XCTAssertEqual(snapshot.selfTestReport?.state, .running)
+        XCTAssertEqual(snapshot.selfTestReport?.currentKind, .short)
+        XCTAssertEqual(snapshot.selfTestReport?.currentRemainingPercent, 63)
+    }
+
+    func testSmartSelfTestProgressClampsDevicePercentages() {
+        var progress = SmartSelfTestProgress(
+            kind: .short,
+            startedAt: Date(timeIntervalSince1970: 100),
+            estimatedDurationSeconds: 120,
+            remainingPercent: 80,
+            lastStatusUpdateAt: nil
+        )
+
+        XCTAssertEqual(progress.completedPercent, 20)
+        progress.remainingPercent = 120
+        XCTAssertEqual(progress.completedPercent, 0)
+        progress.remainingPercent = -10
+        XCTAssertEqual(progress.completedPercent, 100)
+    }
+
     func testSmartctlATAAndNVMeErrorLogsParseStructuredEntries() throws {
         let ataResult = CommandResult(
             stdout: Data(Self.smartctlATAErrorLogFixture.utf8),
@@ -2525,6 +2631,7 @@ final class CapricornTests: XCTestCase {
     func testAppModelAutomaticallyProbesSelfTestCapabilityAfterDriveDiscovery() async {
         var drive = Self.fixtureDrive()
         drive.protocolName = "ATA"
+        drive.isSystemDisk = false
         let refreshService = StagedDriveRefreshService(
             discovery: DriveRefreshSnapshot(
                 drives: [drive],
@@ -2575,6 +2682,39 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(call?.arguments.contains("-c") == true)
         XCTAssertFalse(call?.arguments.contains("-t") == true)
         XCTAssertTrue(adminRunner.calls.isEmpty)
+    }
+
+    @MainActor
+    func testAppModelDoesNotProbeSystemDiskSelfTestCapabilityAfterDriveDiscovery() async {
+        var drive = Self.fixtureDrive(mountedAt: "/")
+        drive.protocolName = "NVMe"
+        drive.isInternal = true
+        drive.isSystemDisk = true
+        let refreshService = StagedDriveRefreshService(
+            discovery: DriveRefreshSnapshot(
+                drives: [drive],
+                snapshots: [drive.id: .refreshingNative(for: drive)]
+            ),
+            updateDelayNanoseconds: 0,
+            updates: []
+        )
+        let capabilityRunner = SequencedCommandRunner(results: [])
+        let model = AppModel(
+            refreshService: refreshService,
+            smartSelfTestService: SmartSelfTestService(
+                smartctlProvider: Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: "")),
+                runner: capabilityRunner,
+                administratorRunner: capabilityRunner,
+                commandCoordinator: SmartctlCommandCoordinator()
+            )
+        )
+
+        await model.refresh()
+        model.checkSmartSelfTestCapability(for: drive)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertTrue(capabilityRunner.calls.isEmpty)
+        XCTAssertEqual(model.smartSelfTestCapability(for: drive), .unknown)
     }
 
     func testSelfTestCapabilityPendingMessageIsLocalized() {
@@ -3371,6 +3511,69 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(adminRunner.calls[0].arguments.contains("-t"))
     }
 
+    func testSmartSelfTestServiceRejectsReadOnlyUSBNVMeBridgeTransports() async {
+        for targetType in ["sntasmedia", "sntrealtek"] {
+            let scan = """
+            {"devices":[{"name":"/dev/disk9","type":"\(targetType)","protocol":"NVMe"}]}
+            """
+            let adminRunner = SequencedCommandRunner(results: [
+                CommandResult(stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8), stderr: Data(), terminationStatus: 0)
+            ])
+            let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: scan))
+            let service = SmartSelfTestService(
+                smartctlProvider: provider,
+                runner: adminRunner,
+                administratorRunner: adminRunner,
+                commandCoordinator: SmartctlCommandCoordinator()
+            )
+            var drive = Self.fixtureDrive()
+            drive.bsdName = "disk9"
+            drive.deviceNode = "/dev/disk9"
+            drive.protocolName = "USB"
+            drive.isInternal = false
+            drive.isRemovable = true
+            drive.isSystemDisk = false
+
+            do {
+                _ = try await service.start(kind: .short, drive: drive)
+                XCTFail("Expected \(targetType) to reject Device Self-test command 0x14")
+            } catch {
+                XCTAssertEqual(error.localizedDescription, SmartSelfTestService.macOSNativeNVMeUnavailableMessage)
+            }
+
+            XCTAssertEqual(adminRunner.calls.count, 1)
+            XCTAssertTrue(adminRunner.calls[0].arguments.contains("-c"))
+            XCTAssertFalse(adminRunner.calls[0].arguments.contains("-t"))
+        }
+    }
+
+    func testSmartSelfTestServiceAllowsJMicronNVMeBridgeCommandPassthrough() async throws {
+        let scan = #"{"devices":[{"name":"/dev/disk9","type":"sntjmicron","protocol":"NVMe"}]}"#
+        let adminRunner = SequencedCommandRunner(results: [
+            CommandResult(stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8), stderr: Data(), terminationStatus: 0),
+            CommandResult(stdout: Data("Please wait 2 minutes for test to complete.".utf8), stderr: Data(), terminationStatus: 0)
+        ])
+        let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: scan))
+        let service = SmartSelfTestService(
+            smartctlProvider: provider,
+            runner: adminRunner,
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+        var drive = Self.fixtureDrive()
+        drive.bsdName = "disk9"
+        drive.deviceNode = "/dev/disk9"
+        drive.protocolName = "USB"
+        drive.isInternal = false
+        drive.isRemovable = true
+        drive.isSystemDisk = false
+
+        _ = try await service.start(kind: .short, drive: drive)
+
+        XCTAssertEqual(adminRunner.calls.count, 2)
+        XCTAssertTrue(adminRunner.calls[1].arguments.contains("-t"))
+    }
+
     func testMacOSNativeNVMeSnapshotKeepsReadOnlySmartctlAccess() async throws {
         let path = "IOService:/AppleARMPE/IONVMeController/IONVMeBlockStorageDevice@1"
         let scan = """
@@ -3449,8 +3652,129 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(adminRunner.calls[1].arguments.contains("short"))
     }
 
+    func testSmartSelfTestServiceFallsBackToCapabilityPollingDuration() async throws {
+        let adminRunner = SequencedCommandRunner(results: [
+            CommandResult(stdout: Data(Self.smartctlATACapabilityFixture.utf8), stderr: Data(), terminationStatus: 0),
+            CommandResult(stdout: Data("{}".utf8), stderr: Data(), terminationStatus: 0)
+        ])
+        let provider = Self.testSmartctlProvider(
+            runner: StaticCommandRunner(stdout: #"{"devices":[{"name":"/dev/disk0","type":"sat","protocol":"ATA"}]}"#)
+        )
+        let service = SmartSelfTestService(
+            smartctlProvider: provider,
+            runner: adminRunner,
+            administratorRunner: adminRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+
+        let result = try await service.start(kind: .short, drive: Self.fixtureDrive())
+
+        XCTAssertEqual(result.estimatedDurationSeconds, 120)
+    }
+
     @MainActor
-    func testSystemDiskSelfTestIsBlockedWhenPreferenceIsDisabled() {
+    func testSmartSelfTestRequestPresentsConfirmationBeforeStarting() {
+        let model = AppModel()
+        var drive = Self.fixtureDrive()
+        drive.isInternal = false
+        drive.isRemovable = true
+        drive.isSystemDisk = false
+        model.smartSelfTestCapabilities[drive.id] = .supported(SmartSelfTestCapability(
+            shortSupported: true,
+            longSupported: true,
+            message: "Self-test capability confirmed.",
+            shortPollingMinutes: 3,
+            longPollingMinutes: 45
+        ))
+
+        model.requestSmartSelfTest(kind: .short, drive: drive)
+
+        guard case let .confirmation(request) = model.smartSelfTestPresentation else {
+            return XCTFail("Expected a self-test confirmation request.")
+        }
+        XCTAssertEqual(request.drive, drive)
+        XCTAssertEqual(request.kind, .short)
+        XCTAssertEqual(request.estimatedDurationSeconds, 180)
+        XCTAssertEqual(model.smartSelfTestSession, .idle)
+        XCTAssertNil(model.smartSelfTestProgress)
+    }
+
+    @MainActor
+    func testHidingSmartSelfTestMonitorKeepsActiveSession() {
+        let model = AppModel()
+        model.smartSelfTestSession = .running(.short, remainingPercent: 63)
+        model.smartSelfTestProgress = SmartSelfTestProgress(
+            kind: .short,
+            startedAt: Date(),
+            estimatedDurationSeconds: 180,
+            remainingPercent: 63,
+            lastStatusUpdateAt: Date()
+        )
+        model.smartSelfTestPresentation = .monitor
+
+        model.hideSmartSelfTestMonitor()
+
+        XCTAssertNil(model.smartSelfTestPresentation)
+        XCTAssertEqual(model.smartSelfTestSession, .running(.short, remainingPercent: 63))
+        XCTAssertEqual(model.smartSelfTestProgress?.completedPercent, 37)
+
+        model.showSmartSelfTestMonitor()
+        XCTAssertEqual(model.smartSelfTestPresentation, .monitor)
+    }
+
+    @MainActor
+    func testVirtualT7DemoProvidesSimulatedDriveAndCompletesSelfTest() async {
+        let model = AppModel.virtualT7Demo(stepNanoseconds: 1_000_000)
+        let drive = try! XCTUnwrap(model.drives.first)
+
+        XCTAssertEqual(drive.displayName, "Samsung Portable SSD T7")
+        XCTAssertEqual(drive.bsdName, "disk999")
+        XCTAssertTrue(drive.isVirtual)
+        guard case let .supported(capability) = model.smartSelfTestCapability(for: drive) else {
+            return XCTFail("Expected the virtual T7 to support SMART self-tests.")
+        }
+        XCTAssertTrue(capability.shortSupported)
+        XCTAssertTrue(capability.longSupported)
+
+        model.requestSmartSelfTest(kind: .short, drive: drive)
+        guard case let .confirmation(request) = model.smartSelfTestPresentation else {
+            return XCTFail("Expected a virtual self-test confirmation.")
+        }
+        model.confirmSmartSelfTest(request)
+
+        for _ in 0..<100 where model.completedSmartSelfTest == nil {
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+
+        XCTAssertEqual(model.completedSmartSelfTest?.state, .passed)
+        XCTAssertEqual(model.completedSmartSelfTest?.report?.latestEntry?.kind, .short)
+        XCTAssertEqual(model.smartSelfTestSession, .idle)
+        XCTAssertNil(model.smartSelfTestProgress)
+    }
+
+    @MainActor
+    func testVirtualT7DemoAbortProducesAbortedResult() async {
+        let model = AppModel.virtualT7Demo(stepNanoseconds: 1_000_000)
+        let drive = try! XCTUnwrap(model.drives.first)
+
+        model.requestSmartSelfTest(kind: .long, drive: drive)
+        guard case let .confirmation(request) = model.smartSelfTestPresentation else {
+            return XCTFail("Expected a virtual self-test confirmation.")
+        }
+        model.confirmSmartSelfTest(request)
+        model.abortSmartSelfTest()
+
+        for _ in 0..<100 where model.completedSmartSelfTest == nil {
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+
+        XCTAssertEqual(model.completedSmartSelfTest?.state, .aborted)
+        XCTAssertEqual(model.completedSmartSelfTest?.report?.state, .aborted)
+        XCTAssertEqual(model.smartSelfTestSession, .idle)
+    }
+
+    @MainActor
+    func testSystemDiskSelfTestIsAlwaysBlocked() {
         let adminRunner = SequencedCommandRunner(results: [])
         let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: ""))
         let service = SmartSelfTestService(
@@ -3458,10 +3782,7 @@ final class CapricornTests: XCTestCase {
             administratorRunner: adminRunner,
             commandCoordinator: SmartctlCommandCoordinator()
         )
-        let model = AppModel(
-            smartSelfTestService: service,
-            allowsSystemDiskSelfTests: { false }
-        )
+        let model = AppModel(smartSelfTestService: service)
         var drive = Self.fixtureDrive()
         drive.isSystemDisk = true
         model.smartSelfTestCapabilities[drive.id] = .supported(SmartSelfTestCapability(
@@ -3472,8 +3793,70 @@ final class CapricornTests: XCTestCase {
 
         model.startSmartSelfTest(kind: .short, drive: drive)
 
-        XCTAssertEqual(model.smartSelfTestSession, .failed("System-disk self-tests are disabled in Settings."))
+        XCTAssertEqual(model.smartSelfTestSession, .failed("SMART self-tests are unavailable for system disks in Capricorn."))
         XCTAssertTrue(adminRunner.calls.isEmpty)
+    }
+
+    @MainActor
+    func testSelfTestTransportRejectionDowngradesStaleSupportedCapability() async {
+        let scan = #"{"devices":[{"name":"/dev/disk99","type":"sntjmicron","protocol":"NVMe"}]}"#
+        let commandRunner = SequencedCommandRunner(results: [
+            CommandResult(stdout: Data(Self.smartctlNVMeCapabilityFixture.utf8), stderr: Data(), terminationStatus: 0),
+            CommandResult(
+                stdout: Data(),
+                stderr: Data("NVMe Self-test cmd failed: NVMe admin command 0x14 is not supported".utf8),
+                terminationStatus: 1
+            )
+        ])
+        let provider = Self.testSmartctlProvider(runner: StaticCommandRunner(stdout: scan))
+        let service = SmartSelfTestService(
+            smartctlProvider: provider,
+            runner: commandRunner,
+            administratorRunner: commandRunner,
+            commandCoordinator: SmartctlCommandCoordinator()
+        )
+        let cache = RecordingSmartDiagnosticsCapabilityCache()
+        let lockDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("CapricornTests-self-test-\(UUID().uuidString)", isDirectory: true)
+        let model = AppModel(
+            diskOperationLockCoordinator: DiskOperationLockCoordinator(lockDirectoryURL: lockDirectory),
+            smartSelfTestService: service,
+            smartDiagnosticsCapabilityCache: cache
+        )
+        var drive = Self.fixtureDrive()
+        drive.bsdName = "disk99"
+        drive.deviceNode = "/dev/disk99"
+        drive.protocolName = "USB"
+        drive.isInternal = false
+        drive.isRemovable = true
+        drive.isSystemDisk = false
+        drive.serialNumber = "RUNTIME-REJECTION"
+        let staleCapability = SmartSelfTestCapability(
+            shortSupported: true,
+            longSupported: true,
+            message: "Self-test capability confirmed."
+        )
+        model.drives = [drive]
+        model.smartSelfTestCapabilities[drive.id] = .supported(staleCapability)
+
+        model.startSmartSelfTest(kind: .short, drive: drive)
+        for _ in 0..<100 {
+            if case .failed = model.smartSelfTestSession { break }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(
+            model.smartSelfTestSession,
+            .failed(SmartSelfTestService.macOSNativeNVMeUnavailableMessage)
+        )
+        XCTAssertEqual(
+            model.smartSelfTestCapability(for: drive),
+            .unavailable(SmartSelfTestService.macOSNativeNVMeUnavailableMessage)
+        )
+        XCTAssertEqual(cache.lastStoredRecord?.status, .unavailable)
+        XCTAssertNil(cache.lastStoredRecord?.selfTestCapability)
+        XCTAssertEqual(model.completedSmartSelfTest?.state, .unknown)
+        XCTAssertNil(model.completedSmartSelfTest?.report)
     }
 
     @MainActor
@@ -7089,6 +7472,30 @@ private final class SequencedCommandRunner: CommandRunning, @unchecked Sendable 
                 ? CommandResult(stdout: Data(), stderr: Data(), terminationStatus: 0)
                 : state.results.removeFirst()
         }
+    }
+}
+
+private final class RecordingSmartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching {
+    var lastStoredRecord: SmartDiagnosticsFeatureCacheRecord?
+
+    func cachedEntry(
+        for drive: DriveDevice,
+        smartctlVersion: String?
+    ) -> SmartDiagnosticsCapabilityCacheEntry? {
+        nil
+    }
+
+    func store(
+        _ record: SmartDiagnosticsFeatureCacheRecord,
+        feature: SmartDiagnosticsFeature,
+        for drive: DriveDevice,
+        smartctlVersion: String?
+    ) {
+        lastStoredRecord = record
+    }
+
+    func remove(for drive: DriveDevice) {
+        lastStoredRecord = nil
     }
 }
 

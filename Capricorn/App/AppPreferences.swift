@@ -44,13 +44,27 @@ enum CapricornSettingsDestination: String, Equatable, Sendable {
 @MainActor
 @Observable
 final class AppPreferences {
+    enum Defaults {
+        static let language = AppLanguage.english.rawValue
+        static let showVirtualDisks = false
+        static let showsSmartSelfTestInterface = false
+        static let avoidWakingSleepingDisks = true
+        static let redactSerialNumbers = false
+        static let automaticRefreshInterval = DiskAutomaticRefreshInterval.off
+        static let showsCheckAndRepairActions = false
+        static let showsIndividualHistoryDeletion = false
+        static let representativeVolumeStartupPreference = RepresentativeVolumeStartupPreference.largestCapacity
+    }
+
     enum Key {
         static let language = "appLanguage"
         static let showVirtualDisks = "showVirtualDisks"
         // Earlier builds allowed an external smartctl override. Keep the key
         // only long enough to clear it when the bundled-only policy is loaded.
         static let legacySmartctlPath = "smartctlPath"
-        static let allowSystemDiskSelfTests = "allowSystemDiskSelfTests"
+        // Earlier builds exposed a system-disk self-test override. The app no
+        // longer operates on system disks, so clear the persisted legacy key.
+        static let legacyAllowSystemDiskSelfTests = "allowSystemDiskSelfTests"
         static let showsSmartSelfTestInterface = "showsSmartSelfTestInterface"
         static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
         static let redactSerialNumbers = "redactSerialNumbers"
@@ -61,82 +75,128 @@ final class AppPreferences {
     }
 
     private let defaults: UserDefaults
+    @ObservationIgnored private var suppressesPersistence = false
 
     var requestedSettingsDestination: CapricornSettingsDestination?
     var satSMARTDriverStatus: SATSMARTDriverStatus
 
     var languageRawValue: String {
-        didSet { defaults.set(languageRawValue, forKey: Key.language) }
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(languageRawValue, forKey: Key.language)
+        }
     }
 
     var showVirtualDisks: Bool {
-        didSet { defaults.set(showVirtualDisks, forKey: Key.showVirtualDisks) }
-    }
-
-    var allowSystemDiskSelfTests: Bool {
-        didSet { defaults.set(allowSystemDiskSelfTests, forKey: Key.allowSystemDiskSelfTests) }
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(showVirtualDisks, forKey: Key.showVirtualDisks)
+        }
     }
 
     /// SMART diagnostics include active self-tests and controller error logs.
     /// Keep the bottom diagnostics panel out of the main views until opted in.
     var showsSmartSelfTestInterface: Bool {
-        didSet { defaults.set(showsSmartSelfTestInterface, forKey: Key.showsSmartSelfTestInterface) }
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(showsSmartSelfTestInterface, forKey: Key.showsSmartSelfTestInterface)
+        }
     }
 
     var avoidWakingSleepingDisks: Bool {
-        didSet { defaults.set(avoidWakingSleepingDisks, forKey: Key.avoidWakingSleepingDisks) }
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(avoidWakingSleepingDisks, forKey: Key.avoidWakingSleepingDisks)
+        }
     }
 
     /// Controls only user-facing serial-number rendering. Internal identity,
     /// history matching, and persistence continue to use the full value.
     var redactSerialNumbers: Bool {
-        didSet { defaults.set(redactSerialNumbers, forKey: Key.redactSerialNumbers) }
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(redactSerialNumbers, forKey: Key.redactSerialNumbers)
+        }
     }
 
     var automaticRefreshInterval: DiskAutomaticRefreshInterval {
-        didSet { defaults.set(automaticRefreshInterval.rawValue, forKey: Key.automaticRefreshIntervalMinutes) }
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(automaticRefreshInterval.rawValue, forKey: Key.automaticRefreshIntervalMinutes)
+        }
     }
 
-    /// Check and repair commands can modify filesystem metadata, so their
-    /// sidebar entry is opt-in rather than exposed in every disk menu by default.
+    /// Controls both the Overview quick-check module and the related disk-action
+    /// menu. Repair commands remain opt-in because they can modify metadata.
     var showsCheckAndRepairActions: Bool {
-        didSet { defaults.set(showsCheckAndRepairActions, forKey: Key.showsCheckAndRepairActions) }
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(showsCheckAndRepairActions, forKey: Key.showsCheckAndRepairActions)
+        }
     }
 
     /// Individual history deletion is destructive and bypasses hidden-history
     /// recovery, so its row actions remain opt-in.
     var showsIndividualHistoryDeletion: Bool {
-        didSet { defaults.set(showsIndividualHistoryDeletion, forKey: Key.showsIndividualHistoryDeletion) }
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(showsIndividualHistoryDeletion, forKey: Key.showsIndividualHistoryDeletion)
+        }
     }
 
     /// Controls the initial representative volume for each non-system drive.
     /// Manual sidebar changes remain active for the current application session.
     var representativeVolumeStartupPreference: RepresentativeVolumeStartupPreference {
-        didSet { defaults.set(representativeVolumeStartupPreference.rawValue, forKey: Key.representativeVolumeStartupPreference) }
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(representativeVolumeStartupPreference.rawValue, forKey: Key.representativeVolumeStartupPreference)
+        }
     }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        languageRawValue = defaults.string(forKey: Key.language) ?? AppLanguage.english.rawValue
-        showVirtualDisks = defaults.bool(forKey: Key.showVirtualDisks)
+        languageRawValue = defaults.string(forKey: Key.language) ?? Defaults.language
+        showVirtualDisks = defaults.object(forKey: Key.showVirtualDisks) as? Bool ?? Defaults.showVirtualDisks
         defaults.removeObject(forKey: Key.legacySmartctlPath)
-        allowSystemDiskSelfTests = defaults.bool(forKey: Key.allowSystemDiskSelfTests)
-        showsSmartSelfTestInterface = defaults.bool(forKey: Key.showsSmartSelfTestInterface)
-        avoidWakingSleepingDisks = defaults.object(forKey: Key.avoidWakingSleepingDisks) as? Bool ?? true
-        redactSerialNumbers = defaults.bool(forKey: Key.redactSerialNumbers)
+        defaults.removeObject(forKey: Key.legacyAllowSystemDiskSelfTests)
+        showsSmartSelfTestInterface = defaults.object(forKey: Key.showsSmartSelfTestInterface) as? Bool ?? Defaults.showsSmartSelfTestInterface
+        avoidWakingSleepingDisks = defaults.object(forKey: Key.avoidWakingSleepingDisks) as? Bool ?? Defaults.avoidWakingSleepingDisks
+        redactSerialNumbers = defaults.object(forKey: Key.redactSerialNumbers) as? Bool ?? Defaults.redactSerialNumbers
         automaticRefreshInterval = DiskAutomaticRefreshInterval(
             rawValue: defaults.integer(forKey: Key.automaticRefreshIntervalMinutes)
-        ) ?? .off
-        showsCheckAndRepairActions = defaults.bool(forKey: Key.showsCheckAndRepairActions)
-        showsIndividualHistoryDeletion = defaults.bool(forKey: Key.showsIndividualHistoryDeletion)
+        ) ?? Defaults.automaticRefreshInterval
+        showsCheckAndRepairActions = defaults.object(forKey: Key.showsCheckAndRepairActions) as? Bool ?? Defaults.showsCheckAndRepairActions
+        showsIndividualHistoryDeletion = defaults.object(forKey: Key.showsIndividualHistoryDeletion) as? Bool ?? Defaults.showsIndividualHistoryDeletion
         representativeVolumeStartupPreference = RepresentativeVolumeStartupPreference(
             rawValue: defaults.string(forKey: Key.representativeVolumeStartupPreference) ?? ""
-        ) ?? .largestCapacity
+        ) ?? Defaults.representativeVolumeStartupPreference
         satSMARTDriverStatus = SATSMARTDriverService().status()
     }
 
     var language: AppLanguage {
         AppLanguage(rawValue: languageRawValue) ?? .english
+    }
+
+    /// Clears every app-owned defaults value while retaining disk capability
+    /// cache entries. SwiftData history is stored separately and is untouched.
+    func resetAllSettings() {
+        let preservedKeys = Set([SmartDiagnosticsCapabilityCache.defaultsKey])
+        for key in defaults.dictionaryRepresentation().keys where !preservedKeys.contains(key) {
+            defaults.removeObject(forKey: key)
+        }
+
+        suppressesPersistence = true
+        languageRawValue = Defaults.language
+        showVirtualDisks = Defaults.showVirtualDisks
+        showsSmartSelfTestInterface = Defaults.showsSmartSelfTestInterface
+        avoidWakingSleepingDisks = Defaults.avoidWakingSleepingDisks
+        redactSerialNumbers = Defaults.redactSerialNumbers
+        automaticRefreshInterval = Defaults.automaticRefreshInterval
+        showsCheckAndRepairActions = Defaults.showsCheckAndRepairActions
+        showsIndividualHistoryDeletion = Defaults.showsIndividualHistoryDeletion
+        representativeVolumeStartupPreference = Defaults.representativeVolumeStartupPreference
+        requestedSettingsDestination = nil
+        suppressesPersistence = false
     }
 
 }
@@ -159,6 +219,8 @@ struct CapricornSettingsView: View {
     @State private var pendingHistoryDatabaseStatistics: HistoryDatabaseStatistics?
     @State private var smartctlExecutableInfo: SmartctlExecutableInfo?
     @State private var highlightedSettingsDestination: CapricornSettingsDestination?
+    @State private var isConfirmingAllSettingsReset = false
+    @State private var settingsResetResult: String?
 
     private var language: AppLanguage {
         preferences.language
@@ -181,14 +243,19 @@ struct CapricornSettingsView: View {
                 Text(language.t("When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
 
-            Section(language.t("Disk Actions")) {
-                Toggle(language.t("Show Check and Repair in Disk Actions"), isOn: $preferences.showsCheckAndRepairActions)
-                Text(language.t("When disabled, Check and Repair is hidden from the disk action menu."))
+                Toggle(language.t("Show Quick Check and Repair"), isOn: $preferences.showsCheckAndRepairActions)
+                Text(language.t("When disabled, Quick Disk Check is hidden from Overview and Check and Repair is hidden from Disk Actions."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                Toggle(language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
+                Text(language.t("When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(language.t("Disk Actions")) {
                 Picker(
                     language.t("Volume selected when Capricorn opens"),
                     selection: $preferences.representativeVolumeStartupPreference
@@ -218,17 +285,6 @@ struct CapricornSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Toggle(language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
-                Text(language.t("When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if preferences.showsSmartSelfTestInterface {
-                    Toggle(language.t("Allow self-tests on the system disk"), isOn: $preferences.allowSystemDiskSelfTests)
-                    Text(language.t("System-disk self-tests may reduce performance and increase sustained storage load. Keep a current backup before enabling this option."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             Section("SMART") {
@@ -372,6 +428,30 @@ struct CapricornSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            Section {
+                VStack(spacing: 14) {
+                    Button(role: .destructive) {
+                        isConfirmingAllSettingsReset = true
+                    } label: {
+                        Label(language.t("Reset All Settings"), systemImage: "arrow.counterclockwise")
+                    }
+                    .foregroundStyle(.red)
+
+                    Text(language.t("Restores all settings and saved interface choices to their defaults. Disk caches and history records are preserved."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    if let settingsResetResult {
+                        Label(settingsResetResult, systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 2)
+            }
         }
         .formStyle(.grouped)
         .padding(20)
@@ -417,6 +497,15 @@ struct CapricornSettingsView: View {
                 "\(language.t("History Record Count")): \(statistics.recordCount)\n\n" +
                 language.t("This permanently removes all SMART, self-test, disk-check, benchmark, and live-activity history from the current database. It cannot be undone.")
             )
+        }
+        .alert(language.t("Reset All Settings?"), isPresented: $isConfirmingAllSettingsReset) {
+            Button(language.t("Reset All Settings"), role: .destructive) {
+                preferences.resetAllSettings()
+                settingsResetResult = preferences.language.t("All settings were restored to their defaults.")
+            }
+            Button(language.t("Cancel"), role: .cancel) {}
+        } message: {
+            Text(language.t("This resets settings and saved interface choices. Disk caches and history records will not be changed."))
         }
         .onAppear {
             revealRequestedSettings(using: proxy)

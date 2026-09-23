@@ -472,6 +472,10 @@ enum DiskSidebarActionPolicy {
         }
     }
 
+    static func isCheckAndRepairMenuEnabled(for drive: DriveDevice) -> Bool {
+        !drive.isSystemDisk
+    }
+
     static func actionsOutsideCheckAndRepair(for drive: DriveDevice) -> [DiskSidebarAction] {
         actions(for: drive).filter {
             switch $0 {
@@ -486,8 +490,7 @@ enum DiskSidebarActionPolicy {
     static func isEnabled(
         _ action: DiskSidebarAction,
         for drive: DriveDevice,
-        targetVolume: DriveDevice.Volume? = nil,
-        allowSystemDiskSelfTests: Bool = false
+        targetVolume: DriveDevice.Volume? = nil
     ) -> Bool {
         if isProtectedSystemControlAction(action, for: drive) {
             return false
@@ -508,17 +511,17 @@ enum DiskSidebarActionPolicy {
         case .inspectOpenFiles:
             return drive.primaryMountPoint != nil
         case .checkLog:
-            let systemDiskIsAllowed = !drive.isSystemDisk || allowSystemDiskSelfTests
-            let protectedDiskIsAllowed = !isProtectedInternalSystemDisk(drive)
-                || (drive.isSystemDisk && allowSystemDiskSelfTests)
-            return systemDiskIsAllowed
-                && protectedDiskIsAllowed
+            return !drive.isSystemDisk
+                && !isProtectedInternalSystemDisk(drive)
                 && !drive.isNetwork
                 && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
         case .detailedCheck:
             return false
         case .firstAid:
-            return !drive.isNetwork && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
+            return !drive.isSystemDisk
+                && !isProtectedInternalSystemDisk(drive)
+                && !drive.isNetwork
+                && (!drive.bsdName.isEmpty || !drive.volumes.isEmpty)
         case .rename:
             return !drive.isNetwork && !drive.isSystemDisk && RepresentativeVolumeResolver.fallbackVolume(for: drive) != nil
         case .revealInFinder:
@@ -1188,10 +1191,56 @@ enum SmartSelfTestSessionState: Equatable, Sendable {
     }
 }
 
+enum SmartSelfTestCompletionState: String, Equatable, Sendable {
+    case passed
+    case failed
+    case aborted
+    case disconnected
+    case unknown
+}
+
+struct SmartSelfTestStartRequest: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let drive: DriveDevice
+    let kind: SmartSelfTestKind
+    let estimatedDurationSeconds: Int?
+
+    init(
+        id: UUID = UUID(),
+        drive: DriveDevice,
+        kind: SmartSelfTestKind,
+        estimatedDurationSeconds: Int?
+    ) {
+        self.id = id
+        self.drive = drive
+        self.kind = kind
+        self.estimatedDurationSeconds = estimatedDurationSeconds
+    }
+}
+
+enum SmartSelfTestPresentation: Equatable, Sendable {
+    case confirmation(SmartSelfTestStartRequest)
+    case monitor
+}
+
+struct SmartSelfTestProgress: Equatable, Sendable {
+    var kind: SmartSelfTestKind
+    var startedAt: Date
+    var estimatedDurationSeconds: Int?
+    var remainingPercent: Int?
+    var lastStatusUpdateAt: Date?
+
+    var completedPercent: Int? {
+        remainingPercent.map { 100 - min(100, max(0, $0)) }
+    }
+}
+
 struct SmartSelfTestCapability: Codable, Equatable, Sendable {
     var shortSupported: Bool
     var longSupported: Bool
     var message: String
+    var shortPollingMinutes: Int? = nil
+    var longPollingMinutes: Int? = nil
 
     func supports(_ kind: SmartSelfTestKind) -> Bool {
         switch kind {
@@ -1199,6 +1248,15 @@ struct SmartSelfTestCapability: Codable, Equatable, Sendable {
         case .long: longSupported
         case .vendor, .unknown: false
         }
+    }
+
+    func estimatedDurationSeconds(for kind: SmartSelfTestKind) -> Int? {
+        let minutes: Int? = switch kind {
+        case .short: shortPollingMinutes
+        case .long: longPollingMinutes
+        case .vendor, .unknown: nil
+        }
+        return minutes.map { max(0, $0) * 60 }
     }
 }
 

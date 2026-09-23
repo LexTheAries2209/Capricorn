@@ -2,6 +2,7 @@
 import AppKit
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SmartAttributesView: View {
     let drive: DriveDevice
@@ -58,8 +59,6 @@ struct SmartAttributesView: View {
                     snapshot: snapshot,
                     viewModel: viewModel,
                     selfTestHistory: selfTestHistory,
-                    exportFolderPath: snapshotExportFolderPath.isEmpty ? nil : snapshotExportFolderPath,
-                    chooseExportFolder: { _ = chooseSnapshotExportFolder() },
                     exportSelfTestHistory: exportSelfTestHistory,
                     exportErrorLog: exportErrorLog,
                     saveMessage: $saveMessage
@@ -281,7 +280,7 @@ struct SmartAttributesView: View {
 
 enum SmartDiagnosticsVisibilityPolicy {
     static func showsPanel(for drive: DriveDevice, attributes: [SmartAttribute]) -> Bool {
-        !drive.isNetwork && !attributes.isEmpty
+        !drive.isNetwork && !drive.isSystemDisk && !attributes.isEmpty
     }
 
     static func showsErrorLogSection(for drive: DriveDevice) -> Bool {
@@ -294,16 +293,14 @@ struct SmartDiagnosticsPanel: View {
     let snapshot: SmartSnapshot?
     let viewModel: AppModel
     let selfTestHistory: [SmartSelfTestHistoryRecord]
-    let exportFolderPath: String?
-    let chooseExportFolder: () -> Void
     let exportSelfTestHistory: ([SmartSelfTestHistoryRecord], String?, SmartDiagnosticsExportFormat) -> String
     let exportErrorLog: (SmartErrorLogReport, String?, SmartDiagnosticsExportFormat) -> String
     @Binding var saveMessage: String?
     @Environment(\.appLanguage) private var language
-    @AppStorage(AppPreferences.Key.allowSystemDiskSelfTests) private var allowSystemDiskSelfTests = false
     @State private var isExpanded = true
     @State private var showsSelfTestHistory = false
     @State private var showsErrorLog = false
+    @State private var isConfirmingSelfTestAbort = false
 
     private var report: SmartSelfTestReport? { snapshot?.selfTestReport }
     private var capabilityState: SmartSelfTestCapabilityState { viewModel.smartSelfTestCapability(for: drive) }
@@ -330,7 +327,7 @@ struct SmartDiagnosticsPanel: View {
         return report?.state
     }
     private var controlsUnavailable: Bool {
-        drive.isNetwork || drive.isMemoryCard || (drive.isSystemDisk && !allowSystemDiskSelfTests)
+        drive.isNetwork || drive.isMemoryCard
     }
 
     private var cannotCompleteSelfTest: Bool {
@@ -380,6 +377,14 @@ struct SmartDiagnosticsPanel: View {
                 )
             }
         }
+        .alert(language.t("Abort SMART Self-Test?"), isPresented: $isConfirmingSelfTestAbort) {
+            Button(language.t("Abort Self-Test"), role: .destructive) {
+                viewModel.abortSmartSelfTest()
+            }
+            Button(language.t("Keep Running"), role: .cancel) {}
+        } message: {
+            Text(language.t("Capricorn will ask the drive to stop its current self-test. Any progress made by this test will be lost."))
+        }
     }
 
     private var selfTestSection: some View {
@@ -414,6 +419,10 @@ struct SmartDiagnosticsPanel: View {
                 }
             }
 
+            if isActiveForDrive, let progress = viewModel.smartSelfTestProgress {
+                selfTestCompactStatus(progress)
+            }
+
             if let latestEntry = report?.latestEntry {
                 selfTestEntryRow(latestEntry)
             }
@@ -428,23 +437,15 @@ struct SmartDiagnosticsPanel: View {
 
                 Menu {
                     Button(language.t("Export CSV")) {
-                        saveMessage = exportSelfTestHistory(selfTestHistory, exportFolderPath, .csv)
+                        requestSelfTestHistoryExport(.csv)
                     }
                     Button(language.t("Export JSON")) {
-                        saveMessage = exportSelfTestHistory(selfTestHistory, exportFolderPath, .json)
+                        requestSelfTestHistoryExport(.json)
                     }
                 } label: {
                     Label(language.t("Export Self-Test History"), systemImage: "square.and.arrow.up")
                 }
                 .disabled(selfTestHistory.isEmpty)
-
-                if exportFolderPath == nil {
-                    Button {
-                        chooseExportFolder()
-                    } label: {
-                        Label(language.t("Choose Storage Folder"), systemImage: "folder")
-                    }
-                }
             }
             .controlSize(.small)
         }
@@ -453,28 +454,35 @@ struct SmartDiagnosticsPanel: View {
     @ViewBuilder
     private var selfTestControls: some View {
         if isActiveForDrive {
-            Button {
-                viewModel.abortSmartSelfTest()
-            } label: {
-                Label(language.t("Abort Self-Test"), systemImage: "stop.circle")
+            HStack(spacing: 8) {
+                Button {
+                    viewModel.showSmartSelfTestMonitor()
+                } label: {
+                    Label(language.t("View Progress"), systemImage: "waveform.path.ecg")
+                }
+                Button(role: .destructive) {
+                    isConfirmingSelfTestAbort = true
+                } label: {
+                    Label(language.t("Abort Self-Test"), systemImage: "stop.circle")
+                }
+                .disabled(viewModel.smartSelfTestSession == .stopping)
             }
-            .disabled(viewModel.smartSelfTestSession == .stopping)
         } else {
             switch capabilityState {
             case let .supported(capability):
                 HStack(spacing: 8) {
                     Button {
-                        viewModel.startSmartSelfTest(kind: .short, drive: drive)
+                        viewModel.requestSmartSelfTest(kind: .short, drive: drive)
                     } label: {
                         Label(language.t("Quick Self-Test"), systemImage: "hare")
                     }
-                    .disabled(controlsUnavailable || !capability.shortSupported)
+                    .disabled(controlsUnavailable || viewModel.isSmartSelfTestActive || !capability.shortSupported)
                     Button {
-                        viewModel.startSmartSelfTest(kind: .long, drive: drive)
+                        viewModel.requestSmartSelfTest(kind: .long, drive: drive)
                     } label: {
                         Label(language.t("Full Self-Test"), systemImage: "tortoise")
                     }
-                    .disabled(controlsUnavailable || !capability.longSupported)
+                    .disabled(controlsUnavailable || viewModel.isSmartSelfTestActive || !capability.longSupported)
                 }
             case .checking:
                 ProgressView()
@@ -485,18 +493,12 @@ struct SmartDiagnosticsPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             case .unknown, .unavailable:
-                if drive.isSystemDisk && !allowSystemDiskSelfTests {
-                    SettingsLink {
-                        Label(language.t("Settings"), systemImage: "gearshape")
-                    }
-                } else {
-                    Button {
-                        viewModel.checkSmartSelfTestCapability(for: drive)
-                    } label: {
-                        Label(language.t("Retry Self-Test Check"), systemImage: "checkmark.shield")
-                    }
-                    .disabled(controlsUnavailable)
+                Button {
+                    viewModel.checkSmartSelfTestCapability(for: drive)
+                } label: {
+                    Label(language.t("Retry Self-Test Check"), systemImage: "checkmark.shield")
                 }
+                .disabled(controlsUnavailable)
             }
         }
     }
@@ -531,10 +533,10 @@ struct SmartDiagnosticsPanel: View {
                     }
                     Menu {
                         Button(language.t("Export CSV")) {
-                            saveMessage = exportErrorLog(errorLogReport, exportFolderPath, .csv)
+                            requestErrorLogExport(.csv, report: errorLogReport)
                         }
                         Button(language.t("Export JSON")) {
-                            saveMessage = exportErrorLog(errorLogReport, exportFolderPath, .json)
+                            requestErrorLogExport(.json, report: errorLogReport)
                         }
                     } label: {
                         Label(language.t("Export Error Entries"), systemImage: "square.and.arrow.up")
@@ -545,18 +547,57 @@ struct SmartDiagnosticsPanel: View {
                             ? language.t("Export Error Entries")
                             : language.t("No parseable error details are available to export.")
                     )
-                    if exportFolderPath == nil {
-                        Button {
-                            chooseExportFolder()
-                        } label: {
-                            Image(systemName: "folder")
-                        }
-                        .help(language.t("Choose Storage Folder"))
-                    }
                 }
                 .controlSize(.small)
             }
         }
+    }
+
+    private func requestSelfTestHistoryExport(_ format: SmartDiagnosticsExportFormat) {
+        guard let fileURL = chooseDiagnosticsExportURL(
+            title: "Export Self-Test History",
+            kind: "self-test-history",
+            format: format
+        ) else {
+            return
+        }
+        saveMessage = exportSelfTestHistory(selfTestHistory, fileURL.path, format)
+    }
+
+    private func requestErrorLogExport(
+        _ format: SmartDiagnosticsExportFormat,
+        report: SmartErrorLogReport
+    ) {
+        guard let fileURL = chooseDiagnosticsExportURL(
+            title: "Export Error Entries",
+            kind: "smart-error-log",
+            format: format
+        ) else {
+            return
+        }
+        saveMessage = exportErrorLog(report, fileURL.path, format)
+    }
+
+    private func chooseDiagnosticsExportURL(
+        title: String,
+        kind: String,
+        format: SmartDiagnosticsExportFormat
+    ) -> URL? {
+        let panel = NSSavePanel()
+        panel.title = language.t(title)
+        panel.nameFieldStringValue = ReportExporter.smartDiagnosticsFileName(
+            drive: drive,
+            date: Date(),
+            language: language,
+            kind: kind,
+            format: format
+        )
+        panel.allowedContentTypes = [format == .csv ? .commaSeparatedText : .json]
+        panel.canCreateDirectories = true
+        panel.showsTagField = false
+
+        guard panel.runModal() == .OK else { return nil }
+        return panel.url
     }
 
     @ViewBuilder
@@ -604,11 +645,11 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var stateDescription: String {
-        if drive.isSystemDisk && !allowSystemDiskSelfTests {
-            return language.t("Enable system-disk self-tests in Settings only after confirming that a current backup is available.")
-        }
         if controlsUnavailable {
             return language.t("Self-tests require smartctl support for this drive.")
+        }
+        if isActiveForDrive, let progress = viewModel.smartSelfTestProgress {
+            return activeProgressDetail(progress)
         }
         switch capabilityState {
         case .unknown:
@@ -731,6 +772,103 @@ struct SmartDiagnosticsPanel: View {
     private var sessionRemainingPercent: Int? {
         guard case let .running(_, remainingPercent) = viewModel.smartSelfTestSession else { return nil }
         return remainingPercent
+    }
+
+    private func selfTestCompactStatus(_ progress: SmartSelfTestProgress) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
+                    Image(systemName: activeProgressSymbol)
+                        .foregroundStyle(.blue)
+                    Text(compactProgressSummary(progress, now: timeline.date))
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(2)
+                    Spacer(minLength: 8)
+                    if let updatedAt = progress.lastStatusUpdateAt {
+                        Text(formattedTime(updatedAt))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let completed = progress.completedPercent {
+                    ProgressView(value: Double(completed), total: 100)
+                        .progressViewStyle(.linear)
+                } else {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                }
+            }
+            .padding(10)
+            .background(.blue.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private var activeProgressSymbol: String {
+        switch viewModel.smartSelfTestSession {
+        case .starting: "paperplane"
+        case .running: "waveform.path.ecg"
+        case .stopping: "stop.circle"
+        case .idle, .failed: "hourglass"
+        }
+    }
+
+    private func compactProgressSummary(_ progress: SmartSelfTestProgress, now: Date) -> String {
+        let phase: String = switch viewModel.smartSelfTestSession {
+        case .starting: language.t("Starting")
+        case .running: language.t("Running")
+        case .stopping: language.t("Stopping")
+        case .idle, .failed: language.t("Self-Test Status Unknown")
+        }
+        var parts = ["\(selfTestName(progress.kind)) · \(phase)"]
+        if let completed = progress.completedPercent {
+            parts.append("\(completed)%")
+        }
+        parts.append("\(language.t("Estimated Completion")): \(estimatedCompletionText(progress, now: now))")
+        return parts.joined(separator: " · ")
+    }
+
+    private func activeProgressDetail(_ progress: SmartSelfTestProgress) -> String {
+        switch viewModel.smartSelfTestSession {
+        case .starting:
+            return language.t("Sending the self-test command to the drive.")
+        case .stopping:
+            return language.t("Waiting for the drive to stop the self-test.")
+        case .running:
+            if let completed = progress.completedPercent,
+               let remaining = progress.remainingPercent {
+                return "\(language.t("Completed")): \(completed)% · \(language.t("Remaining")): \(remaining)%"
+            }
+            return language.t("The drive has not reported percentage progress. Status refreshes every 5 seconds.")
+        case .idle, .failed:
+            return language.t("Self-Test Status Unknown")
+        }
+    }
+
+    private func selfTestName(_ kind: SmartSelfTestKind) -> String {
+        switch language {
+        case .english: "\(kindTitle(kind)) self-test"
+        case .simplifiedChinese: "\(kindTitle(kind))自检"
+        }
+    }
+
+    private func estimatedCompletionText(_ progress: SmartSelfTestProgress, now: Date) -> String {
+        guard let seconds = progress.estimatedDurationSeconds else {
+            return language.t("Not reported by drive")
+        }
+        let completion = progress.startedAt.addingTimeInterval(TimeInterval(seconds))
+        if now > completion, case .running = viewModel.smartSelfTestSession {
+            return "\(formattedTime(completion)) · \(language.t("Waiting for drive"))"
+        }
+        return formattedTime(completion)
+    }
+
+    private func formattedTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: language.localeIdentifier)
+        formatter.timeStyle = .medium
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
     }
 
     private func selfTestEntryRow(_ entry: SmartSelfTestEntry) -> some View {
