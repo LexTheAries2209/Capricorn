@@ -47,6 +47,12 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
             guard let capacity = capacityLabels[capacityToken.uppercased()] else { return nil }
             return "\(manufacturer) \(productName ?? family) \(capacity)"
         }
+
+        var matchingSpecificity: Int {
+            (usbIdentity == nil ? 0 : 4)
+                + (sizeRange == nil ? 0 : 2)
+                + (fixedCapacityToken == nil ? 0 : 1)
+        }
     }
 
     struct Match: Equatable, Sendable {
@@ -170,6 +176,9 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
                 try NSRegularExpression(pattern: $0, options: [.caseInsensitive])
             }
             compiled.append(CompiledRecord(record: record, expressions: expressions))
+        }
+        compiled.sort { lhs, rhs in
+            lhs.record.matchingSpecificity > rhs.record.matchingSpecificity
         }
 
         records = document.records

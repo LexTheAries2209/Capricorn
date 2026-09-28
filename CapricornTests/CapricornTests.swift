@@ -317,6 +317,60 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testExternalDriveModelCatalogPrefersSpecificUSBIdentityRecords() throws {
+        let data = Data(
+            #"""
+            {
+              "schemaVersion": 2,
+              "records": [
+                {
+                  "id": "generic",
+                  "manufacturer": "Vendor",
+                  "family": "Generic Drive",
+                  "mediaKind": "HDD",
+                  "interfaces": ["USB"],
+                  "introduced": 2024,
+                  "modelPatterns": ["^(?<model>USBMODEL)$"],
+                  "capacityLabels": {"1": "1TB"},
+                  "sourceURL": "https://example.com/generic",
+                  "examples": [{"reportedModel": "USBMODEL", "canonicalModel": "USBMODEL", "capacityToken": "1"}]
+                },
+                {
+                  "id": "specific",
+                  "manufacturer": "Vendor",
+                  "family": "Specific Portable Drive",
+                  "productName": "Specific Portable Drive",
+                  "mediaKind": "HDD",
+                  "interfaces": ["USB"],
+                  "introduced": 2024,
+                  "modelPatterns": ["^(?<model>USBMODEL)$"],
+                  "capacityLabels": {"1": "1TB"},
+                  "usbIdentity": {"vendorName": "Vendor USB", "productName": "Portable Bridge", "vendorID": 1, "productID": 2},
+                  "sizeRange": {"minimumBytes": 900000000000, "maximumBytes": 1100000000000},
+                  "fixedCapacityToken": "1",
+                  "sourceURL": "https://example.com/specific",
+                  "examples": [{"reportedModel": "USBMODEL", "canonicalModel": "USBMODEL", "capacityToken": "1"}]
+                }
+              ]
+            }
+            """#.utf8
+        )
+
+        let catalog = try ExternalDriveModelCatalog(data: data)
+        var drive = Self.externalCatalogDrive(model: "USBMODEL")
+        drive.sizeBytes = 1_000_000_000_000
+        drive.usbDevice = DriveUSBDeviceIdentity(
+            vendorName: "Vendor USB",
+            productName: "Portable Bridge",
+            vendorID: 1,
+            productID: 2
+        )
+
+        let match = try XCTUnwrap(catalog.match(for: drive))
+        XCTAssertEqual(match.recordID, "specific")
+        XCTAssertEqual(match.marketingName, "Vendor Specific Portable Drive 1TB")
+    }
+
     func testExternalDriveModelCatalogIdentifiesSamsungPM9A1NVMe() throws {
         var drive = Self.externalCatalogDrive(model: "SAMSUNG MZVL21T0HCLR-00B00")
         drive.protocolName = "PCI-Express"
