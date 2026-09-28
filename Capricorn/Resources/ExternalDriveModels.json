@@ -1,7 +1,179 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scope": "Common physical HDD/SSD families introduced or commonly deployed since 2016, including internal, portable, OEM client, data-center, and enterprise storage visible to macOS.",
   "records": [
+    {
+      "id": "seagate-barracuda-2-5-hdd",
+      "manufacturer": "Seagate",
+      "family": "BarraCuda 2.5",
+      "productName": "BarraCuda 2.5-inch Hard Drive",
+      "mediaKind": "HDD",
+      "interfaces": ["SATA", "USB"],
+      "introduced": 2016,
+      "modelPatterns": [
+        "^(?:SEAGATE\\s+)?(?<model>ST(?<capacity>5000)LM000)(?:[-/ ].*)?$",
+        "^(?:SEAGATE\\s+)?(?<model>ST(?<capacity>4000|3000)LM024)(?:[-/ ].*)?$",
+        "^(?:SEAGATE\\s+)?(?<model>ST(?<capacity>2000)LM015)(?:[-/ ].*)?$",
+        "^(?:SEAGATE\\s+)?(?<model>ST(?<capacity>1000)LM048)(?:[-/ ].*)?$",
+        "^(?:SEAGATE\\s+)?(?<model>ST(?<capacity>500)LM030)(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"5000": "5TB", "4000": "4TB", "3000": "3TB", "2000": "2TB", "1000": "1TB", "500": "500GB"},
+      "sourceURL": "https://www.seagate.com/support/internal-hard-drives/laptop-hard-drives/barracuda-2-5/",
+      "examples": [
+        {"reportedModel": "ST5000LM000-2U8170", "canonicalModel": "ST5000LM000", "capacityToken": "5000"},
+        {"reportedModel": "ST4000LM024-2AN17V", "canonicalModel": "ST4000LM024", "capacityToken": "4000"},
+        {"reportedModel": "ST2000LM015-2E8174", "canonicalModel": "ST2000LM015", "capacityToken": "2000"},
+        {"reportedModel": "ST1000LM048-2E7172", "canonicalModel": "ST1000LM048", "capacityToken": "1000"},
+        {"reportedModel": "ST500LM030-1RK17B", "canonicalModel": "ST500LM030", "capacityToken": "500"}
+      ]
+    },
+    {
+      "id": "seagate-portable-hdd",
+      "manufacturer": "Seagate",
+      "family": "Portable HDD",
+      "productName": "Portable Hard Drive",
+      "prefersMarketingNameOnly": true,
+      "mediaKind": "HDD",
+      "interfaces": ["USB", "SATA"],
+      "introduced": 2019,
+      "modelPatterns": [
+        "^(?:SEAGATE[ _])?(?<model>STGX(?<capacity>1000|2000|4000|5000)400)(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"1000": "1TB", "2000": "2TB", "4000": "4TB", "5000": "5TB"},
+      "sourceURL": "https://www.seagate.com/products/external-hard-drives/portable-hard-drives/seagate-portable-drive/",
+      "examples": [
+        {"reportedModel": "STGX1000400", "canonicalModel": "STGX1000400", "capacityToken": "1000"},
+        {"reportedModel": "STGX2000400", "canonicalModel": "STGX2000400", "capacityToken": "2000"},
+        {"reportedModel": "STGX4000400", "canonicalModel": "STGX4000400", "capacityToken": "4000"},
+        {"reportedModel": "STGX5000400", "canonicalModel": "STGX5000400", "capacityToken": "5000"}
+      ]
+    },
+    {
+      "id": "seagate-expansion-portable-hdd",
+      "manufacturer": "Seagate",
+      "family": "Expansion Portable HDD",
+      "productName": "Expansion Portable Drive",
+      "prefersMarketingNameOnly": true,
+      "mediaKind": "HDD",
+      "interfaces": ["USB", "SATA"],
+      "introduced": 2019,
+      "modelPatterns": [
+        "^(?:SEAGATE[ _])?(?<model>STKM(?<capacity>1000|2000|4000|5000)400)(?:[-/ ].*)?$",
+        "^(?:SEAGATE[ _])?(?<model>STEA(?<capacity>1000|2000|4000|5000)40[02])(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"1000": "1TB", "2000": "2TB", "4000": "4TB", "5000": "5TB"},
+      "sourceURL": "https://www.seagate.com/products/external-hard-drives/portable-hard-drives/expansion-portable-drive/",
+      "examples": [
+        {"reportedModel": "STKM1000400", "canonicalModel": "STKM1000400", "capacityToken": "1000"},
+        {"reportedModel": "STKM2000400", "canonicalModel": "STKM2000400", "capacityToken": "2000"},
+        {"reportedModel": "STKM4000400", "canonicalModel": "STKM4000400", "capacityToken": "4000"},
+        {"reportedModel": "STKM5000400", "canonicalModel": "STKM5000400", "capacityToken": "5000"},
+        {"reportedModel": "STEA5000402", "canonicalModel": "STEA5000402", "capacityToken": "5000"}
+      ]
+    },
+    {
+      "id": "seagate-backup-plus-portable-hdd",
+      "manufacturer": "Seagate",
+      "family": "Backup Plus Portable HDD",
+      "productName": "Backup Plus Portable Drive",
+      "prefersMarketingNameOnly": true,
+      "mediaKind": "HDD",
+      "interfaces": ["USB", "SATA"],
+      "introduced": 2014,
+      "modelPatterns": [
+        "^(?:SEAGATE[ _])?(?<model>STDR(?<capacity>1000|2000|4000|5000)100)(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"1000": "1TB", "2000": "2TB", "4000": "4TB", "5000": "5TB"},
+      "sourceURL": "https://www.seagate.com/products/external-hard-drives/portable-hard-drives/backup-plus-portable-drive/",
+      "examples": [
+        {"reportedModel": "STDR1000100", "canonicalModel": "STDR1000100", "capacityToken": "1000"},
+        {"reportedModel": "STDR2000100", "canonicalModel": "STDR2000100", "capacityToken": "2000"},
+        {"reportedModel": "STDR4000100", "canonicalModel": "STDR4000100", "capacityToken": "4000"},
+        {"reportedModel": "STDR5000100", "canonicalModel": "STDR5000100", "capacityToken": "5000"}
+      ]
+    },
+    {
+      "id": "seagate-backup-plus-slim-hdd",
+      "manufacturer": "Seagate",
+      "family": "Backup Plus Slim",
+      "productName": "Backup Plus Slim",
+      "prefersMarketingNameOnly": true,
+      "mediaKind": "HDD",
+      "interfaces": ["USB", "SATA"],
+      "introduced": 2014,
+      "modelPatterns": [
+        "^(?:SEAGATE[ _])?(?<model>STHN(?<capacity>1000|2000)400)(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"1000": "1TB", "2000": "2TB"},
+      "sourceURL": "https://www.seagate.com/products/external-hard-drives/portable-hard-drives/backup-plus-slim/",
+      "examples": [
+        {"reportedModel": "STHN1000400", "canonicalModel": "STHN1000400", "capacityToken": "1000"},
+        {"reportedModel": "STHN2000400", "canonicalModel": "STHN2000400", "capacityToken": "2000"}
+      ]
+    },
+    {
+      "id": "seagate-one-touch-hdd",
+      "manufacturer": "Seagate",
+      "family": "One Touch HDD",
+      "productName": "One Touch HDD",
+      "prefersMarketingNameOnly": true,
+      "mediaKind": "HDD",
+      "interfaces": ["USB", "SATA"],
+      "introduced": 2019,
+      "modelPatterns": [
+        "^(?:SEAGATE[ _])?(?<model>STKC(?<capacity>1000|2000|4000|5000)400)(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"1000": "1TB", "2000": "2TB", "4000": "4TB", "5000": "5TB"},
+      "sourceURL": "https://www.seagate.com/products/external-hard-drives/portable-hard-drives/one-touch-hdd/",
+      "examples": [
+        {"reportedModel": "STKC1000400", "canonicalModel": "STKC1000400", "capacityToken": "1000"},
+        {"reportedModel": "STKC2000400", "canonicalModel": "STKC2000400", "capacityToken": "2000"},
+        {"reportedModel": "STKC4000400", "canonicalModel": "STKC4000400", "capacityToken": "4000"},
+        {"reportedModel": "STKC5000400", "canonicalModel": "STKC5000400", "capacityToken": "5000"}
+      ]
+    },
+    {
+      "id": "lacie-mobile-drive-hdd",
+      "manufacturer": "LaCie",
+      "family": "Mobile Drive HDD",
+      "productName": "Mobile Drive",
+      "prefersMarketingNameOnly": true,
+      "mediaKind": "HDD",
+      "interfaces": ["USB", "SATA"],
+      "introduced": 2019,
+      "modelPatterns": [
+        "^(?:LACIE[ _])?(?<model>STHG(?<capacity>1000|2000|4000|5000)400)(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"1000": "1TB", "2000": "2TB", "4000": "4TB", "5000": "5TB"},
+      "sourceURL": "https://www.lacie.com/products/mobile-drive/",
+      "examples": [
+        {"reportedModel": "STHG1000400", "canonicalModel": "STHG1000400", "capacityToken": "1000"},
+        {"reportedModel": "STHG2000400", "canonicalModel": "STHG2000400", "capacityToken": "2000"},
+        {"reportedModel": "STHG4000400", "canonicalModel": "STHG4000400", "capacityToken": "4000"},
+        {"reportedModel": "STHG5000400", "canonicalModel": "STHG5000400", "capacityToken": "5000"}
+      ]
+    },
+    {
+      "id": "lacie-rugged-mini-hdd",
+      "manufacturer": "LaCie",
+      "family": "Rugged Mini HDD",
+      "productName": "Rugged Mini",
+      "prefersMarketingNameOnly": true,
+      "mediaKind": "HDD",
+      "interfaces": ["USB", "SATA"],
+      "introduced": 2019,
+      "modelPatterns": [
+        "^(?:LACIE[ _])?(?<model>STJJ(?<capacity>1000|2000|4000|5000)400)(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"1000": "1TB", "2000": "2TB", "4000": "4TB", "5000": "5TB"},
+      "sourceURL": "https://www.lacie.com/products/portable-hard-drives/rugged-mini/",
+      "examples": [
+        {"reportedModel": "STJJ1000400", "canonicalModel": "STJJ1000400", "capacityToken": "1000"},
+        {"reportedModel": "STJJ2000400", "canonicalModel": "STJJ2000400", "capacityToken": "2000"},
+        {"reportedModel": "STJJ4000400", "canonicalModel": "STJJ4000400", "capacityToken": "4000"},
+        {"reportedModel": "STJJ5000400", "canonicalModel": "STJJ5000400", "capacityToken": "5000"}
+      ]
+    },
     {
       "id": "arri-codex-compact-drive",
       "manufacturer": "Codex",

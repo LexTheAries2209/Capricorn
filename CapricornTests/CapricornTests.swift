@@ -280,6 +280,42 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(westernDigital.displayName, "WUH722016CLE604 · WD Ultrastar DC HC555 16TB")
     }
 
+    func testExternalDriveModelCatalogIdentifiesSeagateAndLaCieProductNames() throws {
+        let cases: [(reportedModel: String, recordID: String, productName: String, marketingName: String)] = [
+            (
+                "ST5000LM000-2U8170",
+                "seagate-barracuda-2-5-hdd",
+                "BarraCuda 2.5-inch Hard Drive",
+                "Seagate BarraCuda 2.5-inch Hard Drive 5TB"
+            ),
+            ("STGX5000400", "seagate-portable-hdd", "Portable Hard Drive", "Seagate Portable Hard Drive 5TB"),
+            ("STKM5000400", "seagate-expansion-portable-hdd", "Expansion Portable Drive", "Seagate Expansion Portable Drive 5TB"),
+            ("STDR5000100", "seagate-backup-plus-portable-hdd", "Backup Plus Portable Drive", "Seagate Backup Plus Portable Drive 5TB"),
+            ("STHN2000400", "seagate-backup-plus-slim-hdd", "Backup Plus Slim", "Seagate Backup Plus Slim 2TB"),
+            ("STKC5000400", "seagate-one-touch-hdd", "One Touch HDD", "Seagate One Touch HDD 5TB"),
+            ("STHG5000400", "lacie-mobile-drive-hdd", "Mobile Drive", "LaCie Mobile Drive 5TB"),
+            ("STJJ5000400", "lacie-rugged-mini-hdd", "Rugged Mini", "LaCie Rugged Mini 5TB")
+        ]
+
+        for testCase in cases {
+            let drive = Self.externalCatalogDrive(model: testCase.reportedModel)
+            let match = try XCTUnwrap(
+                ExternalDriveModelCatalog.bundled.match(for: drive),
+                testCase.reportedModel
+            )
+            XCTAssertEqual(match.recordID, testCase.recordID, testCase.reportedModel)
+            XCTAssertEqual(match.productName, testCase.productName, testCase.reportedModel)
+            XCTAssertEqual(match.marketingName, testCase.marketingName, testCase.reportedModel)
+            XCTAssertEqual(drive.catalogSidebarDisplayName, testCase.marketingName, testCase.reportedModel)
+        }
+
+        let screenshotDrive = Self.externalCatalogDrive(model: "ST5000LM000-2U8170")
+        XCTAssertEqual(
+            screenshotDrive.catalogDisplayName,
+            "ST5000LM000 · Seagate BarraCuda 2.5-inch Hard Drive 5TB"
+        )
+    }
+
     func testExternalDriveModelCatalogIdentifiesSamsungPM9A1NVMe() throws {
         var drive = Self.externalCatalogDrive(model: "SAMSUNG MZVL21T0HCLR-00B00")
         drive.protocolName = "PCI-Express"
@@ -705,7 +741,7 @@ final class CapricornTests: XCTestCase {
     }
 
     func testExternalDriveModelCatalogRejectsUnsupportedSchemaAndInvalidRegex() {
-        let unsupportedSchema = Data(#"{"schemaVersion":2,"records":[]}"#.utf8)
+        let unsupportedSchema = Data(#"{"schemaVersion":3,"records":[]}"#.utf8)
         let invalidRegex = Data(#"{"schemaVersion":1,"records":[{"id":"bad","manufacturer":"Vendor","family":"Family","mediaKind":"HDD","interfaces":["SATA"],"introduced":2024,"modelPatterns":["("],"capacityLabels":{"1":"1TB"},"sourceURL":"https://example.com","examples":[]}]}"#.utf8)
 
         XCTAssertThrowsError(try ExternalDriveModelCatalog(data: unsupportedSchema))
