@@ -133,6 +133,26 @@
       ]
     },
     {
+      "id": "seagate-ultra-touch-hdd",
+      "manufacturer": "Seagate",
+      "family": "Ultra Touch HDD",
+      "productName": "Ultra Touch HDD",
+      "prefersMarketingNameOnly": true,
+      "mediaKind": "HDD",
+      "interfaces": ["USB", "SATA"],
+      "introduced": 2023,
+      "modelPatterns": [
+        "^(?:SEAGATE[ _])?(?<model>STMA(?<capacity>2000|4000|5000)400)(?:[-/ ].*)?$"
+      ],
+      "capacityLabels": {"2000": "2TB", "4000": "4TB", "5000": "5TB"},
+      "sourceURL": "https://www.seagate.com/support/external-hard-drives/portable-hard-drives/ultra-touch-hdd-2023/",
+      "examples": [
+        {"reportedModel": "STMA2000400", "canonicalModel": "STMA2000400", "capacityToken": "2000"},
+        {"reportedModel": "STMA4000400", "canonicalModel": "STMA4000400", "capacityToken": "4000"},
+        {"reportedModel": "STMA5000400", "canonicalModel": "STMA5000400", "capacityToken": "5000"}
+      ]
+    },
+    {
       "id": "lacie-mobile-drive-hdd",
       "manufacturer": "LaCie",
       "family": "Mobile Drive HDD",

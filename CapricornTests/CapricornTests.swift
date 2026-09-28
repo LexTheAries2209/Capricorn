@@ -293,6 +293,7 @@ final class CapricornTests: XCTestCase {
             ("STDR5000100", "seagate-backup-plus-portable-hdd", "Backup Plus Portable Drive", "Seagate Backup Plus Portable Drive 5TB"),
             ("STHN2000400", "seagate-backup-plus-slim-hdd", "Backup Plus Slim", "Seagate Backup Plus Slim 2TB"),
             ("STKC5000400", "seagate-one-touch-hdd", "One Touch HDD", "Seagate One Touch HDD 5TB"),
+            ("STMA5000400", "seagate-ultra-touch-hdd", "Ultra Touch HDD", "Seagate Ultra Touch HDD 5TB"),
             ("STHG5000400", "lacie-mobile-drive-hdd", "Mobile Drive", "LaCie Mobile Drive 5TB"),
             ("STJJ5000400", "lacie-rugged-mini-hdd", "Rugged Mini", "LaCie Rugged Mini 5TB")
         ]
