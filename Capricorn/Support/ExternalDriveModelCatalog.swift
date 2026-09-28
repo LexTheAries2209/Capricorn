@@ -30,6 +30,7 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
         var id: String
         var manufacturer: String
         var family: String
+        var productName: String?
         var mediaKind: String
         var interfaces: [String]
         var introduced: Int
@@ -44,13 +45,14 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
 
         func marketingName(capacityToken: String) -> String? {
             guard let capacity = capacityLabels[capacityToken.uppercased()] else { return nil }
-            return "\(manufacturer) \(family) \(capacity)"
+            return "\(manufacturer) \(productName ?? family) \(capacity)"
         }
     }
 
     struct Match: Equatable, Sendable {
         var recordID: String
         var family: String
+        var productName: String
         var capacityLabel: String
         var canonicalModel: String
         var marketingName: String
@@ -151,7 +153,7 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
 
     init(data: Data) throws {
         let document = try JSONDecoder().decode(Document.self, from: data)
-        guard document.schemaVersion == 1 else {
+        guard document.schemaVersion == 1 || document.schemaVersion == 2 else {
             throw CatalogError.unsupportedSchema(document.schemaVersion)
         }
 
@@ -207,6 +209,7 @@ struct ExternalDriveModelCatalog: @unchecked Sendable {
                     return Match(
                         recordID: compiled.record.id,
                         family: compiled.record.family,
+                        productName: compiled.record.productName ?? compiled.record.family,
                         capacityLabel: compiled.record.capacityLabels[capacityToken.uppercased()] ?? capacityToken,
                         canonicalModel: model.uppercased(),
                         marketingName: marketingName,
