@@ -2555,6 +2555,36 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(snapshot.selfTestStatus?.contains("Short") == true)
     }
 
+    func testSmartctlATAParserDoesNotTreatPassedZeroRemainingAsRunning() {
+        let fixture = """
+        {
+          "smartctl": {"exit_status": 0},
+          "ata_smart_self_test_log": {
+            "standard": {
+              "table": [
+                {
+                  "type": {"value": 1, "string": "Short offline"},
+                  "status": {"value": 0, "string": "Completed without error", "passed": true},
+                  "remaining_percent": 0,
+                  "lifetime_hours": 442
+                }
+              ]
+            }
+          }
+        }
+        """
+
+        let snapshot = SmartctlParser.parseSnapshot(
+            Data(fixture.utf8),
+            drive: Self.fixtureDrive(),
+            providerName: "smartctl",
+            exitStatus: 0
+        )
+
+        XCTAssertEqual(snapshot.selfTestReport?.state, .passed)
+        XCTAssertEqual(snapshot.selfTestReport?.entries.first?.state, .passed)
+    }
+
     func testSmartctlNVMeSelfTestParserHandlesNoCurrentTestAndCompletedResult() {
         let drive = Self.fixtureDrive()
         let snapshot = SmartctlParser.parseSnapshot(

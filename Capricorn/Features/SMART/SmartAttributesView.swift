@@ -967,7 +967,10 @@ private struct SmartSelfTestHistoryDetail: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(record.driveName)
                 .font(.title3.bold())
-            LabeledContent(language.t("Completed"), value: record.capturedAt.formatted(date: .abbreviated, time: .standard))
+            LabeledContent(
+                language.t(record.state.isTerminal ? "Completed" : "Captured"),
+                value: record.capturedAt.formatted(date: .abbreviated, time: .standard)
+            )
             LabeledContent(language.t("Test Type"), value: language.smartSelfTestKindTitle(record.testKind))
             LabeledContent(language.t("Status"), value: language.statusMessage(record.statusDetails))
             if let hours = record.powerOnHours {

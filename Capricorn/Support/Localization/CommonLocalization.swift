@@ -689,6 +689,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Op": "操作",
         "Latency": "延迟",
         "Current Status": "当前状态",
+        "Captured": "读取时间",
         "Self-test log available": "有自检日志，点击展开",
         "No self-test log is available from current providers.": "当前数据来源没有提供自检日志。",
         "No Self-Test Record": "没有自检记录",

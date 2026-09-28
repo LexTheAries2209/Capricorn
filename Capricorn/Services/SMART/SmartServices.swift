@@ -1698,7 +1698,6 @@ enum SmartctlParser {
     }
 
     private static func classifySelfTestState(status: String, passed: Bool?, remaining: Int?) -> SmartSelfTestState {
-        if remaining != nil && remaining != 100 { return .running }
         if passed == true { return .passed }
         let lowercased = status.lowercased()
         if lowercased.contains("no self-test") || lowercased.contains("no test") { return .noLog }
@@ -1706,6 +1705,7 @@ enum SmartctlParser {
         if lowercased.contains("abort") || lowercased.contains("interrupt") { return .aborted }
         if lowercased.contains("error") || lowercased.contains("fail") { return .failed }
         if lowercased.contains("completed without error") || lowercased.contains("passed") || lowercased.contains("success") { return .passed }
+        if let remaining, remaining > 0 { return .running }
         if status.isEmpty { return .noLog }
         return .unknown
     }
