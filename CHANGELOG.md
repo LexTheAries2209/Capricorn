@@ -4,6 +4,20 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.9.2 - 2026-09-28
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.2) | [Release Notes / 发布说明](docs/releases/v2.9.2.md)
+
+### 中文
+
+- 扩充硬盘型号数据库，识别更多 Seagate BarraCuda、Portable、Expansion、Backup Plus、One Touch、Ultra Touch 及 LaCie Mobile Drive、Rugged Mini 型号；优先匹配更具体的外置盒规则。
+- 修正 SMART 自检结果解析：不再将剩余进度为 0 的已通过测试误标为“进行中”；未完成的历史记录显示读取时间而非完成时间。
+
+### English
+
+- Expands drive-model recognition for Seagate BarraCuda, Portable, Expansion, Backup Plus, One Touch and Ultra Touch, and LaCie Mobile Drive and Rugged Mini; specific enclosure rules now take priority.
+- Fixes SMART self-test state parsing so a passed test with zero remaining is not mislabeled as running; nonterminal history records show capture time rather than completion time.
+
 ## V2.9.1 - 2026-09-23
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.1) | [Release Notes / 发布说明](docs/releases/v2.9.1.md)
