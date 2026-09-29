@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var viewModel: AppModel
     @State private var preferences: AppPreferences
     @State private var showsDiskCheckReport = false
+    @State private var showsSmartSelfTestSheet = false
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
     @AppStorage("representativeVolumeSelectionsByDrive") private var representativeVolumePreferencesJSON = ""
     @Environment(\.modelContext) private var modelContext
@@ -170,6 +171,9 @@ struct ContentView: View {
                 )
             }
         }
+        .onChange(of: viewModel.smartSelfTestPresentation != nil) {
+            showsSmartSelfTestSheet = viewModel.smartSelfTestPresentation != nil
+        }
         .onChange(of: viewModel.completedSmartSelfTest?.id) {
             guard let completion = viewModel.completedSmartSelfTest else { return }
             if let report = completion.report {
@@ -237,7 +241,7 @@ struct ContentView: View {
         .sheet(isPresented: firstAidPresentationBinding) {
             DiskFirstAidSheet(viewModel: viewModel, language: language)
         }
-        .sheet(isPresented: smartSelfTestPresentationBinding, onDismiss: {
+        .sheet(isPresented: $showsSmartSelfTestSheet, onDismiss: {
             // Keep the sheet content alive until its dismissal animation finishes.
             viewModel.hideSmartSelfTestMonitor()
         }) {
@@ -253,13 +257,6 @@ struct ContentView: View {
                     viewModel.closeFirstAid()
                 }
             }
-        )
-    }
-
-    private var smartSelfTestPresentationBinding: Binding<Bool> {
-        Binding(
-            get: { viewModel.smartSelfTestPresentation != nil },
-            set: { _ in }
         )
     }
 
