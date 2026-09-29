@@ -162,12 +162,12 @@ final class AppModel {
         set { liveActivitySession.workloadState = newValue ? .running : .idle }
     }
 
-    var isLiveActivityDriveSelectionLocked: Bool {
-        isLiveActivityMonitoring || isLiveActivityWorkloadRunning
+    var isDriveSelectionLocked: Bool {
+        isBenchmarking || isLiveActivityMonitoring || isLiveActivityWorkloadRunning
     }
 
     func selectDriveFromSidebar(_ driveID: String?) {
-        guard !isLiveActivityDriveSelectionLocked || driveID == selectedDriveID else { return }
+        guard !isDriveSelectionLocked || driveID == selectedDriveID else { return }
         selectedDriveID = driveID
     }
 

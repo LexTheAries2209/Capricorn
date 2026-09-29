@@ -102,7 +102,7 @@ extension CapricornTests {
     }
 
     @MainActor
-    func testSidebarDriveSelectionLocksToLiveActivitySessionDriveUntilStopped() {
+    func testSidebarDriveSelectionLocksDuringExclusiveWorkloads() {
         var firstDrive = Self.fixtureDrive(mountedAt: "/Volumes/First")
         firstDrive.bsdName = "disk8"
         var secondDrive = Self.fixtureDrive(mountedAt: "/Volumes/Second")
@@ -128,6 +128,14 @@ extension CapricornTests {
         model.isLiveActivityWorkloadRunning = false
         model.selectDriveFromSidebar(firstDrive.id)
         XCTAssertEqual(model.selectedDriveID, firstDrive.id)
+
+        model.isBenchmarking = true
+        model.selectDriveFromSidebar(secondDrive.id)
+        XCTAssertEqual(model.selectedDriveID, firstDrive.id)
+
+        model.isBenchmarking = false
+        model.selectDriveFromSidebar(secondDrive.id)
+        XCTAssertEqual(model.selectedDriveID, secondDrive.id)
     }
 
     @MainActor

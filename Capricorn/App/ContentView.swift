@@ -276,7 +276,7 @@ struct ContentView: View {
     }
 
     private var sidebar: some View {
-        let isDriveSelectionLocked = viewModel.isLiveActivityDriveSelectionLocked
+        let isDriveSelectionLocked = viewModel.isDriveSelectionLocked
 
         return List(selection: sidebarDriveSelection) {
             Section(language.t("Drives")) {
