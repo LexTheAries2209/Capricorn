@@ -2356,15 +2356,15 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive))
     }
 
-    func testSmartSnapshotActionsFollowCurrentAttributesAfterRecovery() {
+    func testSmartSnapshotHeaderFollowsCurrentAttributesAfterRecovery() {
         let drive = Self.fixtureDrive()
-        XCTAssertFalse(SmartSnapshotActionsVisibilityPolicy.showsActions(for: nil))
-        XCTAssertFalse(SmartSnapshotActionsVisibilityPolicy.showsActions(
+        XCTAssertFalse(SmartSnapshotHeaderVisibilityPolicy.showsHeader(for: nil))
+        XCTAssertFalse(SmartSnapshotHeaderVisibilityPolicy.showsHeader(
             for: .unavailable(for: drive, reason: "No SMART data.")
         ))
 
         var snapshot = Self.fixtureSnapshot(for: drive)
-        XCTAssertFalse(SmartSnapshotActionsVisibilityPolicy.showsActions(for: snapshot))
+        XCTAssertFalse(SmartSnapshotHeaderVisibilityPolicy.showsHeader(for: snapshot))
 
         snapshot.attributes = [SmartAttribute(
             id: "temperature.current",
@@ -2376,10 +2376,10 @@ final class CapricornTests: XCTestCase {
             status: .good,
             source: "Fixture"
         )]
-        XCTAssertTrue(SmartSnapshotActionsVisibilityPolicy.showsActions(for: snapshot))
+        XCTAssertTrue(SmartSnapshotHeaderVisibilityPolicy.showsHeader(for: snapshot))
 
         snapshot.attributes = []
-        XCTAssertFalse(SmartSnapshotActionsVisibilityPolicy.showsActions(for: snapshot))
+        XCTAssertFalse(SmartSnapshotHeaderVisibilityPolicy.showsHeader(for: snapshot))
     }
 
     func testSmartDiagnosticsPanelRequiresLocalSmartAttributes() {

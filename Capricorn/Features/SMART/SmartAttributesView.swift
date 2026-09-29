@@ -43,10 +43,10 @@ struct SmartAttributesView: View {
                 showsSerialNumber: true
             )
 
-            HStack(alignment: .top, spacing: 12) {
-                snapshotHeaderDetails
-                Spacer()
-                if SmartSnapshotActionsVisibilityPolicy.showsActions(for: snapshot) {
+            if SmartSnapshotHeaderVisibilityPolicy.showsHeader(for: snapshot) {
+                HStack(alignment: .top, spacing: 12) {
+                    snapshotHeaderDetails
+                    Spacer()
                     snapshotActions
                 }
             }
@@ -280,9 +280,9 @@ struct SmartAttributesView: View {
     }
 }
 
-enum SmartSnapshotActionsVisibilityPolicy {
+enum SmartSnapshotHeaderVisibilityPolicy {
     // Read the current snapshot on each refresh so the header returns with its attributes.
-    static func showsActions(for snapshot: SmartSnapshot?) -> Bool {
+    static func showsHeader(for snapshot: SmartSnapshot?) -> Bool {
         snapshot?.attributes.isEmpty == false
     }
 }
