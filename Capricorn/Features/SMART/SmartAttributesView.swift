@@ -46,7 +46,9 @@ struct SmartAttributesView: View {
             HStack(alignment: .top, spacing: 12) {
                 snapshotHeaderDetails
                 Spacer()
-                snapshotActions
+                if SmartSnapshotActionsVisibilityPolicy.showsActions(for: snapshot) {
+                    snapshotActions
+                }
             }
 
             primarySmartContent
@@ -275,6 +277,13 @@ struct SmartAttributesView: View {
     private func errorLogEntryCount(_ attribute: SmartAttribute) -> Int {
         let digits = attribute.rawValue.split(whereSeparator: { !$0.isNumber && $0 != "-" }).first
         return Int(digits.map(String.init) ?? "0") ?? 0
+    }
+}
+
+enum SmartSnapshotActionsVisibilityPolicy {
+    // Read the current snapshot on each refresh so the header returns with its attributes.
+    static func showsActions(for snapshot: SmartSnapshot?) -> Bool {
+        snapshot?.attributes.isEmpty == false
     }
 }
 

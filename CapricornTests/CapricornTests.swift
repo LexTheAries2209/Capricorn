@@ -2356,6 +2356,32 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive))
     }
 
+    func testSmartSnapshotActionsFollowCurrentAttributesAfterRecovery() {
+        let drive = Self.fixtureDrive()
+        XCTAssertFalse(SmartSnapshotActionsVisibilityPolicy.showsActions(for: nil))
+        XCTAssertFalse(SmartSnapshotActionsVisibilityPolicy.showsActions(
+            for: .unavailable(for: drive, reason: "No SMART data.")
+        ))
+
+        var snapshot = Self.fixtureSnapshot(for: drive)
+        XCTAssertFalse(SmartSnapshotActionsVisibilityPolicy.showsActions(for: snapshot))
+
+        snapshot.attributes = [SmartAttribute(
+            id: "temperature.current",
+            name: "Temperature",
+            rawValue: "31 C",
+            current: nil,
+            worst: nil,
+            threshold: nil,
+            status: .good,
+            source: "Fixture"
+        )]
+        XCTAssertTrue(SmartSnapshotActionsVisibilityPolicy.showsActions(for: snapshot))
+
+        snapshot.attributes = []
+        XCTAssertFalse(SmartSnapshotActionsVisibilityPolicy.showsActions(for: snapshot))
+    }
+
     func testSmartDiagnosticsPanelRequiresLocalSmartAttributes() {
         let attribute = SmartAttribute(
             id: "temperature.current",
