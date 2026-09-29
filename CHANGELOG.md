@@ -4,6 +4,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.9.3 - 2026-09-29
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.3) | [Release Notes / 发布说明](docs/releases/v2.9.3.md)
+
+### 中文
+
+- 无 SMART 属性时隐藏 SMART 页面顶部操作区；没有 `smartctl` 来源属性时不显示 SMART 诊断区，避免对无法完成诊断的设备提供误导性控件。
+- 修复 SMART 自检确认窗口取消后的白色残留块，并恢复快速自检取消/关闭路径；sheet 退出动画完成后再清理状态。
+- 测速、实时监控和实时工作负载运行期间锁定侧边栏硬盘选择，避免切换目标导致状态串盘；任务结束后恢复选择。
+
+### English
+
+- Hides the SMART-page action header when no SMART attributes are available and hides SMART diagnostics unless the current attributes include a `smartctl` source.
+- Fixes the SMART self-test confirmation dismissal artifact and restores reliable cancel/close behavior by cleaning state after the sheet dismissal animation.
+- Locks sidebar drive selection during benchmarks, live monitoring, and live workloads to prevent cross-drive state changes; selection is restored after completion.
+
 ## V2.9.2 - 2026-09-28
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.2) | [Release Notes / 发布说明](docs/releases/v2.9.2.md)
