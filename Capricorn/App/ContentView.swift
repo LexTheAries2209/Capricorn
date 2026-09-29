@@ -237,7 +237,10 @@ struct ContentView: View {
         .sheet(isPresented: firstAidPresentationBinding) {
             DiskFirstAidSheet(viewModel: viewModel, language: language)
         }
-        .sheet(isPresented: smartSelfTestPresentationBinding) {
+        .sheet(isPresented: smartSelfTestPresentationBinding, onDismiss: {
+            // Keep the sheet content alive until its dismissal animation finishes.
+            viewModel.hideSmartSelfTestMonitor()
+        }) {
             SmartSelfTestPresentationSheet(viewModel: viewModel, language: language)
         }
     }
@@ -256,11 +259,7 @@ struct ContentView: View {
     private var smartSelfTestPresentationBinding: Binding<Bool> {
         Binding(
             get: { viewModel.smartSelfTestPresentation != nil },
-            set: { isPresented in
-                if !isPresented {
-                    viewModel.hideSmartSelfTestMonitor()
-                }
-            }
+            set: { _ in }
         )
     }
 

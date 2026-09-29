@@ -4,6 +4,7 @@ import SwiftUI
 struct SmartSelfTestPresentationSheet: View {
     let viewModel: AppModel
     let language: AppLanguage
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Group {
@@ -13,14 +14,18 @@ struct SmartSelfTestPresentationSheet: View {
                     request: request,
                     language: language,
                     start: { viewModel.confirmSmartSelfTest(request) },
-                    cancel: { viewModel.hideSmartSelfTestMonitor() }
+                    cancel: dismissSheet
                 )
             case .monitor:
-                SmartSelfTestMonitorView(viewModel: viewModel, language: language)
+                SmartSelfTestMonitorView(viewModel: viewModel, language: language, dismiss: dismissSheet)
             case nil:
                 EmptyView()
             }
         }
+    }
+
+    private func dismissSheet() {
+        dismiss()
     }
 }
 
@@ -135,6 +140,7 @@ private struct SmartSelfTestConfirmationView: View {
 private struct SmartSelfTestMonitorView: View {
     let viewModel: AppModel
     let language: AppLanguage
+    let dismiss: () -> Void
     @State private var isConfirmingAbort = false
 
     private var drive: DriveDevice? {
@@ -176,7 +182,7 @@ private struct SmartSelfTestMonitorView: View {
                     }
                     Spacer()
                     Button(language.t(isActive ? "Hide Window" : "Close")) {
-                        viewModel.hideSmartSelfTestMonitor()
+                        dismiss()
                     }
                     .keyboardShortcut(.cancelAction)
 
