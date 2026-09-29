@@ -291,42 +291,13 @@ enum SmartDiagnosticsVisibilityPolicy {
     static func showsPanel(for drive: DriveDevice, attributes: [SmartAttribute]) -> Bool {
         !drive.isNetwork
             && !drive.isSystemDisk
-            && !identifiesUnsupportedSamsungT7(drive)
-            && !attributes.isEmpty
+            && attributes.contains { $0.source.caseInsensitiveCompare("smartctl") == .orderedSame }
     }
 
     static func showsErrorLogSection(for drive: DriveDevice) -> Bool {
         !drive.isSystemDisk
     }
 
-    private static func identifiesUnsupportedSamsungT7(_ drive: DriveDevice) -> Bool {
-        // The virtual T7 fixture intentionally supports simulated diagnostics.
-        guard !drive.isVirtual else { return false }
-
-        switch drive.catalogMatch?.recordID {
-        case "samsung-portable-t7":
-            return true
-        case "samsung-portable-t7-shield", "samsung-portable-t7-touch":
-            return false
-        default:
-            break
-        }
-
-        let values = [
-            drive.displayName,
-            drive.mediaName,
-            drive.model,
-            drive.usbDevice?.productName
-        ]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
-
-        guard !values.contains(where: { $0.contains("T7 SHIELD") || $0.contains("T7 TOUCH") }) else {
-            return false
-        }
-        return values.contains { value in
-            value.contains("PSSD T7") || value.contains("PORTABLE SSD T7")
-        }
-    }
 }
 
 struct SmartDiagnosticsPanel: View {

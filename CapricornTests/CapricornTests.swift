@@ -2382,7 +2382,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(SmartSnapshotHeaderVisibilityPolicy.showsHeader(for: snapshot))
     }
 
-    func testSmartDiagnosticsPanelRequiresLocalSmartAttributes() {
+    func testSmartDiagnosticsPanelRequiresSmartctlAttributes() {
         let attribute = SmartAttribute(
             id: "temperature.current",
             name: "Temperature",
@@ -2391,7 +2391,7 @@ final class CapricornTests: XCTestCase {
             worst: nil,
             threshold: nil,
             status: .good,
-            source: "Fixture"
+            source: "smartctl"
         )
         var drive = Self.fixtureDrive()
         drive.isSystemDisk = false
@@ -2399,66 +2399,16 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
         XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: []))
 
+        var nativeAttribute = attribute
+        nativeAttribute.source = "Native macOS"
+        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [nativeAttribute]))
+
         drive.isSystemDisk = true
         XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
 
         drive.isSystemDisk = false
         drive.isNetwork = true
         XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: [attribute]))
-    }
-
-    func testSmartDiagnosticsPanelHidesSamsungT7ButKeepsT7Shield() {
-        var t7 = Self.fixtureDrive()
-        t7.isSystemDisk = false
-        t7.isInternal = false
-        t7.protocolName = "USB"
-        t7.displayName = "PSSD T7"
-        t7.mediaName = "Samsung PSSD T7 Media"
-        t7.model = "Samsung Portable SSD T7"
-        t7.usbDevice = DriveUSBDeviceIdentity(
-            vendorName: "Samsung",
-            productName: "Portable SSD T7",
-            vendorID: 0x04E8,
-            productID: 0x4001
-        )
-        let attribute = SmartAttribute(
-            id: "temperature.current",
-            name: "Temperature",
-            rawValue: "31 C",
-            current: nil,
-            worst: nil,
-            threshold: nil,
-            status: .good,
-            source: "Fixture"
-        )
-
-        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: t7, attributes: [attribute]))
-        var catalogT7 = t7
-        catalogT7.displayName = "USB disk"
-        catalogT7.mediaName = "USB disk"
-        catalogT7.model = "MU-PC2T0T"
-        catalogT7.usbDevice = nil
-        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(for: catalogT7, attributes: [attribute]))
-
-        var t7Shield = t7
-        t7Shield.displayName = "Portable SSD T7 Shield"
-        t7Shield.mediaName = "Samsung Portable SSD T7 Shield Media"
-        t7Shield.model = "MU-PE4T0S/WW"
-        t7Shield.usbDevice?.productName = "Portable SSD T7 Shield"
-
-        XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsPanel(for: t7Shield, attributes: [attribute]))
-
-        t7Shield.model = nil
-        XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsPanel(for: t7Shield, attributes: [attribute]))
-
-        var t7Touch = t7
-        t7Touch.model = "MU-PC1T0S"
-        t7Touch.mediaName = "Samsung Portable SSD T7 Touch"
-        t7Touch.usbDevice?.productName = "Portable SSD T7 Touch"
-        XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsPanel(for: t7Touch, attributes: [attribute]))
-
-        t7.isVirtual = true
-        XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsPanel(for: t7, attributes: [attribute]))
     }
 
     func testHistoryDiagnosticVisibilityExcludesSystemDisks() {
