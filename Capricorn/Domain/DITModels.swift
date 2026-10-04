@@ -222,13 +222,15 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     /// CFast readers commonly expose USB as the bus protocol and do not set
     /// diskutil's SolidState flag, so the media type must remain separate.
     var isCFast: Bool {
-        [displayName, mediaName, model, usbDevice?.productName]
+        let identifiers = [displayName, mediaName, model, usbDevice?.productName]
             .compactMap { $0?.lowercased() }
-            .contains { value in
-                value.contains("cfast")
-                    || value.contains("compactflash")
-                    || value.contains("compact flash")
-            }
+        return identifiers.contains { value in
+            value.contains("cfast")
+                || value.contains("compactflash")
+                || value.contains("compact flash")
+                // SanDisk SDCFSP is a CFast product family even when the USB bridge hides the reader name.
+                || value.contains("sdcfsp-")
+        }
     }
 
     var capacityUsage: DriveCapacityUsage? {

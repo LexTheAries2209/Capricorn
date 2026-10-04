@@ -607,9 +607,6 @@ struct IOKitDriveUSBDeviceIdentityProvider: DriveUSBDeviceIdentityProviding {
             // host node exposes the vendor. Keep walking until the fields merge.
             if identityAtNode.hasAnyValue {
                 partialIdentity = Self.merge(partialIdentity, with: identityAtNode)
-                if partialIdentity?.isComplete == true {
-                    return partialIdentity
-                }
             }
 
             var parent: io_registry_entry_t = 0
@@ -628,12 +625,34 @@ struct IOKitDriveUSBDeviceIdentityProvider: DriveUSBDeviceIdentityProviding {
         _ existing: DriveUSBDeviceIdentity?,
         with incoming: DriveUSBDeviceIdentity
     ) -> DriveUSBDeviceIdentity {
-        DriveUSBDeviceIdentity(
+        let productName: String?
+        switch (existing?.productName, incoming.productName) {
+        case (nil, let incomingProductName):
+            productName = incomingProductName
+        case (let existingProductName, nil):
+            productName = existingProductName
+        case (let existingProductName?, let incomingProductName?):
+            if Self.isCFastIdentifier(incomingProductName),
+               !Self.isCFastIdentifier(existingProductName) {
+                productName = incomingProductName
+            } else {
+                productName = existingProductName
+            }
+        }
+
+        return DriveUSBDeviceIdentity(
             vendorName: existing?.vendorName ?? incoming.vendorName,
-            productName: existing?.productName ?? incoming.productName,
+            productName: productName,
             vendorID: existing?.vendorID ?? incoming.vendorID,
             productID: existing?.productID ?? incoming.productID
         )
+    }
+
+    private static func isCFastIdentifier(_ value: String) -> Bool {
+        let normalized = value.lowercased()
+        return normalized.contains("cfast")
+            || normalized.contains("compactflash")
+            || normalized.contains("compact flash")
     }
 
     private func identity(from entry: io_registry_entry_t) -> DriveUSBDeviceIdentity {
@@ -1015,10 +1034,6 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
 private extension DriveUSBDeviceIdentity {
     var hasAnyValue: Bool {
         vendorName != nil || productName != nil || vendorID != nil || productID != nil
-    }
-
-    var isComplete: Bool {
-        vendorName != nil && productName != nil && vendorID != nil && productID != nil
     }
 }
 

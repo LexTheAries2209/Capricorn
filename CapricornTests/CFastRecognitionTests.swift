@@ -3,6 +3,32 @@ import XCTest
 @testable import Capricorn
 
 final class CFastRecognitionTests: XCTestCase {
+    func testSanDiskSDCFSPModelRecognizesCFastWithoutSerialNumberOrReaderName() {
+        let drive = DriveDevice(
+            bsdName: "disk16",
+            deviceNode: "/dev/disk16",
+            displayName: "SanDisk SDCFSP-256G",
+            mediaName: "SanDisk SDCFSP-256G",
+            protocolName: "USB",
+            sizeBytes: 256_070_647_808,
+            blockSize: 512,
+            isInternal: false,
+            isRemovable: true,
+            isSolidState: false,
+            isWritable: false,
+            isVirtual: false,
+            isSystemDisk: false,
+            smartStatusRaw: nil,
+            nativeSmartKeys: [:],
+            volumes: [],
+            model: "SanDisk SDCFSP-256G",
+            serialNumber: nil
+        )
+
+        XCTAssertTrue(drive.isCFast)
+        XCTAssertEqual(DrivePageHeaderText.mediaKind(for: drive, language: .english), "CFast 2.0")
+    }
+
     func testUSBReaderIdentityRecognizesCFastMedia() {
         var drive = DriveDevice(
             bsdName: "disk11",
