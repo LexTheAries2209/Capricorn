@@ -1082,6 +1082,7 @@ final class CapricornTests: XCTestCase {
             "SMART Self-Test Monitor": "SMART 自检监视器",
             "Estimated Duration": "预计耗时",
             "Current Stage": "当前阶段",
+            "Percentage progress not reported.": "尚未报告百分比进度。",
             "View Progress": "查看进度",
             "Hide Window": "隐藏窗口",
             "Abort SMART Self-Test?": "中止 SMART 自检？",

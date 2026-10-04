@@ -281,7 +281,7 @@ private struct SmartSelfTestMonitorView: View {
                     )
                     metric(
                         title: language.t("Current Stage"),
-                        value: activeStage(progress),
+                        value: currentStageSummary(progress),
                         symbol: "waveform.path.ecg"
                     )
                 }
@@ -370,6 +370,14 @@ private struct SmartSelfTestMonitorView: View {
         case .idle:
             return language.t("Self-Test Status Unknown")
         }
+    }
+
+    private func currentStageSummary(_ progress: SmartSelfTestProgress) -> String {
+        guard case .running = viewModel.smartSelfTestSession,
+              progress.completedPercent == nil else {
+            return activeStage(progress)
+        }
+        return language.t("Percentage progress not reported.")
     }
 
     private var headerStatus: String {
