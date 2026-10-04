@@ -727,9 +727,9 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
         var current = media
         var ownsCurrent = false
         var usbSpeed: Int64?
-        var usbGeneration: String?
+        var detectedUSBGeneration: String?
         var usb4Detected = false
-        var thunderboltGeneration: String?
+        var detectedThunderboltGeneration: String?
         var thunderboltSpeed: Int64?
         var hasThunderbolt = false
 
@@ -747,7 +747,7 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
 
             if text.contains("thunderbolt") || properties["Thunderbolt Version"] != nil {
                 hasThunderbolt = true
-                thunderboltGeneration = thunderboltGeneration ?? thunderboltGeneration(from: properties["Thunderbolt Version"])
+                detectedThunderboltGeneration = detectedThunderboltGeneration ?? thunderboltGeneration(from: properties["Thunderbolt Version"])
                 thunderboltSpeed = thunderboltSpeed ?? speed(from: properties["Current Link Speed"])
             }
 
@@ -761,8 +761,8 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
                         ?? speed(from: properties["Port Speed"])
                         ?? speed(from: properties["Current Speed"])
                 }
-                if usbGeneration == nil {
-                    usbGeneration = usbGeneration(from: usbSpeed)
+                if detectedUSBGeneration == nil {
+                    detectedUSBGeneration = usbGeneration(from: usbSpeed)
                 }
             }
 
@@ -780,7 +780,7 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
         if hasThunderbolt {
             return DriveConnectionInfo(
                 transport: .thunderbolt,
-                generation: thunderboltGeneration,
+                generation: detectedThunderboltGeneration,
                 negotiatedBitsPerSecond: thunderboltSpeed,
                 pathDescription: nil
             )
@@ -796,7 +796,7 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
         guard let usbSpeed else { return nil }
         return DriveConnectionInfo(
             transport: .usb,
-            generation: usbGeneration,
+            generation: detectedUSBGeneration,
             negotiatedBitsPerSecond: usbSpeed,
             pathDescription: nil
         )
@@ -855,11 +855,14 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
     }
 
     private func properties(from entry: io_registry_entry_t) -> [String: Any] {
-        guard let dictionary = IORegistryEntryCreateCFProperties(
+        var unmanagedProperties: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(
             entry,
+            &unmanagedProperties,
             kCFAllocatorDefault,
             0
-        )?.takeRetainedValue() as? [String: Any] else {
+        ) == KERN_SUCCESS,
+        let dictionary = unmanagedProperties?.takeRetainedValue() as? [String: Any] else {
             return [:]
         }
         return dictionary
