@@ -422,14 +422,18 @@ final class NativeSmartProvider: SmartProviding, @unchecked Sendable {
 }
 
 func formatSmartDataUnits(_ units: Int64, unitBytes: Int64 = 512_000) -> String {
+    formatSmartDataUnits(units, unitBytes: unitBytes, unitLabel: "units")
+}
+
+func formatSmartDataUnits(_ units: Int64, unitBytes: Int64, unitLabel: String) -> String {
     let scaled = units.multipliedReportingOverflow(by: unitBytes)
     if !scaled.overflow {
-        return "\(formatByteCount(scaled.partialValue)) (\(units) units)"
+        return "\(formatByteCount(scaled.partialValue)) (\(units) \(unitLabel))"
     }
 
     let terabytes = Double(units) * Double(unitBytes) / 1_000_000_000_000
     let formattedTerabytes = String(format: "%.2f", terabytes)
-    return "\(formattedTerabytes) TB (\(units) units)"
+    return "\(formattedTerabytes) TB (\(units) \(unitLabel))"
 }
 
 func formatSmartLogicalBlocks(_ logicalBlocks: Int64, blockSizeBytes: Int64) -> String {
@@ -2009,9 +2013,11 @@ enum SmartctlParser {
             let raw = item.dictionary("raw")
             let name = item.string("name") ?? "Attribute \(id)"
             let rawValue = ataRawValue(
+                id: id,
                 name: name,
                 raw: raw,
-                logicalBlockSize: logicalBlockSize
+                logicalBlockSize: logicalBlockSize,
+                drive: drive
             )
             let threshold = item.int("thresh")
             let current = item.int("value")
@@ -2030,17 +2036,24 @@ enum SmartctlParser {
     }
 
     private static func ataRawValue(
+        id: Int,
         name: String,
         raw: [String: Any],
-        logicalBlockSize: Int64?
+        logicalBlockSize: Int64?,
+        drive: DriveDevice
     ) -> String {
         let fallback = raw.string("string") ?? raw.valueDescription("value") ?? ""
-        guard isLogicalBlockCounter(name),
-              let logicalBlocks = raw.int64("value"),
-              logicalBlocks >= 0,
-              let logicalBlockSize else {
+        guard let logicalBlocks = raw.int64("value"), logicalBlocks >= 0 else {
             return fallback
         }
+        if drive.isCFast, [241, 242].contains(id) {
+            return formatSmartDataUnits(
+                logicalBlocks,
+                unitBytes: 1_073_741_824,
+                unitLabel: "GiB"
+            )
+        }
+        guard isLogicalBlockCounter(name), let logicalBlockSize else { return fallback }
         return formatSmartLogicalBlocks(logicalBlocks, blockSizeBytes: logicalBlockSize)
     }
 
