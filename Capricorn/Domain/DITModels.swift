@@ -91,6 +91,47 @@ struct DriveUSBDeviceIdentity: Codable, Hashable, Sendable {
     var productID: Int?
 }
 
+enum DriveConnectionTransport: String, Codable, Hashable, Sendable {
+    case usb
+    case usb4
+    case thunderbolt
+}
+
+struct DriveConnectionInfo: Codable, Hashable, Sendable {
+    var transport: DriveConnectionTransport
+    var generation: String?
+    var negotiatedBitsPerSecond: Int64?
+    var pathDescription: String?
+
+    var compactLabel: String {
+        if let generation, !generation.isEmpty {
+            return generation
+        }
+        switch transport {
+        case .usb: return "USB"
+        case .usb4: return "USB4"
+        case .thunderbolt: return "Thunderbolt"
+        }
+    }
+
+    var detailLabel: String {
+        let type = generation ?? compactLabel
+        guard let negotiatedBitsPerSecond else { return type }
+        return "\(type) · \(Self.formatSpeed(negotiatedBitsPerSecond))"
+    }
+
+    private static func formatSpeed(_ bitsPerSecond: Int64) -> String {
+        let megabits = Double(bitsPerSecond) / 1_000_000
+        if megabits >= 1_000 {
+            let gigabits = megabits / 1_000
+            return gigabits.rounded() == gigabits
+                ? "\(Int(gigabits)) Gb/s"
+                : String(format: "%.1f Gb/s", gigabits)
+        }
+        return "\(Int(megabits.rounded())) Mb/s"
+    }
+}
+
 struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     struct Volume: Identifiable, Codable, Hashable, Sendable {
         /// Describes where a diskutil list entry sits in the storage topology.
@@ -152,6 +193,7 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     /// It is kept separate from the drive model because bridge product names
     /// such as "Elements 2621" identify the enclosure rather than the disk.
     var usbDevice: DriveUSBDeviceIdentity? = nil
+    var connectionInfo: DriveConnectionInfo? = nil
 
     var capacityUsage: DriveCapacityUsage? {
         DriveCapacityUsage.resolve(volumes: displayableVolumes)
