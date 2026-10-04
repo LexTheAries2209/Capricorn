@@ -4,6 +4,24 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.9.5 - 2026-10-04
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.5) | [Release Notes / 发布说明](docs/releases/v2.9.5.md)
+
+### 中文
+
+- 在磁盘列表和概览中显示外接磁盘的连接类型和连接速度。
+- 支持更多 CFast 媒体和外接 SSD 型号识别。
+- 改进 CFast 媒体的 SMART 累计读写数据展示。
+- 改进磁盘介质类型和 SMART 信息的显示。
+
+### English
+
+- Shows external-drive connection type and link speed in the disk list and overview.
+- Supports recognition for more CFast media and external SSD models.
+- Improves the presentation of cumulative SMART read and write data for CFast media.
+- Improves the presentation of drive media types and SMART information.
+
 ## V2.9.3 - 2026-09-29
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.3) | [Release Notes / 发布说明](docs/releases/v2.9.3.md)
