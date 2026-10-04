@@ -317,6 +317,28 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testExternalDriveModelCatalogIdentifiesSanDiskExtremePortableSSDVariants() throws {
+        let cases: [(reportedModel: String, recordID: String, marketingName: String)] = [
+            ("SDSSDE61-4T00", "sandisk-extreme-portable-ssd-e61", "SanDisk Extreme Portable SSD 4TB"),
+            ("SDSSDE81-4T00", "sandisk-extreme-pro-portable-ssd-e81", "SanDisk Extreme PRO Portable SSD 4TB"),
+            ("SanDisk Extreme 55DD Media", "sandisk-extreme-portable-ssd-55dd", "SanDisk Extreme Portable SSD 4TB")
+        ]
+
+        for testCase in cases {
+            let drive = Self.externalCatalogDrive(
+                model: testCase.reportedModel,
+                protocolName: "USB",
+                sizeBytes: 4_000_000_000_000
+            )
+            let match = try XCTUnwrap(
+                ExternalDriveModelCatalog.bundled.match(for: drive),
+                testCase.reportedModel
+            )
+            XCTAssertEqual(match.recordID, testCase.recordID, testCase.reportedModel)
+            XCTAssertEqual(match.marketingName, testCase.marketingName, testCase.reportedModel)
+        }
+    }
+
     func testExternalDriveModelCatalogPrefersSpecificUSBIdentityRecords() throws {
         let data = Data(
             #"""
@@ -7166,14 +7188,18 @@ final class CapricornTests: XCTestCase {
         )
     }
 
-    static func externalCatalogDrive(model: String, protocolName: String = "USB") -> DriveDevice {
+    static func externalCatalogDrive(
+        model: String,
+        protocolName: String = "USB",
+        sizeBytes: Int64 = 8_000_000_000_000
+    ) -> DriveDevice {
         DriveDevice(
             bsdName: "disk99",
             deviceNode: "/dev/disk99",
             displayName: model,
             mediaName: model,
             protocolName: protocolName,
-            sizeBytes: 8_000_000_000_000,
+            sizeBytes: sizeBytes,
             blockSize: 512,
             isInternal: false,
             isRemovable: true,

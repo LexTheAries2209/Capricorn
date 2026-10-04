@@ -2686,6 +2686,56 @@
       "examples": [{"reportedModel": "WDC WD60NDZW-11C8XS0", "canonicalModel": "WD60NDZW-11C8XS0", "capacityToken": "6TB"}]
     },
     {
+      "id": "sandisk-extreme-portable-ssd-e61",
+      "manufacturer": "SanDisk",
+      "family": "Extreme Portable SSD E61",
+      "productName": "Extreme Portable SSD",
+      "prefersMarketingNameOnly": true,
+      "mediaKind": "SSD",
+      "interfaces": ["USB"],
+      "introduced": 2020,
+      "modelPatterns": ["^(?:SANDISK\\s+)?(?<model>SDSSDE61)[-/ _](?<capacity>500G|1T00|2T00|4T00)(?:[-/ _].*)?$"] ,
+      "capacityLabels": {"500G": "500GB", "1T00": "1TB", "2T00": "2TB", "4T00": "4TB"},
+      "sourceURL": "https://www.sandisk.com/products/ssd/portable-ssd/",
+      "examples": [
+        {"reportedModel": "SDSSDE61-4T00", "canonicalModel": "SDSSDE61", "capacityToken": "4T00"}
+      ]
+    },
+    {
+      "id": "sandisk-extreme-pro-portable-ssd-e81",
+      "manufacturer": "SanDisk",
+      "family": "Extreme PRO Portable SSD E81",
+      "productName": "Extreme PRO Portable SSD",
+      "prefersMarketingNameOnly": true,
+      "mediaKind": "SSD",
+      "interfaces": ["USB"],
+      "introduced": 2020,
+      "modelPatterns": ["^(?:SANDISK\\s+)?(?<model>SDSSDE81)[-/ _](?<capacity>1T00|2T00|4T00)(?:[-/ _].*)?$"] ,
+      "capacityLabels": {"1T00": "1TB", "2T00": "2TB", "4T00": "4TB"},
+      "sourceURL": "https://www.sandisk.com/products/ssd/portable-ssd/",
+      "examples": [
+        {"reportedModel": "SDSSDE81-4T00", "canonicalModel": "SDSSDE81", "capacityToken": "4T00"}
+      ]
+    },
+    {
+      "id": "sandisk-extreme-portable-ssd-55dd",
+      "manufacturer": "SanDisk",
+      "family": "Extreme Portable SSD (E61/E81 family)",
+      "productName": "Extreme Portable SSD",
+      "prefersMarketingNameOnly": true,
+      "mediaKind": "SSD",
+      "interfaces": ["USB"],
+      "introduced": 2020,
+      "modelPatterns": ["^(?<model>SANDISK\\s+EXTREME\\s+55DD)(?:\\s+MEDIA)?$"] ,
+      "capacityLabels": {"4TB": "4TB"},
+      "sizeRange": {"minimumBytes": 3900000000000, "maximumBytes": 4100000000000},
+      "fixedCapacityToken": "4TB",
+      "sourceURL": "https://www.sandisk.com/products/ssd/portable-ssd/",
+      "examples": [
+        {"reportedModel": "SanDisk Extreme 55DD Media", "canonicalModel": "SANDISK EXTREME 55DD", "capacityToken": "4TB"}
+      ]
+    },
+    {
       "id": "seagate-nytro-5550",
       "manufacturer": "Seagate",
       "family": "Nytro 5550",
