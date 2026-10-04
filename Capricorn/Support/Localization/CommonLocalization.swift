@@ -765,6 +765,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Waiting for drive": "等待硬盘完成",
         "Sending the self-test command to the drive.": "正在向硬盘发送自检命令。",
         "Waiting for the drive to stop the self-test.": "正在等待硬盘停止自检。",
+        "Percentage progress not reported.": "尚未报告百分比进度。",
         "The drive has not reported percentage progress. Status refreshes every 5 seconds.": "硬盘尚未报告百分比进度，状态每 5 秒刷新一次。",
         "No additional details": "没有更多详情",
         "Quick": "快速",
