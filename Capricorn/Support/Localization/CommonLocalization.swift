@@ -385,6 +385,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Original model": "原始型号",
         "History": "历史",
         "Capacity": "容量",
+        "Connection Speed": "连接速度",
         "Used Capacity": "已用容量",
         "Available Capacity": "可用容量",
         "Used": "已用",
