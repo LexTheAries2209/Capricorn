@@ -33,6 +33,13 @@ struct OverviewView: View {
                         StatTile(title: language.t("Available Capacity"), value: formatByteCount(capacityUsage.availableBytes), symbol: "internaldrive")
                     }
                     StatTile(title: language.t("Format"), value: drive.fileSystemSummary ?? language.t("Unavailable"), symbol: "doc.richtext")
+                    if !drive.isInternal, !drive.isNetwork {
+                        StatTile(
+                            title: language.t("Connection Speed"),
+                            value: drive.connectionInfo?.detailLabel ?? language.t("Unavailable"),
+                            symbol: "cable.connector.horizontal"
+                        )
+                    }
                     StatTile(
                         title: language.t("Temperature"),
                         value: snapshot?.temperatureCelsius.map { String(format: "%.1f C", $0) } ?? language.t("Unavailable"),

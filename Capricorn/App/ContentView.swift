@@ -1140,6 +1140,9 @@ private struct DriveSidebarRow: View {
            !components.contains(where: { $0.caseInsensitiveCompare(drive.protocolName) == .orderedSame }) {
             components.append(drive.protocolName)
         }
+        if let connectionLabel = drive.connectionInfo?.compactLabel {
+            components.append(connectionLabel)
+        }
         if drive.sizeBytes > 0 {
             components.append(formatByteCount(drive.sizeBytes))
         }
