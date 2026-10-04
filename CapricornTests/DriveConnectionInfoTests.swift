@@ -23,7 +23,7 @@ final class DriveConnectionInfoTests: XCTestCase {
         )
 
         XCTAssertEqual(info.compactLabel, "TB4")
-        XCTAssertEqual(info.detailLabel, "TB4 → USB2.0 · 有效 480 Mb/s")
+        XCTAssertEqual(info.detailLabel(effectiveLabel: "有效"), "TB4 → USB2.0 · 有效 480 Mb/s")
     }
 
     func testConnectionInfoRemainsCodable() throws {
