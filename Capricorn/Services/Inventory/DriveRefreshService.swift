@@ -162,7 +162,7 @@ actor DriveRefreshService: DriveRefreshing {
 
     private static func priority(for drive: DriveDevice) -> Int {
         if drive.isSystemDisk { return 0 }
-        if drive.isSolidState { return 1 }
+        if drive.isSolidState || drive.isCFast { return 1 }
         if drive.isNetwork || drive.isMemoryCard { return 3 }
         return 2
     }

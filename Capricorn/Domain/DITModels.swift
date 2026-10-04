@@ -205,6 +205,19 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     var usbDevice: DriveUSBDeviceIdentity? = nil
     var connectionInfo: DriveConnectionInfo? = nil
 
+    /// Identifies CFast media from the device or its USB reader identity.
+    /// CFast readers commonly expose USB as the bus protocol and do not set
+    /// diskutil's SolidState flag, so the media type must remain separate.
+    var isCFast: Bool {
+        [displayName, mediaName, model, usbDevice?.productName]
+            .compactMap { $0?.lowercased() }
+            .contains { value in
+                value.contains("cfast")
+                    || value.contains("compactflash")
+                    || value.contains("compact flash")
+            }
+    }
+
     var capacityUsage: DriveCapacityUsage? {
         DriveCapacityUsage.resolve(volumes: displayableVolumes)
     }
@@ -1002,11 +1015,12 @@ enum DrivePageHeaderText {
         if drive.isNetwork {
             return language.t("Network Drive")
         }
+        if drive.isCFast {
+            return language.t("CFast 2.0")
+        }
         if drive.isMemoryCard {
             return language.t("SD Card")
         }
-        // The presentation model intentionally exposes only four states:
-        // network volume, SD card, SSD, and HDD as the catch-all physical media.
         return drive.isSolidState ? language.t("SSD") : language.t("HDD")
     }
 

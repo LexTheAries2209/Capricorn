@@ -633,6 +633,7 @@ enum ReportExporter {
 
     private static func smartSnapshotDeviceType(for drive: DriveDevice) -> String {
         if drive.isNetwork { return "Net" }
+        if drive.isCFast { return "CFast 2.0" }
         if drive.isMemoryCard { return "SD" }
         return drive.isSolidState ? "SSD" : "HDD"
     }
