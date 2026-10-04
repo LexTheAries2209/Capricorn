@@ -318,17 +318,21 @@ final class CapricornTests: XCTestCase {
     }
 
     func testExternalDriveModelCatalogIdentifiesSanDiskExtremePortableSSDVariants() throws {
-        let cases: [(reportedModel: String, recordID: String, marketingName: String)] = [
-            ("SDSSDE61-4T00", "sandisk-extreme-portable-ssd-e61", "SanDisk Extreme Portable SSD 4TB"),
-            ("SDSSDE81-4T00", "sandisk-extreme-pro-portable-ssd-e81", "SanDisk Extreme PRO Portable SSD 4TB"),
-            ("SanDisk Extreme 55DD Media", "sandisk-extreme-portable-ssd-55dd", "SanDisk Extreme Portable SSD 4TB")
+        let cases: [(reportedModel: String, sizeBytes: Int64, recordID: String, marketingName: String)] = [
+            ("SDSSDE61-4T00", 4_000_000_000_000, "sandisk-extreme-portable-ssd-e61", "SanDisk Extreme Portable SSD 4TB"),
+            ("SDSSDE81-4T00", 4_000_000_000_000, "sandisk-extreme-pro-portable-ssd-e81", "SanDisk Extreme PRO Portable SSD 4TB"),
+            ("SanDisk Extreme 55DD Media", 4_000_000_000_000, "sandisk-extreme-portable-ssd-e61-55dd-4tb", "SanDisk Extreme Portable SSD 4TB"),
+            ("SanDisk Extreme 55AE", 2_000_000_000_000, "sandisk-extreme-portable-ssd-e61-55ae-2tb", "SanDisk Extreme Portable SSD 2TB"),
+            ("SDSSDE62-2T00-GA0", 2_000_000_000_000, "sandisk-extreme-portable-ssd-e62", "SanDisk Extreme Portable SSD 2TB"),
+            ("SDSSDE62P-2T00-G25", 2_000_000_000_000, "sandisk-extreme-portable-ssd-e62p", "SanDisk Extreme Portable SSD for PlayStation 5 and PC 2TB"),
+            ("SDSSDE82-4T00-G25", 4_000_000_000_000, "sandisk-extreme-pro-portable-ssd-e82", "SanDisk Extreme PRO with USB4 Portable SSD 4TB")
         ]
 
         for testCase in cases {
             let drive = Self.externalCatalogDrive(
                 model: testCase.reportedModel,
                 protocolName: "USB",
-                sizeBytes: 4_000_000_000_000
+                sizeBytes: testCase.sizeBytes
             )
             let match = try XCTUnwrap(
                 ExternalDriveModelCatalog.bundled.match(for: drive),
