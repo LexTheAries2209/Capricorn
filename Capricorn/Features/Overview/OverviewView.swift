@@ -36,7 +36,7 @@ struct OverviewView: View {
                     if !drive.isInternal, !drive.isNetwork {
                         StatTile(
                             title: language.t("Connection Speed"),
-                            value: drive.connectionInfo?.detailLabel ?? language.t("Unavailable"),
+                            value: drive.connectionInfo?.detailLabel(effectiveLabel: language.t("Effective")) ?? language.t("Unavailable"),
                             symbol: "cable.connector.horizontal"
                         )
                     }
