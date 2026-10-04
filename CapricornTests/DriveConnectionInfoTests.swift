@@ -26,6 +26,18 @@ final class DriveConnectionInfoTests: XCTestCase {
         XCTAssertEqual(info.detailLabel(effectiveLabel: "有效"), "TB4 → USB2.0 · 有效 480 Mb/s")
     }
 
+    func testThunderboltConnectionShowsFortyGigabitSpeed() {
+        let info = DriveConnectionInfo(
+            transport: .thunderbolt,
+            generation: "TB4",
+            negotiatedBitsPerSecond: 40_000_000_000,
+            pathDescription: nil
+        )
+
+        XCTAssertEqual(info.compactLabel, "TB4")
+        XCTAssertEqual(info.detailLabel(effectiveLabel: "有效"), "TB4 · 40 Gb/s")
+    }
+
     func testConnectionInfoRemainsCodable() throws {
         let original = DriveConnectionInfo(
             transport: .usb4,

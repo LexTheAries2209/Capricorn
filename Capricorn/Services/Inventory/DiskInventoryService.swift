@@ -726,11 +726,11 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
 
         var current = media
         var ownsCurrent = false
-        var usbSpeed: Int64?
+        var detectedUSBSpeed: Int64?
         var detectedUSBGeneration: String?
         var usb4Detected = false
         var detectedThunderboltGeneration: String?
-        var thunderboltSpeed: Int64?
+        var detectedThunderboltSpeed: Int64?
         var hasThunderbolt = false
 
         defer {
@@ -741,28 +741,29 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
 
         while true {
             let properties = properties(from: current)
-            let className = (properties["IOClass"] as? String ?? "").lowercased()
-            let providerClass = (properties["IOProviderClass"] as? String ?? "").lowercased()
-            let text = "\(className) \(providerClass)".lowercased()
+            let className = registryClassName(from: current).lowercased()
+            let entryName = registryEntryName(from: current).lowercased()
+            let text = "\(className) \(entryName)".lowercased()
+
+            if let thunderboltPath = properties["Thunderbolt Path"] as? String {
+                hasThunderbolt = true
+                let pathInfo = thunderboltInfo(from: thunderboltPath)
+                detectedThunderboltGeneration = detectedThunderboltGeneration ?? pathInfo.generation
+                detectedThunderboltSpeed = minimum(detectedThunderboltSpeed, pathInfo.speed)
+            }
 
             if text.contains("thunderbolt") || properties["Thunderbolt Version"] != nil {
                 hasThunderbolt = true
                 detectedThunderboltGeneration = detectedThunderboltGeneration ?? thunderboltGeneration(from: properties["Thunderbolt Version"])
-                if let candidate = speed(from: properties["Current Link Speed"]) {
-                    thunderboltSpeed = min(thunderboltSpeed ?? candidate, candidate)
-                }
+                detectedThunderboltSpeed = minimum(detectedThunderboltSpeed, thunderboltSpeed(from: properties))
             }
 
             if text.contains("usb4") {
                 usb4Detected = true
             }
 
-            if text.contains("usb") {
-                if let candidate = speed(from: properties["USB Speed"])
-                    ?? speed(from: properties["Port Speed"])
-                    ?? speed(from: properties["Current Speed"]) {
-                    usbSpeed = min(usbSpeed ?? candidate, candidate)
-                }
+            if text.contains("usb") || properties["UsbLinkSpeed"] != nil || properties["USBSpeed"] != nil {
+                detectedUSBSpeed = minimum(detectedUSBSpeed, usbSpeed(from: properties))
             }
 
             var parent: io_registry_entry_t = 0
@@ -778,12 +779,12 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
 
         if hasThunderbolt {
             let effectiveSpeed: Int64?
-            if let usbSpeed, let thunderboltSpeed {
-                effectiveSpeed = min(usbSpeed, thunderboltSpeed)
+            if let detectedUSBSpeed, let detectedThunderboltSpeed {
+                effectiveSpeed = min(detectedUSBSpeed, detectedThunderboltSpeed)
             } else {
-                effectiveSpeed = usbSpeed ?? thunderboltSpeed
+                effectiveSpeed = detectedUSBSpeed ?? detectedThunderboltSpeed
             }
-            let pathDescription = usbSpeed.map {
+            let pathDescription = detectedUSBSpeed.map {
                 "\(detectedThunderboltGeneration ?? "Thunderbolt") → \(usbGeneration(from: $0) ?? "USB")"
             }
             return DriveConnectionInfo(
@@ -797,16 +798,16 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
             return DriveConnectionInfo(
                 transport: .usb4,
                 generation: "USB4",
-                negotiatedBitsPerSecond: usbSpeed,
+                negotiatedBitsPerSecond: detectedUSBSpeed,
                 pathDescription: nil
             )
         }
-        guard let usbSpeed else { return nil }
-        detectedUSBGeneration = usbGeneration(from: usbSpeed)
+        guard let detectedUSBSpeed else { return nil }
+        detectedUSBGeneration = usbGeneration(from: detectedUSBSpeed)
         return DriveConnectionInfo(
             transport: .usb,
             generation: detectedUSBGeneration,
-            negotiatedBitsPerSecond: usbSpeed,
+            negotiatedBitsPerSecond: detectedUSBSpeed,
             pathDescription: nil
         )
     }
@@ -837,6 +838,43 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
         }
     }
 
+    private func usbSpeed(from properties: [String: Any]) -> Int64? {
+        speed(from: properties["UsbLinkSpeed"])
+            ?? usbSpeedCode(from: properties["USBSpeed"])
+            ?? usbSpeedCode(from: properties["Device Speed"])
+    }
+
+    private func usbSpeedCode(from value: Any?) -> Int64? {
+        guard let raw = integerValue(from: value) else { return nil }
+        switch raw {
+        case 0: return nil
+        case 1: return 12_000_000
+        case 2: return 480_000_000
+        case 3: return 5_000_000_000
+        case 4: return 10_000_000_000
+        case 5: return 20_000_000_000
+        default: return nil
+        }
+    }
+
+    private func thunderboltSpeed(from properties: [String: Any]) -> Int64? {
+        if let bandwidth = integerValue(from: properties["Link Bandwidth"]),
+           bandwidth > 0 {
+            return bandwidth * 100_000_000
+        }
+
+        guard let raw = integerValue(from: properties["Current Link Speed"]) else {
+            return nil
+        }
+        switch raw {
+        case 1: return 10_000_000_000
+        case 2: return 20_000_000_000
+        case 4: return 40_000_000_000
+        case 8: return 80_000_000_000
+        default: return nil
+        }
+    }
+
     private func speed(from value: Any?) -> Int64? {
         if let text = value as? String {
             let normalized = text.lowercased()
@@ -849,18 +887,84 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
             if normalized.contains("mb") { return Int64(number * 1_000_000) }
             return Int64(number)
         }
-        guard let raw = (value as? NSNumber)?.int64Value else { return nil }
-        switch raw {
-        case 1: return 1_500_000
-        case 2: return 12_000_000
-        case 3: return 480_000_000
-        case 4: return 5_000_000_000
-        case 5: return 10_000_000_000
-        case 6: return 20_000_000_000
-        case 7: return 40_000_000_000
-        default:
-            return raw >= 100_000 ? raw : nil
+        guard let raw = integerValue(from: value) else { return nil }
+        return raw >= 100_000 ? raw : nil
+    }
+
+    private func integerValue(from value: Any?) -> Int64? {
+        if let value = value as? NSNumber {
+            return value.int64Value
         }
+        if let value = value as? Int64 {
+            return value
+        }
+        if let value = value as? Int {
+            return Int64(value)
+        }
+        if let value = value as? UInt64, value <= UInt64(Int64.max) {
+            return Int64(value)
+        }
+        if let value = value as? UInt {
+            return Int64(value)
+        }
+        return nil
+    }
+
+    private func minimum(_ first: Int64?, _ second: Int64?) -> Int64? {
+        switch (first, second) {
+        case let (first?, second?): min(first, second)
+        case let (first?, nil): first
+        case let (nil, second?): second
+        case (nil, nil): nil
+        }
+    }
+
+    private func thunderboltInfo(from path: String) -> (generation: String?, speed: Int64?) {
+        let pathEntry = path.withCString { IORegistryEntryFromPath(kIOMainPortDefault, $0) }
+        guard pathEntry != 0 else {
+            return (nil, nil)
+        }
+        var current = pathEntry
+        var ownsCurrent = false
+        var generation: String?
+        var speed: Int64?
+        defer {
+            if ownsCurrent {
+                IOObjectRelease(current)
+            } else {
+                IOObjectRelease(pathEntry)
+            }
+        }
+
+        while true {
+            let currentProperties = properties(from: current)
+            generation = generation ?? thunderboltGeneration(from: currentProperties["Thunderbolt Version"])
+            speed = minimum(speed, thunderboltSpeed(from: currentProperties))
+
+            var parent: io_registry_entry_t = 0
+            guard IORegistryEntryGetParentEntry(current, kIOServicePlane, &parent) == KERN_SUCCESS else {
+                break
+            }
+            if ownsCurrent {
+                IOObjectRelease(current)
+            }
+            current = parent
+            ownsCurrent = true
+        }
+
+        return (generation, speed)
+    }
+
+    private func registryClassName(from entry: io_registry_entry_t) -> String {
+        var name = [CChar](repeating: 0, count: 128)
+        guard IOObjectGetClass(entry, &name) == KERN_SUCCESS else { return "" }
+        return String(cString: name)
+    }
+
+    private func registryEntryName(from entry: io_registry_entry_t) -> String {
+        var name = [CChar](repeating: 0, count: 128)
+        guard IORegistryEntryGetName(entry, &name) == KERN_SUCCESS else { return "" }
+        return String(cString: name)
     }
 
     private func properties(from entry: io_registry_entry_t) -> [String: Any] {
