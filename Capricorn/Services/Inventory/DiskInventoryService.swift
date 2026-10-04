@@ -86,6 +86,10 @@ protocol DriveUSBDeviceIdentityProviding: Sendable {
     func deviceIdentities(for drives: [DriveDevice]) async -> [String: DriveUSBDeviceIdentity]
 }
 
+protocol DriveConnectionInfoProviding: Sendable {
+    func connectionInfo(for drives: [DriveDevice]) async -> [String: DriveConnectionInfo]
+}
+
 enum DriveSerialNumberNormalizer {
     static func normalize(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -705,6 +709,185 @@ struct IOKitDriveUSBDeviceIdentityProvider: DriveUSBDeviceIdentityProviding {
     }
 }
 
+struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
+    func connectionInfo(for drives: [DriveDevice]) async -> [String: DriveConnectionInfo] {
+        var result: [String: DriveConnectionInfo] = [:]
+        for drive in drives where !drive.isNetwork {
+            if let info = connectionInfo(forBSDName: drive.bsdName) {
+                result[drive.bsdName] = info
+            }
+        }
+        return result
+    }
+
+    private func connectionInfo(forBSDName bsdName: String) -> DriveConnectionInfo? {
+        guard let media = copyWholeMedia(bsdName: bsdName) else { return nil }
+        defer { IOObjectRelease(media) }
+
+        var current = media
+        var ownsCurrent = false
+        var usbSpeed: Int64?
+        var usbGeneration: String?
+        var usb4Detected = false
+        var thunderboltGeneration: String?
+        var thunderboltSpeed: Int64?
+        var hasThunderbolt = false
+
+        defer {
+            if ownsCurrent {
+                IOObjectRelease(current)
+            }
+        }
+
+        while true {
+            let properties = properties(from: current)
+            let className = (properties["IOClass"] as? String ?? "").lowercased()
+            let providerClass = (properties["IOProviderClass"] as? String ?? "").lowercased()
+            let text = "\(className) \(providerClass)".lowercased()
+
+            if text.contains("thunderbolt") || properties["Thunderbolt Version"] != nil {
+                hasThunderbolt = true
+                thunderboltGeneration = thunderboltGeneration ?? thunderboltGeneration(from: properties["Thunderbolt Version"])
+                thunderboltSpeed = thunderboltSpeed ?? speed(from: properties["Current Link Speed"])
+            }
+
+            if text.contains("usb4") {
+                usb4Detected = true
+            }
+
+            if text.contains("usb") {
+                if usbSpeed == nil {
+                    usbSpeed = speed(from: properties["USB Speed"])
+                        ?? speed(from: properties["Port Speed"])
+                        ?? speed(from: properties["Current Speed"])
+                }
+                if usbGeneration == nil {
+                    usbGeneration = usbGeneration(from: usbSpeed)
+                }
+            }
+
+            var parent: io_registry_entry_t = 0
+            guard IORegistryEntryGetParentEntry(current, kIOServicePlane, &parent) == KERN_SUCCESS else {
+                break
+            }
+            if ownsCurrent {
+                IOObjectRelease(current)
+            }
+            current = parent
+            ownsCurrent = true
+        }
+
+        if hasThunderbolt {
+            return DriveConnectionInfo(
+                transport: .thunderbolt,
+                generation: thunderboltGeneration,
+                negotiatedBitsPerSecond: thunderboltSpeed,
+                pathDescription: nil
+            )
+        }
+        if usb4Detected {
+            return DriveConnectionInfo(
+                transport: .usb4,
+                generation: "USB4",
+                negotiatedBitsPerSecond: usbSpeed,
+                pathDescription: nil
+            )
+        }
+        guard let usbSpeed else { return nil }
+        return DriveConnectionInfo(
+            transport: .usb,
+            generation: usbGeneration,
+            negotiatedBitsPerSecond: usbSpeed,
+            pathDescription: nil
+        )
+    }
+
+    private func thunderboltGeneration(from value: Any?) -> String? {
+        if let text = value as? String {
+            let normalized = text.lowercased()
+            if normalized.contains("4") { return "TB4" }
+            if normalized.contains("3") { return "TB3" }
+        }
+        guard let raw = (value as? NSNumber)?.intValue else { return nil }
+        switch raw {
+        case 3, 16: return "TB3"
+        case 4, 32: return "TB4"
+        default: return nil
+        }
+    }
+
+    private func usbGeneration(from speed: Int64?) -> String? {
+        guard let speed else { return nil }
+        switch speed {
+        case 1_500_000, 12_000_000: return "USB1.x"
+        case 480_000_000: return "USB2.0"
+        case 5_000_000_000: return "USB3.0"
+        case 10_000_000_000: return "USB3.1"
+        case 20_000_000_000: return "USB3.2"
+        default: return nil
+        }
+    }
+
+    private func speed(from value: Any?) -> Int64? {
+        if let text = value as? String {
+            let normalized = text.lowercased()
+            let number = normalized
+                .split(whereSeparator: { !$0.isNumber && $0 != "." })
+                .first
+                .flatMap { Double($0) }
+            guard let number else { return nil }
+            if normalized.contains("gb") { return Int64(number * 1_000_000_000) }
+            if normalized.contains("mb") { return Int64(number * 1_000_000) }
+            return Int64(number)
+        }
+        guard let raw = (value as? NSNumber)?.int64Value else { return nil }
+        switch raw {
+        case 1: return 1_500_000
+        case 2: return 12_000_000
+        case 3: return 480_000_000
+        case 4: return 5_000_000_000
+        case 5: return 10_000_000_000
+        case 6: return 20_000_000_000
+        case 7: return 40_000_000_000
+        default:
+            return raw >= 100_000 ? raw : nil
+        }
+    }
+
+    private func properties(from entry: io_registry_entry_t) -> [String: Any] {
+        guard let dictionary = IORegistryEntryCreateCFProperties(
+            entry,
+            kCFAllocatorDefault,
+            0
+        )?.takeRetainedValue() as? [String: Any] else {
+            return [:]
+        }
+        return dictionary
+    }
+
+    private func copyWholeMedia(bsdName: String) -> io_registry_entry_t? {
+        guard let matching = IOServiceMatching(kIOMediaClass) else { return nil }
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else {
+            return nil
+        }
+        defer { IOObjectRelease(iterator) }
+
+        while true {
+            let media = IOIteratorNext(iterator)
+            guard media != 0 else { return nil }
+            let name = IORegistryEntryCreateCFProperty(media, kIOBSDNameKey as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? String
+            let whole = IORegistryEntryCreateCFProperty(media, kIOMediaWholeKey as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? Bool
+            if name == bsdName, whole == true {
+                return media
+            }
+            IOObjectRelease(media)
+        }
+    }
+}
+
 private extension DriveUSBDeviceIdentity {
     var hasAnyValue: Bool {
         vendorName != nil || productName != nil || vendorID != nil || productID != nil
@@ -916,6 +1099,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
     private let networkProvider: NetworkVolumeInventoryProviding?
     private let serialNumberProvider: DriveSerialNumberProviding
     private let usbDeviceIdentityProvider: DriveUSBDeviceIdentityProviding
+    private let connectionInfoProvider: DriveConnectionInfoProviding
     private let maximumConcurrentInfoCalls: Int
     private let infoTimeout: TimeInterval
 
@@ -925,6 +1109,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
         networkProvider: NetworkVolumeInventoryProviding? = NetworkMountInventoryProvider(),
         serialNumberProvider: DriveSerialNumberProviding? = nil,
         usbDeviceIdentityProvider: DriveUSBDeviceIdentityProviding? = nil,
+        connectionInfoProvider: DriveConnectionInfoProviding? = nil,
         maximumConcurrentInfoCalls: Int = 2,
         infoTimeout: TimeInterval = 5
     ) {
@@ -936,6 +1121,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
             fallback: IOKitDriveSerialProvider()
         )
         self.usbDeviceIdentityProvider = usbDeviceIdentityProvider ?? IOKitDriveUSBDeviceIdentityProvider()
+        self.connectionInfoProvider = connectionInfoProvider ?? IOKitDriveConnectionInfoProvider()
         self.maximumConcurrentInfoCalls = max(1, maximumConcurrentInfoCalls)
         self.infoTimeout = infoTimeout
     }
@@ -968,6 +1154,16 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
                 guard let usbDevice = usbDeviceIdentities[drive.bsdName] else { return drive }
                 var enriched = drive
                 enriched.usbDevice = usbDevice
+                return enriched
+            }
+        }
+
+        let connectionInfo = await connectionInfoProvider.connectionInfo(for: devices)
+        if !connectionInfo.isEmpty {
+            devices = devices.map { drive in
+                guard let connectionInfo = connectionInfo[drive.bsdName] else { return drive }
+                var enriched = drive
+                enriched.connectionInfo = connectionInfo
                 return enriched
             }
         }
