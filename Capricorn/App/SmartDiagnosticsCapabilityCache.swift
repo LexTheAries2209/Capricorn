@@ -124,7 +124,7 @@ final class SmartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching {
     private func transportSignature(for drive: DriveDevice) -> String {
         [
             drive.protocolName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-            drive.isSolidState ? "ssd" : "hdd",
+            drive.mediaKind.rawValue,
             (drive.model ?? drive.mediaName)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased()

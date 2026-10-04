@@ -91,6 +91,15 @@ struct DriveUSBDeviceIdentity: Codable, Hashable, Sendable {
     var productID: Int?
 }
 
+enum DriveMediaKind: String, Codable, Hashable, Sendable {
+    case network
+    case cfast
+    case memoryCard
+    case ssd
+    case hdd
+    case unknown
+}
+
 enum DriveConnectionTransport: String, Codable, Hashable, Sendable {
     case usb
     case usb4
@@ -202,6 +211,9 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     var isInternal: Bool
     var isRemovable: Bool
     var isSolidState: Bool
+    /// Compatibility defaults keep older manually-created and persisted drives
+    /// stable; live inventory sets this to false when diskutil omits SolidState.
+    var isSolidStateKnown: Bool = true
     var isWritable: Bool
     var isVirtual: Bool
     var isSystemDisk: Bool
@@ -231,6 +243,14 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
                 // SanDisk SDCFSP is a CFast product family even when the USB bridge hides the reader name.
                 || value.contains("sdcfsp-")
         }
+    }
+
+    var mediaKind: DriveMediaKind {
+        if isNetwork { return .network }
+        if isCFast { return .cfast }
+        if isMemoryCard { return .memoryCard }
+        guard isSolidStateKnown else { return .unknown }
+        return isSolidState ? .ssd : .hdd
     }
 
     var capacityUsage: DriveCapacityUsage? {
@@ -1027,16 +1047,14 @@ enum DrivePageHeaderText {
     }
 
     static func mediaKind(for drive: DriveDevice, language: AppLanguage) -> String {
-        if drive.isNetwork {
-            return language.t("Network Drive")
+        switch drive.mediaKind {
+        case .network: return language.t("Network Drive")
+        case .cfast: return language.t("CFast 2.0")
+        case .memoryCard: return language.t("SD Card")
+        case .ssd: return language.t("SSD")
+        case .hdd: return language.t("HDD")
+        case .unknown: return language.t("Unknown")
         }
-        if drive.isCFast {
-            return language.t("CFast 2.0")
-        }
-        if drive.isMemoryCard {
-            return language.t("SD Card")
-        }
-        return drive.isSolidState ? language.t("SSD") : language.t("HDD")
     }
 
     static func subtitle(for drive: DriveDevice, language: AppLanguage) -> String {
@@ -1092,6 +1110,7 @@ extension DriveDevice {
         case isInternal
         case isRemovable
         case isSolidState
+        case isSolidStateKnown
         case isWritable
         case isVirtual
         case isSystemDisk
@@ -1117,6 +1136,7 @@ extension DriveDevice {
         isInternal = try container.decode(Bool.self, forKey: .isInternal)
         isRemovable = try container.decode(Bool.self, forKey: .isRemovable)
         isSolidState = try container.decode(Bool.self, forKey: .isSolidState)
+        isSolidStateKnown = try container.decodeIfPresent(Bool.self, forKey: .isSolidStateKnown) ?? true
         isWritable = try container.decode(Bool.self, forKey: .isWritable)
         isVirtual = try container.decode(Bool.self, forKey: .isVirtual)
         isSystemDisk = try container.decode(Bool.self, forKey: .isSystemDisk)
@@ -1142,6 +1162,7 @@ extension DriveDevice {
         try container.encode(isInternal, forKey: .isInternal)
         try container.encode(isRemovable, forKey: .isRemovable)
         try container.encode(isSolidState, forKey: .isSolidState)
+        try container.encode(isSolidStateKnown, forKey: .isSolidStateKnown)
         try container.encode(isWritable, forKey: .isWritable)
         try container.encode(isVirtual, forKey: .isVirtual)
         try container.encode(isSystemDisk, forKey: .isSystemDisk)

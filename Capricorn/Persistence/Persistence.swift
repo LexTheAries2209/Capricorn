@@ -632,10 +632,14 @@ enum ReportExporter {
     }
 
     private static func smartSnapshotDeviceType(for drive: DriveDevice) -> String {
-        if drive.isNetwork { return "Net" }
-        if drive.isCFast { return "CFast 2.0" }
-        if drive.isMemoryCard { return "SD" }
-        return drive.isSolidState ? "SSD" : "HDD"
+        switch drive.mediaKind {
+        case .network: return "Net"
+        case .cfast: return "CFast 2.0"
+        case .memoryCard: return "SD"
+        case .ssd: return "SSD"
+        case .hdd: return "HDD"
+        case .unknown: return "Unknown"
+        }
     }
 
     private static func shouldIncludeVolumeDetails(for drive: DriveDevice) -> Bool {

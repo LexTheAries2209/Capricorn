@@ -3,6 +3,49 @@ import XCTest
 @testable import Capricorn
 
 final class CFastRecognitionTests: XCTestCase {
+    func testMissingSolidStateMetadataProducesUnknownMediaKind() throws {
+        let drive = try XCTUnwrap(DiskutilPlistParser.parseDevice(
+            infoData: Data("""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0"><dict>
+              <key>BusProtocol</key><string>USB</string>
+              <key>DeviceIdentifier</key><string>disk20</string>
+              <key>MediaName</key><string>Generic USB Storage</string>
+              <key>Size</key><integer>1000000000</integer>
+              <key>WholeDisk</key><true/>
+            </dict></plist>
+            """.utf8),
+            volumes: [],
+            showVirtual: false
+        ))
+
+        XCTAssertFalse(drive.isSolidStateKnown)
+        XCTAssertEqual(drive.mediaKind, .unknown)
+    }
+
+    func testUnknownSolidStateDoesNotRenderAsHDD() {
+        var drive = makeDrive(isSolidStateKnown: false)
+        drive.usbDevice = nil
+
+        XCTAssertEqual(drive.mediaKind, .unknown)
+        XCTAssertEqual(DrivePageHeaderText.mediaKind(for: drive, language: .english), "Unknown")
+
+        let csv = ReportExporter.smartSnapshotCSVReport(
+            drive: drive,
+            snapshot: SmartSnapshot.unavailable(for: drive, reason: "Fixture"),
+            language: .english
+        )
+        XCTAssertTrue(csv.contains("device_type,Device Type,Device media type,Unknown"))
+    }
+
+    func testKnownNonSolidStateStillRendersAsHDD() {
+        let drive = makeDrive(isSolidStateKnown: true)
+
+        XCTAssertEqual(drive.mediaKind, .hdd)
+        XCTAssertEqual(DrivePageHeaderText.mediaKind(for: drive, language: .english), "HDD")
+    }
+
     func testSanDiskSDCFSPModelRecognizesCFastWithoutSerialNumberOrReaderName() {
         let drive = DriveDevice(
             bsdName: "disk16",
@@ -160,5 +203,29 @@ final class CFastRecognitionTests: XCTestCase {
         )
         XCTAssertTrue(written.rawValue.contains("GiB"))
         XCTAssertFalse(written.rawValue.contains("512 B/LBA"))
+    }
+
+    private func makeDrive(isSolidStateKnown: Bool) -> DriveDevice {
+        DriveDevice(
+            bsdName: "disk19",
+            deviceNode: "/dev/disk19",
+            displayName: "Generic USB Storage",
+            mediaName: "Generic USB Storage",
+            protocolName: "USB",
+            sizeBytes: 1_000_000_000,
+            blockSize: 512,
+            isInternal: false,
+            isRemovable: true,
+            isSolidState: false,
+            isSolidStateKnown: isSolidStateKnown,
+            isWritable: true,
+            isVirtual: false,
+            isSystemDisk: false,
+            smartStatusRaw: nil,
+            nativeSmartKeys: [:],
+            volumes: [],
+            model: "Generic USB Storage",
+            serialNumber: nil
+        )
     }
 }

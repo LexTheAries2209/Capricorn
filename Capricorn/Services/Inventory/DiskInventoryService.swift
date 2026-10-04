@@ -292,6 +292,7 @@ enum DiskutilPlistParser {
             registryName: registryName,
             content: content
         )
+        let solidState = info.bool("SolidState")
         return DriveDevice(
             bsdName: bsdName,
             deviceNode: info.string("DeviceNode") ?? "/dev/\(bsdName)",
@@ -302,7 +303,8 @@ enum DiskutilPlistParser {
             blockSize: info.int("DeviceBlockSize") ?? 512,
             isInternal: info.bool("Internal") ?? false,
             isRemovable: info.bool("RemovableMediaOrExternalDevice") ?? info.bool("Removable") ?? false,
-            isSolidState: info.bool("SolidState") ?? false,
+            isSolidState: solidState ?? false,
+            isSolidStateKnown: solidState != nil,
             isWritable: info.bool("WritableMedia") ?? info.bool("Writable") ?? false,
             isVirtual: isVirtual,
             isSystemDisk: deviceVolumes.contains(where: { $0.mountPoint == "/" }),
@@ -1176,6 +1178,7 @@ final class NetworkMountInventoryProvider: NetworkVolumeInventoryProviding, @unc
             isInternal: false,
             isRemovable: false,
             isSolidState: false,
+            isSolidStateKnown: false,
             isWritable: isWritable,
             isVirtual: false,
             isSystemDisk: false,
