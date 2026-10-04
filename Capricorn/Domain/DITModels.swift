@@ -97,13 +97,22 @@ enum DriveConnectionTransport: String, Codable, Hashable, Sendable {
     case thunderbolt
 }
 
+/// Identifies a bridge whose negotiated path is USB4 but can carry Thunderbolt traffic.
+enum DriveConnectionBridgeKind: String, Codable, Hashable, Sendable {
+    case usb4ThunderboltCompatible
+}
+
 struct DriveConnectionInfo: Codable, Hashable, Sendable {
     var transport: DriveConnectionTransport
     var generation: String?
     var negotiatedBitsPerSecond: Int64?
     var pathDescription: String?
+    var bridgeKind: DriveConnectionBridgeKind? = nil
 
     var compactLabel: String {
+        if bridgeKind == .usb4ThunderboltCompatible {
+            return "USB4"
+        }
         if let generation, !generation.isEmpty {
             return generation
         }
@@ -119,6 +128,10 @@ struct DriveConnectionInfo: Codable, Hashable, Sendable {
     }
 
     func detailLabel(effectiveLabel: String) -> String {
+        if bridgeKind == .usb4ThunderboltCompatible {
+            guard let negotiatedBitsPerSecond else { return "USB4/TBT" }
+            return "USB4/TBT · \(Self.formatSpeed(negotiatedBitsPerSecond))"
+        }
         let type = generation ?? compactLabel
         if let pathDescription, !pathDescription.isEmpty {
             if let negotiatedBitsPerSecond {

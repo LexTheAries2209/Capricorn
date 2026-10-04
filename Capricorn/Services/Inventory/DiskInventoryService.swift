@@ -732,6 +732,7 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
         var detectedThunderboltGeneration: String?
         var detectedThunderboltSpeed: Int64?
         var hasThunderbolt = false
+        var usb4ThunderboltBridgeDetected = false
 
         defer {
             if ownsCurrent {
@@ -747,6 +748,9 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
 
             if let thunderboltPath = properties["Thunderbolt Path"] as? String {
                 hasThunderbolt = true
+                if thunderboltPath.localizedCaseInsensitiveContains("IOThunderboltSwitchUSB4") {
+                    usb4ThunderboltBridgeDetected = true
+                }
                 let pathInfo = thunderboltInfo(from: thunderboltPath)
                 detectedThunderboltGeneration = detectedThunderboltGeneration ?? pathInfo.generation
                 detectedThunderboltSpeed = minimum(detectedThunderboltSpeed, pathInfo.speed)
@@ -754,6 +758,9 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
 
             if text.contains("thunderbolt") || properties["Thunderbolt Version"] != nil {
                 hasThunderbolt = true
+                if text.contains("iothunderboltswitchusb4") {
+                    usb4ThunderboltBridgeDetected = true
+                }
                 detectedThunderboltGeneration = detectedThunderboltGeneration ?? thunderboltGeneration(from: properties["Thunderbolt Version"])
                 detectedThunderboltSpeed = minimum(detectedThunderboltSpeed, thunderboltSpeed(from: properties))
             }
@@ -791,7 +798,8 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
                 transport: .thunderbolt,
                 generation: detectedThunderboltGeneration,
                 negotiatedBitsPerSecond: effectiveSpeed,
-                pathDescription: pathDescription
+                pathDescription: pathDescription,
+                bridgeKind: usb4ThunderboltBridgeDetected ? .usb4ThunderboltCompatible : nil
             )
         }
         if usb4Detected {
@@ -815,13 +823,13 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
     private func thunderboltGeneration(from value: Any?) -> String? {
         if let text = value as? String {
             let normalized = text.lowercased()
-            if normalized.contains("4") { return "TB4" }
-            if normalized.contains("3") { return "TB3" }
+            if normalized.contains("4") { return "TBT4" }
+            if normalized.contains("3") { return "TBT3" }
         }
         guard let raw = (value as? NSNumber)?.intValue else { return nil }
         switch raw {
-        case 3, 16: return "TB3"
-        case 4, 32: return "TB4"
+        case 3, 16: return "TBT3"
+        case 4, 32: return "TBT4"
         default: return nil
         }
     }
