@@ -748,7 +748,9 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
             if text.contains("thunderbolt") || properties["Thunderbolt Version"] != nil {
                 hasThunderbolt = true
                 detectedThunderboltGeneration = detectedThunderboltGeneration ?? thunderboltGeneration(from: properties["Thunderbolt Version"])
-                thunderboltSpeed = thunderboltSpeed ?? speed(from: properties["Current Link Speed"])
+                if let candidate = speed(from: properties["Current Link Speed"]) {
+                    thunderboltSpeed = min(thunderboltSpeed ?? candidate, candidate)
+                }
             }
 
             if text.contains("usb4") {
@@ -756,13 +758,10 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
             }
 
             if text.contains("usb") {
-                if usbSpeed == nil {
-                    usbSpeed = speed(from: properties["USB Speed"])
-                        ?? speed(from: properties["Port Speed"])
-                        ?? speed(from: properties["Current Speed"])
-                }
-                if detectedUSBGeneration == nil {
-                    detectedUSBGeneration = usbGeneration(from: usbSpeed)
+                if let candidate = speed(from: properties["USB Speed"])
+                    ?? speed(from: properties["Port Speed"])
+                    ?? speed(from: properties["Current Speed"]) {
+                    usbSpeed = min(usbSpeed ?? candidate, candidate)
                 }
             }
 
@@ -778,11 +777,20 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
         }
 
         if hasThunderbolt {
+            let effectiveSpeed: Int64?
+            if let usbSpeed, let thunderboltSpeed {
+                effectiveSpeed = min(usbSpeed, thunderboltSpeed)
+            } else {
+                effectiveSpeed = usbSpeed ?? thunderboltSpeed
+            }
+            let pathDescription = usbSpeed.map {
+                "\(detectedThunderboltGeneration ?? "Thunderbolt") → \(usbGeneration(from: $0) ?? "USB")"
+            }
             return DriveConnectionInfo(
                 transport: .thunderbolt,
                 generation: detectedThunderboltGeneration,
-                negotiatedBitsPerSecond: thunderboltSpeed,
-                pathDescription: nil
+                negotiatedBitsPerSecond: effectiveSpeed,
+                pathDescription: pathDescription
             )
         }
         if usb4Detected {
@@ -794,6 +802,7 @@ struct IOKitDriveConnectionInfoProvider: DriveConnectionInfoProviding {
             )
         }
         guard let usbSpeed else { return nil }
+        detectedUSBGeneration = usbGeneration(from: usbSpeed)
         return DriveConnectionInfo(
             transport: .usb,
             generation: detectedUSBGeneration,

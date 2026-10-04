@@ -116,6 +116,12 @@ struct DriveConnectionInfo: Codable, Hashable, Sendable {
 
     var detailLabel: String {
         let type = generation ?? compactLabel
+        if let pathDescription, !pathDescription.isEmpty {
+            if let negotiatedBitsPerSecond {
+                return "\(pathDescription) · 有效 \(Self.formatSpeed(negotiatedBitsPerSecond))"
+            }
+            return pathDescription
+        }
         guard let negotiatedBitsPerSecond else { return type }
         return "\(type) · \(Self.formatSpeed(negotiatedBitsPerSecond))"
     }
