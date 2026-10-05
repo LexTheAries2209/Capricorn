@@ -4,6 +4,7 @@ import SwiftUI
 struct SmartSelfTestPresentationSheet: View {
     let viewModel: AppModel
     let language: AppLanguage
+    let opensProgressWindowAutomatically: Bool
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -13,7 +14,12 @@ struct SmartSelfTestPresentationSheet: View {
                 SmartSelfTestConfirmationView(
                     request: request,
                     language: language,
-                    start: { viewModel.confirmSmartSelfTest(request) },
+                    start: {
+                        viewModel.confirmSmartSelfTest(
+                            request,
+                            opensProgressWindowAutomatically: opensProgressWindowAutomatically
+                        )
+                    },
                     cancel: dismissSheet
                 )
             case .monitor:

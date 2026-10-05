@@ -1751,8 +1751,11 @@ final class AppModel {
         ))
     }
 
-    func confirmSmartSelfTest(_ request: SmartSelfTestStartRequest) {
-        smartSelfTestPresentation = .monitor
+    func confirmSmartSelfTest(
+        _ request: SmartSelfTestStartRequest,
+        opensProgressWindowAutomatically: Bool = true
+    ) {
+        smartSelfTestPresentation = opensProgressWindowAutomatically ? .monitor : nil
         if !startSmartSelfTest(kind: request.kind, drive: request.drive) {
             smartSelfTestPresentation = nil
         }

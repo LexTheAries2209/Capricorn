@@ -10,6 +10,8 @@ struct ContentView: View {
     @State private var preferences: AppPreferences
     @State private var showsDiskCheckReport = false
     @State private var showsSmartSelfTestSheet = false
+    @AppStorage(AppPreferences.Key.opensSmartSelfTestProgressWindowAutomatically)
+    private var opensSmartSelfTestProgressWindowAutomatically = AppPreferences.Defaults.opensSmartSelfTestProgressWindowAutomatically
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
     @AppStorage("representativeVolumeSelectionsByDrive") private var representativeVolumePreferencesJSON = ""
     @Environment(\.modelContext) private var modelContext
@@ -189,7 +191,9 @@ struct ContentView: View {
                     )
                 }
             }
-            viewModel.showSmartSelfTestMonitor()
+            if opensSmartSelfTestProgressWindowAutomatically {
+                viewModel.showSmartSelfTestMonitor()
+            }
         }
         .sheet(item: $viewModel.diskOpenFileInspection) { inspection in
             DiskOpenFileInspectionSheet(
@@ -245,7 +249,11 @@ struct ContentView: View {
             // Keep the sheet content alive until its dismissal animation finishes.
             viewModel.hideSmartSelfTestMonitor()
         }) {
-            SmartSelfTestPresentationSheet(viewModel: viewModel, language: language)
+            SmartSelfTestPresentationSheet(
+                viewModel: viewModel,
+                language: language,
+                opensProgressWindowAutomatically: opensSmartSelfTestProgressWindowAutomatically
+            )
         }
     }
 

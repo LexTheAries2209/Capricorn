@@ -1052,8 +1052,10 @@ final class CapricornTests: XCTestCase {
             "Interface Display": "界面显示",
             "Show Quick Check and Repair": "显示快速自检与修复",
             "When disabled, Quick Disk Check is hidden from Overview and Check and Repair is hidden from Disk Actions.": "关闭后，概览页面将隐藏快速自检模块，硬盘操作菜单也不会显示“检查与修复”。",
-            "Open benchmark progress window by default": "默认打开测速窗口",
+            "Open benchmark progress window by default": "默认打开测速进度窗口",
             "When disabled, a benchmark continues in the background and opens its progress window only when you select View Progress.": "关闭后，测速会在后台继续，仅在点击“查看进度”时打开测速进度窗口。",
+            "Open SMART self-test progress window by default": "默认打开 SMART 自检进度窗口",
+            "When disabled, a SMART self-test continues in the background and opens its progress window only when you select View Progress.": "关闭后，SMART 自检会在后台继续，仅在点击“查看进度”时打开自检进度窗口。",
             "Keyboard Shortcuts": "快捷键",
             "Switch feature pages in order": "按顺序切换功能页面",
             "Show SMART self-test status and controls": "显示 SMART 自检状态和测试功能",
@@ -1214,6 +1216,36 @@ final class CapricornTests: XCTestCase {
 
         XCTAssertFalse(defaults.bool(forKey: AppPreferences.Key.opensBenchmarkProgressWindowAutomatically))
         XCTAssertFalse(AppPreferences(defaults: defaults).opensBenchmarkProgressWindowAutomatically)
+    }
+
+    @MainActor
+    func testSmartSelfTestProgressWindowPreferenceDefaultsOnAndPersists() {
+        let suiteName = "CapricornTests.smartSelfTestProgressWindowPreference.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = AppPreferences(defaults: defaults)
+
+        XCTAssertTrue(preferences.opensSmartSelfTestProgressWindowAutomatically)
+        preferences.opensSmartSelfTestProgressWindowAutomatically = false
+
+        XCTAssertFalse(defaults.bool(forKey: AppPreferences.Key.opensSmartSelfTestProgressWindowAutomatically))
+        XCTAssertFalse(AppPreferences(defaults: defaults).opensSmartSelfTestProgressWindowAutomatically)
+    }
+
+    @MainActor
+    func testSmartSelfTestCanStartWithoutPresentingProgressMonitor() {
+        let model = AppModel.virtualT7Demo(stepNanoseconds: 1_000_000)
+        let drive = try! XCTUnwrap(model.drives.first)
+        model.requestSmartSelfTest(kind: .short, drive: drive)
+        guard case let .confirmation(request) = model.smartSelfTestPresentation else {
+            return XCTFail("Expected a virtual self-test confirmation.")
+        }
+
+        model.confirmSmartSelfTest(request, opensProgressWindowAutomatically: false)
+
+        XCTAssertNil(model.smartSelfTestPresentation)
+        XCTAssertTrue(model.isSmartSelfTestActive)
+        model.abortSmartSelfTest()
     }
 
     @MainActor
