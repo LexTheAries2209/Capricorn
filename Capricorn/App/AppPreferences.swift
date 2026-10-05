@@ -54,6 +54,7 @@ final class AppPreferences {
         static let showsCheckAndRepairActions = false
         static let showsIndividualHistoryDeletion = false
         static let opensBenchmarkProgressWindowAutomatically = true
+        static let opensSmartSelfTestProgressWindowAutomatically = true
         static let representativeVolumeStartupPreference = RepresentativeVolumeStartupPreference.largestCapacity
     }
 
@@ -73,6 +74,7 @@ final class AppPreferences {
         static let showsCheckAndRepairActions = "showsCheckAndRepairActions"
         static let showsIndividualHistoryDeletion = "showsIndividualHistoryDeletion"
         static let opensBenchmarkProgressWindowAutomatically = "opensBenchmarkProgressWindowAutomatically"
+        static let opensSmartSelfTestProgressWindowAutomatically = "opensSmartSelfTestProgressWindowAutomatically"
         static let representativeVolumeStartupPreference = "representativeVolumeStartupPreference"
     }
 
@@ -155,6 +157,15 @@ final class AppPreferences {
         }
     }
 
+    /// Controls whether a SMART self-test opens its progress window immediately.
+    /// When disabled, the running self-test remains accessible through View Progress.
+    var opensSmartSelfTestProgressWindowAutomatically: Bool {
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(opensSmartSelfTestProgressWindowAutomatically, forKey: Key.opensSmartSelfTestProgressWindowAutomatically)
+        }
+    }
+
     /// Controls the initial representative volume for each non-system drive.
     /// Manual sidebar changes remain active for the current application session.
     var representativeVolumeStartupPreference: RepresentativeVolumeStartupPreference {
@@ -179,6 +190,7 @@ final class AppPreferences {
         showsCheckAndRepairActions = defaults.object(forKey: Key.showsCheckAndRepairActions) as? Bool ?? Defaults.showsCheckAndRepairActions
         showsIndividualHistoryDeletion = defaults.object(forKey: Key.showsIndividualHistoryDeletion) as? Bool ?? Defaults.showsIndividualHistoryDeletion
         opensBenchmarkProgressWindowAutomatically = defaults.object(forKey: Key.opensBenchmarkProgressWindowAutomatically) as? Bool ?? Defaults.opensBenchmarkProgressWindowAutomatically
+        opensSmartSelfTestProgressWindowAutomatically = defaults.object(forKey: Key.opensSmartSelfTestProgressWindowAutomatically) as? Bool ?? Defaults.opensSmartSelfTestProgressWindowAutomatically
         representativeVolumeStartupPreference = RepresentativeVolumeStartupPreference(
             rawValue: defaults.string(forKey: Key.representativeVolumeStartupPreference) ?? ""
         ) ?? Defaults.representativeVolumeStartupPreference
@@ -207,6 +219,7 @@ final class AppPreferences {
         showsCheckAndRepairActions = Defaults.showsCheckAndRepairActions
         showsIndividualHistoryDeletion = Defaults.showsIndividualHistoryDeletion
         opensBenchmarkProgressWindowAutomatically = Defaults.opensBenchmarkProgressWindowAutomatically
+        opensSmartSelfTestProgressWindowAutomatically = Defaults.opensSmartSelfTestProgressWindowAutomatically
         representativeVolumeStartupPreference = Defaults.representativeVolumeStartupPreference
         requestedSettingsDestination = nil
         suppressesPersistence = false
@@ -272,6 +285,14 @@ struct CapricornSettingsView: View {
                     isOn: $preferences.opensBenchmarkProgressWindowAutomatically
                 )
                 Text(language.t("When disabled, a benchmark continues in the background and opens its progress window only when you select View Progress."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle(
+                    language.t("Open SMART self-test progress window by default"),
+                    isOn: $preferences.opensSmartSelfTestProgressWindowAutomatically
+                )
+                Text(language.t("When disabled, a SMART self-test continues in the background and opens its progress window only when you select View Progress."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
