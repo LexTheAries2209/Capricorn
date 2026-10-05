@@ -4,6 +4,20 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.9.6 - 2026-10-05
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.6) | [Release Notes / 发布说明](docs/releases/v2.9.6.md)
+
+### 中文
+
+- 将“默认打开测速窗口”更名为“默认打开测速进度窗口”，使设置含义更明确。
+- 新增“默认打开 SMART 自检进度窗口”选项；关闭后自检继续在后台运行，可通过“查看进度”手动打开监视器。
+
+### English
+
+- Renames “Open benchmark progress window by default” to make the setting's purpose explicit.
+- Adds “Open SMART self-test progress window by default”; when disabled, self-tests continue in the background and the monitor can be opened with View Progress.
+
 ## V2.9.5 - 2026-10-04
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.5) | [Release Notes / 发布说明](docs/releases/v2.9.5.md)
