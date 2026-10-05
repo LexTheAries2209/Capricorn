@@ -54,6 +54,8 @@ struct BenchmarkView: View {
     @AppStorage("benchmarkDemoEngine") private var demoEngineRaw = BenchmarkProfile.demoLight.engine.rawValue
     @AppStorage("benchmarkCustomEngine") private var customEngineRaw = BenchmarkEngine.synchronous.rawValue
     @AppStorage("benchmarkCustomExecutionMode") private var customExecutionModeRaw = BenchmarkExecutionMode.finite.rawValue
+    @AppStorage(AppPreferences.Key.opensBenchmarkProgressWindowAutomatically)
+    private var opensBenchmarkProgressWindowAutomatically = AppPreferences.Defaults.opensBenchmarkProgressWindowAutomatically
     @State private var selectedProfileID = BenchmarkProfile.default.id
     @State private var benchmarkNotice: BenchmarkNotice?
     // Volume capacity can block the main thread; snapshot it for view updates,
@@ -922,15 +924,22 @@ struct BenchmarkView: View {
                             volumePath: targetFolderPath,
                             resultUpdatePolicy: .mergeTests
                         )
-                        benchmarkNotice = started ? .monitor : (viewModel.isBenchmarking ? .benchmarkInProgress : nil)
+                        benchmarkNotice = noticeAfterBenchmarkStart(started)
                     } else {
                         let started = viewModel.startBenchmark(profile: runProfile, volumePath: targetFolderPath)
-                        benchmarkNotice = started ? .monitor : nil
+                        benchmarkNotice = noticeAfterBenchmarkStart(started)
                     }
                 },
                 onDismiss: { benchmarkNotice = nil }
             )
         }
+    }
+
+    private func noticeAfterBenchmarkStart(_ started: Bool) -> BenchmarkNotice? {
+        if started {
+            return opensBenchmarkProgressWindowAutomatically ? .monitor : nil
+        }
+        return viewModel.isBenchmarking ? .benchmarkInProgress : nil
     }
 
     private func validateTargetFolderForRun(profile runProfile: BenchmarkProfile? = nil) -> Bool {

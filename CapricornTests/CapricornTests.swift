@@ -1052,6 +1052,8 @@ final class CapricornTests: XCTestCase {
             "Interface Display": "界面显示",
             "Show Quick Check and Repair": "显示快速自检与修复",
             "When disabled, Quick Disk Check is hidden from Overview and Check and Repair is hidden from Disk Actions.": "关闭后，概览页面将隐藏快速自检模块，硬盘操作菜单也不会显示“检查与修复”。",
+            "Open benchmark progress window by default": "默认打开测速窗口",
+            "When disabled, a benchmark continues in the background and opens its progress window only when you select View Progress.": "关闭后，测速会在后台继续，仅在点击“查看进度”时打开测速进度窗口。",
             "Keyboard Shortcuts": "快捷键",
             "Switch feature pages in order": "按顺序切换功能页面",
             "Show SMART self-test status and controls": "显示 SMART 自检状态和测试功能",
@@ -1198,6 +1200,20 @@ final class CapricornTests: XCTestCase {
             "在历史界面显示单独删除按钮"
         )
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Delete permanently"), "永久删除")
+    }
+
+    @MainActor
+    func testBenchmarkProgressWindowPreferenceDefaultsOnAndPersists() {
+        let suiteName = "CapricornTests.benchmarkProgressWindowPreference.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = AppPreferences(defaults: defaults)
+
+        XCTAssertTrue(preferences.opensBenchmarkProgressWindowAutomatically)
+        preferences.opensBenchmarkProgressWindowAutomatically = false
+
+        XCTAssertFalse(defaults.bool(forKey: AppPreferences.Key.opensBenchmarkProgressWindowAutomatically))
+        XCTAssertFalse(AppPreferences(defaults: defaults).opensBenchmarkProgressWindowAutomatically)
     }
 
     @MainActor

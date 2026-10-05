@@ -270,6 +270,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART.": "关闭后，概览和 SMART 页面将隐藏自检控制、已保存报告和错误日志工具。",
         "Show Quick Check and Repair": "显示快速自检与修复",
         "When disabled, Quick Disk Check is hidden from Overview and Check and Repair is hidden from Disk Actions.": "关闭后，概览页面将隐藏快速自检模块，硬盘操作菜单也不会显示“检查与修复”。",
+        "Open benchmark progress window by default": "默认打开测速窗口",
+        "When disabled, a benchmark continues in the background and opens its progress window only when you select View Progress.": "关闭后，测速会在后台继续，仅在点击“查看进度”时打开测速进度窗口。",
         "Self-tests, saved reports, and controller error entries.": "自检、已保存报告和控制器错误条目。",
         "Self-tests and saved reports.": "自检和已保存报告。",
         "Collapse SMART Diagnostics": "收起 SMART 诊断",

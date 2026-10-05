@@ -53,6 +53,7 @@ final class AppPreferences {
         static let automaticRefreshInterval = DiskAutomaticRefreshInterval.off
         static let showsCheckAndRepairActions = false
         static let showsIndividualHistoryDeletion = false
+        static let opensBenchmarkProgressWindowAutomatically = true
         static let representativeVolumeStartupPreference = RepresentativeVolumeStartupPreference.largestCapacity
     }
 
@@ -71,6 +72,7 @@ final class AppPreferences {
         static let automaticRefreshIntervalMinutes = "automaticRefreshIntervalMinutes"
         static let showsCheckAndRepairActions = "showsCheckAndRepairActions"
         static let showsIndividualHistoryDeletion = "showsIndividualHistoryDeletion"
+        static let opensBenchmarkProgressWindowAutomatically = "opensBenchmarkProgressWindowAutomatically"
         static let representativeVolumeStartupPreference = "representativeVolumeStartupPreference"
     }
 
@@ -144,6 +146,15 @@ final class AppPreferences {
         }
     }
 
+    /// Controls whether a benchmark opens its progress window immediately.
+    /// When disabled, the running benchmark remains accessible through View Progress.
+    var opensBenchmarkProgressWindowAutomatically: Bool {
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(opensBenchmarkProgressWindowAutomatically, forKey: Key.opensBenchmarkProgressWindowAutomatically)
+        }
+    }
+
     /// Controls the initial representative volume for each non-system drive.
     /// Manual sidebar changes remain active for the current application session.
     var representativeVolumeStartupPreference: RepresentativeVolumeStartupPreference {
@@ -167,6 +178,7 @@ final class AppPreferences {
         ) ?? Defaults.automaticRefreshInterval
         showsCheckAndRepairActions = defaults.object(forKey: Key.showsCheckAndRepairActions) as? Bool ?? Defaults.showsCheckAndRepairActions
         showsIndividualHistoryDeletion = defaults.object(forKey: Key.showsIndividualHistoryDeletion) as? Bool ?? Defaults.showsIndividualHistoryDeletion
+        opensBenchmarkProgressWindowAutomatically = defaults.object(forKey: Key.opensBenchmarkProgressWindowAutomatically) as? Bool ?? Defaults.opensBenchmarkProgressWindowAutomatically
         representativeVolumeStartupPreference = RepresentativeVolumeStartupPreference(
             rawValue: defaults.string(forKey: Key.representativeVolumeStartupPreference) ?? ""
         ) ?? Defaults.representativeVolumeStartupPreference
@@ -194,6 +206,7 @@ final class AppPreferences {
         automaticRefreshInterval = Defaults.automaticRefreshInterval
         showsCheckAndRepairActions = Defaults.showsCheckAndRepairActions
         showsIndividualHistoryDeletion = Defaults.showsIndividualHistoryDeletion
+        opensBenchmarkProgressWindowAutomatically = Defaults.opensBenchmarkProgressWindowAutomatically
         representativeVolumeStartupPreference = Defaults.representativeVolumeStartupPreference
         requestedSettingsDestination = nil
         suppressesPersistence = false
@@ -251,6 +264,14 @@ struct CapricornSettingsView: View {
 
                 Toggle(language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
                 Text(language.t("When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle(
+                    language.t("Open benchmark progress window by default"),
+                    isOn: $preferences.opensBenchmarkProgressWindowAutomatically
+                )
+                Text(language.t("When disabled, a benchmark continues in the background and opens its progress window only when you select View Progress."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
