@@ -318,8 +318,8 @@ struct DiskActivityView: View {
     }
 
     private var workloadControlLayout: some View {
-        // Use one row when every workload action and setting fits; otherwise use
-        // one action row followed by two rows of configuration controls.
+        // Prefer one row, then keep the target beside the actions before using
+        // the more compact three-row configuration.
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .bottom, spacing: 24) {
                 workloadActionsControl
@@ -329,6 +329,20 @@ struct DiskActivityView: View {
                 workloadLoopControl
             }
             .fixedSize(horizontal: true, vertical: false)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .bottom, spacing: 24) {
+                    workloadActionsControl
+                    workloadTargetControl(width: 360)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                HStack(alignment: .bottom, spacing: 24) {
+                    workloadOperationControl
+                    workloadFileSizeControl
+                    workloadLoopControl
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
 
             VStack(alignment: .leading, spacing: 12) {
                 workloadActionsControl
@@ -446,22 +460,22 @@ struct DiskActivityView: View {
 
     private var workloadActionsControl: some View {
         HStack(spacing: 8) {
-                Button {
-                    startWorkload()
-                } label: {
-                    workloadActionLabel(language.t("Start Workload"), systemImage: "play.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canStartWorkload)
+            Button {
+                startWorkload()
+            } label: {
+                workloadActionLabel(language.t("Start Workload"), systemImage: "play.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canStartWorkload)
 
-                Button {
-                    viewModel.stopLiveActivityWorkload()
-                } label: {
-                    workloadActionLabel(language.t("Stop Workload"), systemImage: "stop.fill")
-                }
-                .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
+            Button {
+                viewModel.stopLiveActivityWorkload()
+            } label: {
+                workloadActionLabel(language.t("Stop Workload"), systemImage: "stop.fill")
+            }
+            .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
         }
-        .frame(minHeight: 36, alignment: .center)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func workloadActionLabel(_ title: String, systemImage: String) -> some View {
