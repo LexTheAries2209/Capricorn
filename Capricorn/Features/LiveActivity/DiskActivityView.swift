@@ -304,17 +304,20 @@ struct DiskActivityView: View {
     }
 
     private var workloadControlLayout: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            workloadActionsControl
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .bottom, spacing: 24) {
-                    workloadTargetControl(width: 360)
-                    workloadOperationControl
-                    workloadFileSizeControl
-                    workloadLoopControl
-                }
-                .fixedSize(horizontal: true, vertical: false)
+        // Use one row when every workload action and setting fits; otherwise use
+        // one action row followed by two rows of configuration controls.
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .bottom, spacing: 24) {
+                workloadActionsControl
+                workloadTargetControl(width: 360)
+                workloadOperationControl
+                workloadFileSizeControl
+                workloadLoopControl
+            }
+            .fixedSize(horizontal: true, vertical: false)
 
+            VStack(alignment: .leading, spacing: 12) {
+                workloadActionsControl
                 Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 12) {
                     GridRow {
                         workloadTargetControl(width: 360)
