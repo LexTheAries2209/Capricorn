@@ -190,47 +190,18 @@ struct DiskActivityView: View {
 
                 Spacer(minLength: 0)
             }
-            HStack(spacing: 8) {
-                Button {
-                    saveMessage = nil
-                    viewModel.startLiveActivityMonitoring(drive: drive, interval: selectedInterval)
-                } label: {
-                    Label(language.t("Start Monitoring"), systemImage: "play.fill")
+            // Keep all actions together when they fit; move only history actions below on narrow windows.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    monitoringActionButtons
+                    historyActionButtons
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || drive.isNetwork)
+                .fixedSize(horizontal: true, vertical: false)
 
-                Button {
-                    saveMessage = nil
-                    viewModel.continueLiveActivityMonitoring(drive: drive, interval: selectedInterval)
-                } label: {
-                    Label(language.t("Continue Monitoring"), systemImage: "play.circle")
+                VStack(alignment: .leading, spacing: 8) {
+                    monitoringActionButtons
+                    historyActionButtons
                 }
-                .disabled(!viewModel.canContinueLiveActivityMonitoring(for: drive))
-
-                Button {
-                    viewModel.stopLiveActivityMonitoring()
-                } label: {
-                    Label(language.t("Stop Monitoring"), systemImage: "stop.fill")
-                }
-                .disabled(!isMonitoringThisDrive)
-
-                Spacer(minLength: 10)
-
-                Button {
-                    saveActivityHistory()
-                } label: {
-                    Label(language.t("Save to History"), systemImage: "tray.and.arrow.down")
-                }
-                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || displayedSamples.isEmpty)
-
-                Button {
-                    saveMessage = nil
-                    viewModel.clearLiveActivity()
-                } label: {
-                    Label(language.t("Clear Chart"), systemImage: "xmark.circle")
-                }
-                .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || displayedSamples.isEmpty)
             }
             .frame(minHeight: 36, alignment: .center)
         }
@@ -241,6 +212,55 @@ struct DiskActivityView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(.separator.opacity(0.45), lineWidth: 1)
         }
+    }
+
+    private var monitoringActionButtons: some View {
+        HStack(spacing: 8) {
+            Button {
+                saveMessage = nil
+                viewModel.startLiveActivityMonitoring(drive: drive, interval: selectedInterval)
+            } label: {
+                Label(language.t("Start Monitoring"), systemImage: "play.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || drive.isNetwork)
+
+            Button {
+                saveMessage = nil
+                viewModel.continueLiveActivityMonitoring(drive: drive, interval: selectedInterval)
+            } label: {
+                Label(language.t("Continue Monitoring"), systemImage: "play.circle")
+            }
+            .disabled(!viewModel.canContinueLiveActivityMonitoring(for: drive))
+
+            Button {
+                viewModel.stopLiveActivityMonitoring()
+            } label: {
+                Label(language.t("Stop Monitoring"), systemImage: "stop.fill")
+            }
+            .disabled(!isMonitoringThisDrive)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var historyActionButtons: some View {
+        HStack(spacing: 8) {
+            Button {
+                saveActivityHistory()
+            } label: {
+                Label(language.t("Save to History"), systemImage: "tray.and.arrow.down")
+            }
+            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || displayedSamples.isEmpty)
+
+            Button {
+                saveMessage = nil
+                viewModel.clearLiveActivity()
+            } label: {
+                Label(language.t("Clear Chart"), systemImage: "xmark.circle")
+            }
+            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning || displayedSamples.isEmpty)
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var workloadPanel: some View {
