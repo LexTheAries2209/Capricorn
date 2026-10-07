@@ -171,21 +171,25 @@ struct DiskActivityView: View {
     }
 
     private var controls: some View {
+        // Keep monitoring controls left and history actions right when the row fits.
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .bottom, spacing: 16) {
-                sampleIntervalControl
-                activityActionRow
+                liveActivityMonitoringGroup
+                Spacer(minLength: 0)
+                historyActionButtons
             }
-            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: .infinity)
+
+            VStack(alignment: .leading, spacing: 10) {
+                liveActivityMonitoringGroup
+                historyActionButtons
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 sampleIntervalControl
-                activityActionRow
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                sampleIntervalControl
-                activityActionControls
+                monitoringActionButtons
+                historyActionButtons
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -216,24 +220,12 @@ struct DiskActivityView: View {
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    private var activityActionRow: some View {
+    private var liveActivityMonitoringGroup: some View {
         HStack(spacing: 8) {
+            sampleIntervalControl
             monitoringActionButtons
-            historyActionButtons
         }
         .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private var activityActionControls: some View {
-        ViewThatFits(in: .horizontal) {
-            activityActionRow
-
-            VStack(alignment: .leading, spacing: 8) {
-                monitoringActionButtons
-                historyActionButtons
-            }
-        }
-        .frame(minHeight: 36, alignment: .center)
     }
 
     private var monitoringActionButtons: some View {
