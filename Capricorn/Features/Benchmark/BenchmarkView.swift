@@ -410,13 +410,12 @@ struct BenchmarkView: View {
                 .scrollIndicators(.visible)
             }
 
-            // Keep benchmark actions on a dedicated second row, even when the
-            // window is wide enough for the configuration controls to fit.
-            HStack(spacing: 10) {
+            // Keep the efficiency controls with the run actions so the whole
+            // execution control surface reads as one row.
+            HStack(alignment: .center, spacing: 10) {
                 benchmarkActionControls
+                smallBlockEfficiencyControls
             }
-
-            smallBlockEfficiencyControls
 
             BenchmarkConfigurationDescriptionView(description: configurationDescription)
             if selectedProfileIsCustom {
@@ -578,8 +577,6 @@ struct BenchmarkView: View {
             .pickerStyle(.segmented)
             .frame(width: 250)
             .disabled(viewModel.isBenchmarking || !usesSmallBlockEfficiency)
-
-            Spacer(minLength: 0)
         }
         .help(language.t("Use the selected test-size percentage for 4 KiB, 16 KiB, and 64 KiB items."))
     }
