@@ -171,40 +171,24 @@ struct DiskActivityView: View {
     }
 
     private var controls: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        ViewThatFits(in: .horizontal) {
             HStack(alignment: .bottom, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(language.t("Sample Interval"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Picker("", selection: $selectedIntervalSeconds) {
-                        ForEach(DiskActivitySampleInterval.allCases) { interval in
-                            Text(interval.title).tag(interval.seconds)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 220, alignment: .leading)
-                    .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning)
-                }
-
-                Spacer(minLength: 0)
+                sampleIntervalControl
+                activityActionRow
             }
-            // Keep all actions together when they fit; move only history actions below on narrow windows.
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) {
-                    monitoringActionButtons
-                    historyActionButtons
-                }
-                .fixedSize(horizontal: true, vertical: false)
+            .fixedSize(horizontal: true, vertical: false)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    monitoringActionButtons
-                    historyActionButtons
-                }
+            VStack(alignment: .leading, spacing: 10) {
+                sampleIntervalControl
+                activityActionRow
             }
-            .frame(minHeight: 36, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 10) {
+                sampleIntervalControl
+                activityActionControls
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .padding(.leading, 4)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -212,6 +196,44 @@ struct DiskActivityView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(.separator.opacity(0.45), lineWidth: 1)
         }
+    }
+
+    private var sampleIntervalControl: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(language.t("Sample Interval"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Picker("", selection: $selectedIntervalSeconds) {
+                ForEach(DiskActivitySampleInterval.allCases) { interval in
+                    Text(interval.title).tag(interval.seconds)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 220, alignment: .leading)
+            .disabled(viewModel.isLiveActivityMonitoring || viewModel.isLiveActivityWorkloadRunning)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var activityActionRow: some View {
+        HStack(spacing: 8) {
+            monitoringActionButtons
+            historyActionButtons
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var activityActionControls: some View {
+        ViewThatFits(in: .horizontal) {
+            activityActionRow
+
+            VStack(alignment: .leading, spacing: 8) {
+                monitoringActionButtons
+                historyActionButtons
+            }
+        }
+        .frame(minHeight: 36, alignment: .center)
     }
 
     private var monitoringActionButtons: some View {
