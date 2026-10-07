@@ -17,7 +17,6 @@ struct DiskActivityView: View {
     @State private var saveMessage: String?
     @State private var workloadTargetSelectionError: String?
     @State private var workloadTargetSnapshot = WorkloadTargetSnapshot.empty
-    @State private var controlsViewportWidth: CGFloat = 0
 
     private let controlGroupSpacing: CGFloat = 8
 
@@ -171,31 +170,25 @@ struct DiskActivityView: View {
     }
 
     private var controls: some View {
-        // Keep one layout path during resizing. The custom row measures both
-        // groups directly, so it can right-align without ever overlapping them.
-        ScrollView(.horizontal, showsIndicators: true) {
-            TrailingControlRow(minimumWidth: controlsViewportWidth, spacing: 16) {
-                liveActivityMonitoringGroup
-                historyActionButtons
+        // The scroll view owns overflow, while the frame inside it is at least
+        // as wide as the visible panel. This keeps trailing actions at the
+        // panel edge when there is room and extends the row only when needed.
+        GeometryReader { geometry in
+            ScrollView(.horizontal, showsIndicators: true) {
+                TrailingControlRow(minimumWidth: geometry.size.width, spacing: 16) {
+                    liveActivityMonitoringGroup
+                    historyActionButtons
+                }
             }
+            .frame(width: geometry.size.width)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            GeometryReader { geometry in
-                Color.clear
-                    .preference(key: ControlsViewportWidthKey.self, value: geometry.size.width)
-            }
-        }
+        .frame(height: 46)
         .padding(10)
         .padding(.leading, 4)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(.separator.opacity(0.45), lineWidth: 1)
-        }
-        .onPreferenceChange(ControlsViewportWidthKey.self) { width in
-            guard abs(width - controlsViewportWidth) > 0.5 else { return }
-            controlsViewportWidth = width
         }
     }
 
@@ -794,14 +787,6 @@ private struct WorkloadTargetSnapshot: Equatable {
         folderIsUsable: false,
         availableCapacity: 0
     )
-}
-
-private struct ControlsViewportWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
 }
 
 private struct TrailingControlRow: Layout {
