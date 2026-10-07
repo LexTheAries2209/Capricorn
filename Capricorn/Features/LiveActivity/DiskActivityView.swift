@@ -359,10 +359,12 @@ struct DiskActivityView: View {
                 Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 12) {
                     GridRow {
                         workloadTargetControl(width: 360)
+                            .frame(width: 360, alignment: .leading)
                         workloadOperationControl
                     }
                     GridRow {
                         workloadFileSizeControl
+                            .frame(width: 360, alignment: .leading)
                         workloadLoopControl
                     }
                 }
