@@ -16,6 +16,7 @@ struct DiskActivityView: View {
     @Environment(\.appLanguage) private var language
     @State private var saveMessage: String?
     @State private var workloadTargetSelectionError: String?
+    @State private var workloadTargetSnapshot = WorkloadTargetSnapshot.empty
 
     private var isShowingCurrentSession: Bool {
         viewModel.liveActivityDriveID == drive.id
@@ -42,11 +43,7 @@ struct DiskActivityView: View {
     }
 
     private var resolvedWorkloadTarget: DiskActivityWorkloadResolvedTarget {
-        DiskActivityWorkloadTargetResolver.resolve(
-            workloadTargetSelection,
-            for: drive,
-            preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
-        )
+        workloadTargetSnapshot.resolvedTarget
     }
 
     private var selectedInterval: DiskActivitySampleInterval {
@@ -62,7 +59,7 @@ struct DiskActivityView: View {
     }
 
     private var workloadTargetFolderURL: URL? {
-        resolvedWorkloadTarget.folderURL
+        workloadTargetSnapshot.resolvedTarget.folderURL
     }
 
     private var workloadTargetFolderPath: String {
@@ -70,12 +67,11 @@ struct DiskActivityView: View {
     }
 
     private var workloadTargetFolderIsUsable: Bool {
-        DiskActivityWorkloadTargetResolver.isUsableFolder(workloadTargetFolderPath)
+        workloadTargetSnapshot.folderIsUsable
     }
 
     private var workloadTargetAvailableCapacity: Int64 {
-        guard workloadTargetFolderIsUsable, let workloadTargetFolderURL else { return 0 }
-        return DiskActivityWorkloadStorageValidator.availableCapacity(for: workloadTargetFolderURL)
+        workloadTargetSnapshot.availableCapacity
     }
 
     private var workloadResolvedFileSize: Int64? {
@@ -151,6 +147,7 @@ struct DiskActivityView: View {
             if isShowingCurrentSession {
                 viewModel.liveActivityWorkloadError = nil
             }
+            refreshWorkloadTargetSnapshot()
             adjustWorkloadFileSizeForTarget()
         }
     }
@@ -316,9 +313,9 @@ struct DiskActivityView: View {
     }
 
     private var workloadControlLayout: some View {
-        // Prefer one row, then keep the target beside the actions before using
-        // the more compact three-row configuration.
-        ViewThatFits(in: .horizontal) {
+        // Keep the workload controls at one height. A scrollable row avoids
+        // ViewThatFits measuring several complete control trees during resize.
+        ScrollView(.horizontal, showsIndicators: true) {
             HStack(alignment: .bottom, spacing: 24) {
                 workloadActionsControl
                 workloadTargetControl(width: 360)
@@ -327,36 +324,6 @@ struct DiskActivityView: View {
                 workloadLoopControl
             }
             .fixedSize(horizontal: true, vertical: false)
-
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .bottom, spacing: 24) {
-                    workloadActionsControl
-                    workloadTargetControl(width: 360)
-                }
-                .fixedSize(horizontal: true, vertical: false)
-                HStack(alignment: .bottom, spacing: 24) {
-                    workloadOperationControl
-                    workloadFileSizeControl
-                    workloadLoopControl
-                }
-                .fixedSize(horizontal: true, vertical: false)
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                workloadActionsControl
-                Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 12) {
-                    GridRow {
-                        workloadTargetControl(width: 360)
-                            .frame(width: 360, alignment: .leading)
-                        workloadOperationControl
-                    }
-                    GridRow {
-                        workloadFileSizeControl
-                            .frame(width: 360, alignment: .leading)
-                        workloadLoopControl
-                    }
-                }
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -643,6 +610,7 @@ struct DiskActivityView: View {
         if isShowingCurrentSession {
             viewModel.liveActivityWorkloadError = nil
         }
+        refreshWorkloadTargetSnapshot()
         adjustWorkloadFileSizeForTarget()
     }
 
@@ -670,6 +638,33 @@ struct DiskActivityView: View {
         let encoded = preferences.encoded()
         if encoded != workloadTargetPreferencesJSON {
             workloadTargetPreferencesJSON = encoded
+        }
+        refreshWorkloadTargetSnapshot()
+    }
+
+    private func refreshWorkloadTargetSnapshot() {
+        let resolvedTarget = DiskActivityWorkloadTargetResolver.resolve(
+            workloadTargetSelection,
+            for: drive,
+            preferredVolumeID: viewModel.representativeVolume(for: drive)?.deviceIdentifier
+        )
+        let folderIsUsable = resolvedTarget.folderURL.map {
+            DiskActivityWorkloadTargetResolver.isUsableFolder($0.path)
+        } ?? false
+        let availableCapacity: Int64
+        if folderIsUsable, let folderURL = resolvedTarget.folderURL {
+            availableCapacity = DiskActivityWorkloadStorageValidator.availableCapacity(for: folderURL)
+        } else {
+            availableCapacity = 0
+        }
+
+        let nextSnapshot = WorkloadTargetSnapshot(
+            resolvedTarget: resolvedTarget,
+            folderIsUsable: folderIsUsable,
+            availableCapacity: availableCapacity
+        )
+        if workloadTargetSnapshot != nextSnapshot {
+            workloadTargetSnapshot = nextSnapshot
         }
     }
 
@@ -771,4 +766,21 @@ private struct ActivityMetricTile: View {
                 .stroke(.separator.opacity(0.35), lineWidth: 1)
         }
     }
+}
+
+private struct WorkloadTargetSnapshot: Equatable {
+    let resolvedTarget: DiskActivityWorkloadResolvedTarget
+    let folderIsUsable: Bool
+    let availableCapacity: Int64
+
+    static let empty = WorkloadTargetSnapshot(
+        resolvedTarget: DiskActivityWorkloadResolvedTarget(
+            selection: .automatic,
+            volume: nil,
+            folderURL: nil,
+            didFallBackToAutomatic: false
+        ),
+        folderIsUsable: false,
+        availableCapacity: 0
+    )
 }
