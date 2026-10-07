@@ -6158,8 +6158,8 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(english.dataPattern.contains("Random"))
         XCTAssertTrue(english.runs.contains("5"))
         XCTAssertTrue(english.fileSize.contains("full file"))
-        XCTAssertTrue(english.testTerms.contains("POSIX AIO"))
-        XCTAssertTrue(english.testTerms.contains("fsync"))
+        XCTAssertFalse(english.testTerms.contains("This profile uses POSIX AIO"))
+        XCTAssertFalse(english.testTerms.contains("fsync"))
         XCTAssertTrue(english.testTerms.contains("SEQ"))
         XCTAssertFalse(english.testTerms.contains("1 second"))
         XCTAssertFalse(english.testTerms.contains("5 seconds"))
@@ -6171,8 +6171,8 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(chinese.fileSize.contains("完整"))
         XCTAssertTrue(chinese.dataPattern.contains("随机"))
         XCTAssertTrue(chinese.testTerms.contains("SEQ"))
-        XCTAssertTrue(chinese.testTerms.contains("POSIX AIO"))
-        XCTAssertTrue(chinese.testTerms.contains("刷盘"))
+        XCTAssertFalse(chinese.testTerms.contains("此配置使用"))
+        XCTAssertFalse(chinese.testTerms.contains("刷盘"))
         XCTAssertFalse(chinese.testTerms.contains("间隔"))
         XCTAssertTrue(efficientChinese.fileSize.contains("4 KiB、16 KiB 和 64 KiB"))
         XCTAssertTrue(efficientChinese.fileSize.contains("20%"))
@@ -6218,8 +6218,9 @@ final class CapricornTests: XCTestCase {
         )
         XCTAssertEqual(AppLanguage.simplifiedChinese.profileName(.custom), "自定义")
         XCTAssertTrue(asyncCustomChinese.profileUse.contains("自定义"))
-        XCTAssertTrue(asyncCustomChinese.testTerms.contains("POSIX AIO"))
-        XCTAssertTrue(asyncCustomChinese.testTerms.contains("刷盘"))
+        XCTAssertTrue(asyncCustomChinese.testTerms.contains("测试项标记"))
+        XCTAssertFalse(asyncCustomChinese.testTerms.contains("此配置使用"))
+        XCTAssertFalse(asyncCustomChinese.testTerms.contains("刷盘"))
 
         let customLoopChinese = AppLanguage.simplifiedChinese.benchmarkConfigurationDescription(
             profile: BenchmarkProfile.custom(
