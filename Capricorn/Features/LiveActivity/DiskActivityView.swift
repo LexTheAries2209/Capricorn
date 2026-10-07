@@ -172,52 +172,42 @@ struct DiskActivityView: View {
     }
 
     private var controls: some View {
-        // A single scrollable row avoids measuring multiple wrapping candidates
-        // during every window resize while keeping all controls at one height.
-        ScrollView(.horizontal, showsIndicators: true) {
-            HStack(alignment: .bottom, spacing: 16) {
+        // Keep the history actions on the panel's trailing edge when the row fits.
+        // Switch to a single scrollable row only after the available width is
+        // genuinely smaller than the controls' intrinsic width.
+        Group {
+            if controlsViewportWidth == 0 || controlsContentWidth <= controlsViewportWidth {
                 liveActivityMonitoringGroup
-                    .background {
-                        GeometryReader { geometry in
-                            Color.clear
-                                .preference(
-                                    key: ControlsIntrinsicWidthsKey.self,
-                                    value: ControlsIntrinsicWidths(liveActivity: geometry.size.width)
-                                )
-                        }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .bottomTrailing) {
+                        historyActionButtons
                     }
-                Spacer(minLength: 0)
-                historyActionButtons
-                    .background {
-                        GeometryReader { geometry in
-                            Color.clear
-                                .preference(
-                                    key: ControlsIntrinsicWidthsKey.self,
-                                    value: ControlsIntrinsicWidths(history: geometry.size.width)
-                                )
-                        }
+            } else {
+                ScrollView(.horizontal, showsIndicators: true) {
+                    HStack(alignment: .bottom, spacing: 16) {
+                        liveActivityMonitoringGroup
+                        historyActionButtons
                     }
+                    .fixedSize(horizontal: true, vertical: false)
+                }
             }
-            .frame(
-                width: controlsViewportWidth > 0
-                    ? max(controlsViewportWidth, controlsContentWidth)
-                    : nil,
-                alignment: .leading
-            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .padding(.leading, 4)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(.separator.opacity(0.45), lineWidth: 1)
+        .background {
+            controlsIntrinsicMeasurement
         }
         .background {
             GeometryReader { geometry in
                 Color.clear
                     .preference(key: ControlsViewportWidthKey.self, value: geometry.size.width)
             }
+        }
+        .padding(10)
+        .padding(.leading, 4)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.separator.opacity(0.45), lineWidth: 1)
         }
         .onPreferenceChange(ControlsViewportWidthKey.self) { width in
             guard abs(width - controlsViewportWidth) > 0.5 else { return }
@@ -228,6 +218,33 @@ struct DiskActivityView: View {
             guard abs(contentWidth - controlsContentWidth) > 0.5 else { return }
             controlsContentWidth = contentWidth
         }
+    }
+
+    private var controlsIntrinsicMeasurement: some View {
+        HStack(alignment: .bottom, spacing: 16) {
+            liveActivityMonitoringGroup
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear
+                            .preference(
+                                key: ControlsIntrinsicWidthsKey.self,
+                                value: ControlsIntrinsicWidths(liveActivity: geometry.size.width)
+                            )
+                    }
+                }
+            historyActionButtons
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear
+                            .preference(
+                                key: ControlsIntrinsicWidthsKey.self,
+                                value: ControlsIntrinsicWidths(history: geometry.size.width)
+                            )
+                    }
+                }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .hidden()
     }
 
     private var sampleIntervalControl: some View {
