@@ -18,7 +18,6 @@ struct DiskActivityView: View {
     @State private var workloadTargetSelectionError: String?
     @State private var workloadTargetSnapshot = WorkloadTargetSnapshot.empty
     @State private var controlsViewportWidth: CGFloat = 0
-    @State private var controlsContentWidth: CGFloat = 0
 
     private let controlGroupSpacing: CGFloat = 8
 
@@ -172,30 +171,15 @@ struct DiskActivityView: View {
     }
 
     private var controls: some View {
-        // Keep the history actions on the panel's trailing edge when the row fits.
-        // Switch to a single scrollable row only after the available width is
-        // genuinely smaller than the controls' intrinsic width.
-        Group {
-            if controlsViewportWidth == 0 || controlsContentWidth <= controlsViewportWidth {
+        // Keep one layout path during resizing. The custom row measures both
+        // groups directly, so it can right-align without ever overlapping them.
+        ScrollView(.horizontal, showsIndicators: true) {
+            TrailingControlRow(minimumWidth: controlsViewportWidth, spacing: 16) {
                 liveActivityMonitoringGroup
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .overlay(alignment: .bottomTrailing) {
-                        historyActionButtons
-                    }
-            } else {
-                ScrollView(.horizontal, showsIndicators: true) {
-                    HStack(alignment: .bottom, spacing: 16) {
-                        liveActivityMonitoringGroup
-                        historyActionButtons
-                    }
-                    .fixedSize(horizontal: true, vertical: false)
-                }
+                historyActionButtons
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            controlsIntrinsicMeasurement
-        }
         .background {
             GeometryReader { geometry in
                 Color.clear
@@ -213,38 +197,6 @@ struct DiskActivityView: View {
             guard abs(width - controlsViewportWidth) > 0.5 else { return }
             controlsViewportWidth = width
         }
-        .onPreferenceChange(ControlsIntrinsicWidthsKey.self) { widths in
-            let contentWidth = widths.liveActivity + 16 + widths.history
-            guard abs(contentWidth - controlsContentWidth) > 0.5 else { return }
-            controlsContentWidth = contentWidth
-        }
-    }
-
-    private var controlsIntrinsicMeasurement: some View {
-        HStack(alignment: .bottom, spacing: 16) {
-            liveActivityMonitoringGroup
-                .background {
-                    GeometryReader { geometry in
-                        Color.clear
-                            .preference(
-                                key: ControlsIntrinsicWidthsKey.self,
-                                value: ControlsIntrinsicWidths(liveActivity: geometry.size.width)
-                            )
-                    }
-                }
-            historyActionButtons
-                .background {
-                    GeometryReader { geometry in
-                        Color.clear
-                            .preference(
-                                key: ControlsIntrinsicWidthsKey.self,
-                                value: ControlsIntrinsicWidths(history: geometry.size.width)
-                            )
-                    }
-                }
-        }
-        .fixedSize(horizontal: true, vertical: false)
-        .hidden()
     }
 
     private var sampleIntervalControl: some View {
@@ -852,17 +804,43 @@ private struct ControlsViewportWidthKey: PreferenceKey {
     }
 }
 
-private struct ControlsIntrinsicWidths: Equatable {
-    var liveActivity: CGFloat = 0
-    var history: CGFloat = 0
-}
+private struct TrailingControlRow: Layout {
+    let minimumWidth: CGFloat
+    let spacing: CGFloat
 
-private struct ControlsIntrinsicWidthsKey: PreferenceKey {
-    static let defaultValue = ControlsIntrinsicWidths()
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let contentWidth = sizes.reduce(0) { $0 + $1.width } + spacing * CGFloat(max(0, sizes.count - 1))
+        let contentHeight = sizes.map(\.height).max() ?? 0
+        return CGSize(width: max(minimumWidth, contentWidth), height: contentHeight)
+    }
 
-    static func reduce(value: inout ControlsIntrinsicWidths, nextValue: () -> ControlsIntrinsicWidths) {
-        let next = nextValue()
-        value.liveActivity = max(value.liveActivity, next.liveActivity)
-        value.history = max(value.history, next.history)
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard subviews.count >= 2 else { return }
+
+        let firstSize = subviews[0].sizeThatFits(.unspecified)
+        let secondSize = subviews[1].sizeThatFits(.unspecified)
+        let firstY = bounds.maxY - firstSize.height
+        let secondY = bounds.maxY - secondSize.height
+
+        subviews[0].place(
+            at: CGPoint(x: bounds.minX, y: firstY),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(firstSize)
+        )
+        subviews[1].place(
+            at: CGPoint(x: bounds.maxX - secondSize.width, y: secondY),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(secondSize)
+        )
     }
 }
