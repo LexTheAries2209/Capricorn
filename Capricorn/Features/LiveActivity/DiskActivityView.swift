@@ -18,6 +18,9 @@ struct DiskActivityView: View {
     @State private var workloadTargetSelectionError: String?
     @State private var workloadTargetSnapshot = WorkloadTargetSnapshot.empty
     @State private var controlsViewportWidth: CGFloat = 0
+    @State private var controlsContentWidth: CGFloat = 0
+
+    private let controlGroupSpacing: CGFloat = 8
 
     private var isShowingCurrentSession: Bool {
         viewModel.liveActivityDriveID == drive.id
@@ -174,10 +177,33 @@ struct DiskActivityView: View {
         ScrollView(.horizontal, showsIndicators: true) {
             HStack(alignment: .bottom, spacing: 16) {
                 liveActivityMonitoringGroup
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear
+                                .preference(
+                                    key: ControlsIntrinsicWidthsKey.self,
+                                    value: ControlsIntrinsicWidths(liveActivity: geometry.size.width)
+                                )
+                        }
+                    }
                 Spacer(minLength: 0)
                 historyActionButtons
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear
+                                .preference(
+                                    key: ControlsIntrinsicWidthsKey.self,
+                                    value: ControlsIntrinsicWidths(history: geometry.size.width)
+                                )
+                        }
+                    }
             }
-            .frame(minWidth: controlsViewportWidth, alignment: .leading)
+            .frame(
+                width: controlsViewportWidth > 0
+                    ? max(controlsViewportWidth, controlsContentWidth)
+                    : nil,
+                alignment: .leading
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
@@ -196,6 +222,11 @@ struct DiskActivityView: View {
         .onPreferenceChange(ControlsViewportWidthKey.self) { width in
             guard abs(width - controlsViewportWidth) > 0.5 else { return }
             controlsViewportWidth = width
+        }
+        .onPreferenceChange(ControlsIntrinsicWidthsKey.self) { widths in
+            let contentWidth = widths.liveActivity + 16 + widths.history
+            guard abs(contentWidth - controlsContentWidth) > 0.5 else { return }
+            controlsContentWidth = contentWidth
         }
     }
 
@@ -218,7 +249,7 @@ struct DiskActivityView: View {
     }
 
     private var liveActivityMonitoringGroup: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .bottom, spacing: controlGroupSpacing) {
             monitoringActionGroup
             sampleIntervalControl
         }
@@ -328,7 +359,7 @@ struct DiskActivityView: View {
         // Keep the workload controls at one height. A scrollable row avoids
         // ViewThatFits measuring several complete control trees during resize.
         ScrollView(.horizontal, showsIndicators: true) {
-            HStack(alignment: .bottom, spacing: 16) {
+            HStack(alignment: .bottom, spacing: controlGroupSpacing) {
                 workloadActionsControl
                 workloadTargetControl(width: 360)
                 workloadOperationControl
@@ -466,7 +497,6 @@ struct DiskActivityView: View {
         Label(title, systemImage: systemImage)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 6)
     }
 
     private var workloadTargetStatusText: String {
@@ -802,5 +832,20 @@ private struct ControlsViewportWidthKey: PreferenceKey {
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
+    }
+}
+
+private struct ControlsIntrinsicWidths: Equatable {
+    var liveActivity: CGFloat = 0
+    var history: CGFloat = 0
+}
+
+private struct ControlsIntrinsicWidthsKey: PreferenceKey {
+    static let defaultValue = ControlsIntrinsicWidths()
+
+    static func reduce(value: inout ControlsIntrinsicWidths, nextValue: () -> ControlsIntrinsicWidths) {
+        let next = nextValue()
+        value.liveActivity = max(value.liveActivity, next.liveActivity)
+        value.history = max(value.history, next.history)
     }
 }
