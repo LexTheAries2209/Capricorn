@@ -221,7 +221,7 @@ struct DiskActivityView: View {
     }
 
     private var liveActivityMonitoringGroup: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .bottom, spacing: 8) {
             sampleIntervalControl
             monitoringActionButtons
         }
