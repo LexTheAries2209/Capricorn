@@ -17,6 +17,7 @@ struct DiskActivityView: View {
     @State private var saveMessage: String?
     @State private var workloadTargetSelectionError: String?
     @State private var workloadTargetSnapshot = WorkloadTargetSnapshot.empty
+    @State private var controlsViewportWidth: CGFloat = 0
 
     private var isShowingCurrentSession: Bool {
         viewModel.liveActivityDriveID == drive.id
@@ -176,6 +177,7 @@ struct DiskActivityView: View {
                 Spacer(minLength: 0)
                 historyActionButtons
             }
+            .frame(minWidth: controlsViewportWidth, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
@@ -184,6 +186,16 @@ struct DiskActivityView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(.separator.opacity(0.45), lineWidth: 1)
+        }
+        .background {
+            GeometryReader { geometry in
+                Color.clear
+                    .preference(key: ControlsViewportWidthKey.self, value: geometry.size.width)
+            }
+        }
+        .onPreferenceChange(ControlsViewportWidthKey.self) { width in
+            guard abs(width - controlsViewportWidth) > 0.5 else { return }
+            controlsViewportWidth = width
         }
     }
 
@@ -783,4 +795,12 @@ private struct WorkloadTargetSnapshot: Equatable {
         folderIsUsable: false,
         availableCapacity: 0
     )
+}
+
+private struct ControlsViewportWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
 }
