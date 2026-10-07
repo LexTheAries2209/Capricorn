@@ -1230,7 +1230,7 @@ private struct DriveDetailView: View {
             BenchmarkView(drive: drive, viewModel: viewModel, saveResults: saveBenchmarkResults)
                 .tabItem { Label(language.t("Benchmark"), systemImage: "speedometer") }
                 .tag(DriveFeatureTab.benchmark)
-            DiskActivityView(drive: drive, viewModel: viewModel, activityHistory: activityHistory)
+            DiskActivityView(drive: drive, viewModel: viewModel)
                 .tabItem { Label(language.t("Live Activity"), systemImage: "waveform.path.ecg.rectangle") }
                 .tag(DriveFeatureTab.liveActivity)
             HistoryReportView(

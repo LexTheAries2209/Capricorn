@@ -6,7 +6,6 @@ import SwiftUI
 struct DiskActivityView: View {
     let drive: DriveDevice
     var viewModel: AppModel
-    let activityHistory: [DiskActivityHistoryRecord]
     @AppStorage("diskActivitySampleInterval") private var selectedIntervalSeconds = DiskActivitySampleInterval.default.seconds
     @AppStorage("diskActivityWorkloadTargetsByDrive") private var workloadTargetPreferencesJSON = ""
     @AppStorage("diskActivityWorkloadTargetFolder") private var legacyWorkloadTargetFolderPath = ""
@@ -16,10 +15,7 @@ struct DiskActivityView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @State private var saveMessage: String?
-    @State private var showHiddenActivityHistory = false
     @State private var workloadTargetSelectionError: String?
-    private let activityHistoryScrollThreshold = 10
-    private let activityHistoryRowHeight: CGFloat = 58
 
     private var isShowingCurrentSession: Bool {
         viewModel.liveActivityDriveID == drive.id
@@ -107,14 +103,6 @@ struct DiskActivityView: View {
         return workloadTargetAvailableCapacity >= required
     }
 
-    private var selectedDriveHistory: [DiskActivityHistoryRecord] {
-        HistoryVisibility.visible(activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) })
-    }
-
-    private var selectedDriveHiddenHistory: [DiskActivityHistoryRecord] {
-        HistoryVisibility.hidden(activityHistory.filter { HistoryDriveMatcher.matches(record: $0, drive: drive) })
-    }
-
     private var summary: DiskActivitySummary {
         let fallbackEnd = isMonitoringThisDrive ? Date() : (isShowingCurrentSession ? viewModel.liveActivityEndedAt : nil)
         return DiskActivityStatistics.summarize(
@@ -142,7 +130,6 @@ struct DiskActivityView: View {
                     style: .expanded
                 )
                 metricGrid
-                historyList
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -683,169 +670,6 @@ struct DiskActivityView: View {
                 ActivityMetricTile(title: "\(language.operationTitle(.read)) \(language.t("Average"))", value: DiskActivityFormatter.speed(summary.averageReadMegabytesPerSecond), symbol: "chart.line.downtrend.xyaxis")
                 ActivityMetricTile(title: "\(language.operationTitle(.write)) \(language.t("Average"))", value: DiskActivityFormatter.speed(summary.averageWriteMegabytesPerSecond), symbol: "chart.line.uptrend.xyaxis")
             }
-        }
-    }
-
-    private var historyList: some View {
-        InfoPanel(title: language.t("Live Activity History"), symbol: "clock.arrow.circlepath") {
-            if !selectedDriveHistory.isEmpty {
-                HStack {
-                    Spacer()
-                    Button {
-                        hideAllVisibleActivityHistory()
-                    } label: {
-                        Label(language.t("Hide All"), systemImage: "eye.slash")
-                    }
-                    .controlSize(.small)
-                    .help(language.t("Hide All"))
-                }
-            }
-
-            if selectedDriveHistory.isEmpty {
-                Text(selectedDriveHiddenHistory.isEmpty ? language.t("No saved activity records yet.") : language.t("No visible activity records. Hidden activity records can be restored below."))
-                    .foregroundStyle(.secondary)
-            } else {
-                activityHistoryRows(selectedDriveHistory, isHidden: false)
-            }
-
-            if !selectedDriveHiddenHistory.isEmpty {
-                hiddenActivityHistoryDisclosure
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func activityHistoryRows(_ items: [DiskActivityHistoryRecord], isHidden: Bool) -> some View {
-        if items.count > activityHistoryScrollThreshold {
-            ScrollView(.vertical) {
-                activityHistoryRowsContent(items, isHidden: isHidden)
-            }
-            .frame(height: CGFloat(activityHistoryScrollThreshold) * activityHistoryRowHeight)
-            .scrollIndicators(.visible)
-        } else {
-            activityHistoryRowsContent(items, isHidden: isHidden)
-        }
-    }
-
-    private func activityHistoryRowsContent(_ items: [DiskActivityHistoryRecord], isHidden: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                activityHistoryRow(item, isHidden: isHidden)
-                    .padding(.vertical, 8)
-                if index < items.count - 1 {
-                    Divider()
-                }
-            }
-        }
-    }
-
-    private var hiddenActivityHistoryDisclosure: some View {
-        DisclosureGroup(isExpanded: $showHiddenActivityHistory) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(language.t("Hidden records remain in the local database and can be restored here."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        restoreAllHiddenActivityHistory()
-                    } label: {
-                        Label(language.t("Restore All"), systemImage: "arrow.counterclockwise")
-                    }
-                    .controlSize(.small)
-                }
-
-                activityHistoryRows(selectedDriveHiddenHistory, isHidden: true)
-            }
-            .padding(.top, 8)
-        } label: {
-            Label(language.t("Manage Hidden Records"), systemImage: "eye.slash")
-                .font(.headline)
-        }
-        .padding(.top, 8)
-    }
-
-    private func activityHistoryRow(_ item: DiskActivityHistoryRecord, isHidden: Bool) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.endedAt.formatted(date: .abbreviated, time: .standard))
-                Text("\(language.t("Elapsed")) \(DiskActivityChartScale.formatDuration(item.durationSeconds)) · \(item.sampleCount) \(language.t("samples")) · \(item.sampleInterval.title)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(language.operationTitle(.read)) \(DiskActivityFormatter.speed(item.peakReadMegabytesPerSecond))")
-                Text("\(language.operationTitle(.write)) \(DiskActivityFormatter.speed(item.peakWriteMegabytesPerSecond))")
-            }
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
-
-            Button {
-                selectedIntervalSeconds = item.sampleInterval.seconds
-                saveMessage = nil
-                viewModel.loadLiveActivityRecord(item, drive: drive)
-            } label: {
-                Image(systemName: "chart.xyaxis.line")
-                    .frame(width: 18, height: 18)
-            }
-            .buttonStyle(.borderless)
-            .help(language.t("Load Chart"))
-            .disabled(viewModel.isLiveActivityMonitoring)
-
-            activityHistoryVisibilityButton(isHidden: isHidden) {
-                if isHidden {
-                    restoreActivityHistory(item)
-                } else {
-                    hideActivityHistory(item)
-                }
-            }
-        }
-    }
-
-    private func activityHistoryVisibilityButton(isHidden: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: isHidden ? "arrow.uturn.backward" : "eye.slash")
-                .frame(width: 18, height: 18)
-        }
-        .buttonStyle(.borderless)
-        .controlSize(.small)
-        .foregroundStyle(.secondary)
-        .help(language.t(isHidden ? "Restore" : "Hide from history"))
-        .accessibilityLabel(language.t(isHidden ? "Restore" : "Hide from history"))
-    }
-
-    private func hideActivityHistory(_ item: DiskActivityHistoryRecord) {
-        do {
-            try HistoryRepository(modelContext: modelContext).hide(item)
-        } catch {
-            saveMessage = UserFacingError.message("Could not update activity history.", error: error)
-        }
-    }
-
-    private func restoreActivityHistory(_ item: DiskActivityHistoryRecord) {
-        do {
-            try HistoryRepository(modelContext: modelContext).restore(item)
-        } catch {
-            saveMessage = UserFacingError.message("Could not update activity history.", error: error)
-        }
-    }
-
-    private func restoreAllHiddenActivityHistory() {
-        do {
-            try HistoryRepository(modelContext: modelContext).restoreAll(selectedDriveHiddenHistory)
-        } catch {
-            saveMessage = UserFacingError.message("Could not update activity history.", error: error)
-        }
-    }
-
-    private func hideAllVisibleActivityHistory() {
-        do {
-            try HistoryRepository(modelContext: modelContext).hideAll(selectedDriveHistory, matching: drive)
-        } catch {
-            saveMessage = UserFacingError.message("Could not update activity history.", error: error)
         }
     }
 
