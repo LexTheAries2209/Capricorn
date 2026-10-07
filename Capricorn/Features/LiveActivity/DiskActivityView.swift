@@ -183,12 +183,12 @@ struct DiskActivityView: View {
             VStack(alignment: .leading, spacing: 10) {
                 liveActivityMonitoringGroup
                 historyActionButtons
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             VStack(alignment: .leading, spacing: 10) {
                 sampleIntervalControl
-                monitoringActionButtons
+                monitoringActionGroup
                 historyActionButtons
             }
         }
@@ -223,6 +223,16 @@ struct DiskActivityView: View {
     private var liveActivityMonitoringGroup: some View {
         HStack(alignment: .bottom, spacing: 8) {
             sampleIntervalControl
+            monitoringActionGroup
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var monitoringActionGroup: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(language.t("Monitoring Controls"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
             monitoringActionButtons
         }
         .fixedSize(horizontal: true, vertical: false)
@@ -459,21 +469,26 @@ struct DiskActivityView: View {
     }
 
     private var workloadActionsControl: some View {
-        HStack(spacing: 8) {
-            Button {
-                startWorkload()
-            } label: {
-                workloadActionLabel(language.t("Start Workload"), systemImage: "play.fill")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!canStartWorkload)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(language.t("Workload Controls"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button {
+                    startWorkload()
+                } label: {
+                    workloadActionLabel(language.t("Start Workload"), systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canStartWorkload)
 
-            Button {
-                viewModel.stopLiveActivityWorkload()
-            } label: {
-                workloadActionLabel(language.t("Stop Workload"), systemImage: "stop.fill")
+                Button {
+                    viewModel.stopLiveActivityWorkload()
+                } label: {
+                    workloadActionLabel(language.t("Stop Workload"), systemImage: "stop.fill")
+                }
+                .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
             }
-            .disabled(!viewModel.isLiveActivityWorkloadRunning || !isShowingCurrentSession)
         }
         .fixedSize(horizontal: true, vertical: false)
     }
