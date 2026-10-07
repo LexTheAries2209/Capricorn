@@ -5506,6 +5506,14 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testLiveActivityHistoryChartUsesFiveYAxisLabels() {
+        XCTAssertEqual(DiskActivityChartView.Style.mini.maximumYAxisLabelCount, 5)
+        XCTAssertEqual(
+            DiskActivityChartAxisLabelPolicy.visibleIndices(tickCount: 9, maximumLabelCount: DiskActivityChartView.Style.mini.maximumYAxisLabelCount),
+            [0, 2, 4, 6, 8]
+        )
+    }
+
     func testBenchmarkActivityPanelKeepsChartVisibleOutsideBenchmark() {
         XCTAssertTrue(BenchmarkActivityPanelState.showsChart(isNetworkDrive: false))
         XCTAssertTrue(BenchmarkActivityPanelState.showsChart(isNetworkDrive: true))
