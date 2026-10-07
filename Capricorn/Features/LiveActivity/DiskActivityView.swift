@@ -328,7 +328,7 @@ struct DiskActivityView: View {
         // Keep the workload controls at one height. A scrollable row avoids
         // ViewThatFits measuring several complete control trees during resize.
         ScrollView(.horizontal, showsIndicators: true) {
-            HStack(alignment: .bottom, spacing: 24) {
+            HStack(alignment: .bottom, spacing: 16) {
                 workloadActionsControl
                 workloadTargetControl(width: 360)
                 workloadOperationControl
