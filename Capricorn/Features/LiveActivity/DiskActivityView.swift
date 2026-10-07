@@ -171,24 +171,12 @@ struct DiskActivityView: View {
     }
 
     private var controls: some View {
-        // Keep monitoring controls left and history actions right when the row fits.
-        ViewThatFits(in: .horizontal) {
+        // A single scrollable row avoids measuring multiple wrapping candidates
+        // during every window resize while keeping all controls at one height.
+        ScrollView(.horizontal, showsIndicators: true) {
             HStack(alignment: .bottom, spacing: 16) {
                 liveActivityMonitoringGroup
                 Spacer(minLength: 0)
-                historyActionButtons
-            }
-            .frame(maxWidth: .infinity)
-
-            VStack(alignment: .leading, spacing: 10) {
-                liveActivityMonitoringGroup
-                historyActionButtons
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                sampleIntervalControl
-                monitoringActionGroup
                 historyActionButtons
             }
         }
@@ -222,8 +210,8 @@ struct DiskActivityView: View {
 
     private var liveActivityMonitoringGroup: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            sampleIntervalControl
             monitoringActionGroup
+            sampleIntervalControl
         }
         .fixedSize(horizontal: true, vertical: false)
     }
