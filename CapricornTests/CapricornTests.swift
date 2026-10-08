@@ -18,12 +18,22 @@ final class CapricornTests: XCTestCase {
     func testActivityMetricGridKeepsCompactWrappingThreshold() {
         let layout = ActivityMetricGridLayout()
         let grid = layout.geometry(width: 769, itemCount: 6)
-        XCTAssertEqual(grid.columns, 5)
+        XCTAssertEqual(grid.columns, 4)
         XCTAssertEqual(grid.rows, 2)
         XCTAssertGreaterThanOrEqual(grid.columnWidth, 120)
-        XCTAssertEqual(grid.columnWidth * 5 + layout.spacing * 4, 769, accuracy: 0.001)
+        XCTAssertEqual(grid.columnWidth * 4 + layout.spacing * 3, 769, accuracy: 0.001)
         XCTAssertEqual(layout.geometry(width: 380, itemCount: 6).columns, 3)
         XCTAssertEqual(layout.geometry(width: 380, itemCount: 6).rows, 2)
+    }
+
+    func testActivityMetricGridKeepsReadAndWriteAveragesOnSameRow() {
+        let layout = ActivityMetricGridLayout()
+        for width: CGFloat in [769, 640, 639, 510, 509, 380, 379, 250] {
+            let grid = layout.geometry(width: width, itemCount: 6)
+            XCTAssertEqual(4 / grid.columns, 5 / grid.columns)
+            XCTAssertGreaterThanOrEqual(grid.columnWidth, 120)
+            XCTAssertEqual(grid.columnWidth * CGFloat(grid.columns) + layout.spacing * CGFloat(grid.columns - 1), width, accuracy: 0.001)
+        }
     }
 
     func testActivityMetricGridHandlesEmptyAndVeryNarrowWidths() {

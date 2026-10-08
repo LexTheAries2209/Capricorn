@@ -799,7 +799,9 @@ struct ActivityMetricGridLayout: Layout {
         guard itemCount > 0 else { return (0, 0, 0) }
         let width = max(0, width.isFinite ? width : minimumWidth * CGFloat(itemCount) + spacing * CGFloat(itemCount - 1))
         // Cap tracks at the item count so wide windows never reserve empty columns.
-        let columns = max(1, Int(min(CGFloat(itemCount), floor((width + spacing) / (minimumWidth + spacing)))))
+        let fittingColumns = max(1, Int(min(CGFloat(itemCount), floor((width + spacing) / (minimumWidth + spacing)))))
+        // Keep the read/write averages together when the six metrics first wrap.
+        let columns = itemCount == 6 && fittingColumns == 5 ? 4 : fittingColumns
         let columnWidth = max(0, (width - spacing * CGFloat(columns - 1)) / CGFloat(columns))
         return (columns, (itemCount + columns - 1) / columns, columnWidth)
     }
