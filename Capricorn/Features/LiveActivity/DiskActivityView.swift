@@ -3,6 +3,12 @@ import AppKit
 import SwiftData
 import SwiftUI
 
+private struct WorkloadStartRequest: Identifiable {
+    let id = UUID()
+    let configuration: DiskActivityWorkloadConfiguration
+    let interval: DiskActivitySampleInterval
+}
+
 struct DiskActivityView: View {
     let drive: DriveDevice
     var viewModel: AppModel
@@ -17,6 +23,7 @@ struct DiskActivityView: View {
     @State private var saveMessage: String?
     @State private var workloadTargetSelectionError: String?
     @State private var workloadTargetSnapshot = WorkloadTargetSnapshot.empty
+    @State private var workloadStartRequest: WorkloadStartRequest?
 
     private let controlGroupSpacing: CGFloat = 8
 
@@ -142,8 +149,30 @@ struct DiskActivityView: View {
         .onChange(of: drive.id) { _, _ in
             saveMessage = nil
             workloadTargetSelectionError = nil
+            workloadStartRequest = nil
             prepareWorkloadTarget()
             adjustWorkloadFileSizeForTarget()
+        }
+        .sheet(item: $workloadStartRequest) { request in
+            BenchmarkConfirmationSheet(
+                language: language,
+                title: language.t("Start Workload"),
+                driveName: drive.catalogDisplayName,
+                message: language.activityWorkloadConfirmationMessage(isNetworkDrive: drive.isNetwork),
+                warning: language.activityWorkloadConfirmationWarning(request.configuration.operation),
+                fields: language.activityWorkloadConfirmationFields(
+                    configuration: request.configuration,
+                    interval: request.interval
+                ),
+                targetFolder: request.configuration.targetFolderURL.path,
+                targetFolderTitle: language.t("Target Location"),
+                confirmTitle: language.t("Start Workload"),
+                onConfirm: {
+                    workloadStartRequest = nil
+                    startWorkload(request)
+                },
+                onDismiss: { workloadStartRequest = nil }
+            )
         }
         .onChange(of: workloadOperationRaw) { _, _ in
             if isShowingCurrentSession {
@@ -282,22 +311,9 @@ struct DiskActivityView: View {
             VStack(alignment: .leading, spacing: 10) {
                 workloadControlLayout
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Label(workloadTargetStatusText, systemImage: workloadTargetStatusSymbol)
-                        .font(.caption)
-                        .foregroundStyle(workloadTargetStatusColor)
-                    Text(workloadTargetFolderPath.isEmpty ? language.t("No target folder selected") : workloadTargetFolderPath)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text(language.t("Large file workload creates temporary files and may stress or wear storage."))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(language.t("Workload engine: SEQ1M Q4T4 async, 4 MiB chunks, 0 Fill."))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                Label(workloadTargetStatusText, systemImage: workloadTargetStatusSymbol)
+                    .font(.caption)
+                    .foregroundStyle(workloadTargetStatusColor)
 
                 if isShowingCurrentSession, let progress = viewModel.liveActivityWorkloadProgress {
                     VStack(alignment: .leading, spacing: 6) {
@@ -437,7 +453,7 @@ struct DiskActivityView: View {
                 .foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 Button {
-                    startWorkload()
+                    requestWorkloadStart()
                 } label: {
                     workloadActionLabel(language.t("Start Workload"), systemImage: "play.fill")
                 }
@@ -672,7 +688,8 @@ struct DiskActivityView: View {
         }
     }
 
-    private func startWorkload() {
+    private func requestWorkloadStart() {
+        refreshWorkloadTargetSnapshot()
         guard let targetURL = workloadTargetFolderURL,
               let fileSize = workloadResolvedFileSize else {
             workloadTargetSelectionError = language.t("Choose a writable target folder before starting.")
@@ -683,9 +700,9 @@ struct DiskActivityView: View {
             return
         }
 
-        saveMessage = nil
         workloadTargetSelectionError = nil
-        viewModel.startLiveActivityWorkload(
+        // Freeze what the user is approving, including the resolved full-disk size.
+        workloadStartRequest = WorkloadStartRequest(
             configuration: DiskActivityWorkloadConfiguration(
                 targetFolderURL: targetURL,
                 operation: workloadOperation,
@@ -693,8 +710,36 @@ struct DiskActivityView: View {
                 fileSizeBytes: fileSize,
                 loopEnabled: workloadLoopEnabled
             ),
-            drive: drive,
             interval: selectedInterval
+        )
+    }
+
+    private func startWorkload(_ request: WorkloadStartRequest) {
+        let configuration = request.configuration
+        guard !viewModel.isLiveActivityWorkloadRunning else { return }
+        guard DiskActivityWorkloadTargetResolver.isUsableFolder(configuration.targetFolderURL.path),
+              BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(configuration.targetFolderURL.path, drive: drive) else {
+            workloadTargetSelectionError = language.t("The selected folder must be writable and on the selected drive.")
+            refreshWorkloadTargetSnapshot()
+            return
+        }
+        // Recheck the approved path rather than falling back to a different target.
+        let availableCapacity = DiskActivityWorkloadStorageValidator.availableCapacity(for: configuration.targetFolderURL)
+        let requiredSpace = DiskActivityWorkloadStorageValidator.requiredSpace(
+            fileSizeBytes: configuration.fileSizeBytes,
+            operation: configuration.operation
+        )
+        guard availableCapacity >= requiredSpace else {
+            workloadTargetSelectionError = language.t("Selected workload size exceeds available free space")
+            refreshWorkloadTargetSnapshot()
+            return
+        }
+        saveMessage = nil
+        workloadTargetSelectionError = nil
+        viewModel.startLiveActivityWorkload(
+            configuration: configuration,
+            drive: drive,
+            interval: request.interval
         )
     }
 

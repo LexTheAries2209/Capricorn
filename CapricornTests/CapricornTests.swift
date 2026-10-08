@@ -1315,6 +1315,48 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("Actions"), "操作")
     }
 
+    func testWorkloadConfirmationDescribesApprovedConfiguration() {
+        let configuration = DiskActivityWorkloadConfiguration(
+            targetFolderURL: URL(fileURLWithPath: "/Volumes/Test"),
+            operation: .mixed,
+            fileSizeOption: .fullDisk95,
+            fileSizeBytes: 32 * 1_024 * 1_024 * 1_024,
+            loopEnabled: true
+        )
+        let chinese = AppLanguage.simplifiedChinese.activityWorkloadConfirmationFields(
+            configuration: configuration, interval: .tenth
+        )
+        XCTAssertEqual(chinese.map(\.title), ["负载", "大文件大小", "循环", "采样间隔", "引擎", "数据模式"])
+        XCTAssertEqual(chinese[0].value, "读写混合")
+        XCTAssertEqual(chinese[1].value, "全盘 (95%) · 32 GiB x2")
+        XCTAssertEqual(chinese[2].value, "直到手动停止")
+        XCTAssertEqual(chinese[3].value, "0.1s")
+        XCTAssertEqual(chinese[4].value, "SEQ1M Q4T4 异步，4 MiB 块")
+        XCTAssertEqual(chinese[5].value, "0 填充")
+
+        var fixedConfiguration = configuration
+        fixedConfiguration.operation = .write
+        fixedConfiguration.fileSizeOption = .gib32
+        fixedConfiguration.loopEnabled = false
+        let english = AppLanguage.english.activityWorkloadConfirmationFields(
+            configuration: fixedConfiguration, interval: .default
+        )
+        XCTAssertEqual(english[0].value, "Write")
+        XCTAssertEqual(english[1].value, "32 GiB")
+        XCTAssertEqual(english[2].value, "Off")
+        XCTAssertEqual(english[3].value, DiskActivitySampleInterval.default.title)
+    }
+
+    func testWorkloadConfirmationWarnsAboutReadPreparationAndMonitoring() {
+        let chinese = AppLanguage.simplifiedChinese
+        XCTAssertTrue(chinese.activityWorkloadConfirmationWarning(.read).contains("写入临时源文件"))
+        XCTAssertTrue(chinese.activityWorkloadConfirmationWarning(.mixed).contains("写入磨损"))
+        XCTAssertTrue(chinese.activityWorkloadConfirmationWarning(.write).contains("磁盘空间"))
+        XCTAssertTrue(chinese.activityWorkloadConfirmationMessage(isNetworkDrive: false).contains("同时开始实时活动监控"))
+        XCTAssertTrue(chinese.activityWorkloadConfirmationMessage(isNetworkDrive: true).contains("不支持实时活动监控"))
+        XCTAssertTrue(AppLanguage.english.activityWorkloadConfirmationWarning(.read).contains("writes a temporary source file"))
+    }
+
     func testSmartDiagnosticStatusMessagesAreLocalized() {
         XCTAssertEqual(
             AppLanguage.simplifiedChinese.statusMessage("No SMART error log entries were reported."),

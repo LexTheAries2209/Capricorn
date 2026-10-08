@@ -1176,7 +1176,7 @@ private struct CustomBenchmarkRowsEditor: View {
     }
 }
 
-private struct BenchmarkConfirmationSheet: View {
+struct BenchmarkConfirmationSheet: View {
     let language: AppLanguage
     let title: String
     let driveName: String
@@ -1185,6 +1185,7 @@ private struct BenchmarkConfirmationSheet: View {
     let testItem: String?
     let fields: [BenchmarkConfirmationField]
     let targetFolder: String?
+    let targetFolderTitle: String
     let targetMismatch: Bool
     let confirmTitle: String?
     let onConfirm: (() -> Void)?
@@ -1199,6 +1200,7 @@ private struct BenchmarkConfirmationSheet: View {
         testItem: String? = nil,
         fields: [BenchmarkConfirmationField],
         targetFolder: String? = nil,
+        targetFolderTitle: String? = nil,
         targetMismatch: Bool = false,
         confirmTitle: String? = nil,
         onConfirm: (() -> Void)? = nil,
@@ -1212,6 +1214,7 @@ private struct BenchmarkConfirmationSheet: View {
         self.testItem = testItem
         self.fields = fields
         self.targetFolder = targetFolder
+        self.targetFolderTitle = targetFolderTitle ?? language.t("Write target folder")
         self.targetMismatch = targetMismatch
         self.confirmTitle = confirmTitle
         self.onConfirm = onConfirm
@@ -1263,7 +1266,7 @@ private struct BenchmarkConfirmationSheet: View {
 
             if let targetFolder {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(language.t("Write target folder"))
+                    Text(targetFolderTitle)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     Text(targetFolder)
