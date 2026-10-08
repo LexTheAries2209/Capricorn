@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for disk inspection, SMART health checks, sto
 
 Capricorn 是一个本地 macOS 工具，用于磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.9.6`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.9.7`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v2.9.6.md](docs/releases/v2.9.6.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v2.9.7.md](docs/releases/v2.9.7.md)
 
 Complete release log / 完整更新记录：[CHANGELOG.md](CHANGELOG.md)
 
@@ -22,7 +22,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 
 ### 下载和安装
 
-前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.9.6-macOS.zip`，解压后将 `Capricorn V2.9.6.app` 放到 `Applications` 或其他本地工具目录。
+前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.9.7-macOS.zip`，解压后将 `Capricorn V2.9.7.app` 放到 `Applications` 或其他本地工具目录。
 
 首次打开时，如果 macOS Gatekeeper 显示互联网下载提示，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
@@ -76,7 +76,7 @@ Capricorn is for macOS users who need to inspect drive status, review external d
 
 ### Download And Install
 
-Download `Capricorn-v2.9.6-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn V2.9.6.app` to `Applications` or another local tools folder.
+Download `Capricorn-v2.9.7-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn V2.9.7.app` to `Applications` or another local tools folder.
 
 On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 

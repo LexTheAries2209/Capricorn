@@ -4,6 +4,24 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.9.7 - 2026-10-08
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.7) | [Release Notes / 发布说明](docs/releases/v2.9.7.md)
+
+### 中文
+
+- 测速和实时活动控件在窄窗口中横向滚动，改进窗口缩放流畅度和统计块布局。
+- 大文件负载新增启动确认，展示目标位置、负载设置和写入提醒，并说明同时启动监控；系统盘默认负载位置为桌面。
+- 实时活动历史统一在历史页管理，图表显示五个纵轴数据标签。
+- 系统盘概览的卷宗列表仅显示一个当前系统卷。
+
+### English
+
+- Benchmark and live-activity controls scroll horizontally in narrow windows, with smoother resizing and improved metric-tile layouts.
+- Large-file workloads gain start confirmation with target, settings, write warnings, and monitoring guidance; system-disk workloads default to Desktop.
+- Live-activity records are managed in History, with five vertical-axis labels on history charts.
+- The system-disk overview lists only the current system volume.
+
 ## V2.9.6 - 2026-10-05
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.6) | [Release Notes / 发布说明](docs/releases/v2.9.6.md)
