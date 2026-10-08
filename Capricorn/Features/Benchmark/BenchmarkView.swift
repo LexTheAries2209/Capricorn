@@ -410,11 +410,14 @@ struct BenchmarkView: View {
                 .scrollIndicators(.visible)
             }
 
-            // Keep the efficiency controls with the run actions so the whole
-            // execution control surface reads as one row.
-            HStack(alignment: .center, spacing: 10) {
-                benchmarkActionControls
-                smallBlockEfficiencyControls
+            // Preserve the row's intrinsic width; narrow windows scroll instead
+            // of compressing the efficiency label onto multiple lines.
+            ScrollView(.horizontal, showsIndicators: true) {
+                HStack(alignment: .center, spacing: 10) {
+                    benchmarkActionControls
+                    smallBlockEfficiencyControls
+                }
+                .fixedSize(horizontal: true, vertical: false)
             }
 
             BenchmarkConfigurationDescriptionView(description: configurationDescription)
