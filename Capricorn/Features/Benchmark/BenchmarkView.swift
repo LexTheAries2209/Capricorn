@@ -1527,8 +1527,13 @@ struct DiskActivityChartView: View {
     let current: DiskActivitySample?
     let style: Style
     var showsHeader = true
+    var centersTitleAndYAxisLabels = false
     @Environment(\.appLanguage) private var language
     private static let plotVerticalInset: CGFloat = 7
+
+    var yAxisLabelAlignment: Alignment {
+        centersTitleAndYAxisLabels ? .center : .trailing
+    }
 
     private var readSpeed: Double {
         current?.readMegabytesPerSecond ?? 0
@@ -1606,7 +1611,10 @@ struct DiskActivityChartView: View {
     private var chartTitle: some View {
         Text(title)
             .font(.caption.bold())
-            .fixedSize(horizontal: true, vertical: false)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: !centersTitleAndYAxisLabels, vertical: true)
+            // Use the speed column's width so the title shares its center.
+            .frame(width: centersTitleAndYAxisLabels ? style.yAxisWidth : nil, alignment: .center)
     }
 
     private var chartLegend: some View {
@@ -1635,7 +1643,7 @@ struct DiskActivityChartView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.65)
-                        .frame(width: geometry.size.width, alignment: .trailing)
+                        .frame(width: geometry.size.width, alignment: yAxisLabelAlignment)
                         .position(
                             x: geometry.size.width / 2,
                             y: Self.plotVerticalInset + plotHeight * (1 - fraction)

@@ -132,7 +132,8 @@ struct DiskActivityView: View {
                     title: language.t("Live Disk Activity"),
                     samples: displayedSamples,
                     current: displayedCurrentActivity,
-                    style: .expanded
+                    style: .expanded,
+                    centersTitleAndYAxisLabels: true
                 )
                 metricGrid
             }

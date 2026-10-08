@@ -5627,6 +5627,28 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testLiveActivityChartCentersTitleAndSpeedColumnWithoutChangingOtherCharts() {
+        let liveChart = DiskActivityChartView(
+            title: "Live Disk Activity",
+            samples: [],
+            current: nil,
+            style: .expanded,
+            centersTitleAndYAxisLabels: true
+        )
+        XCTAssertEqual(liveChart.yAxisLabelAlignment, .center)
+
+        for style in [DiskActivityChartView.Style.compact, .expanded, .mini] {
+            let chart = DiskActivityChartView(
+                title: "Disk Activity",
+                samples: [],
+                current: nil,
+                style: style
+            )
+            XCTAssertFalse(chart.centersTitleAndYAxisLabels)
+            XCTAssertEqual(chart.yAxisLabelAlignment, .trailing)
+        }
+    }
+
     func testBenchmarkActivityPanelKeepsChartVisibleOutsideBenchmark() {
         XCTAssertTrue(BenchmarkActivityPanelState.showsChart(isNetworkDrive: false))
         XCTAssertTrue(BenchmarkActivityPanelState.showsChart(isNetworkDrive: true))
