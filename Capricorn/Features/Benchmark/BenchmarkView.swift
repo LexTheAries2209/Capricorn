@@ -1257,6 +1257,10 @@ struct BenchmarkConfirmationSheet: View {
         configurationDescription == nil ? "exclamationmark.triangle.fill" : "info.circle"
     }
 
+    var dismissTitle: String {
+        language.t(configurationDescription != nil ? "Close" : (confirmTitle == nil ? "OK" : "Cancel"))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 14) {
@@ -1273,12 +1277,23 @@ struct BenchmarkConfirmationSheet: View {
                 }
             }
 
-            Text(message)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
-
             if let configurationDescription {
-                BenchmarkConfigurationDescriptionView(description: configurationDescription)
+                // Frame only the help copy; keep run confirmations unchanged.
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(message)
+                        .font(.callout.weight(.medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                    BenchmarkConfigurationDescriptionView(description: configurationDescription)
+                }
+                .padding(16)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(.secondary.opacity(0.45), lineWidth: 1)
+                }
+            } else {
+                Text(message)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if let testItem {
@@ -1335,8 +1350,15 @@ struct BenchmarkConfirmationSheet: View {
 
             HStack {
                 Spacer()
-                Button(language.t(confirmTitle == nil ? "OK" : "Cancel"), action: onDismiss)
-                    .keyboardShortcut(.cancelAction)
+                if configurationDescription != nil {
+                    Button(dismissTitle, action: onDismiss)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+                        .keyboardShortcut(.cancelAction)
+                } else {
+                    Button(dismissTitle, action: onDismiss)
+                        .keyboardShortcut(.cancelAction)
+                }
                 if let confirmTitle, let onConfirm {
                     Button(action: onConfirm) {
                         Label(confirmTitle, systemImage: "play.fill")

@@ -6400,6 +6400,7 @@ final class CapricornTests: XCTestCase {
             onDismiss: {}
         )
         XCTAssertEqual(help.headerSymbol, "info.circle")
+        XCTAssertEqual(help.dismissTitle, "关闭")
         XCTAssertEqual(help.configurationDescription?.detailParagraphs, description.detailParagraphs)
         XCTAssertNil(help.warning)
         XCTAssertNil(help.targetFolder)
@@ -6418,6 +6419,7 @@ final class CapricornTests: XCTestCase {
             onDismiss: {}
         )
         XCTAssertEqual(confirmation.headerSymbol, "exclamationmark.triangle.fill")
+        XCTAssertEqual(confirmation.dismissTitle, "取消")
         XCTAssertNotNil(confirmation.warning)
         XCTAssertNotNil(confirmation.onConfirm)
         XCTAssertNil(confirmation.configurationDescription)
