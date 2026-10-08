@@ -395,19 +395,11 @@ struct BenchmarkView: View {
 
     private var benchmarkControls: some View {
         VStack(alignment: .leading, spacing: BenchmarkControlLayout.verticalSpacing) {
-            // The grid separates label baselines from control centers because popup and segmented
-            // pickers use different AppKit alignment rectangles.
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: BenchmarkControlLayout.horizontalSpacing) {
-                    benchmarkPickerControls
-                }
-
-                ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: BenchmarkControlLayout.horizontalSpacing) {
-                        benchmarkPickerControls
-                    }
-                }
-                .scrollIndicators(.visible)
+            // Keep one control tree at every width so live resize does not
+            // repeatedly measure and switch between ViewThatFits candidates.
+            ScrollView(.horizontal, showsIndicators: true) {
+                benchmarkPickerControls
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
             // Preserve the row's intrinsic width; narrow windows scroll instead
