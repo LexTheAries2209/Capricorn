@@ -1507,7 +1507,8 @@ struct DiskActivityChartView: View {
         var maximumYAxisLabelCount: Int {
             switch self {
             case .compact: 5
-            case .expanded: 5
+            // The taller live-activity plot has room to label every grid line.
+            case .expanded: 9
             case .mini: 5
             }
         }

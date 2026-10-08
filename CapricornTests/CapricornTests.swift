@@ -5619,6 +5619,29 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testLiveActivityExpandedChartLabelsEverySpeedGridLine() {
+        let tickCount = DiskActivityChartScale.yTicks(maxSpeed: 432).count
+        XCTAssertEqual(DiskActivityChartView.Style.expanded.maximumYAxisLabelCount, 9)
+        XCTAssertEqual(
+            DiskActivityChartAxisLabelPolicy.visibleIndices(
+                tickCount: tickCount,
+                maximumLabelCount: DiskActivityChartView.Style.expanded.maximumYAxisLabelCount
+            ),
+            Array(0..<tickCount)
+        )
+    }
+
+    func testBenchmarkCompactChartKeepsFiveYAxisLabels() {
+        XCTAssertEqual(DiskActivityChartView.Style.compact.maximumYAxisLabelCount, 5)
+        XCTAssertEqual(
+            DiskActivityChartAxisLabelPolicy.visibleIndices(
+                tickCount: 9,
+                maximumLabelCount: DiskActivityChartView.Style.compact.maximumYAxisLabelCount
+            ),
+            [0, 2, 4, 6, 8]
+        )
+    }
+
     func testLiveActivityHistoryChartUsesFiveYAxisLabels() {
         XCTAssertEqual(DiskActivityChartView.Style.mini.maximumYAxisLabelCount, 5)
         XCTAssertEqual(
