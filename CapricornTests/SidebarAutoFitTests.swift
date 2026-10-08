@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import AppKit
 import SwiftUI
+import Vision
 import XCTest
 @testable import Capricorn
 
@@ -74,11 +75,23 @@ final class SidebarAutoFitTests: XCTestCase {
         let preferences = AppPreferences(defaults: defaults)
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
         let model = AppModel()
-        let drive = CapricornTests.fixtureDrive(mountedAt: "/Volumes/Unit")
+        var drive = CapricornTests.fixtureDrive(mountedAt: "/")
+        drive.protocolName = "Apple Fabric"
+        drive.serialNumber = "0ba01ee32464d219"
+        drive.volumes[0].name = "Macintosh HD"
+        drive.volumes[0].fileSystemType = "APFS"
+        drive.volumes[0].totalCapacityBytes = 994_660_000_000
+        drive.volumes[0].availableCapacityBytes = 91_550_000_000
         model.drives = [drive]
+        model.selectedDriveID = drive.id
         model.snapshots = [drive.id: CapricornTests.fixtureSnapshot(for: drive)]
         let container = try ModelContainerFactory.makeInMemory()
-        let root = ContentView(viewModel: model, preferences: preferences).modelContainer(container)
+        let availableRowWidth = LockedState<CGFloat>(0)
+        let root = ContentView(viewModel: model, preferences: preferences)
+            .modelContainer(container)
+            .onPreferenceChange(DriveSidebarAvailableWidthPreferenceKey.self) { width in
+                availableRowWidth.withLock { $0 = width }
+            }
         let hostingView = NSHostingView(rootView: root)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1_200, height: 800),
@@ -103,14 +116,52 @@ final class SidebarAutoFitTests: XCTestCase {
         let preferredWidth = coordinator.preferredWidth
         XCTAssertLessThan(preferredWidth, 420)
         // The native sidebar may impose a slightly larger minimum thickness.
-        splitView.setPosition(preferredWidth, ofDividerAt: 0)
+        let fittedWidth = coordinator.fittedWidth(sidebarWidth: splitView.arrangedSubviews[0].frame.width)
+        let chromeWidth = fittedWidth - preferredWidth
+        splitView.setPosition(fittedWidth, ofDividerAt: 0)
         splitView.layoutSubtreeIfNeeded()
         let allowedWidth = splitView.arrangedSubviews[0].frame.width
         XCTAssertGreaterThanOrEqual(allowedWidth, preferredWidth)
         XCTAssertLessThan(allowedWidth, 420)
         splitView.setPosition(420, ofDividerAt: 0)
+        let layoutSettled = await AsyncTestWaiter.wait {
+            abs((coordinator.viewportWidth ?? 0) - splitView.arrangedSubviews[0].frame.width + chromeWidth) < 1
+        }
+        XCTAssertTrue(layoutSettled)
         XCTAssertNil(coordinator.handle(try mouseEvent(window: window, splitView: splitView, clickCount: 2)))
         XCTAssertEqual(splitView.arrangedSubviews[0].frame.width, allowedWidth, accuracy: 1)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        hostingView.layoutSubtreeIfNeeded()
+        let intrinsicRowWidth = await measuredWidth(drive: drive, volume: drive.volumes[0], language: .simplifiedChinese)
+        let actualRowWidth = availableRowWidth.snapshot()
+        XCTAssertGreaterThanOrEqual(actualRowWidth + 1, intrinsicRowWidth,
+                                    "The visible list row must fit its complete content, not just the requested divider position.")
+
+        let renderedRow = DriveSidebarRow(
+            drive: drive,
+            representativeVolume: drive.volumes[0],
+            snapshot: CapricornTests.fixtureSnapshot(for: drive)
+        )
+        .environment(\.appLanguage, AppLanguage.simplifiedChinese)
+        .frame(width: actualRowWidth)
+        .padding(14)
+        .background(Color.blue)
+        .environment(\.colorScheme, .dark)
+        let renderer = ImageRenderer(content: renderedRow)
+        renderer.scale = 2
+        let renderedImage = try XCTUnwrap(renderer.cgImage)
+        let captureURL = URL(fileURLWithPath: "/tmp/Capricorn-sidebar-autofit.png")
+        let png = try XCTUnwrap(NSBitmapImageRep(cgImage: renderedImage).representation(using: .png, properties: [:]))
+        try png.write(to: captureURL)
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        try VNImageRequestHandler(cgImage: renderedImage).perform([request])
+        let lines = request.results?.compactMap { $0.topCandidates(1).first?.string } ?? []
+        XCTAssertTrue(lines.contains {
+            $0.contains("Apple Fabric") && $0.replacingOccurrences(of: " ", with: "").contains("1TB")
+        },
+                      "Rendered sidebar must show the full capacity line: \(lines)")
 
         var drives = (1...30).map { index in
             var entry = drive
@@ -154,6 +205,41 @@ final class SidebarAutoFitTests: XCTestCase {
         drive.serialNumber = String(repeating: "1234567890", count: 8)
         let longEnglish = await measuredWidth(drive: drive, volume: nil, language: .english)
         XCTAssertGreaterThan(longEnglish, shortEnglish + 100)
+    }
+
+    @MainActor
+    func testAutoFitIncludesCompleteAppleFabricCapacityLine() async throws {
+        var drive = CapricornTests.fixtureDrive(mountedAt: "/")
+        drive.protocolName = "Apple Fabric"
+        drive.serialNumber = "0ba01ee32464d219"
+        drive.volumes[0].name = "Macintosh HD"
+        drive.volumes[0].fileSystemType = "APFS"
+        drive.volumes[0].totalCapacityBytes = 994_660_000_000
+        drive.volumes[0].availableCapacityBytes = 91_550_000_000
+        let language = AppLanguage.simplifiedChinese
+        let measured = await measuredWidth(drive: drive, volume: drive.volumes[0], language: language)
+        let summary = Text("disk0 · APFS · Apple Fabric · \(formatByteCount(drive.sizeBytes))")
+            .font(.caption)
+            .fixedSize()
+        let summaryWidth = NSHostingView(rootView: summary).fittingSize.width
+        let badgeWidth = NSHostingView(
+            rootView: HealthBadge(status: .good, compact: true)
+                .environment(\.appLanguage, language)
+                .fixedSize()
+        ).fittingSize.width
+        XCTAssertGreaterThanOrEqual(measured, ceil(summaryWidth + 24 + 20 + badgeWidth) - 1,
+                                    "Full device summary, icon, both gaps and uncompressed health badge must fit.")
+    }
+
+    @MainActor
+    func testFittedWidthIncludesMeasuredNativeNavigationChrome() {
+        let coordinator = SidebarDividerAutoFit.Coordinator(preferredWidth: 310, viewportWidth: 412)
+        defer { coordinator.invalidate() }
+        XCTAssertEqual(coordinator.fittedWidth(sidebarWidth: 420), 318)
+        coordinator.viewportWidth = 302
+        XCTAssertEqual(coordinator.fittedWidth(sidebarWidth: 310), 318)
+        coordinator.viewportWidth = nil
+        XCTAssertEqual(coordinator.fittedWidth(sidebarWidth: 420), 310)
     }
 
     @MainActor

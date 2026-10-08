@@ -15,7 +15,15 @@ enum SidebarAutoFitWidth {
     }
 }
 
-struct DriveSidebarInsetPreferenceKey: PreferenceKey {
+struct DriveSidebarAvailableWidthPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat { 0 }
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+struct DriveSidebarViewportWidthPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat { 0 }
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
@@ -33,9 +41,10 @@ struct DriveSidebarWidthPreferenceKey: PreferenceKey {
 
 struct SidebarDividerAutoFit: NSViewRepresentable {
     let preferredWidth: CGFloat
+    var viewportWidth: CGFloat? = nil
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(preferredWidth: preferredWidth)
+        Coordinator(preferredWidth: preferredWidth, viewportWidth: viewportWidth)
     }
 
     func makeNSView(context: Context) -> SidebarDividerAutoFitView {
@@ -47,6 +56,7 @@ struct SidebarDividerAutoFit: NSViewRepresentable {
 
     func updateNSView(_ nsView: SidebarDividerAutoFitView, context: Context) {
         context.coordinator.preferredWidth = preferredWidth
+        context.coordinator.viewportWidth = viewportWidth
     }
 
     static func dismantleNSView(_ nsView: SidebarDividerAutoFitView, coordinator: Coordinator) {
@@ -56,11 +66,13 @@ struct SidebarDividerAutoFit: NSViewRepresentable {
     @MainActor
     final class Coordinator {
         var preferredWidth: CGFloat
+        var viewportWidth: CGFloat?
         weak var anchor: NSView?
         private var monitor: Any?
 
-        init(preferredWidth: CGFloat) {
+        init(preferredWidth: CGFloat, viewportWidth: CGFloat? = nil) {
             self.preferredWidth = preferredWidth
+            self.viewportWidth = viewportWidth
             monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
                 guard let self else { return event }
                 return self.handle(event)
@@ -78,6 +90,13 @@ struct SidebarDividerAutoFit: NSViewRepresentable {
                 NSEvent.removeMonitor(monitor)
                 self.monitor = nil
             }
+        }
+
+        func fittedWidth(sidebarWidth: CGFloat) -> CGFloat {
+            // Split-view thickness also includes native navigation chrome
+            // outside the measured SwiftUI list.
+            let chromeWidth = viewportWidth.map { max(0, sidebarWidth - $0) } ?? 0
+            return preferredWidth + chromeWidth
         }
 
         func handle(_ event: NSEvent) -> NSEvent? {
@@ -105,7 +124,7 @@ struct SidebarDividerAutoFit: NSViewRepresentable {
 
             // Leave native dragging and collapse behavior alone; consume only
             // a double-click on this window's sidebar divider.
-            splitView.setPosition(preferredWidth, ofDividerAt: 0)
+            splitView.setPosition(fittedWidth(sidebarWidth: sidebar.frame.width), ofDividerAt: 0)
             splitView.layoutSubtreeIfNeeded()
             return nil
         }

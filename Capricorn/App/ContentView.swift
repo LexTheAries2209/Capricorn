@@ -11,7 +11,8 @@ struct ContentView: View {
     @State private var showsDiskCheckReport = false
     @State private var showsSmartSelfTestSheet = false
     @State private var sidebarRowWidths: [String: CGFloat] = [:]
-    @State private var sidebarRowInset: CGFloat = 14
+    @State private var sidebarViewportWidth: CGFloat = 300
+    @State private var sidebarAvailableRowWidth: CGFloat = 272
     @AppStorage(AppPreferences.Key.opensSmartSelfTestProgressWindowAutomatically)
     private var opensSmartSelfTestProgressWindowAutomatically = AppPreferences.Defaults.opensSmartSelfTestProgressWindowAutomatically
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
@@ -445,7 +446,16 @@ struct ContentView: View {
         }
         .coordinateSpace(name: SidebarAutoFitWidth.coordinateSpace)
         .background {
-            SidebarDividerAutoFit(preferredWidth: sidebarPreferredWidth)
+            GeometryReader { geometry in
+                Color.clear.preference(
+                    key: DriveSidebarViewportWidthPreferenceKey.self,
+                    value: geometry.size.width
+                )
+            }
+            SidebarDividerAutoFit(
+                preferredWidth: sidebarPreferredWidth,
+                viewportWidth: sidebarViewportWidth
+            )
                 .frame(width: 0, height: 0)
             // List creates only visible rows; measure every drive independently.
             VStack(alignment: .leading, spacing: 0) {
@@ -467,9 +477,14 @@ struct ContentView: View {
         .onPreferenceChange(DriveSidebarWidthPreferenceKey.self) { widths in
             sidebarRowWidths = widths
         }
-        .onPreferenceChange(DriveSidebarInsetPreferenceKey.self) { inset in
-            if inset > 0 {
-                sidebarRowInset = inset
+        .onPreferenceChange(DriveSidebarViewportWidthPreferenceKey.self) { width in
+            if width > 0 {
+                sidebarViewportWidth = width
+            }
+        }
+        .onPreferenceChange(DriveSidebarAvailableWidthPreferenceKey.self) { width in
+            if width > 0 {
+                sidebarAvailableRowWidth = width
             }
         }
         .navigationSplitViewColumnWidth(
@@ -482,7 +497,7 @@ struct ContentView: View {
     private var sidebarPreferredWidth: CGFloat {
         SidebarAutoFitWidth.preferred(
             rowWidths: viewModel.drives.compactMap { sidebarRowWidths[$0.id] },
-            rowInset: sidebarRowInset
+            rowInset: max(0, sidebarViewportWidth - sidebarAvailableRowWidth) / 2
         )
     }
 
@@ -1136,8 +1151,8 @@ struct DriveSidebarRow: View {
                         )
                     } else {
                         Color.clear.preference(
-                            key: DriveSidebarInsetPreferenceKey.self,
-                            value: max(0, geometry.frame(in: .named(SidebarAutoFitWidth.coordinateSpace)).minX)
+                            key: DriveSidebarAvailableWidthPreferenceKey.self,
+                            value: geometry.size.width
                         )
                     }
                 }
@@ -1154,32 +1169,38 @@ struct DriveSidebarRow: View {
                 Text(primaryDisplayName)
                     .font(.headline)
                     .lineLimit(1)
+                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: false)
                     .truncationMode(.middle)
                     .help(primaryDisplayName)
                 Text(drive.catalogSidebarDisplayName)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
+                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: false)
                     .truncationMode(.middle)
                     .help(drive.catalogDisplayHelp(language: language))
                 Text(DrivePageHeaderText.serialNumberLine(for: drive, language: language, redact: redactSerialNumbers))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: false)
                     .truncationMode(.middle)
                 Text(deviceSummary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: false)
                     .help(identifierSummary)
                 if let capacitySummary {
                     Text(capacitySummary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .fixedSize(horizontal: measuresIntrinsicWidth, vertical: false)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, 4)
     }
