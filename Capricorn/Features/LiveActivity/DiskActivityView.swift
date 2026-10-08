@@ -762,8 +762,7 @@ struct DiskActivityView: View {
                     .foregroundStyle(.green)
             }
 
-            // Allow compact metrics to stay on one row longer during resize.
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
+            ActivityMetricGridLayout {
                 ActivityMetricTile(title: language.t("Elapsed"), value: DiskActivityChartScale.formatDuration(summary.durationSeconds), symbol: "timer")
                 ActivityMetricTile(title: language.t("Samples"), value: "\(summary.sampleCount)", symbol: "point.3.connected.trianglepath.dotted")
                 ActivityMetricTile(title: "\(language.operationTitle(.read)) \(language.t("Peak"))", value: DiskActivityFormatter.speed(summary.peakReadMegabytesPerSecond), symbol: "arrow.down.circle")
@@ -789,6 +788,49 @@ struct DiskActivityView: View {
         } catch {
             saveMessage = UserFacingError.message("Could not save activity record.", error: error)
         }
+    }
+}
+
+struct ActivityMetricGridLayout: Layout {
+    let minimumWidth: CGFloat = 140
+    let spacing: CGFloat = 10
+
+    func geometry(width: CGFloat, itemCount: Int) -> (columns: Int, rows: Int, columnWidth: CGFloat) {
+        guard itemCount > 0 else { return (0, 0, 0) }
+        let width = max(0, width.isFinite ? width : minimumWidth * CGFloat(itemCount) + spacing * CGFloat(itemCount - 1))
+        // Cap tracks at the item count so wide windows never reserve empty columns.
+        let columns = max(1, Int(min(CGFloat(itemCount), floor((width + spacing) / (minimumWidth + spacing)))))
+        let columnWidth = max(0, (width - spacing * CGFloat(columns - 1)) / CGFloat(columns))
+        return (columns, (itemCount + columns - 1) / columns, columnWidth)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard !subviews.isEmpty else { return .zero }
+        let idealWidth = minimumWidth * CGFloat(subviews.count) + spacing * CGFloat(subviews.count - 1)
+        let width = max(0, proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? idealWidth)
+        let grid = geometry(width: width, itemCount: subviews.count)
+        let height = rowHeight(columnWidth: grid.columnWidth, subviews: subviews)
+        return CGSize(width: width, height: height * CGFloat(grid.rows) + spacing * CGFloat(grid.rows - 1))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard !subviews.isEmpty else { return }
+        let grid = geometry(width: bounds.width, itemCount: subviews.count)
+        let height = rowHeight(columnWidth: grid.columnWidth, subviews: subviews)
+        for index in subviews.indices {
+            subviews[index].place(
+                at: CGPoint(
+                    x: bounds.minX + CGFloat(index % grid.columns) * (grid.columnWidth + spacing),
+                    y: bounds.minY + CGFloat(index / grid.columns) * (height + spacing)
+                ),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: grid.columnWidth, height: height)
+            )
+        }
+    }
+
+    private func rowHeight(columnWidth: CGFloat, subviews: Subviews) -> CGFloat {
+        subviews.map { $0.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height }.max() ?? 0
     }
 }
 

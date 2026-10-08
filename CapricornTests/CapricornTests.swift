@@ -5,6 +5,37 @@ import SwiftUI
 @testable import Capricorn
 
 final class CapricornTests: XCTestCase {
+    func testActivityMetricGridFillsWideWindowsWithoutEmptyColumns() {
+        let layout = ActivityMetricGridLayout()
+        for width: CGFloat in [890, 1_040, 1_500, 2_400] {
+            let grid = layout.geometry(width: width, itemCount: 6)
+            XCTAssertEqual(grid.columns, 6)
+            XCTAssertEqual(grid.rows, 1)
+            XCTAssertEqual(grid.columnWidth * 6 + layout.spacing * 5, width, accuracy: 0.001)
+        }
+    }
+
+    func testActivityMetricGridKeepsCompactWrappingThreshold() {
+        let layout = ActivityMetricGridLayout()
+        let grid = layout.geometry(width: 889, itemCount: 6)
+        XCTAssertEqual(grid.columns, 5)
+        XCTAssertEqual(grid.rows, 2)
+        XCTAssertGreaterThanOrEqual(grid.columnWidth, 140)
+        XCTAssertEqual(grid.columnWidth * 5 + layout.spacing * 4, 889, accuracy: 0.001)
+        XCTAssertEqual(layout.geometry(width: 440, itemCount: 6).columns, 3)
+        XCTAssertEqual(layout.geometry(width: 440, itemCount: 6).rows, 2)
+    }
+
+    func testActivityMetricGridHandlesEmptyAndVeryNarrowWidths() {
+        let layout = ActivityMetricGridLayout()
+        XCTAssertEqual(layout.geometry(width: 1_500, itemCount: 0).columns, 0)
+        let grid = layout.geometry(width: 100, itemCount: 6)
+        XCTAssertEqual(grid.columns, 1)
+        XCTAssertEqual(grid.rows, 6)
+        XCTAssertEqual(grid.columnWidth, 100)
+        XCTAssertEqual(layout.geometry(width: .infinity, itemCount: 6).columns, 6)
+    }
+
     func testApplicationRuntimeDetectsXCTestHostEnvironment() {
         XCTAssertTrue(ApplicationRuntime.isTestProcess(environment: [
             "XCTestConfigurationFilePath": "/tmp/Capricorn.xctestconfiguration"
