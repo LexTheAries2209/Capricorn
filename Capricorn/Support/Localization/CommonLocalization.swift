@@ -580,6 +580,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "No SMART Attributes": "无 SMART 属性",
         "SMART data is unavailable for this drive.": "此硬盘的 SMART 数据不可用。",
         "Profile": "配置",
+        "Benchmark Configuration Help": "测速配置说明",
         "Runs": "测试次数",
         "Test Size": "测试文件大小",
         "Read / Write": "读写方式",
@@ -987,6 +988,11 @@ struct BenchmarkConfigurationDescription: Equatable {
     var fileSize: String
     var dataPattern: String
     var testTerms: String
+
+    // The profile summary stays inline; the remaining explanations live in help.
+    var detailParagraphs: [String] {
+        [runs, fileSize, dataPattern, testTerms]
+    }
 }
 
 struct SmartAttributeDisplay: Equatable {

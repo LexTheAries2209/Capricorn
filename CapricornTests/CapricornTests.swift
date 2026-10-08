@@ -6356,6 +6356,73 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    func testBenchmarkHelpKeepsFourLocalizedDetailsSeparateFromProfileSummary() {
+        for language in AppLanguage.allCases {
+            for profile in [BenchmarkProfile.default, .loop, .extremeLoop] {
+                let description = language.benchmarkConfigurationDescription(
+                    profile: profile,
+                    runs: 3,
+                    fileSizeBytes: BenchmarkProfile.defaultTestSize,
+                    dataPattern: .zeroFill,
+                    usesTrimmedAverage: true,
+                    usesSmallBlockEfficiency: true,
+                    smallBlockFileSizePercent: 20
+                )
+
+                XCTAssertEqual(description.detailParagraphs, [
+                    description.runs, description.fileSize, description.dataPattern, description.testTerms
+                ])
+                XCTAssertEqual(description.detailParagraphs.count, 4)
+                XCTAssertFalse(description.detailParagraphs.contains(description.profileUse))
+                XCTAssertTrue(description.fileSize.contains("20%"))
+            }
+        }
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Benchmark Configuration Help"), "测速配置说明")
+        XCTAssertEqual(AppLanguage.english.t("Benchmark Configuration Help"), "Benchmark Configuration Help")
+    }
+
+    func testBenchmarkHelpSheetIsInformationalAndPreservesRunConfirmationWarnings() {
+        let language = AppLanguage.simplifiedChinese
+        let description = language.benchmarkConfigurationDescription(
+            profile: .default,
+            runs: 1,
+            fileSizeBytes: BenchmarkProfile.defaultTestSize,
+            dataPattern: .random,
+            usesTrimmedAverage: false
+        )
+        let help = BenchmarkConfirmationSheet(
+            language: language,
+            title: language.t("Benchmark Configuration Help"),
+            driveName: "Test SSD",
+            message: description.profileUse,
+            configurationDescription: description,
+            fields: [],
+            onDismiss: {}
+        )
+        XCTAssertEqual(help.headerSymbol, "info.circle")
+        XCTAssertEqual(help.configurationDescription?.detailParagraphs, description.detailParagraphs)
+        XCTAssertNil(help.warning)
+        XCTAssertNil(help.targetFolder)
+        XCTAssertNil(help.confirmTitle)
+        XCTAssertNil(help.onConfirm)
+
+        let confirmation = BenchmarkConfirmationSheet(
+            language: language,
+            title: language.t("Run Benchmark"),
+            driveName: "Test SSD",
+            message: language.t("Benchmark writes a complete temporary test file to the selected target folder."),
+            warning: language.t("Write tests can temporarily use free space and stress storage."),
+            fields: [],
+            confirmTitle: language.t("Run Benchmark"),
+            onConfirm: {},
+            onDismiss: {}
+        )
+        XCTAssertEqual(confirmation.headerSymbol, "exclamationmark.triangle.fill")
+        XCTAssertNotNil(confirmation.warning)
+        XCTAssertNotNil(confirmation.onConfirm)
+        XCTAssertNil(confirmation.configurationDescription)
+    }
+
     func testBenchmarkStorageValidatorFiltersUnavailableFileSizes() {
         let options: [Int64] = [
             16 * 1_024 * 1_024,

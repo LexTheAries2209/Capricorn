@@ -9,6 +9,7 @@ private struct SingleBenchmarkRequest {
 }
 
 private enum BenchmarkNotice {
+    case configurationHelp
     case confirmFullTest
     case benchmarkInProgress
     case confirmSingleTest(SingleBenchmarkRequest)
@@ -397,9 +398,24 @@ struct BenchmarkView: View {
         VStack(alignment: .leading, spacing: BenchmarkControlLayout.verticalSpacing) {
             // Keep one control tree at every width so live resize does not
             // repeatedly measure and switch between ViewThatFits candidates.
-            ScrollView(.horizontal, showsIndicators: true) {
-                benchmarkPickerControls
-                    .fixedSize(horizontal: true, vertical: false)
+            HStack(alignment: .top, spacing: 10) {
+                ScrollView(.horizontal, showsIndicators: true) {
+                    benchmarkPickerControls
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                // Keep help visible even when the configuration controls scroll.
+                Button {
+                    benchmarkNotice = .configurationHelp
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                        .font(.body)
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(language.t("Benchmark Configuration Help"))
+                .accessibilityLabel(language.t("Benchmark Configuration Help"))
             }
 
             // Preserve the row's intrinsic width; narrow windows scroll instead
@@ -412,7 +428,10 @@ struct BenchmarkView: View {
                 .fixedSize(horizontal: true, vertical: false)
             }
 
-            BenchmarkConfigurationDescriptionView(description: configurationDescription)
+            Text(configurationDescription.profileUse)
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
             if selectedProfileIsCustom {
                 CustomBenchmarkRowsEditor(
                     rows: customRowsBinding,
@@ -864,6 +883,16 @@ struct BenchmarkView: View {
     @ViewBuilder
     private func benchmarkNoticeSheet(for notice: BenchmarkNotice) -> some View {
         switch notice {
+        case .configurationHelp:
+            BenchmarkConfirmationSheet(
+                language: language,
+                title: language.t("Benchmark Configuration Help"),
+                driveName: drive.catalogDisplayName,
+                message: configurationDescription.profileUse,
+                configurationDescription: configurationDescription,
+                fields: [],
+                onDismiss: { benchmarkNotice = nil }
+            )
         case .monitor:
             BenchmarkProgressSheet(
                 viewModel: viewModel,
@@ -1182,6 +1211,7 @@ struct BenchmarkConfirmationSheet: View {
     let driveName: String
     let message: String
     let warning: String?
+    let configurationDescription: BenchmarkConfigurationDescription?
     let testItem: String?
     let fields: [BenchmarkConfirmationField]
     let targetFolder: String?
@@ -1197,6 +1227,7 @@ struct BenchmarkConfirmationSheet: View {
         driveName: String,
         message: String,
         warning: String? = nil,
+        configurationDescription: BenchmarkConfigurationDescription? = nil,
         testItem: String? = nil,
         fields: [BenchmarkConfirmationField],
         targetFolder: String? = nil,
@@ -1211,6 +1242,7 @@ struct BenchmarkConfirmationSheet: View {
         self.driveName = driveName
         self.message = message
         self.warning = warning
+        self.configurationDescription = configurationDescription
         self.testItem = testItem
         self.fields = fields
         self.targetFolder = targetFolder
@@ -1221,12 +1253,16 @@ struct BenchmarkConfirmationSheet: View {
         self.onDismiss = onDismiss
     }
 
+    var headerSymbol: String {
+        configurationDescription == nil ? "exclamationmark.triangle.fill" : "info.circle"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "exclamationmark.triangle.fill")
+                Image(systemName: headerSymbol)
                     .font(.title2)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(configurationDescription == nil ? Color.orange : Color.secondary)
                     .frame(width: 32)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
@@ -1240,6 +1276,10 @@ struct BenchmarkConfirmationSheet: View {
             Text(message)
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if let configurationDescription {
+                BenchmarkConfigurationDescriptionView(description: configurationDescription)
+            }
 
             if let testItem {
                 Label("\(language.t("Test Item")): \(testItem)", systemImage: "speedometer")
@@ -1400,28 +1440,15 @@ private struct BenchmarkConfigurationDescriptionView: View {
     let description: BenchmarkConfigurationDescription
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(description.profileUse)
-                .font(.caption)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-            BenchmarkConfigurationLine(text: description.runs)
-            BenchmarkConfigurationLine(text: description.fileSize)
-            BenchmarkConfigurationLine(text: description.dataPattern)
-            BenchmarkConfigurationLine(text: description.testTerms)
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(description.detailParagraphs, id: \.self) { paragraph in
+                Text(paragraph)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .font(.callout)
+        .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct BenchmarkConfigurationLine: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
