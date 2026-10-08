@@ -792,7 +792,7 @@ struct DiskActivityView: View {
 }
 
 struct ActivityMetricGridLayout: Layout {
-    let minimumWidth: CGFloat = 140
+    let minimumWidth: CGFloat = 120
     let spacing: CGFloat = 10
 
     func geometry(width: CGFloat, itemCount: Int) -> (columns: Int, rows: Int, columnWidth: CGFloat) {
