@@ -57,11 +57,12 @@ struct OverviewView: View {
                 }
 
                 InfoPanel(title: language.t("Volumes"), symbol: "opticaldiscdrive") {
-                    if drive.displayableVolumes.isEmpty {
+                    let volumes = OverviewVolumePresentation.volumes(for: drive)
+                    if volumes.isEmpty {
                         Text(language.t("No mounted volumes are mapped to this physical disk."))
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(drive.displayableVolumes) { volume in
+                        ForEach(volumes) { volume in
                             HStack {
                                 VStack(alignment: .leading) {
                                     Text(volume.name)
@@ -187,6 +188,17 @@ struct OverviewView: View {
     private var temperatureValueTint: Color? {
         guard let celsius = snapshot?.temperatureCelsius else { return nil }
         return temperatureTint(for: celsius)
+    }
+}
+
+enum OverviewVolumePresentation {
+    static func volumes(for drive: DriveDevice) -> [DriveDevice.Volume] {
+        guard drive.isSystemDisk else { return drive.displayableVolumes }
+        // Filter only this panel; other features still need the full volume topology.
+        guard let rootVolume = drive.volumes.first(where: { $0.mountPoint == "/" }) else {
+            return []
+        }
+        return [rootVolume]
     }
 }
 

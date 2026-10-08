@@ -3,6 +3,63 @@ import XCTest
 @testable import Capricorn
 
 final class RepresentativeVolumeSelectionTests: XCTestCase {
+    func testOverviewSystemDiskShowsOnlyMountedRootWithoutChangingSharedVolumes() {
+        var drive = CapricornTests.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk1s1", name: "iSCPreboot", mountPoint: "/System/Volumes/iSCPreboot", sizeBytes: 500, isWritable: false, isSystem: true, fileSystemType: "APFS"),
+            DriveDevice.Volume(deviceIdentifier: "disk3s1", name: "Macintosh HD", mountPoint: nil, sizeBytes: 1_000, isWritable: false, isSystem: true, fileSystemType: "APFS", apfsRole: "System"),
+            DriveDevice.Volume(deviceIdentifier: "disk3s1s1", name: "Macintosh HD", mountPoint: "/", sizeBytes: 1_000, isWritable: false, isSystem: true, fileSystemType: "APFS", apfsRole: "System"),
+            DriveDevice.Volume(deviceIdentifier: "disk3s3", name: "Recovery", mountPoint: nil, sizeBytes: 1_000, isWritable: false, isSystem: true, fileSystemType: "APFS", apfsRole: "Recovery"),
+            DriveDevice.Volume(deviceIdentifier: "disk3s5", name: "Data", mountPoint: "/System/Volumes/Data", sizeBytes: 1_000, isWritable: true, isSystem: true, fileSystemType: "APFS", apfsRole: "Data")
+        ]
+        let originalVolumes = drive.volumes
+        let sharedVolumes = drive.displayableVolumes
+        let capacityUsage = drive.capacityUsage
+        let workloadVolumes = DiskActivityWorkloadTargetResolver.orderedVolumes(for: drive)
+
+        XCTAssertEqual(OverviewVolumePresentation.volumes(for: drive), [drive.volumes[2]])
+        XCTAssertEqual(drive.volumes, originalVolumes)
+        XCTAssertEqual(drive.displayableVolumes, sharedVolumes)
+        XCTAssertTrue(drive.displayableVolumes.contains { $0.name == "Data" })
+        XCTAssertEqual(drive.capacityUsage, capacityUsage)
+        XCTAssertEqual(DiskActivityWorkloadTargetResolver.orderedVolumes(for: drive), workloadVolumes)
+    }
+
+    func testOverviewSystemDiskKeepsActualRootNameAfterRename() {
+        var drive = CapricornTests.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk3s1s1", name: "My System", mountPoint: "/", sizeBytes: 1_000, isWritable: false, isSystem: true)
+        ]
+
+        XCTAssertEqual(OverviewVolumePresentation.volumes(for: drive).map(\.name), ["My System"])
+    }
+
+    func testOverviewNonSystemDisksKeepAllDisplayableVolumes() {
+        var drive = CapricornTests.fixtureDrive()
+        drive.isSystemDisk = false
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk9s1", name: "Projects", mountPoint: "/Volumes/Projects", sizeBytes: 1_000, isWritable: true, isSystem: false),
+            DriveDevice.Volume(deviceIdentifier: "disk9s2", name: "Archive", mountPoint: "/Volumes/Archive", sizeBytes: 500, isWritable: true, isSystem: false)
+        ]
+
+        XCTAssertEqual(OverviewVolumePresentation.volumes(for: drive), drive.displayableVolumes)
+        drive.isInternal = false
+        XCTAssertEqual(OverviewVolumePresentation.volumes(for: drive), drive.displayableVolumes)
+        drive.isNetwork = true
+        XCTAssertEqual(OverviewVolumePresentation.volumes(for: drive), drive.displayableVolumes)
+    }
+
+    func testOverviewSystemDiskWithoutRootDoesNotShowAuxiliaryVolumes() {
+        var drive = CapricornTests.fixtureDrive()
+        drive.volumes = [
+            DriveDevice.Volume(deviceIdentifier: "disk1s1", name: "iSCPreboot", mountPoint: "/System/Volumes/iSCPreboot", sizeBytes: 500, isWritable: false, isSystem: true)
+        ]
+
+        XCTAssertTrue(OverviewVolumePresentation.volumes(for: drive).isEmpty)
+        drive.volumes = []
+        XCTAssertTrue(OverviewVolumePresentation.volumes(for: drive).isEmpty)
+    }
+
     func testFallbackUsesLargestSafeVolumeAndSkipsProtectedVolumes() {
         var drive = CapricornTests.fixtureDrive()
         drive.isInternal = false
