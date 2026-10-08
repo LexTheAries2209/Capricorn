@@ -5650,6 +5650,7 @@ final class CapricornTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testLiveActivityChartCentersTitleAndSpeedColumnWithoutChangingOtherCharts() {
         let liveChart = DiskActivityChartView(
             title: "Live Disk Activity",
@@ -6426,6 +6427,7 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(AppLanguage.english.t("Benchmark Configuration Help"), "Benchmark Configuration Help")
     }
 
+    @MainActor
     func testBenchmarkHelpSheetIsInformationalAndPreservesRunConfirmationWarnings() {
         let language = AppLanguage.simplifiedChinese
         let description = language.benchmarkConfigurationDescription(

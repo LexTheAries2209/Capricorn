@@ -10,6 +10,8 @@ struct ContentView: View {
     @State private var preferences: AppPreferences
     @State private var showsDiskCheckReport = false
     @State private var showsSmartSelfTestSheet = false
+    @State private var sidebarRowWidths: [String: CGFloat] = [:]
+    @State private var sidebarRowInset: CGFloat = 14
     @AppStorage(AppPreferences.Key.opensSmartSelfTestProgressWindowAutomatically)
     private var opensSmartSelfTestProgressWindowAutomatically = AppPreferences.Defaults.opensSmartSelfTestProgressWindowAutomatically
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
@@ -441,7 +443,47 @@ struct ContentView: View {
             .padding(12)
             .background(.bar)
         }
-        .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 420)
+        .coordinateSpace(name: SidebarAutoFitWidth.coordinateSpace)
+        .background {
+            SidebarDividerAutoFit(preferredWidth: sidebarPreferredWidth)
+                .frame(width: 0, height: 0)
+            // List creates only visible rows; measure every drive independently.
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(viewModel.drives) { drive in
+                    DriveSidebarRow(
+                        drive: drive,
+                        representativeVolume: viewModel.representativeVolume(for: drive),
+                        snapshot: viewModel.snapshots[drive.id],
+                        measuresIntrinsicWidth: true
+                    )
+                    .fixedSize(horizontal: true, vertical: true)
+                }
+            }
+            .hidden()
+            .accessibilityHidden(true)
+            .allowsHitTesting(false)
+            .frame(width: 0, height: 0, alignment: .topLeading)
+        }
+        .onPreferenceChange(DriveSidebarWidthPreferenceKey.self) { widths in
+            sidebarRowWidths = widths
+        }
+        .onPreferenceChange(DriveSidebarInsetPreferenceKey.self) { inset in
+            if inset > 0 {
+                sidebarRowInset = inset
+            }
+        }
+        .navigationSplitViewColumnWidth(
+            min: SidebarAutoFitWidth.minimum,
+            ideal: SidebarAutoFitWidth.initial,
+            max: max(SidebarAutoFitWidth.defaultMaximum, sidebarPreferredWidth)
+        )
+    }
+
+    private var sidebarPreferredWidth: CGFloat {
+        SidebarAutoFitWidth.preferred(
+            rowWidths: viewModel.drives.compactMap { sidebarRowWidths[$0.id] },
+            rowInset: sidebarRowInset
+        )
     }
 
     private var sidebarDriveSelection: Binding<String?> {
@@ -1075,14 +1117,34 @@ private struct DiskOpenFileList: View {
     }
 }
 
-private struct DriveSidebarRow: View {
+struct DriveSidebarRow: View {
     let drive: DriveDevice
     let representativeVolume: DriveDevice.Volume?
     let snapshot: SmartSnapshot?
+    var measuresIntrinsicWidth = false
     @Environment(\.appLanguage) private var language
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
 
     var body: some View {
+        rowContent
+            .background {
+                GeometryReader { geometry in
+                    if measuresIntrinsicWidth {
+                        Color.clear.preference(
+                            key: DriveSidebarWidthPreferenceKey.self,
+                            value: [drive.id: geometry.size.width]
+                        )
+                    } else {
+                        Color.clear.preference(
+                            key: DriveSidebarInsetPreferenceKey.self,
+                            value: max(0, geometry.frame(in: .named(SidebarAutoFitWidth.coordinateSpace)).minX)
+                        )
+                    }
+                }
+            }
+    }
+
+    private var rowContent: some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: iconName)
                 .font(.title3)
