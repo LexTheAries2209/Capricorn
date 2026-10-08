@@ -762,7 +762,8 @@ struct DiskActivityView: View {
                     .foregroundStyle(.green)
             }
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 10)], spacing: 10) {
+            // Allow compact metrics to stay on one row longer during resize.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
                 ActivityMetricTile(title: language.t("Elapsed"), value: DiskActivityChartScale.formatDuration(summary.durationSeconds), symbol: "timer")
                 ActivityMetricTile(title: language.t("Samples"), value: "\(summary.sampleCount)", symbol: "point.3.connected.trianglepath.dotted")
                 ActivityMetricTile(title: "\(language.operationTitle(.read)) \(language.t("Peak"))", value: DiskActivityFormatter.speed(summary.peakReadMegabytesPerSecond), symbol: "arrow.down.circle")
