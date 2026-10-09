@@ -581,6 +581,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "SMART data is unavailable for this drive.": "此硬盘的 SMART 数据不可用。",
         "Profile": "配置",
         "Benchmark Configuration Help": "测速配置说明",
+        "Benchmark Controls": "测速控制",
         "Runs": "测试次数",
         "Test Size": "测试文件大小",
         "Read / Write": "读写方式",

@@ -1589,6 +1589,10 @@ final class CapricornTests: XCTestCase {
     }
 
     func testSmallBlockEfficiencyControlsAreLocalized() {
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Benchmark Controls"), "测速控制")
+        XCTAssertEqual(AppLanguage.english.t("Benchmark Controls"), "Benchmark Controls")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Target Location"), "目标位置")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Off"), "关闭")
         XCTAssertEqual(
             AppLanguage.simplifiedChinese.t("Improve Small-Block Test Efficiency"),
             "提高小块文件测试效率"

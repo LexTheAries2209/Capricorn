@@ -16,8 +16,8 @@ private enum BenchmarkNotice {
     case monitor
 }
 
-// Match each column to its rendered macOS control width so the visible gaps
-// stay consistent across popup and segmented pickers.
+// Use baseline widths for aligned columns; longer localized segmented controls
+// can grow to their native width without overlapping the next column.
 private enum BenchmarkControlLayout {
     static let horizontalSpacing: CGFloat = 15
     static let verticalSpacing: CGFloat = 15
@@ -114,12 +114,18 @@ struct BenchmarkView: View {
             : BenchmarkProfile.defaultSmallBlockFileSizePercent
     }
 
-    private var smallBlockFileSizePercentBinding: Binding<Int> {
+    private var smallBlockEfficiencyBinding: Binding<Int?> {
         Binding {
-            selectedSmallBlockFileSizePercent
+            usesSmallBlockEfficiency ? selectedSmallBlockFileSizePercent : nil
         } set: { nextPercent in
+            // Off preserves the last ratio in the existing preferences.
+            guard let nextPercent else {
+                usesSmallBlockEfficiency = false
+                return
+            }
             guard BenchmarkProfile.smallBlockFileSizePercentOptions.contains(nextPercent) else { return }
             storedSmallBlockFileSizePercent = nextPercent
+            usesSmallBlockEfficiency = true
         }
     }
 
@@ -305,7 +311,6 @@ struct BenchmarkView: View {
             VStack(alignment: .leading, spacing: 14) {
                 benchmarkHeader
                 benchmarkControls
-                targetFolderControl
                 if BenchmarkActivityPanelState.showsChart(isNetworkDrive: drive.isNetwork) {
                     benchmarkActivityPanel
                 }
@@ -418,15 +423,31 @@ struct BenchmarkView: View {
                 .accessibilityLabel(language.t("Benchmark Configuration Help"))
             }
 
-            // Preserve the row's intrinsic width; narrow windows scroll instead
-            // of compressing the efficiency label onto multiple lines.
+            // Keep the three labeled groups together while narrow windows scroll.
             ScrollView(.horizontal, showsIndicators: true) {
-                HStack(alignment: .center, spacing: 10) {
-                    benchmarkActionControls
-                    smallBlockEfficiencyControls
+                HStack(alignment: .top, spacing: BenchmarkControlLayout.horizontalSpacing) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        benchmarkControlTitle("Benchmark Controls")
+                        HStack(spacing: 10) {
+                            benchmarkActionControls
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        benchmarkControlTitle("Target Location")
+                        targetFolderControls
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        benchmarkControlTitle("Improve Small-Block Test Efficiency")
+                        smallBlockEfficiencyControls
+                    }
                 }
                 .fixedSize(horizontal: true, vertical: false)
+                .controlSize(.regular)
             }
+
+            targetFolderDetails
 
             Text(configurationDescription.profileUse)
                 .font(.caption)
@@ -501,7 +522,7 @@ struct BenchmarkView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: BenchmarkControlLayout.operationWidth, alignment: .leading)
+                .frame(minWidth: BenchmarkControlLayout.operationWidth, alignment: .leading)
                 .disabled(viewModel.isBenchmarking)
 
                 Picker("", selection: selectedEngineBinding) {
@@ -510,7 +531,7 @@ struct BenchmarkView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: BenchmarkControlLayout.engineWidth, alignment: .leading)
+                .frame(minWidth: BenchmarkControlLayout.engineWidth, alignment: .leading)
                 .help(language.t("Async uses POSIX AIO queue depth; Sync uses worker threads with blocking file I/O."))
                 .disabled(viewModel.isBenchmarking)
 
@@ -521,7 +542,7 @@ struct BenchmarkView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: BenchmarkControlLayout.dataPatternWidth, alignment: .leading)
+                .frame(minWidth: BenchmarkControlLayout.dataPatternWidth, alignment: .leading)
                 .disabled(viewModel.isBenchmarking)
 
                 Picker("", selection: $usesTrimmedAverage) {
@@ -530,7 +551,7 @@ struct BenchmarkView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: BenchmarkControlLayout.trimmedAverageWidth, alignment: .leading)
+                .frame(minWidth: BenchmarkControlLayout.trimmedAverageWidth, alignment: .leading)
                 .help(language.t("Run two extra measured passes, discard fastest and slowest, then average the rest."))
                 .disabled(viewModel.isBenchmarking || selectedProfileIsLooping)
             }
@@ -538,7 +559,7 @@ struct BenchmarkView: View {
         .controlSize(.regular)
     }
 
-    private func benchmarkControlTitle(_ key: String, width: CGFloat) -> some View {
+    private func benchmarkControlTitle(_ key: String, width: CGFloat? = nil) -> some View {
         Text(language.t(key))
             .font(.caption2)
             .foregroundStyle(.secondary)
@@ -577,75 +598,70 @@ struct BenchmarkView: View {
     }
 
     private var smallBlockEfficiencyControls: some View {
-        HStack(spacing: 12) {
-            Toggle(language.t("Improve Small-Block Test Efficiency"), isOn: $usesSmallBlockEfficiency)
-                .toggleStyle(.switch)
-                .disabled(viewModel.isBenchmarking)
-
-            Picker("", selection: smallBlockFileSizePercentBinding) {
-                ForEach(BenchmarkProfile.smallBlockFileSizePercentOptions, id: \.self) { percent in
-                    Text("\(percent)%").tag(percent)
-                }
+        Picker(language.t("Improve Small-Block Test Efficiency"), selection: smallBlockEfficiencyBinding) {
+            Text(language.t("Off")).tag(nil as Int?)
+            ForEach(BenchmarkProfile.smallBlockFileSizePercentOptions, id: \.self) { percent in
+                Text("\(percent)%").tag(Optional(percent))
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 250)
-            .disabled(viewModel.isBenchmarking || !usesSmallBlockEfficiency)
         }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 100, alignment: .leading)
+        .disabled(viewModel.isBenchmarking)
         .help(language.t("Use the selected test-size percentage for 4 KiB, 16 KiB, and 64 KiB items."))
     }
 
-    private var targetFolderControl: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Label(language.t("Target Location"), systemImage: "folder")
-                    .font(.headline)
+    private var targetFolderControls: some View {
+        HStack(spacing: 10) {
+            Menu {
+                Button {
+                    setBenchmarkTargetSelection(.automatic)
+                } label: {
+                    Label(
+                        automaticTargetTitle,
+                        systemImage: targetSelection == .automatic ? "checkmark" : "internaldrive"
+                    )
+                }
 
-                Menu {
+                Divider()
+
+                ForEach(DiskActivityWorkloadTargetResolver.orderedVolumes(for: drive)) { volume in
                     Button {
-                        setBenchmarkTargetSelection(.automatic)
+                        setBenchmarkTargetSelection(.volume(deviceIdentifier: volume.deviceIdentifier))
                     } label: {
                         Label(
-                            automaticTargetTitle,
-                            systemImage: targetSelection == .automatic ? "checkmark" : "internaldrive"
+                            benchmarkVolumeTitle(volume),
+                            systemImage: targetSelection == .volume(deviceIdentifier: volume.deviceIdentifier) ? "checkmark" : "externaldrive"
                         )
                     }
-
-                    Divider()
-
-                    ForEach(DiskActivityWorkloadTargetResolver.orderedVolumes(for: drive)) { volume in
-                        Button {
-                            setBenchmarkTargetSelection(.volume(deviceIdentifier: volume.deviceIdentifier))
-                        } label: {
-                            Label(
-                                benchmarkVolumeTitle(volume),
-                                systemImage: targetSelection == .volume(deviceIdentifier: volume.deviceIdentifier) ? "checkmark" : "externaldrive"
-                            )
-                        }
-                        .disabled(!DiskActivityWorkloadTargetResolver.isUsable(volume))
-                    }
-
-                    Divider()
-
-                    Button {
-                        chooseTargetFolder()
-                    } label: {
-                        Label(language.t("Choose Folder…"), systemImage: "folder.badge.gearshape")
-                    }
-                } label: {
-                    Label(benchmarkTargetMenuTitle, systemImage: "folder")
+                    .disabled(!DiskActivityWorkloadTargetResolver.isUsable(volume))
                 }
-                .buttonStyle(.bordered)
-                .disabled(viewModel.isBenchmarking)
 
-                Label(targetFolderStatusText, systemImage: targetFolderStatusSymbol)
-                    .font(.caption)
-                    .foregroundStyle(targetFolderStatusColor)
-                    .lineLimit(1)
+                Divider()
 
-                Spacer(minLength: 8)
+                Button {
+                    chooseTargetFolder()
+                } label: {
+                    Label(language.t("Choose Folder…"), systemImage: "folder.badge.gearshape")
+                }
+            } label: {
+                Label(benchmarkTargetMenuTitle, systemImage: "folder")
             }
+            .buttonStyle(.bordered)
+            .disabled(viewModel.isBenchmarking)
+            .help(targetFolderPath)
+            .accessibilityLabel(language.t("Target Location"))
 
+            Label(targetFolderStatusText, systemImage: targetFolderStatusSymbol)
+                .font(.caption)
+                .foregroundStyle(targetFolderStatusColor)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
+    private var targetFolderDetails: some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text(targetFolderPath.isEmpty ? language.t("No target folder selected") : targetFolderPath)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -659,12 +675,6 @@ struct BenchmarkView: View {
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        }
-        .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(.separator.opacity(0.45), lineWidth: 1)
         }
     }
 
