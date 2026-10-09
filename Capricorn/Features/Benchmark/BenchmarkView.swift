@@ -447,7 +447,12 @@ struct BenchmarkView: View {
                 .controlSize(.regular)
             }
 
-            targetFolderDetails
+            if targetFolderDriveMismatch {
+                Label(language.t("Benchmark will measure the target folder volume, not the selected drive."), systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Text(configurationDescription.profileUse)
                 .font(.caption)
@@ -657,24 +662,6 @@ struct BenchmarkView: View {
                 .foregroundStyle(targetFolderStatusColor)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-        }
-    }
-
-    private var targetFolderDetails: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(targetFolderPath.isEmpty ? language.t("No target folder selected") : targetFolderPath)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if targetFolderDriveMismatch {
-                Label(language.t("Benchmark will measure the target folder volume, not the selected drive."), systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 

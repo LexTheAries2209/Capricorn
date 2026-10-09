@@ -89,6 +89,7 @@ final class BenchmarkControlsTests: XCTestCase {
                 && $0.boundingBox.midY > efficiencyTitle.midY - 0.08
         }, "Efficiency selection must appear below its title: \(lines)")
         XCTAssertTrue(lines.contains { $0.contains(language.t("Target folder is writable")) }, "\(lines)")
+        XCTAssertFalse(lines.contains { $0.hasPrefix("/") }, "The detailed target path must not occupy a row: \(lines)")
         XCTAssertFalse(model.isBenchmarking)
     }
 }
