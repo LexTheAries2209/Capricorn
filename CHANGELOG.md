@@ -4,6 +4,24 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.9.8 - 2026-10-09
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.8) | [Release Notes / 发布说明](docs/releases/v2.9.8.md)
+
+### 中文
+
+- 测速控制、目标位置和小块效率设置同排分组显示；小块效率改为包含关闭及五个比率的下拉框，详细配置移至帮助窗口。
+- 双击侧栏分隔线自动适应硬盘信息宽度，改进长名称、连接信息和容量的完整显示。
+- 实时活动大图显示九个纵轴标签，标题与速度标签居中对齐。
+- 移除概览中重复的 SMART 状态块。
+
+### English
+
+- Groups benchmark actions, target selection, and small-block efficiency in one row; efficiency becomes a dropdown with Off and five ratios, with detailed settings in Help.
+- Double-clicking the sidebar divider fits drive information, improving the display of long names, connection information, and capacities.
+- Expanded live-activity charts show nine vertical-axis labels with a centered title and speed labels.
+- Removes the redundant SMART status tile from Overview.
+
 ## V2.9.7 - 2026-10-08
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.7) | [Release Notes / 发布说明](docs/releases/v2.9.7.md)
