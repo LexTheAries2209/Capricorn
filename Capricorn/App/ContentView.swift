@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var sidebarRowWidths: [String: CGFloat] = [:]
     @State private var sidebarViewportWidth: CGFloat = 300
     @State private var sidebarAvailableRowWidth: CGFloat = 272
+    @State private var sidebarAutoFitIsActive = false
     @AppStorage(AppPreferences.Key.opensSmartSelfTestProgressWindowAutomatically)
     private var opensSmartSelfTestProgressWindowAutomatically = AppPreferences.Defaults.opensSmartSelfTestProgressWindowAutomatically
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
@@ -295,7 +296,9 @@ struct ContentView: View {
                     DriveSidebarRow(
                         drive: drive,
                         representativeVolume: viewModel.representativeVolume(for: drive),
-                        snapshot: viewModel.snapshots[drive.id]
+                        snapshot: viewModel.snapshots[drive.id],
+                        allowsTextWrapping: sidebarAutoFitIsActive
+                            && sidebarAvailableRowWidth < (sidebarRowWidths[drive.id] ?? 0)
                     )
                         .contextMenu {
                             driveContextMenu(for: drive)
@@ -454,7 +457,8 @@ struct ContentView: View {
             }
             SidebarDividerAutoFit(
                 preferredWidth: sidebarPreferredWidth,
-                viewportWidth: sidebarViewportWidth
+                viewportWidth: sidebarViewportWidth,
+                onAutoFitChanged: { sidebarAutoFitIsActive = $0 }
             )
                 .frame(width: 0, height: 0)
             // List creates only visible rows; measure every drive independently.
@@ -1137,6 +1141,7 @@ struct DriveSidebarRow: View {
     let representativeVolume: DriveDevice.Volume?
     let snapshot: SmartSnapshot?
     var measuresIntrinsicWidth = false
+    var allowsTextWrapping = false
     @Environment(\.appLanguage) private var language
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
 
@@ -1168,34 +1173,34 @@ struct DriveSidebarRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(primaryDisplayName)
                     .font(.headline)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: false)
+                    .lineLimit(allowsTextWrapping ? nil : 1)
+                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: allowsTextWrapping)
                     .truncationMode(.middle)
                     .help(primaryDisplayName)
                 Text(drive.catalogSidebarDisplayName)
                     .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: false)
+                    .lineLimit(allowsTextWrapping ? nil : 1)
+                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: allowsTextWrapping)
                     .truncationMode(.middle)
                     .help(drive.catalogDisplayHelp(language: language))
                 Text(DrivePageHeaderText.serialNumberLine(for: drive, language: language, redact: redactSerialNumbers))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: false)
+                    .lineLimit(allowsTextWrapping ? nil : 1)
+                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: allowsTextWrapping)
                     .truncationMode(.middle)
                 Text(deviceSummary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: false)
+                    .lineLimit(allowsTextWrapping ? nil : 1)
+                    .fixedSize(horizontal: measuresIntrinsicWidth, vertical: allowsTextWrapping)
                     .help(identifierSummary)
                 if let capacitySummary {
                     Text(capacitySummary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: measuresIntrinsicWidth, vertical: false)
+                        .lineLimit(allowsTextWrapping ? nil : 1)
+                        .fixedSize(horizontal: measuresIntrinsicWidth, vertical: allowsTextWrapping)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

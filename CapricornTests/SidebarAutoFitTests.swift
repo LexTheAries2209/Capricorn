@@ -9,10 +9,44 @@ final class SidebarAutoFitTests: XCTestCase {
     func testPreferredWidthUsesWidestRowInsteadOfMaximum() {
         XCTAssertEqual(SidebarAutoFitWidth.preferred(rowWidths: []), 260)
         XCTAssertEqual(SidebarAutoFitWidth.preferred(rowWidths: [180, 220]), 260)
-        XCTAssertEqual(SidebarAutoFitWidth.preferred(rowWidths: [310.2, 280, 340.1]), 341)
-        XCTAssertEqual(SidebarAutoFitWidth.preferred(rowWidths: [500]), 500)
-        XCTAssertEqual(SidebarAutoFitWidth.preferred(rowWidths: [.nan, .infinity, -1, 310]), 310)
-        XCTAssertEqual(SidebarAutoFitWidth.preferred(rowWidths: [310], rowInset: 14), 338)
+        XCTAssertEqual(SidebarAutoFitWidth.preferred(rowWidths: [310.2, 280, 340.1]), 343)
+        XCTAssertEqual(SidebarAutoFitWidth.preferred(rowWidths: [500]), 502)
+        XCTAssertEqual(SidebarAutoFitWidth.preferred(rowWidths: [.nan, .infinity, -1, 310]), 312)
+        XCTAssertEqual(SidebarAutoFitWidth.preferred(rowWidths: [310], rowInset: 14), 340)
+    }
+
+    func testAvailableRowWidthUsesNarrowestVisibleRow() {
+        var width = DriveSidebarAvailableWidthPreferenceKey.defaultValue
+        for next: CGFloat in [0, 320, 300, 315, .nan] {
+            DriveSidebarAvailableWidthPreferenceKey.reduce(value: &width) { next }
+        }
+        XCTAssertEqual(width, 300)
+    }
+
+    @MainActor
+    func testAutoFitTracksEnrichedContentUntilManualDividerDrag() async throws {
+        let (window, splitView, anchor) = makeSplitView()
+        defer { window.orderOut(nil) }
+        let coordinator = SidebarDividerAutoFit.Coordinator(preferredWidth: 310)
+        coordinator.anchor = anchor
+        defer { coordinator.invalidate() }
+        XCTAssertNil(coordinator.handle(try mouseEvent(window: window, splitView: splitView, clickCount: 2)))
+        coordinator.update(preferredWidth: 390, viewportWidth: nil)
+        let expanded = await AsyncTestWaiter.wait { splitView.arrangedSubviews[0].frame.width == 390 }
+        XCTAssertTrue(expanded)
+        coordinator.update(preferredWidth: 330, viewportWidth: nil)
+        let shrunk = await AsyncTestWaiter.wait { splitView.arrangedSubviews[0].frame.width == 330 }
+        XCTAssertTrue(shrunk)
+        let press = try mouseEvent(window: window, splitView: splitView, clickCount: 1)
+        XCTAssertTrue(coordinator.handle(press) === press)
+        XCTAssertFalse(coordinator.followsContentWidth)
+        splitView.setPosition(350, ofDividerAt: 0)
+        coordinator.update(preferredWidth: 400, viewportWidth: nil)
+        await Task.yield()
+        XCTAssertEqual(splitView.arrangedSubviews[0].frame.width, 350, accuracy: 1)
+        XCTAssertNil(coordinator.handle(try mouseEvent(window: window, splitView: splitView, clickCount: 2)))
+        XCTAssertTrue(coordinator.followsContentWidth)
+        XCTAssertEqual(splitView.arrangedSubviews[0].frame.width, 400, accuracy: 1)
     }
 
     @MainActor
@@ -243,18 +277,331 @@ final class SidebarAutoFitTests: XCTestCase {
     }
 
     @MainActor
+    func testIntrinsicWidthIncludesEveryLineAcrossDriveKindsAndHealthStates() async {
+        let kinds = ["internal", "USB3", "USB4", "Thunderbolt", "card", "virtual", "network"]
+        for language in AppLanguage.allCases {
+            for kind in kinds {
+                for field in 0..<6 {
+                    var drive = CapricornTests.fixtureDrive(mountedAt: "/Volumes/Storage")
+                    drive.isInternal = kind == "internal"
+                    drive.isSystemDisk = drive.isInternal
+                    drive.isMemoryCard = kind == "card"
+                    drive.isVirtual = kind == "virtual"
+                    drive.isNetwork = kind == "network"
+                    drive.protocolName = drive.isNetwork ? "SMB" : "PCI-Express"
+                    if drive.isNetwork {
+                        drive.deviceNode = "//user@production-storage-server.example/Archive"
+                    } else if ["USB3", "USB4", "Thunderbolt"].contains(kind) {
+                        drive.connectionInfo = DriveConnectionInfo(
+                            transport: kind == "Thunderbolt" ? .thunderbolt : .usb,
+                            generation: kind == "USB3" ? "USB3.2 Gen 2" : kind,
+                            negotiatedBitsPerSecond: 40_000_000_000,
+                            pathDescription: nil
+                        )
+                    }
+                    drive.volumes[0].name = "Archive"
+                    drive.volumes[0].fileSystemType = "NTFS"
+                    drive.volumes[0].totalCapacityBytes = 9_999_999_000_000_000
+                    drive.volumes[0].availableCapacityBytes = 6_789_123_000_000
+                    let longText = String(repeating: "Archive-0123456789-资料备份-Été-", count: 4)
+                    switch field {
+                    case 0: drive.volumes[0].name = longText
+                    case 1: drive.displayName = longText
+                    case 2: drive.serialNumber = longText
+                    case 3: drive.protocolName = longText
+                    case 4:
+                        drive.volumes.append(DriveDevice.Volume(
+                            deviceIdentifier: "disk0s2", name: "Photos", mountPoint: "/Volumes/Photos",
+                            sizeBytes: 1_000_000, isWritable: true, isSystem: false,
+                            fileSystemType: "APFS"
+                        ))
+                        drive.sizeBytes = 9_999_999_000_000_000
+                    default:
+                        drive.volumes = []
+                        drive.serialNumber = nil
+                        drive.sizeBytes = 0
+                    }
+                    let health = HealthStatus.allCases[field % HealthStatus.allCases.count]
+                    let width = await measuredWidth(
+                        drive: drive, volume: drive.volumes.first, language: language, health: health
+                    )
+                    let badge = NSHostingView(rootView: HealthBadge(status: health, compact: true)
+                        .environment(\.appLanguage, language).fixedSize()).fittingSize.width
+                    let lines = metadataLines(drive: drive, language: language)
+                    for (text, font) in lines {
+                        let textWidth = NSHostingView(rootView: Text(text).font(font).fixedSize()).fittingSize.width
+                        XCTAssertGreaterThanOrEqual(SidebarAutoFitWidth.preferred(rowWidths: [width]), textWidth + 24 + 20 + badge,
+                                                    "\(language) \(kind) field \(field) \(health): \(text)")
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testConstrainedAutoFitWrapsMetadataWithoutHidingLineEndings() throws {
+        var drive = CapricornTests.fixtureDrive(mountedAt: "/Volumes/Archive")
+        drive.volumes[0].name = "Production media archive for the external storage array VolumeEnd"
+        drive.displayName = "High capacity external storage device connected through a dock ModelEnd"
+        drive.serialNumber = "0123456789-0123456789-0123456789-SerialEnd"
+        drive.protocolName = "PCI-Express"
+        drive.connectionInfo = DriveConnectionInfo(
+            transport: .usb4, generation: "USB4",
+            negotiatedBitsPerSecond: 40_000_000_000, pathDescription: nil
+        )
+        drive.sizeBytes = 4_100_000_000_000
+        drive.volumes[0].fileSystemType = "NTFS"
+        for language in AppLanguage.allCases {
+            let row = DriveSidebarRow(
+                drive: drive, representativeVolume: drive.volumes[0],
+                snapshot: CapricornTests.fixtureSnapshot(for: drive),
+                allowsTextWrapping: true
+            )
+            .environment(\.appLanguage, language)
+            .frame(width: 260)
+            .padding(14)
+            .background(Color.white)
+            .environment(\.colorScheme, .light)
+            let renderer = ImageRenderer(content: row)
+            renderer.scale = 2
+            let image = try XCTUnwrap(renderer.cgImage)
+            let png = try XCTUnwrap(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
+            try png.write(to: URL(fileURLWithPath: "/tmp/Capricorn-sidebar-wrapped-\(language.rawValue).png"))
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.recognitionLanguages = ["zh-Hans", "en-US"]
+            try VNImageRequestHandler(cgImage: image).perform([request])
+            let text = (request.results?.compactMap { $0.topCandidates(1).first?.string } ?? [])
+                .joined().replacingOccurrences(of: " ", with: "").lowercased()
+            for ending in ["volumeend", "modelend", "serialend", "4.1tb"] {
+                XCTAssertTrue(text.contains(ending), "Wrapped row must retain \(ending): \(text)")
+            }
+        }
+    }
+
+    @MainActor
+    func testSerialRedactionMeasuresOnlyTheDisplayedSerialText() async throws {
+        let suite = "CapricornTests.sidebarRedaction.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var drive = CapricornTests.fixtureDrive()
+        drive.serialNumber = String(repeating: "0123456789", count: 15)
+        for language in AppLanguage.allCases {
+            defaults.set(false, forKey: AppPreferences.Key.redactSerialNumbers)
+            let full = await measuredWidth(drive: drive, volume: nil, language: language, defaults: defaults)
+            defaults.set(true, forKey: AppPreferences.Key.redactSerialNumbers)
+            let redacted = await measuredWidth(drive: drive, volume: nil, language: language, defaults: defaults)
+            XCTAssertGreaterThan(full, redacted + 100)
+        }
+    }
+
+    private func metadataLines(drive: DriveDevice, language: AppLanguage) -> [(String, Font)] {
+        var summary = [String]()
+        if !drive.isNetwork, !drive.bsdName.isEmpty { summary.append(drive.bsdName) }
+        if let format = drive.fileSystemSummary { summary.append(format) }
+        if !drive.protocolName.isEmpty,
+           !summary.contains(where: { $0.caseInsensitiveCompare(drive.protocolName) == .orderedSame }) {
+            summary.append(drive.protocolName)
+        }
+        if let connection = drive.connectionInfo?.compactLabel { summary.append(connection) }
+        if drive.sizeBytes > 0 { summary.append(formatByteCount(drive.sizeBytes)) }
+        var lines: [(String, Font)] = [
+            (drive.networkServerDisplayName ?? drive.volumes.first?.name ?? drive.sidebarVolumeName, .headline),
+            (drive.catalogSidebarDisplayName, .subheadline.weight(.semibold)),
+            (DrivePageHeaderText.serialNumberLine(for: drive, language: language, redact: false), .caption),
+            (summary.isEmpty ? drive.bsdName : summary.joined(separator: " · "), .caption)
+        ]
+        if let usage = drive.capacityUsage {
+            lines.append(("\(language.t("Used")) \(formatByteCount(usage.usedBytes)) · \(language.t("Available")) \(formatByteCount(usage.availableBytes))", .caption))
+        }
+        return lines
+    }
+
+    @MainActor
+    func testTwoDriveSidebarShowsFullUSB4CapacityInBothLanguagesAndAppearances() async throws {
+        for language in AppLanguage.allCases {
+            for appearance in [ColorScheme.light, .dark] {
+                try await verifyTwoDriveSidebar(language: language, appearance: appearance)
+                try await verifyTwoDriveSidebar(language: language, appearance: appearance, usesLongIdentity: true)
+                try await verifyTwoDriveSidebar(language: language, appearance: appearance, loadsExternalAfterFit: true)
+                try await verifyTwoDriveSidebar(language: language, appearance: appearance, loadsEnrichmentAfterFit: true)
+                try await verifyTwoDriveSidebar(language: language, appearance: appearance, exceedsWindowWidth: true)
+            }
+        }
+    }
+
+    @MainActor
+    private func verifyTwoDriveSidebar(
+        language: AppLanguage,
+        appearance: ColorScheme,
+        usesLongIdentity: Bool = false,
+        loadsExternalAfterFit: Bool = false,
+        loadsEnrichmentAfterFit: Bool = false,
+        exceedsWindowWidth: Bool = false
+    ) async throws {
+        var internalDrive = CapricornTests.fixtureDrive(mountedAt: "/")
+        internalDrive.protocolName = "Apple Fabric"
+        internalDrive.serialNumber = "0ba01ee32464d219"
+        internalDrive.volumes[0].name = "Macintosh HD"
+        internalDrive.volumes[0].fileSystemType = "APFS"
+        var externalDrive = CapricornTests.fixtureDrive(mountedAt: "/Volumes/40G4T_NTFS_E")
+        externalDrive.bsdName = "disk4"
+        externalDrive.deviceNode = "/dev/disk4"
+        externalDrive.isInternal = false
+        externalDrive.isSystemDisk = false
+        externalDrive.model = "GeIL P4S 4TB"
+        externalDrive.displayName = "GeIL P4S 4TB"
+        externalDrive.mediaName = "GeIL P4S 4TB"
+        externalDrive.protocolName = "PCI-Express"
+        externalDrive.serialNumber = "WKCI3602785"
+        externalDrive.sizeBytes = 4_100_000_000_000
+        externalDrive.connectionInfo = DriveConnectionInfo(
+            transport: .usb4, generation: "USB4",
+            negotiatedBitsPerSecond: 40_000_000_000, pathDescription: nil
+        )
+        externalDrive.volumes[0].name = "40G4T_NTFS_E"
+        externalDrive.volumes[0].deviceIdentifier = "disk4s1"
+        externalDrive.volumes[0].fileSystemType = "NTFS"
+        externalDrive.volumes[0].sizeBytes = externalDrive.sizeBytes
+        externalDrive.volumes[0].totalCapacityBytes = externalDrive.sizeBytes
+        externalDrive.volumes[0].availableCapacityBytes = 65_000_000_000
+        if usesLongIdentity {
+            externalDrive.serialNumber = String(repeating: "0123456789", count: 6)
+            externalDrive.volumes[0].name = "Production media and project archive for the external storage array"
+        }
+        if exceedsWindowWidth {
+            externalDrive.volumes[0].name = String(repeating: "Storage-Archive-", count: 30)
+        }
+        let drives = [internalDrive, externalDrive]
+        var discoveryDrive = externalDrive
+        if loadsEnrichmentAfterFit {
+            discoveryDrive.connectionInfo = nil
+            discoveryDrive.protocolName = "USB"
+            discoveryDrive.serialNumber = nil
+        }
+        let model = AppModel()
+        model.drives = loadsExternalAfterFit ? [internalDrive] : [internalDrive, discoveryDrive]
+        model.selectedDriveID = internalDrive.id
+        model.snapshots = Dictionary(uniqueKeysWithValues: drives.map {
+            ($0.id, CapricornTests.fixtureSnapshot(for: $0))
+        })
+        let suite = "CapricornTests.twoDriveAutoFit.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.languageRawValue = language.rawValue
+        let intrinsicWidths = LockedState<[String: CGFloat]>([:])
+        let availableWidth = LockedState<CGFloat>(0)
+        let container = try ModelContainerFactory.makeInMemory()
+        let root = ContentView(viewModel: model, preferences: preferences)
+            .modelContainer(container)
+            .environment(\.colorScheme, appearance)
+            .onPreferenceChange(DriveSidebarWidthPreferenceKey.self) { value in
+                intrinsicWidths.withLock { $0 = value }
+            }
+            .onPreferenceChange(DriveSidebarAvailableWidthPreferenceKey.self) { value in
+                availableWidth.withLock { $0 = value }
+            }
+        let hostingView = NSHostingView(rootView: root)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1_433, height: 800),
+            styleMask: [.titled, .resizable], backing: .buffered, defer: false
+        )
+        window.contentView = hostingView
+        defer { window.orderOut(nil) }
+        hostingView.layoutSubtreeIfNeeded()
+        let ready = await AsyncTestWaiter.wait {
+            intrinsicWidths.snapshot().count == model.drives.count && availableWidth.snapshot() > 0
+        }
+        XCTAssertTrue(ready)
+        let anchor = try XCTUnwrap(descendants(of: hostingView).compactMap { $0 as? SidebarDividerAutoFitView }.first)
+        let coordinator = try XCTUnwrap(anchor.coordinator)
+        let splitView = try XCTUnwrap(descendants(of: hostingView).compactMap { $0 as? NSSplitView }.first {
+            $0.isVertical && $0.arrangedSubviews.count >= 2 && anchor.isDescendant(of: $0.arrangedSubviews[0])
+        })
+        XCTAssertNil(coordinator.handle(try mouseEvent(window: window, splitView: splitView, clickCount: 2)))
+        if loadsExternalAfterFit || loadsEnrichmentAfterFit {
+            model.drives = drives
+            let expected = await measuredWidth(drive: externalDrive, volume: externalDrive.volumes[0], language: language)
+            let loaded = await AsyncTestWaiter.wait {
+                abs((intrinsicWidths.snapshot()[externalDrive.id] ?? 0) - expected) <= 1
+            }
+            XCTAssertTrue(loaded)
+        }
+        try await Task.sleep(nanoseconds: 150_000_000)
+        hostingView.layoutSubtreeIfNeeded()
+        let width = availableWidth.snapshot()
+        let widths = intrinsicWidths.snapshot()
+        if exceedsWindowWidth {
+            XCTAssertLessThan(width, try XCTUnwrap(widths[externalDrive.id]))
+            XCTAssertTrue(coordinator.followsContentWidth)
+            XCTAssertLessThanOrEqual(
+                splitView.arrangedSubviews[0].frame.width,
+                window.contentLayoutRect.width - SidebarAutoFitWidth.minimumDetailWidth,
+                "Auto-fit must preserve visible space for the selected drive."
+            )
+        } else {
+            XCTAssertGreaterThanOrEqual(width + 1, try XCTUnwrap(widths[externalDrive.id]),
+                                        "Actual external row must fit: divider \(splitView.arrangedSubviews[0].frame.width), viewport \(coordinator.viewportWidth ?? 0), target \(coordinator.preferredWidth), measured \(widths)")
+        }
+        let rows = VStack(alignment: .leading, spacing: 10) {
+            ForEach(drives) { drive in
+                DriveSidebarRow(
+                    drive: drive, representativeVolume: drive.volumes[0],
+                    snapshot: model.snapshots[drive.id],
+                    allowsTextWrapping: width < (widths[drive.id] ?? 0)
+                )
+                .frame(width: width)
+            }
+        }
+        .environment(\.appLanguage, language)
+        .environment(\.colorScheme, appearance)
+        .padding(14)
+        .background(appearance == .light ? Color.white : Color.black)
+        let renderer = ImageRenderer(content: rows)
+        renderer.scale = 2
+        let image = try XCTUnwrap(renderer.cgImage)
+        let png = try XCTUnwrap(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
+        let scenario = exceedsWindowWidth ? "window-limit" : usesLongIdentity ? "long-identity"
+            : loadsExternalAfterFit ? "late-drive" : loadsEnrichmentAfterFit ? "late-metadata" : "normal"
+        try png.write(to: URL(fileURLWithPath: "/tmp/Capricorn-two-drive-\(language.rawValue)-\(appearance == .light ? "light" : "dark")-\(scenario).png"))
+        let summary = metadataLines(drive: externalDrive, language: language)[3]
+        let summaryWidth = NSHostingView(rootView: Text(summary.0).font(summary.1).fixedSize()).fittingSize.width
+        // OCR only the metadata's horizontal region so very wide rendered rows
+        // do not downsample small captions into illegible text.
+        let recognitionImage = try XCTUnwrap(image.cropping(to: CGRect(
+            x: 0, y: 0,
+            width: min(CGFloat(image.width), ceil((summaryWidth + 24 + 20 + 28) * renderer.scale)),
+            height: CGFloat(image.height)
+        )))
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        try VNImageRequestHandler(cgImage: recognitionImage).perform([request])
+        let lines = request.results?.compactMap { $0.topCandidates(1).first?.string } ?? []
+        XCTAssertTrue(lines.contains {
+            $0.contains("USB4") && $0.replacingOccurrences(of: " ", with: "").contains("4.1TB")
+        }, "Rendered USB4 capacity must be complete: \(lines)")
+    }
+
+    @MainActor
     private func measuredWidth(
         drive: DriveDevice,
         volume: DriveDevice.Volume?,
-        language: AppLanguage
+        language: AppLanguage,
+        health: HealthStatus = .good,
+        defaults: UserDefaults = .standard
     ) async -> CGFloat {
         let widths = LockedState<[String: CGFloat]>([:])
+        var snapshot = CapricornTests.fixtureSnapshot(for: drive)
+        snapshot.health = health
         let root = DriveSidebarRow(
             drive: drive,
             representativeVolume: volume,
-            snapshot: CapricornTests.fixtureSnapshot(for: drive),
+            snapshot: snapshot,
             measuresIntrinsicWidth: true
         )
+        .defaultAppStorage(defaults)
         .environment(\.appLanguage, language)
         .fixedSize(horizontal: true, vertical: true)
         .onPreferenceChange(DriveSidebarWidthPreferenceKey.self) { value in
