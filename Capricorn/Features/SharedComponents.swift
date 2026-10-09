@@ -75,11 +75,12 @@ enum LifeRemainingBatterySymbol {
 struct HealthBadge: View {
     let status: HealthStatus
     var compact = false
+    var labelFont: Font? = nil
     @Environment(\.appLanguage) private var language
 
     var body: some View {
         Label(language.healthBadgeTitle(status, compact: compact), systemImage: status.symbolName)
-            .font(compact ? .caption.bold() : .headline)
+            .font(labelFont ?? (compact ? .caption.bold() : .headline))
             .foregroundStyle(status.tint)
             .padding(.horizontal, compact ? 8 : 12)
             .padding(.vertical, compact ? 4 : 8)

@@ -253,11 +253,11 @@ final class SidebarAutoFitTests: XCTestCase {
         let language = AppLanguage.simplifiedChinese
         let measured = await measuredWidth(drive: drive, volume: drive.volumes[0], language: language)
         let summary = Text("disk0 · APFS · Apple Fabric · \(formatByteCount(drive.sizeBytes))")
-            .font(.caption)
+            .font(DriveSidebarTypography.metadata)
             .fixedSize()
         let summaryWidth = NSHostingView(rootView: summary).fittingSize.width
         let badgeWidth = NSHostingView(
-            rootView: HealthBadge(status: .good, compact: true)
+            rootView: HealthBadge(status: .good, compact: true, labelFont: DriveSidebarTypography.metadata.bold())
                 .environment(\.appLanguage, language)
                 .fixedSize()
         ).fittingSize.width
@@ -325,7 +325,9 @@ final class SidebarAutoFitTests: XCTestCase {
                     let width = await measuredWidth(
                         drive: drive, volume: drive.volumes.first, language: language, health: health
                     )
-                    let badge = NSHostingView(rootView: HealthBadge(status: health, compact: true)
+                    let badge = NSHostingView(rootView: HealthBadge(
+                        status: health, compact: true, labelFont: DriveSidebarTypography.metadata.bold()
+                    )
                         .environment(\.appLanguage, language).fixedSize()).fittingSize.width
                     let lines = metadataLines(drive: drive, language: language)
                     for (text, font) in lines {
@@ -406,13 +408,13 @@ final class SidebarAutoFitTests: XCTestCase {
         if let connection = drive.connectionInfo?.compactLabel { summary.append(connection) }
         if drive.sizeBytes > 0 { summary.append(formatByteCount(drive.sizeBytes)) }
         var lines: [(String, Font)] = [
-            (drive.networkServerDisplayName ?? drive.volumes.first?.name ?? drive.sidebarVolumeName, .headline),
-            (drive.catalogSidebarDisplayName, .subheadline.weight(.semibold)),
-            (DrivePageHeaderText.serialNumberLine(for: drive, language: language, redact: false), .caption),
-            (summary.isEmpty ? drive.bsdName : summary.joined(separator: " · "), .caption)
+            (drive.networkServerDisplayName ?? drive.volumes.first?.name ?? drive.sidebarVolumeName, DriveSidebarTypography.title),
+            (drive.catalogSidebarDisplayName, DriveSidebarTypography.model),
+            (DrivePageHeaderText.serialNumberLine(for: drive, language: language, redact: false), DriveSidebarTypography.metadata),
+            (summary.isEmpty ? drive.bsdName : summary.joined(separator: " · "), DriveSidebarTypography.metadata)
         ]
         if let usage = drive.capacityUsage {
-            lines.append(("\(language.t("Used")) \(formatByteCount(usage.usedBytes)) · \(language.t("Available")) \(formatByteCount(usage.availableBytes))", .caption))
+            lines.append(("\(language.t("Used")) \(formatByteCount(usage.usedBytes)) · \(language.t("Available")) \(formatByteCount(usage.availableBytes))", DriveSidebarTypography.metadata))
         }
         return lines
     }
@@ -426,6 +428,88 @@ final class SidebarAutoFitTests: XCTestCase {
                 try await verifyTwoDriveSidebar(language: language, appearance: appearance, loadsExternalAfterFit: true)
                 try await verifyTwoDriveSidebar(language: language, appearance: appearance, loadsEnrichmentAfterFit: true)
                 try await verifyTwoDriveSidebar(language: language, appearance: appearance, exceedsWindowWidth: true)
+            }
+        }
+    }
+
+    @MainActor
+    func testNativeSidebarScreenshotsRetainLongFieldsAcrossDriveKinds() async throws {
+        let kinds = ["internal", "USB3", "USB4", "Thunderbolt", "card", "virtual", "network"]
+        for language in AppLanguage.allCases {
+            for (index, kind) in kinds.enumerated() {
+                var drive = CapricornTests.fixtureDrive(mountedAt: "/Volumes/Storage")
+                drive.isInternal = kind == "internal"
+                drive.isSystemDisk = drive.isInternal
+                drive.isMemoryCard = kind == "card"
+                drive.isVirtual = kind == "virtual"
+                drive.isNetwork = kind == "network"
+                drive.volumes[0].name = String(repeating: "Production Archive ", count: 10) + "VolumeEnd"
+                drive.displayName = String(repeating: "External Storage ", count: 10) + "ModelEnd"
+                drive.serialNumber = String(repeating: "0123456789-", count: 10) + "SerialEnd"
+                drive.protocolName = String(repeating: "Transport ", count: 10) + "ProtocolEnd"
+                drive.sizeBytes = 4_100_000_000_000
+                drive.volumes[0].fileSystemType = "NTFS"
+                if drive.isNetwork {
+                    drive.deviceNode = "//user@storage-server-HostEnd.example/Archive"
+                } else if ["USB3", "USB4", "Thunderbolt"].contains(kind) {
+                    drive.connectionInfo = DriveConnectionInfo(
+                        transport: kind == "Thunderbolt" ? .thunderbolt : .usb,
+                        generation: kind, negotiatedBitsPerSecond: 40_000_000_000,
+                        pathDescription: nil
+                    )
+                }
+                let suite = "CapricornTests.nativeKinds.\(UUID().uuidString)"
+                let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+                defer { defaults.removePersistentDomain(forName: suite) }
+                let preferences = AppPreferences(defaults: defaults)
+                preferences.languageRawValue = language.rawValue
+                let model = AppModel()
+                model.showVirtualDisks = true
+                model.drives = [drive]
+                model.selectedDriveID = drive.id
+                var snapshot = CapricornTests.fixtureSnapshot(for: drive)
+                snapshot.health = HealthStatus.allCases[index % HealthStatus.allCases.count]
+                model.snapshots = [drive.id: snapshot]
+                let widths = LockedState<[String: CGFloat]>([:])
+                let root = ContentView(viewModel: model, preferences: preferences)
+                    .modelContainer(try ModelContainerFactory.makeInMemory())
+                    .environment(\.colorScheme, .light)
+                    .onPreferenceChange(DriveSidebarWidthPreferenceKey.self) { value in
+                        widths.withLock { $0 = value }
+                    }
+                let hostingView = NSHostingView(rootView: root)
+                let window = NSWindow(
+                    contentRect: NSRect(x: 0, y: 0, width: 1_433, height: 850),
+                    styleMask: [.titled, .resizable], backing: .buffered, defer: false
+                )
+                window.appearance = NSAppearance(named: .aqua)
+                window.contentView = hostingView
+                window.makeKeyAndOrderFront(nil)
+                defer { window.orderOut(nil) }
+                hostingView.layoutSubtreeIfNeeded()
+                let ready = await AsyncTestWaiter.wait { widths.snapshot()[drive.id] != nil }
+                XCTAssertTrue(ready)
+                let anchor = try XCTUnwrap(descendants(of: hostingView).compactMap { $0 as? SidebarDividerAutoFitView }.first)
+                let coordinator = try XCTUnwrap(anchor.coordinator)
+                let splitView = try XCTUnwrap(descendants(of: hostingView).compactMap { $0 as? NSSplitView }.first {
+                    $0.isVertical && $0.arrangedSubviews.count >= 2 && anchor.isDescendant(of: $0.arrangedSubviews[0])
+                })
+                XCTAssertNil(coordinator.handle(try mouseEvent(window: window, splitView: splitView, clickCount: 2)))
+                try await Task.sleep(nanoseconds: 150_000_000)
+                hostingView.layoutSubtreeIfNeeded()
+                let image = try captureNativeSidebar(
+                    window: window, splitView: splitView,
+                    name: "\(language.rawValue)-\(kind)-long-fields"
+                )
+                let request = VNRecognizeTextRequest()
+                request.recognitionLevel = .accurate
+                request.recognitionLanguages = ["zh-Hans", "en-US"]
+                try VNImageRequestHandler(cgImage: image).perform([request])
+                let text = (request.results?.compactMap { $0.topCandidates(1).first?.string } ?? [])
+                    .joined().replacingOccurrences(of: " ", with: "").lowercased()
+                for ending in [drive.isNetwork ? "hostend" : "volumeend", "modelend", "serialend", "protocolend", "4.1tb"] {
+                    XCTAssertTrue(text.contains(ending), "\(language) \(kind) native sidebar hid \(ending): \(text)")
+                }
             }
         }
     }
@@ -508,6 +592,8 @@ final class SidebarAutoFitTests: XCTestCase {
             styleMask: [.titled, .resizable], backing: .buffered, defer: false
         )
         window.contentView = hostingView
+        window.appearance = NSAppearance(named: appearance == .light ? .aqua : .darkAqua)
+        window.makeKeyAndOrderFront(nil)
         defer { window.orderOut(nil) }
         hostingView.layoutSubtreeIfNeeded()
         let ready = await AsyncTestWaiter.wait {
@@ -544,36 +630,12 @@ final class SidebarAutoFitTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(width + 1, try XCTUnwrap(widths[externalDrive.id]),
                                         "Actual external row must fit: divider \(splitView.arrangedSubviews[0].frame.width), viewport \(coordinator.viewportWidth ?? 0), target \(coordinator.preferredWidth), measured \(widths)")
         }
-        let rows = VStack(alignment: .leading, spacing: 10) {
-            ForEach(drives) { drive in
-                DriveSidebarRow(
-                    drive: drive, representativeVolume: drive.volumes[0],
-                    snapshot: model.snapshots[drive.id],
-                    allowsTextWrapping: width < (widths[drive.id] ?? 0)
-                )
-                .frame(width: width)
-            }
-        }
-        .environment(\.appLanguage, language)
-        .environment(\.colorScheme, appearance)
-        .padding(14)
-        .background(appearance == .light ? Color.white : Color.black)
-        let renderer = ImageRenderer(content: rows)
-        renderer.scale = 2
-        let image = try XCTUnwrap(renderer.cgImage)
-        let png = try XCTUnwrap(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
         let scenario = exceedsWindowWidth ? "window-limit" : usesLongIdentity ? "long-identity"
             : loadsExternalAfterFit ? "late-drive" : loadsEnrichmentAfterFit ? "late-metadata" : "normal"
-        try png.write(to: URL(fileURLWithPath: "/tmp/Capricorn-two-drive-\(language.rawValue)-\(appearance == .light ? "light" : "dark")-\(scenario).png"))
-        let summary = metadataLines(drive: externalDrive, language: language)[3]
-        let summaryWidth = NSHostingView(rootView: Text(summary.0).font(summary.1).fixedSize()).fittingSize.width
-        // OCR only the metadata's horizontal region so very wide rendered rows
-        // do not downsample small captions into illegible text.
-        let recognitionImage = try XCTUnwrap(image.cropping(to: CGRect(
-            x: 0, y: 0,
-            width: min(CGFloat(image.width), ceil((summaryWidth + 24 + 20 + 28) * renderer.scale)),
-            height: CGFloat(image.height)
-        )))
+        let recognitionImage = try captureNativeSidebar(
+            window: window, splitView: splitView,
+            name: "\(language.rawValue)-\(appearance == .light ? "light" : "dark")-\(scenario)"
+        )
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["zh-Hans", "en-US"]
@@ -581,7 +643,33 @@ final class SidebarAutoFitTests: XCTestCase {
         let lines = request.results?.compactMap { $0.topCandidates(1).first?.string } ?? []
         XCTAssertTrue(lines.contains {
             $0.contains("USB4") && $0.replacingOccurrences(of: " ", with: "").contains("4.1TB")
-        }, "Rendered USB4 capacity must be complete: \(lines)")
+        }, "Native sidebar USB4 capacity must be complete: \(lines)")
+    }
+
+    @MainActor
+    private func captureNativeSidebar(window: NSWindow, splitView: NSSplitView, name: String) throws -> CGImage {
+        guard CGPreflightScreenCaptureAccess() else {
+            throw XCTSkip("Native sidebar screenshot verification requires Screen Recording permission.")
+        }
+        let captureURL = URL(fileURLWithPath: "/tmp/Capricorn-native-sidebar-\(name).png")
+        // Native List rows are separate drawing layers; cacheDisplay and
+        // ImageRenderer do not capture what the window server actually shows.
+        let capture = Process()
+        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        capture.arguments = ["-x", "-o", "-l", "\(window.windowNumber)", captureURL.path]
+        try capture.run()
+        capture.waitUntilExit()
+        XCTAssertEqual(capture.terminationStatus, 0)
+        let image = try XCTUnwrap(NSImage(contentsOf: captureURL)?.cgImage(
+            forProposedRect: nil, context: nil, hints: nil
+        ))
+        let scale = CGFloat(image.width) / window.frame.width
+        // Inspect the actual native sidebar, not a separately rendered row.
+        return try XCTUnwrap(image.cropping(to: CGRect(
+            x: 0, y: 0,
+            width: min(CGFloat(image.width), ceil(splitView.arrangedSubviews[0].frame.width * scale)),
+            height: CGFloat(image.height)
+        )))
     }
 
     @MainActor

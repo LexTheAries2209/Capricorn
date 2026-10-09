@@ -1167,44 +1167,50 @@ struct DriveSidebarRow: View {
     private var rowContent: some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: iconName)
-                .font(.title3)
+                .font(DriveSidebarTypography.icon)
                 .foregroundStyle(snapshot?.health.tint ?? .secondary)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(primaryDisplayName)
-                    .font(.headline)
+                    .font(DriveSidebarTypography.title)
                     .lineLimit(allowsTextWrapping ? nil : 1)
                     .fixedSize(horizontal: measuresIntrinsicWidth, vertical: allowsTextWrapping)
                     .truncationMode(.middle)
                     .help(primaryDisplayName)
                 Text(drive.catalogSidebarDisplayName)
-                    .font(.subheadline.weight(.semibold))
+                    .font(DriveSidebarTypography.model)
                     .lineLimit(allowsTextWrapping ? nil : 1)
                     .fixedSize(horizontal: measuresIntrinsicWidth, vertical: allowsTextWrapping)
                     .truncationMode(.middle)
                     .help(drive.catalogDisplayHelp(language: language))
                 Text(DrivePageHeaderText.serialNumberLine(for: drive, language: language, redact: redactSerialNumbers))
-                    .font(.caption)
+                    .font(DriveSidebarTypography.metadata)
                     .foregroundStyle(.secondary)
                     .lineLimit(allowsTextWrapping ? nil : 1)
                     .fixedSize(horizontal: measuresIntrinsicWidth, vertical: allowsTextWrapping)
                     .truncationMode(.middle)
                 Text(deviceSummary)
-                    .font(.caption)
+                    .font(DriveSidebarTypography.metadata)
                     .foregroundStyle(.secondary)
                     .lineLimit(allowsTextWrapping ? nil : 1)
                     .fixedSize(horizontal: measuresIntrinsicWidth, vertical: allowsTextWrapping)
                     .help(identifierSummary)
                 if let capacitySummary {
                     Text(capacitySummary)
-                        .font(.caption)
+                        .font(DriveSidebarTypography.metadata)
                         .foregroundStyle(.secondary)
                         .lineLimit(allowsTextWrapping ? nil : 1)
                         .fixedSize(horizontal: measuresIntrinsicWidth, vertical: allowsTextWrapping)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            HealthBadge(status: snapshot?.health ?? .unavailable, compact: true)
+            HealthBadge(
+                status: snapshot?.health ?? .unavailable,
+                compact: true,
+                labelFont: DriveSidebarTypography.metadata.bold()
+            )
+                // Native List's automatic label style reserves extra icon space.
+                .labelStyle(.titleAndIcon)
                 .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, 4)

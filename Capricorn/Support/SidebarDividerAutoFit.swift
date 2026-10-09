@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import AppKit
+import OSLog
 import SwiftUI
+
+enum DriveSidebarTypography {
+    // Semantic fonts resolve differently inside native sidebar rows and their
+    // offscreen measurement copies. Resolve system sizes once for both paths.
+    static let title = Font.system(size: NSFont.preferredFont(forTextStyle: .headline).pointSize, weight: .bold)
+    static let model = Font.system(size: NSFont.preferredFont(forTextStyle: .subheadline).pointSize, weight: .semibold)
+    static let metadata = Font.system(size: NSFont.smallSystemFontSize)
+    static let icon = Font.system(size: NSFont.preferredFont(forTextStyle: .title3).pointSize)
+}
 
 enum SidebarAutoFitWidth {
     static let minimum: CGFloat = 260
@@ -202,6 +212,7 @@ struct SidebarDividerAutoFit: NSViewRepresentable {
                 fittedWidth(sidebarWidth: sidebar.frame.width),
                 maximumWidth
             )
+            CapricornLog.sidebar.debug("Auto-fit: preferred \(self.preferredWidth), viewport \(self.viewportWidth ?? 0), current \(sidebar.frame.width), target \(target)")
             guard abs(sidebar.frame.width - target) >= 1 else { return }
             splitView.setPosition(target, ofDividerAt: 0)
             splitView.layoutSubtreeIfNeeded()

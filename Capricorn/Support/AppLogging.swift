@@ -11,6 +11,7 @@ enum CapricornLog {
     static let workload = Logger(subsystem: subsystem, category: "Workload")
     static let diskOperations = Logger(subsystem: subsystem, category: "DiskOperations")
     static let persistence = Logger(subsystem: subsystem, category: "Persistence")
+    static let sidebar = Logger(subsystem: subsystem, category: "Sidebar")
 
     static let inventorySignposter = OSSignposter(subsystem: subsystem, category: "Inventory")
     static let benchmarkSignposter = OSSignposter(subsystem: subsystem, category: "Benchmark")
