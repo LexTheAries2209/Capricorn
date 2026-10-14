@@ -47,6 +47,9 @@ final class AppPreferences {
     enum Defaults {
         static let language = AppLanguage.english.rawValue
         static let showVirtualDisks = false
+        static let enablesDeveloperOptions = false
+        static let enablesCustomBenchmarkConfiguration = false
+        static let enablesVirtualDisks = false
         static let showsSmartSelfTestInterface = false
         static let avoidWakingSleepingDisks = false
         static let redactSerialNumbers = false
@@ -61,6 +64,9 @@ final class AppPreferences {
     enum Key {
         static let language = "appLanguage"
         static let showVirtualDisks = "showVirtualDisks"
+        static let enablesDeveloperOptions = "enablesDeveloperOptions"
+        static let enablesCustomBenchmarkConfiguration = "enablesCustomBenchmarkConfiguration"
+        static let enablesVirtualDisks = "enablesVirtualDisks"
         // Earlier builds allowed an external smartctl override. Keep the key
         // only long enough to clear it when the bundled-only policy is loaded.
         static let legacySmartctlPath = "smartctlPath"
@@ -96,6 +102,37 @@ final class AppPreferences {
             guard !suppressesPersistence else { return }
             defaults.set(showVirtualDisks, forKey: Key.showVirtualDisks)
         }
+    }
+
+    /// The master switch gates developer features without clearing their saved choices.
+    var enablesDeveloperOptions: Bool {
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(enablesDeveloperOptions, forKey: Key.enablesDeveloperOptions)
+        }
+    }
+
+    var enablesCustomBenchmarkConfiguration: Bool {
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(enablesCustomBenchmarkConfiguration, forKey: Key.enablesCustomBenchmarkConfiguration)
+        }
+    }
+
+    /// Reserved for future virtual-drive functionality; independent of the inventory filter.
+    var enablesVirtualDisks: Bool {
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(enablesVirtualDisks, forKey: Key.enablesVirtualDisks)
+        }
+    }
+
+    var allowsCustomBenchmarkConfiguration: Bool {
+        enablesDeveloperOptions && enablesCustomBenchmarkConfiguration
+    }
+
+    var allowsVirtualDisks: Bool {
+        enablesDeveloperOptions && enablesVirtualDisks
     }
 
     /// SMART diagnostics include active self-tests and controller error logs.
@@ -179,6 +216,9 @@ final class AppPreferences {
         self.defaults = defaults
         languageRawValue = defaults.string(forKey: Key.language) ?? Defaults.language
         showVirtualDisks = defaults.object(forKey: Key.showVirtualDisks) as? Bool ?? Defaults.showVirtualDisks
+        enablesDeveloperOptions = defaults.object(forKey: Key.enablesDeveloperOptions) as? Bool ?? Defaults.enablesDeveloperOptions
+        enablesCustomBenchmarkConfiguration = defaults.object(forKey: Key.enablesCustomBenchmarkConfiguration) as? Bool ?? Defaults.enablesCustomBenchmarkConfiguration
+        enablesVirtualDisks = defaults.object(forKey: Key.enablesVirtualDisks) as? Bool ?? Defaults.enablesVirtualDisks
         defaults.removeObject(forKey: Key.legacySmartctlPath)
         defaults.removeObject(forKey: Key.legacyAllowSystemDiskSelfTests)
         showsSmartSelfTestInterface = defaults.object(forKey: Key.showsSmartSelfTestInterface) as? Bool ?? Defaults.showsSmartSelfTestInterface
@@ -212,6 +252,9 @@ final class AppPreferences {
         suppressesPersistence = true
         languageRawValue = Defaults.language
         showVirtualDisks = Defaults.showVirtualDisks
+        enablesDeveloperOptions = Defaults.enablesDeveloperOptions
+        enablesCustomBenchmarkConfiguration = Defaults.enablesCustomBenchmarkConfiguration
+        enablesVirtualDisks = Defaults.enablesVirtualDisks
         showsSmartSelfTestInterface = Defaults.showsSmartSelfTestInterface
         avoidWakingSleepingDisks = Defaults.avoidWakingSleepingDisks
         redactSerialNumbers = Defaults.redactSerialNumbers
@@ -470,6 +513,8 @@ struct CapricornSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            DeveloperSettingsSection(preferences: preferences)
 
             Section {
                 VStack(spacing: 14) {

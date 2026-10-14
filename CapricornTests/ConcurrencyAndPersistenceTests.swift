@@ -59,6 +59,48 @@ extension CapricornTests {
     }
 
     @MainActor
+    func testDeveloperOptionsDefaultToOffAndPreserveSavedChoices() throws {
+        let suiteName = "CapricornTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let preferences = AppPreferences(defaults: defaults)
+        XCTAssertFalse(preferences.enablesDeveloperOptions)
+        XCTAssertFalse(preferences.enablesCustomBenchmarkConfiguration)
+        XCTAssertFalse(preferences.enablesVirtualDisks)
+        XCTAssertFalse(preferences.allowsCustomBenchmarkConfiguration)
+        XCTAssertFalse(preferences.allowsVirtualDisks)
+
+        preferences.enablesDeveloperOptions = true
+        XCTAssertFalse(preferences.allowsCustomBenchmarkConfiguration)
+        XCTAssertFalse(preferences.allowsVirtualDisks)
+        preferences.enablesCustomBenchmarkConfiguration = true
+        preferences.enablesVirtualDisks = true
+
+        let reloaded = AppPreferences(defaults: defaults)
+        XCTAssertTrue(reloaded.enablesDeveloperOptions)
+        XCTAssertTrue(reloaded.allowsCustomBenchmarkConfiguration)
+        XCTAssertTrue(reloaded.allowsVirtualDisks)
+        XCTAssertFalse(reloaded.showVirtualDisks)
+
+        reloaded.enablesDeveloperOptions = false
+        let disabled = AppPreferences(defaults: defaults)
+        XCTAssertFalse(disabled.allowsCustomBenchmarkConfiguration)
+        XCTAssertFalse(disabled.allowsVirtualDisks)
+        XCTAssertTrue(disabled.enablesCustomBenchmarkConfiguration)
+        XCTAssertTrue(disabled.enablesVirtualDisks)
+        disabled.enablesDeveloperOptions = true
+        XCTAssertTrue(disabled.allowsCustomBenchmarkConfiguration)
+        XCTAssertTrue(disabled.allowsVirtualDisks)
+
+        disabled.enablesCustomBenchmarkConfiguration = false
+        disabled.enablesVirtualDisks = false
+        let turnedOff = AppPreferences(defaults: defaults)
+        XCTAssertFalse(turnedOff.allowsCustomBenchmarkConfiguration)
+        XCTAssertFalse(turnedOff.allowsVirtualDisks)
+    }
+
+    @MainActor
     func testResetAllSettingsPreservesDiskCacheAndHistory() throws {
         let suiteName = "CapricornTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -73,6 +115,9 @@ extension CapricornTests {
         let preferences = AppPreferences(defaults: defaults)
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
         preferences.showVirtualDisks = true
+        preferences.enablesDeveloperOptions = true
+        preferences.enablesCustomBenchmarkConfiguration = true
+        preferences.enablesVirtualDisks = true
         preferences.showsSmartSelfTestInterface = true
         preferences.avoidWakingSleepingDisks = true
         preferences.redactSerialNumbers = true
@@ -90,6 +135,14 @@ extension CapricornTests {
 
         XCTAssertEqual(preferences.languageRawValue, AppPreferences.Defaults.language)
         XCTAssertEqual(preferences.showVirtualDisks, AppPreferences.Defaults.showVirtualDisks)
+        XCTAssertFalse(preferences.enablesDeveloperOptions)
+        XCTAssertFalse(preferences.enablesCustomBenchmarkConfiguration)
+        XCTAssertFalse(preferences.enablesVirtualDisks)
+        XCTAssertFalse(preferences.allowsCustomBenchmarkConfiguration)
+        XCTAssertFalse(preferences.allowsVirtualDisks)
+        XCTAssertNil(defaults.object(forKey: AppPreferences.Key.enablesDeveloperOptions))
+        XCTAssertNil(defaults.object(forKey: AppPreferences.Key.enablesCustomBenchmarkConfiguration))
+        XCTAssertNil(defaults.object(forKey: AppPreferences.Key.enablesVirtualDisks))
         XCTAssertEqual(preferences.showsSmartSelfTestInterface, AppPreferences.Defaults.showsSmartSelfTestInterface)
         XCTAssertFalse(preferences.avoidWakingSleepingDisks)
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.avoidWakingSleepingDisks))
