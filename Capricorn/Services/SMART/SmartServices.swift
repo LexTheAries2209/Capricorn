@@ -534,7 +534,9 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         commandCoordinator: SmartctlCommandCoordinator = .shared,
         ioServiceTargetResolver: any SmartctlIOServiceTargetResolving = IOKitSmartctlTargetResolver(),
         avoidsWakingSleepingDisks: @escaping @Sendable () -> Bool = {
-            UserDefaults.standard.object(forKey: AppPreferences.Key.avoidWakingSleepingDisks) as? Bool ?? true
+            // Keep refresh behavior aligned with the settings default before a choice is saved.
+            UserDefaults.standard.object(forKey: AppPreferences.Key.avoidWakingSleepingDisks) as? Bool
+                ?? AppPreferences.Defaults.avoidWakingSleepingDisks
         }
     ) {
         self.runner = runner

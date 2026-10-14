@@ -48,7 +48,7 @@ final class AppPreferences {
         static let language = AppLanguage.english.rawValue
         static let showVirtualDisks = false
         static let showsSmartSelfTestInterface = false
-        static let avoidWakingSleepingDisks = true
+        static let avoidWakingSleepingDisks = false
         static let redactSerialNumbers = false
         static let automaticRefreshInterval = DiskAutomaticRefreshInterval.off
         static let showsCheckAndRepairActions = false

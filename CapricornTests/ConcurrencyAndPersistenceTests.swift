@@ -14,7 +14,7 @@ extension CapricornTests {
         defaults.set(true, forKey: AppPreferences.Key.legacyAllowSystemDiskSelfTests)
         let preferences = AppPreferences(defaults: defaults)
         XCTAssertFalse(preferences.showsSmartSelfTestInterface)
-        XCTAssertTrue(preferences.avoidWakingSleepingDisks)
+        XCTAssertFalse(preferences.avoidWakingSleepingDisks)
         XCTAssertFalse(preferences.redactSerialNumbers)
         XCTAssertEqual(preferences.automaticRefreshInterval, .off)
         XCTAssertFalse(preferences.showsCheckAndRepairActions)
@@ -24,7 +24,7 @@ extension CapricornTests {
         XCTAssertNil(defaults.string(forKey: AppPreferences.Key.legacySmartctlPath))
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyAllowSystemDiskSelfTests))
         preferences.showsSmartSelfTestInterface = true
-        preferences.avoidWakingSleepingDisks = false
+        preferences.avoidWakingSleepingDisks = true
         preferences.redactSerialNumbers = true
         preferences.automaticRefreshInterval = .every15Minutes
         preferences.showsCheckAndRepairActions = true
@@ -36,11 +36,26 @@ extension CapricornTests {
         XCTAssertNil(defaults.string(forKey: AppPreferences.Key.legacySmartctlPath))
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyAllowSystemDiskSelfTests))
         XCTAssertTrue(reloaded.showsSmartSelfTestInterface)
-        XCTAssertFalse(reloaded.avoidWakingSleepingDisks)
+        XCTAssertTrue(reloaded.avoidWakingSleepingDisks)
         XCTAssertTrue(reloaded.redactSerialNumbers)
         XCTAssertEqual(reloaded.automaticRefreshInterval, .every15Minutes)
         XCTAssertTrue(reloaded.showsCheckAndRepairActions)
         XCTAssertEqual(reloaded.representativeVolumeStartupPreference, .lastSelected)
+    }
+
+    @MainActor
+    func testAppPreferencesPreservesSavedSleepProtectionSetting() throws {
+        let suiteName = "CapricornTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        for enabled in [true, false] {
+            defaults.set(enabled, forKey: AppPreferences.Key.avoidWakingSleepingDisks)
+
+            let preferences = AppPreferences(defaults: defaults)
+
+            XCTAssertEqual(preferences.avoidWakingSleepingDisks, enabled)
+        }
     }
 
     @MainActor
@@ -59,7 +74,7 @@ extension CapricornTests {
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
         preferences.showVirtualDisks = true
         preferences.showsSmartSelfTestInterface = true
-        preferences.avoidWakingSleepingDisks = false
+        preferences.avoidWakingSleepingDisks = true
         preferences.redactSerialNumbers = true
         preferences.automaticRefreshInterval = .every15Minutes
         preferences.showsCheckAndRepairActions = true
@@ -76,7 +91,9 @@ extension CapricornTests {
         XCTAssertEqual(preferences.languageRawValue, AppPreferences.Defaults.language)
         XCTAssertEqual(preferences.showVirtualDisks, AppPreferences.Defaults.showVirtualDisks)
         XCTAssertEqual(preferences.showsSmartSelfTestInterface, AppPreferences.Defaults.showsSmartSelfTestInterface)
-        XCTAssertEqual(preferences.avoidWakingSleepingDisks, AppPreferences.Defaults.avoidWakingSleepingDisks)
+        XCTAssertFalse(preferences.avoidWakingSleepingDisks)
+        XCTAssertNil(defaults.object(forKey: AppPreferences.Key.avoidWakingSleepingDisks))
+        XCTAssertFalse(AppPreferences(defaults: defaults).avoidWakingSleepingDisks)
         XCTAssertEqual(preferences.redactSerialNumbers, AppPreferences.Defaults.redactSerialNumbers)
         XCTAssertEqual(preferences.automaticRefreshInterval, AppPreferences.Defaults.automaticRefreshInterval)
         XCTAssertEqual(preferences.showsCheckAndRepairActions, AppPreferences.Defaults.showsCheckAndRepairActions)
