@@ -81,6 +81,7 @@ struct ContentView: View {
                     benchmarkHistory: driveBenchmarkHistory,
                     activityHistory: driveActivityHistory,
                     showsQuickDiskCheck: preferences.showsCheckAndRepairActions,
+                    allowsCustomBenchmarkConfiguration: preferences.allowsCustomBenchmarkConfiguration,
                     satDriverGuidance: SATSMARTDriverGuidancePolicy.guidance(
                         for: drive,
                         snapshot: driveSnapshot,
@@ -1275,6 +1276,7 @@ private struct DriveDetailView: View {
     let benchmarkHistory: [BenchmarkHistoryRecord]
     let activityHistory: [DiskActivityHistoryRecord]
     let showsQuickDiskCheck: Bool
+    let allowsCustomBenchmarkConfiguration: Bool
     let satDriverGuidance: SATSMARTDriverGuidance?
     let openSATDriverSettings: () -> Void
     let saveSnapshot: (String?) -> String
@@ -1321,7 +1323,12 @@ private struct DriveDetailView: View {
             )
                 .tabItem { Label("SMART", systemImage: "list.bullet.rectangle") }
                 .tag(DriveFeatureTab.smart)
-            BenchmarkView(drive: drive, viewModel: viewModel, saveResults: saveBenchmarkResults)
+            BenchmarkView(
+                drive: drive,
+                viewModel: viewModel,
+                allowsCustomBenchmarkConfiguration: allowsCustomBenchmarkConfiguration,
+                saveResults: saveBenchmarkResults
+            )
                 .tabItem { Label(language.t("Benchmark"), systemImage: "speedometer") }
                 .tag(DriveFeatureTab.benchmark)
             DiskActivityView(drive: drive, viewModel: viewModel)

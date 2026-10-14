@@ -33,6 +33,7 @@ private enum BenchmarkControlLayout {
 struct BenchmarkView: View {
     let drive: DriveDevice
     var viewModel: AppModel
+    let allowsCustomBenchmarkConfiguration: Bool
     let saveResults: ([BenchmarkResult], [DiskActivitySample]) -> Void
     @Environment(\.appLanguage) private var language
 
@@ -57,15 +58,34 @@ struct BenchmarkView: View {
     @AppStorage("benchmarkCustomExecutionMode") private var customExecutionModeRaw = BenchmarkExecutionMode.finite.rawValue
     @AppStorage(AppPreferences.Key.opensBenchmarkProgressWindowAutomatically)
     private var opensBenchmarkProgressWindowAutomatically = AppPreferences.Defaults.opensBenchmarkProgressWindowAutomatically
-    @State private var selectedProfileID = BenchmarkProfile.default.id
+    @State private var requestedProfileID = BenchmarkProfile.default.id
     @State private var benchmarkNotice: BenchmarkNotice?
     // Volume capacity can block the main thread; snapshot it for view updates,
     // then query again during run validation so stale free space cannot start a test.
     @State private var targetCapacitySnapshot: (path: String, bytes: Int64)?
     private let progressContentLeadingInset: CGFloat = 6
 
+    private var availableProfiles: [BenchmarkProfile] {
+        BenchmarkProfile.presets.filter {
+            allowsCustomBenchmarkConfiguration || $0.id != BenchmarkProfile.custom.id
+        }
+    }
+
+    // Resolve the selection immediately when settings change, before onChange runs.
+    private var selectedProfileID: String {
+        availableProfiles.first(where: { $0.id == requestedProfileID })?.id ?? BenchmarkProfile.default.id
+    }
+
+    private var selectedProfileBinding: Binding<String> {
+        Binding {
+            selectedProfileID
+        } set: { nextProfileID in
+            requestedProfileID = nextProfileID
+        }
+    }
+
     private var baseProfile: BenchmarkProfile {
-        let preset = BenchmarkProfile.presets.first(where: { $0.id == selectedProfileID }) ?? .default
+        let preset = availableProfiles.first(where: { $0.id == selectedProfileID }) ?? .default
         if preset.baseProfileID == "custom" {
             return BenchmarkProfile.custom(
                 rows: customRows,
@@ -349,6 +369,18 @@ struct BenchmarkView: View {
         .onChange(of: customExecutionModeRaw) { _, _ in
             adjustSelectedFileSizeForTarget()
         }
+        .onChange(of: allowsCustomBenchmarkConfiguration) { _, isAllowed in
+            guard !isAllowed, requestedProfileID == BenchmarkProfile.custom.id else { return }
+            requestedProfileID = BenchmarkProfile.default.id
+            // Discard pending custom requests while allowing an active run to finish.
+            switch benchmarkNotice {
+            case .confirmFullTest, .confirmSingleTest:
+                benchmarkNotice = nil
+            default:
+                break
+            }
+            adjustSelectedFileSizeForTarget()
+        }
         .onChange(of: customRowsJSON) { _, _ in
             adjustSelectedFileSizeForTarget()
         }
@@ -491,14 +523,15 @@ struct BenchmarkView: View {
             }
 
             GridRow(alignment: .center) {
-                Picker("", selection: $selectedProfileID) {
-                    ForEach(BenchmarkProfile.presets) { profile in
+                Picker("", selection: selectedProfileBinding) {
+                    ForEach(availableProfiles) { profile in
                         Text(language.profileName(profile)).tag(profile.id)
                     }
                 }
                 .labelsHidden()
                 .frame(width: BenchmarkControlLayout.profileWidth, alignment: .leading)
                 .disabled(viewModel.isBenchmarking)
+                .accessibilityIdentifier("benchmarkProfilePicker")
 
                 Picker("", selection: $selectedRunCount) {
                     ForEach(BenchmarkProfile.runCountOptions, id: \.self) { count in
@@ -936,6 +969,10 @@ struct BenchmarkView: View {
                 targetMismatch: targetFolderDriveMismatch,
                 confirmTitle: language.t(request == nil ? "Run Benchmark" : "Run Single Test"),
                 onConfirm: {
+                    guard runProfile.baseProfileID != BenchmarkProfile.custom.id || allowsCustomBenchmarkConfiguration else {
+                        benchmarkNotice = nil
+                        return
+                    }
                     if let request {
                         let started = viewModel.startBenchmark(
                             profile: request.profile,
