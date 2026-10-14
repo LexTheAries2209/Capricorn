@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for disk inspection, SMART health checks, sto
 
 Capricorn 是一个本地 macOS 工具，用于磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.9.8`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.9.9`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v2.9.8.md](docs/releases/v2.9.8.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v2.9.9.md](docs/releases/v2.9.9.md)
 
 Complete release log / 完整更新记录：[CHANGELOG.md](CHANGELOG.md)
 
@@ -22,7 +22,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 
 ### 下载和安装
 
-前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.9.8-macOS.zip`，解压后将 `Capricorn V2.9.8.app` 放到 `Applications` 或其他本地工具目录。
+前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.9.9-macOS.zip`，解压后将 `Capricorn V2.9.9.app` 放到 `Applications` 或其他本地工具目录。
 
 首次打开时，如果 macOS Gatekeeper 显示互联网下载提示，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
@@ -45,6 +45,8 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，也不会直接向裸设备写入测速数据。
 
 ### 测速和实时活动
+
+默认提供四个内置测速配置；自定义配置可在设置的开发者选项中开启。
 
 测速只在用户选择的文件夹中创建临时测试文件。写入、混合和大文件负载可能对存储设备产生压力，请确认目标位置并保留重要数据备份。
 
@@ -76,7 +78,7 @@ Capricorn is for macOS users who need to inspect drive status, review external d
 
 ### Download And Install
 
-Download `Capricorn-v2.9.8-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn V2.9.8.app` to `Applications` or another local tools folder.
+Download `Capricorn-v2.9.9-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn V2.9.9.app` to `Applications` or another local tools folder.
 
 On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
@@ -99,6 +101,8 @@ SMART availability varies across drives, memory cards, USB bridges, and network 
 Capricorn bundles smartmontools 7.5. It does not automatically install or remove system drivers, and benchmarks do not write directly to raw devices.
 
 ### Benchmark And Live Activity
+
+Four built-in benchmark profiles are available by default; custom configuration can be enabled under Developer Options in Settings.
 
 Benchmarks create temporary files only inside the folder selected by the user. Write, mixed, and large-file workloads can stress storage devices; verify the target and keep important backups.
 

@@ -4,6 +4,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.9.9 - 2026-10-15
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.9) | [Release Notes / 发布说明](docs/releases/v2.9.9.md)
+
+### 中文
+
+- “SMART 刷新时不唤醒休眠硬盘”默认关闭，保留已有用户选择。
+- 设置新增默认关闭的开发者选项，开启后可见自定义测速和虚拟硬盘两个开关；虚拟硬盘功能暂未提供。
+- 测速默认仅显示四个内置配置，开启自定义配置后增加“自定义”，关闭后回到默认配置并保留自定义参数。
+
+### English
+
+- “Do not wake sleeping disks for SMART refresh” is off by default, preserving saved user choices.
+- Adds Developer Options, off by default, with separate custom-benchmark and virtual-disk switches; virtual-disk functionality is not yet available.
+- Benchmarking shows four built-in profiles by default. Enabling custom configuration adds Custom; disabling it returns to Default and retains custom settings.
+
 ## V2.9.8 - 2026-10-09
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.8) | [Release Notes / 发布说明](docs/releases/v2.9.8.md)
