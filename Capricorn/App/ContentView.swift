@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var preferences: AppPreferences
     @State private var showsDiskCheckReport = false
     @State private var showsSmartSelfTestSheet = false
+    @State private var showsVirtualDiskUnavailable = false
     @State private var sidebarRowWidths: [String: CGFloat] = [:]
     @State private var sidebarViewportWidth: CGFloat = 300
     @State private var sidebarAvailableRowWidth: CGFloat = 272
@@ -139,6 +140,11 @@ struct ContentView: View {
         .onChange(of: viewModel.drives.map(\.id)) {
             restoreDiskCheckReports()
         }
+        .onChange(of: preferences.allowsVirtualDisks) {
+            if !preferences.allowsVirtualDisks {
+                showsVirtualDiskUnavailable = false
+            }
+        }
         .onChange(of: diskCheckHistory.map(\.id)) {
             restoreDiskCheckReports()
         }
@@ -251,6 +257,11 @@ struct ContentView: View {
                 opensProgressWindowAutomatically: opensSmartSelfTestProgressWindowAutomatically
             )
         }
+        .alert(language.t("Add virtual disk"), isPresented: $showsVirtualDiskUnavailable) {
+            Button(language.t("OK"), role: .cancel) {}
+        } message: {
+            Text(language.t("User-defined simulated disks will be available in a future update."))
+        }
     }
 
     private var firstAidPresentationBinding: Binding<Bool> {
@@ -306,6 +317,19 @@ struct ContentView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
+                    if preferences.allowsVirtualDisks {
+                        Button {
+                            showsVirtualDiskUnavailable = true
+                        } label: {
+                            Label(language.t("Add virtual disk"), systemImage: "plus")
+                        }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("addVirtualDisk")
+                        .help(language.t("User-defined simulated disks will be available in a future update."))
+                    }
+
                     Spacer(minLength: 8)
 
                     Button {
