@@ -332,6 +332,16 @@ struct ContentView: View {
 
                     Spacer(minLength: 8)
 
+                    Picker(language.t("Language"), selection: $preferences.languageRawValue) {
+                        ForEach(AppLanguage.allCases) { language in
+                            Text(language.shortTitle).tag(language.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+                    .frame(width: 100, alignment: .trailing)
+
                     Button {
                         Task { await viewModel.refresh() }
                     } label: {
@@ -341,24 +351,6 @@ struct ContentView: View {
                     .buttonStyle(.borderless)
                     .disabled(viewModel.isRefreshing || viewModel.isFirstAidBlocking)
                     .help(language.t("Refresh disks and SMART data"))
-                }
-
-                HStack(spacing: 8) {
-                    Label(language.t("Language"), systemImage: "globe")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                    Picker(selection: $preferences.languageRawValue) {
-                        ForEach(AppLanguage.allCases) { language in
-                            Text(language.shortTitle).tag(language.rawValue)
-                        }
-                    } label: {
-                        EmptyView()
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .controlSize(.small)
-                    .frame(width: 116, alignment: .trailing)
                 }
 
                 Divider()
