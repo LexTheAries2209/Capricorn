@@ -16,8 +16,7 @@ final class CFastRecognitionTests: XCTestCase {
               <key>WholeDisk</key><true/>
             </dict></plist>
             """.utf8),
-            volumes: [],
-            showVirtual: false
+            volumes: []
         ))
 
         XCTAssertFalse(drive.isSolidStateKnown)

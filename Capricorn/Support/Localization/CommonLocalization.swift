@@ -243,7 +243,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Refresh to scan attached storage.": "刷新以扫描已连接的存储设备。",
         "Drives": "硬盘",
         "Refresh Disks": "刷新硬盘",
-        "Show virtual disks": "显示虚拟硬盘",
         "Refresh disks and SMART data": "刷新硬盘和 SMART 数据",
         "Language": "语言",
         "Interface Display": "界面显示",

@@ -380,6 +380,7 @@ final class AppSettingsRecord {
     // policy ignores this legacy value and AppPreferences clears its old key.
     var smartctlPath: String?
     var includeSerialsInReports: Bool
+    // Retained only for SwiftData compatibility; inventory ignores this legacy filter.
     var showVirtualDisks: Bool
     var lastUpdated: Date
 

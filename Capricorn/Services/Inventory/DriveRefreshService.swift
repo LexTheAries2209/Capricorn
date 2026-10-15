@@ -19,13 +19,13 @@ struct DriveSnapshotUpdate: Sendable {
 }
 
 protocol DriveRefreshing: Sendable {
-    func discover(showVirtual: Bool) async throws -> DriveRefreshSnapshot
+    func discover() async throws -> DriveRefreshSnapshot
     func snapshotUpdates(for drives: [DriveDevice]) async -> AsyncStream<DriveSnapshotUpdate>
 }
 
 extension DriveRefreshing {
-    func refresh(showVirtual: Bool) async throws -> DriveRefreshSnapshot {
-        var discovery = try await discover(showVirtual: showVirtual)
+    func refresh() async throws -> DriveRefreshSnapshot {
+        var discovery = try await discover()
         let updates = await snapshotUpdates(for: discovery.drives)
         for await update in updates {
             discovery.snapshots[update.driveID] = update.snapshot
@@ -49,11 +49,11 @@ actor DriveRefreshService: DriveRefreshing {
         self.maximumConcurrentSnapshots = max(1, maximumConcurrentSnapshots)
     }
 
-    func discover(showVirtual: Bool) async throws -> DriveRefreshSnapshot {
+    func discover() async throws -> DriveRefreshSnapshot {
         let interval = CapricornLog.inventorySignposter.beginInterval("Drive refresh")
         defer { CapricornLog.inventorySignposter.endInterval("Drive refresh", interval) }
         CapricornLog.inventory.info("Drive refresh started")
-        let drives = try await inventoryProvider.loadDrives(showVirtual: showVirtual)
+        let drives = try await inventoryProvider.loadDrives()
         let snapshot = DriveRefreshSnapshot(
             drives: drives,
             snapshots: Dictionary(uniqueKeysWithValues: drives.map { ($0.id, SmartSnapshot.refreshingNative(for: $0)) })

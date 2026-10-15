@@ -215,6 +215,7 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     /// stable; live inventory sets this to false when diskutil omits SolidState.
     var isSolidStateKnown: Bool = true
     var isWritable: Bool
+    /// Simulated drive marker. Live inventory excludes OS logical devices.
     var isVirtual: Bool
     var isSystemDisk: Bool
     var isNetwork: Bool = false

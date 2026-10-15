@@ -200,7 +200,7 @@ enum VirtualT7DemoFixture {
 }
 
 private struct VirtualT7DemoInventoryProvider: DiskInventoryProviding {
-    func loadDrives(showVirtual: Bool) async throws -> [DriveDevice] {
+    func loadDrives() async throws -> [DriveDevice] {
         [VirtualT7DemoFixture.drive]
     }
 }

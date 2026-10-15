@@ -61,7 +61,6 @@ final class AppModel {
     let benchmarkSession = BenchmarkSessionModel()
     let liveActivitySession = LiveActivitySessionModel()
     let diskOperations = DiskOperationsModel()
-    var showVirtualDisks = false
     var selectedFeatureTab: DriveFeatureTab = .overview
     var smartSelfTestSession: SmartSelfTestSessionState = .idle
     var smartSelfTestProgress: SmartSelfTestProgress?
@@ -548,13 +547,12 @@ final class AppModel {
         let refreshID = UUID()
         activeRefreshID = refreshID
         let refreshService = refreshService
-        let showVirtualDisks = showVirtualDisks
         isRefreshing = true
         setSidebarRefreshStatus("Scanning disks...")
         benchmarkError = nil
         let worker = Task { [weak self] in
             do {
-                let discovery = try await refreshService.discover(showVirtual: showVirtualDisks)
+                let discovery = try await refreshService.discover()
                 try Task.checkCancellation()
                 guard let self, self.activeRefreshID == refreshID else { return }
                 self.applyDriveDiscovery(discovery, refreshID: refreshID)
@@ -2287,7 +2285,7 @@ private struct PreviewInventoryProvider: DiskInventoryProviding {
         )
     ]
 
-    func loadDrives(showVirtual: Bool) async throws -> [DriveDevice] {
+    func loadDrives() async throws -> [DriveDevice] {
         Self.previewDrives
     }
 }

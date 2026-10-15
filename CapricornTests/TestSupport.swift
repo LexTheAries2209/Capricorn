@@ -61,7 +61,7 @@ final class SequencedInventoryProvider: DiskInventoryProviding, @unchecked Senda
         state.snapshot().calls
     }
 
-    func loadDrives(showVirtual: Bool) async throws -> [DriveDevice] {
+    func loadDrives() async throws -> [DriveDevice] {
         let response = state.withLock { state -> Response in
             let index = min(state.calls, max(0, state.responses.count - 1))
             defer { state.calls += 1 }
@@ -197,7 +197,7 @@ final class StagedDriveRefreshService: DriveRefreshing, @unchecked Sendable {
         self.updates = updates
     }
 
-    func discover(showVirtual: Bool) async throws -> DriveRefreshSnapshot {
+    func discover() async throws -> DriveRefreshSnapshot {
         discovery
     }
 

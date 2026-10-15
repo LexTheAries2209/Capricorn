@@ -21,7 +21,6 @@ struct CapricornApp: App {
         let viewModel = AppModel()
         #endif
         let updateChecker = AppUpdateChecker()
-        viewModel.showVirtualDisks = preferences.showVirtualDisks
         _preferences = State(initialValue: preferences)
         _viewModel = State(initialValue: viewModel)
         _updateChecker = State(initialValue: updateChecker)

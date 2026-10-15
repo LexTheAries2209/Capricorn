@@ -5,7 +5,7 @@ import IOKit.storage
 import OSLog
 
 protocol DiskInventoryProviding: Sendable {
-    func loadDrives(showVirtual: Bool) async throws -> [DriveDevice]
+    func loadDrives() async throws -> [DriveDevice]
 }
 
 struct DiskutilListModel: Sendable {
@@ -245,7 +245,7 @@ enum DiskutilPlistParser {
         ].contains(normalized)
     }
 
-    static func parseDevice(infoData: Data, volumes: [DriveDevice.Volume], showVirtual: Bool) throws -> DriveDevice? {
+    static func parseDevice(infoData: Data, volumes: [DriveDevice.Volume]) throws -> DriveDevice? {
         guard
             let info = try PropertyListSerialization.propertyList(from: infoData, options: [], format: nil) as? [String: Any]
         else { throw DiskutilParserError.invalidPlist }
@@ -262,10 +262,12 @@ enum DiskutilPlistParser {
         if content == "Apple_APFS_Container" || content == "Apple_CoreStorage" {
             return nil
         }
-        if !showVirtual && isVirtual {
+        // OS logical devices are excluded unconditionally. Simulated drives
+        // use their own inventory source rather than diskutil discovery.
+        if isVirtual {
             return nil
         }
-        if !showVirtual && volumes.contains(where: { ($0.mountPoint ?? "").contains("/Library/Developer/CoreSimulator/") }) {
+        if volumes.contains(where: { ($0.mountPoint ?? "").contains("/Library/Developer/CoreSimulator/") }) {
             return nil
         }
 
@@ -306,7 +308,7 @@ enum DiskutilPlistParser {
             isSolidState: solidState ?? false,
             isSolidStateKnown: solidState != nil,
             isWritable: info.bool("WritableMedia") ?? info.bool("Writable") ?? false,
-            isVirtual: isVirtual,
+            isVirtual: false,
             isSystemDisk: deviceVolumes.contains(where: { $0.mountPoint == "/" }),
             isMemoryCard: isMemoryCard,
             // Native SMART is intentionally collected by NativeSmartProbe after
@@ -1268,7 +1270,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
         self.infoTimeout = infoTimeout
     }
 
-    func loadDrives(showVirtual: Bool) async throws -> [DriveDevice] {
+    func loadDrives() async throws -> [DriveDevice] {
         let listResult = try await runner.run(diskutilPath, arguments: ["list", "-plist"])
         if listResult.terminationStatus != 0 {
             throw CommandError.nonZeroExit(executable: diskutilPath, status: listResult.terminationStatus, stderr: listResult.stderrString)
@@ -1278,8 +1280,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
         let physicalDiskIDs = await loadPhysicalDiskIDs()
         var devices = await loadPhysicalDevices(
             list: list,
-            physicalDiskIDs: physicalDiskIDs,
-            showVirtual: showVirtual
+            physicalDiskIDs: physicalDiskIDs
         )
         let serialNumbers = await serialNumberProvider.serialNumbers(for: devices)
         if !serialNumbers.isEmpty {
@@ -1345,8 +1346,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
 
     private func loadPhysicalDevices(
         list: DiskutilListModel,
-        physicalDiskIDs: Set<String>,
-        showVirtual: Bool
+        physicalDiskIDs: Set<String>
     ) async -> [DriveDevice] {
         let runner = runner
         let diskutilPath = diskutilPath
@@ -1385,8 +1385,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
                             index,
                             try DiskutilPlistParser.parseDevice(
                                 infoData: result.stdout,
-                                volumes: volumes,
-                                showVirtual: showVirtual
+                                volumes: volumes
                             )
                         )
                     } catch {
@@ -1433,8 +1432,7 @@ final class DiskutilInventoryProvider: DiskInventoryProviding, @unchecked Sendab
                                 nextIndex,
                                 try DiskutilPlistParser.parseDevice(
                                     infoData: result.stdout,
-                                    volumes: volumes,
-                                    showVirtual: showVirtual
+                                    volumes: volumes
                                 )
                             )
                         } catch {

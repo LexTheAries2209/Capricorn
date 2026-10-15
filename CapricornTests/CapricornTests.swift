@@ -87,8 +87,7 @@ final class CapricornTests: XCTestCase {
 
         let drive = try XCTUnwrap(DiskutilPlistParser.parseDevice(
             infoData: Self.disk0InfoFixture.data(using: .utf8)!,
-            volumes: list.volumesByPhysicalDisk["disk0"] ?? [],
-            showVirtual: false
+            volumes: list.volumesByPhysicalDisk["disk0"] ?? []
         ))
 
         XCTAssertEqual(drive.bsdName, "disk0")
@@ -933,8 +932,7 @@ final class CapricornTests: XCTestCase {
 
         let drive = try XCTUnwrap(DiskutilPlistParser.parseDevice(
             infoData: Self.disk11InfoFixture.data(using: .utf8)!,
-            volumes: volumes,
-            showVirtual: false
+            volumes: volumes
         ))
 
         XCTAssertTrue(BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive("/Volumes/40G4T_NTFS_E", drive: drive))
@@ -976,8 +974,7 @@ final class CapricornTests: XCTestCase {
               <key>WritableMedia</key><false/>
             </dict></plist>
             """.utf8),
-            volumes: list.volumesByPhysicalDisk["disk12"] ?? [],
-            showVirtual: false
+            volumes: list.volumesByPhysicalDisk["disk12"] ?? []
         ))
 
         XCTAssertEqual(drive.sidebarVolumeName, "B_0005_1CHZ")
@@ -2385,8 +2382,7 @@ final class CapricornTests: XCTestCase {
     func testDiskutilParserMarksSecureDigitalReaderAsMemoryCard() throws {
         let drive = try XCTUnwrap(DiskutilPlistParser.parseDevice(
             infoData: Self.sdxcInfoFixture.data(using: .utf8)!,
-            volumes: [],
-            showVirtual: false
+            volumes: []
         ))
 
         XCTAssertEqual(drive.bsdName, "disk10")

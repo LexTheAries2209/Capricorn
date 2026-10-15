@@ -129,21 +129,12 @@ struct ContentView: View {
             )
             guard ApplicationRuntime.allowsAutomaticStartupTasks else { return }
             viewModel.startDriveSystemEventMonitoring()
-            viewModel.showVirtualDisks = preferences.showVirtualDisks
             await viewModel.refreshIfNeeded()
             restoreDiskCheckReports()
         }
         .task(id: preferences.automaticRefreshInterval) {
             guard ApplicationRuntime.allowsAutomaticStartupTasks else { return }
             await viewModel.runAutomaticRefresh(every: preferences.automaticRefreshInterval)
-        }
-        .onChange(of: viewModel.showVirtualDisks) {
-            preferences.showVirtualDisks = viewModel.showVirtualDisks
-            Task { await viewModel.refresh() }
-        }
-        .onChange(of: preferences.showVirtualDisks) {
-            guard viewModel.showVirtualDisks != preferences.showVirtualDisks else { return }
-            viewModel.showVirtualDisks = preferences.showVirtualDisks
         }
         .onChange(of: viewModel.drives.map(\.id)) {
             restoreDiskCheckReports()
@@ -315,13 +306,6 @@ struct ContentView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    Toggle(isOn: $viewModel.showVirtualDisks) {
-                        Label(language.t("Show virtual disks"), systemImage: "square.stack.3d.up")
-                    }
-                    .toggleStyle(.checkbox)
-                    .controlSize(.small)
-                    .lineLimit(1)
-
                     Spacer(minLength: 8)
 
                     Button {

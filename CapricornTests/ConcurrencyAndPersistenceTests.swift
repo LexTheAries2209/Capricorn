@@ -12,6 +12,7 @@ extension CapricornTests {
 
         defaults.set("/usr/bin/true", forKey: AppPreferences.Key.legacySmartctlPath)
         defaults.set(true, forKey: AppPreferences.Key.legacyAllowSystemDiskSelfTests)
+        defaults.set(true, forKey: AppPreferences.Key.legacyShowVirtualDisks)
         let preferences = AppPreferences(defaults: defaults)
         XCTAssertFalse(preferences.showsSmartSelfTestInterface)
         XCTAssertFalse(preferences.avoidWakingSleepingDisks)
@@ -20,9 +21,9 @@ extension CapricornTests {
         XCTAssertFalse(preferences.showsCheckAndRepairActions)
         XCTAssertEqual(preferences.representativeVolumeStartupPreference, .largestCapacity)
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
-        preferences.showVirtualDisks = true
         XCTAssertNil(defaults.string(forKey: AppPreferences.Key.legacySmartctlPath))
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyAllowSystemDiskSelfTests))
+        XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyShowVirtualDisks))
         preferences.showsSmartSelfTestInterface = true
         preferences.avoidWakingSleepingDisks = true
         preferences.redactSerialNumbers = true
@@ -32,9 +33,9 @@ extension CapricornTests {
 
         let reloaded = AppPreferences(defaults: defaults)
         XCTAssertEqual(reloaded.languageRawValue, AppLanguage.simplifiedChinese.rawValue)
-        XCTAssertTrue(reloaded.showVirtualDisks)
         XCTAssertNil(defaults.string(forKey: AppPreferences.Key.legacySmartctlPath))
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyAllowSystemDiskSelfTests))
+        XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyShowVirtualDisks))
         XCTAssertTrue(reloaded.showsSmartSelfTestInterface)
         XCTAssertTrue(reloaded.avoidWakingSleepingDisks)
         XCTAssertTrue(reloaded.redactSerialNumbers)
@@ -81,7 +82,6 @@ extension CapricornTests {
         XCTAssertTrue(reloaded.enablesDeveloperOptions)
         XCTAssertTrue(reloaded.allowsCustomBenchmarkConfiguration)
         XCTAssertTrue(reloaded.allowsVirtualDisks)
-        XCTAssertFalse(reloaded.showVirtualDisks)
 
         reloaded.enablesDeveloperOptions = false
         let disabled = AppPreferences(defaults: defaults)
@@ -114,7 +114,6 @@ extension CapricornTests {
 
         let preferences = AppPreferences(defaults: defaults)
         preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
-        preferences.showVirtualDisks = true
         preferences.enablesDeveloperOptions = true
         preferences.enablesCustomBenchmarkConfiguration = true
         preferences.enablesVirtualDisks = true
@@ -134,7 +133,6 @@ extension CapricornTests {
         preferences.resetAllSettings()
 
         XCTAssertEqual(preferences.languageRawValue, AppPreferences.Defaults.language)
-        XCTAssertEqual(preferences.showVirtualDisks, AppPreferences.Defaults.showVirtualDisks)
         XCTAssertFalse(preferences.enablesDeveloperOptions)
         XCTAssertFalse(preferences.enablesCustomBenchmarkConfiguration)
         XCTAssertFalse(preferences.enablesVirtualDisks)
@@ -556,7 +554,7 @@ extension CapricornTests {
             smartService: smartService
         )
 
-        let snapshot = try await service.refresh(showVirtual: false)
+        let snapshot = try await service.refresh()
 
         XCTAssertEqual(snapshot.drives.map(\.id), [firstDrive.id, secondDrive.id])
         XCTAssertEqual(Set(snapshot.snapshots.keys), Set([firstDrive.id, secondDrive.id]))
@@ -573,7 +571,7 @@ extension CapricornTests {
             )
         )
 
-        let drives = try await provider.loadDrives(showVirtual: false)
+        let drives = try await provider.loadDrives()
 
         XCTAssertEqual(drives.map(\.bsdName), ["disk8", "disk9", "disk10"])
         XCTAssertEqual(drives.map(\.serialNumber), ["SERIAL-8", "SERIAL-9", "SERIAL-10"])
@@ -615,7 +613,7 @@ extension CapricornTests {
             serialNumberProvider: StaticDriveSerialProvider(serialNumbersByBSDName: [:])
         )
 
-        let drives = try await provider.loadDrives(showVirtual: false)
+        let drives = try await provider.loadDrives()
 
         XCTAssertEqual(drives.map(\.bsdName), ["disk0", "disk10"])
         let fallback = try XCTUnwrap(drives.first(where: { $0.bsdName == "disk10" }))

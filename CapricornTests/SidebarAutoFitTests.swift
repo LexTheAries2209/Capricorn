@@ -464,7 +464,6 @@ final class SidebarAutoFitTests: XCTestCase {
                 let preferences = AppPreferences(defaults: defaults)
                 preferences.languageRawValue = language.rawValue
                 let model = AppModel()
-                model.showVirtualDisks = true
                 model.drives = [drive]
                 model.selectedDriveID = drive.id
                 var snapshot = CapricornTests.fixtureSnapshot(for: drive)

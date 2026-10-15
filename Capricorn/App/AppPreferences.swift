@@ -46,7 +46,6 @@ enum CapricornSettingsDestination: String, Equatable, Sendable {
 final class AppPreferences {
     enum Defaults {
         static let language = AppLanguage.english.rawValue
-        static let showVirtualDisks = false
         static let enablesDeveloperOptions = false
         static let enablesCustomBenchmarkConfiguration = false
         static let enablesVirtualDisks = false
@@ -63,7 +62,8 @@ final class AppPreferences {
 
     enum Key {
         static let language = "appLanguage"
-        static let showVirtualDisks = "showVirtualDisks"
+        // Logical devices are no longer exposed by inventory.
+        static let legacyShowVirtualDisks = "showVirtualDisks"
         static let enablesDeveloperOptions = "enablesDeveloperOptions"
         static let enablesCustomBenchmarkConfiguration = "enablesCustomBenchmarkConfiguration"
         static let enablesVirtualDisks = "enablesVirtualDisks"
@@ -97,13 +97,6 @@ final class AppPreferences {
         }
     }
 
-    var showVirtualDisks: Bool {
-        didSet {
-            guard !suppressesPersistence else { return }
-            defaults.set(showVirtualDisks, forKey: Key.showVirtualDisks)
-        }
-    }
-
     /// The master switch gates developer features without clearing their saved choices.
     var enablesDeveloperOptions: Bool {
         didSet {
@@ -119,7 +112,7 @@ final class AppPreferences {
         }
     }
 
-    /// Reserved for future virtual-drive functionality; independent of the inventory filter.
+    /// Gates user-defined simulated drives, never OS logical devices or disk images.
     var enablesVirtualDisks: Bool {
         didSet {
             guard !suppressesPersistence else { return }
@@ -215,7 +208,7 @@ final class AppPreferences {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         languageRawValue = defaults.string(forKey: Key.language) ?? Defaults.language
-        showVirtualDisks = defaults.object(forKey: Key.showVirtualDisks) as? Bool ?? Defaults.showVirtualDisks
+        defaults.removeObject(forKey: Key.legacyShowVirtualDisks)
         enablesDeveloperOptions = defaults.object(forKey: Key.enablesDeveloperOptions) as? Bool ?? Defaults.enablesDeveloperOptions
         enablesCustomBenchmarkConfiguration = defaults.object(forKey: Key.enablesCustomBenchmarkConfiguration) as? Bool ?? Defaults.enablesCustomBenchmarkConfiguration
         enablesVirtualDisks = defaults.object(forKey: Key.enablesVirtualDisks) as? Bool ?? Defaults.enablesVirtualDisks
@@ -251,7 +244,6 @@ final class AppPreferences {
 
         suppressesPersistence = true
         languageRawValue = Defaults.language
-        showVirtualDisks = Defaults.showVirtualDisks
         enablesDeveloperOptions = Defaults.enablesDeveloperOptions
         enablesCustomBenchmarkConfiguration = Defaults.enablesCustomBenchmarkConfiguration
         enablesVirtualDisks = Defaults.enablesVirtualDisks
@@ -307,7 +299,6 @@ struct CapricornSettingsView: View {
                     }
                 }
 
-                Toggle(language.t("Show virtual disks"), isOn: $preferences.showVirtualDisks)
                 Toggle(language.t("Redact serial numbers"), isOn: $preferences.redactSerialNumbers)
                 Text(language.t("When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value."))
                     .font(.caption)
