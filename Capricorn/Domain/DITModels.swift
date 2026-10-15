@@ -1013,6 +1013,8 @@ enum AppCommandShortcut {
     static let settingsKeyEquivalent = KeyEquivalent("`")
     static let refreshDisks = (key: "r", modifiers: EventModifiers.command)
     static let refreshDisksKeyEquivalent = KeyEquivalent("r")
+    static let addVirtualDisk = (key: "t", modifiers: EventModifiers.command)
+    static let addVirtualDiskKeyEquivalent = KeyEquivalent("t")
     static let saveSmartSnapshot = (key: "s", modifiers: EventModifiers.command)
     static let saveSmartSnapshotKeyEquivalent = KeyEquivalent("s")
     static let featureTabCharacter: Character = "\t"

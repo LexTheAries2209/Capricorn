@@ -334,7 +334,11 @@ struct ContentView: View {
                         .controlSize(.small)
                         .lineLimit(1)
                         .accessibilityIdentifier("addVirtualDisk")
-                        .disabled(isDriveSelectionLocked)
+                        .keyboardShortcut(
+                            AppCommandShortcut.addVirtualDiskKeyEquivalent,
+                            modifiers: AppCommandShortcut.addVirtualDisk.modifiers
+                        )
+                        .disabled(isDriveSelectionLocked || showsVirtualDiskConfiguration)
                         .help(language.t("Add virtual disk"))
                     }
 

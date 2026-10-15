@@ -8,6 +8,53 @@ import XCTest
 
 final class VirtualDiskPresentationTests: XCTestCase {
     @MainActor
+    func testCommandTOpensConfigurationOnlyWhenAddVirtualDiskIsAvailable() async throws {
+        XCTAssertEqual(AppCommandShortcut.addVirtualDisk.key, "t")
+        XCTAssertEqual(AppCommandShortcut.addVirtualDisk.modifiers, .command)
+        let suite = "CapricornTests.virtualShortcut.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = AppPreferences(defaults: defaults)
+        let model = AppModel()
+        let physical = CapricornTests.fixtureDrive()
+        model.drives = [physical]
+        model.selectedDriveID = physical.id
+        let window = makeWindow(
+            root: ContentView(viewModel: model, preferences: preferences)
+                .modelContainer(try ModelContainerFactory.makeInMemory()),
+            size: NSSize(width: 1_433, height: 800)
+        )
+        window.makeKeyAndOrderFront(nil)
+        defer { window.orderOut(nil) }
+        let event = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .command,
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+            context: nil, characters: "t", charactersIgnoringModifiers: "t",
+            isARepeat: false, keyCode: 17
+        ))
+        for (developer, virtualDisks, locked) in [
+            (false, false, false), (false, true, false), (true, false, false),
+            (true, true, true), (true, true, false)
+        ] {
+            preferences.enablesDeveloperOptions = developer
+            preferences.enablesVirtualDisks = virtualDisks
+            model.isLiveActivityMonitoring = locked
+            try await Task.sleep(for: .milliseconds(150))
+            _ = window.contentView?.performKeyEquivalent(with: event)
+            if developer && virtualDisks && !locked {
+                let opened = await AsyncTestWaiter.wait { window.attachedSheet != nil }
+                XCTAssertTrue(opened, "Command+T should open the configuration sheet.")
+                preferences.enablesVirtualDisks = false
+                let dismissed = await AsyncTestWaiter.wait { window.attachedSheet == nil }
+                XCTAssertTrue(dismissed)
+            } else {
+                try await Task.sleep(for: .milliseconds(150))
+                XCTAssertNil(window.attachedSheet)
+            }
+        }
+    }
+
+    @MainActor
     func testDisablingEitherVirtualDiskSwitchEjectsAllCreatedDisks() async throws {
         for disablesMaster in [false, true] {
             let suite = "CapricornTests.disableVirtualDisks.\(UUID().uuidString)"
