@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for disk inspection, SMART health checks, sto
 
 Capricorn 是一个本地 macOS 工具，用于磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.9.9`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.10.0`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v2.9.9.md](docs/releases/v2.9.9.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v2.10.0.md](docs/releases/v2.10.0.md)
 
 Complete release log / 完整更新记录：[CHANGELOG.md](CHANGELOG.md)
 
@@ -22,13 +22,13 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 
 ### 下载和安装
 
-前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.9.9-macOS.zip`，解压后将 `Capricorn V2.9.9.app` 放到 `Applications` 或其他本地工具目录。
+前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.10.0-macOS.zip`，解压后将 `Capricorn V2.10.0.app` 放到 `Applications` 或其他本地工具目录。
 
 首次打开时，如果 macOS Gatekeeper 显示互联网下载提示，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
 ### 核心功能
 
-- 识别本机物理磁盘、外接磁盘、普通挂载分区、网络卷和存储卡。
+- 识别本机物理磁盘、外接磁盘、网络卷和存储卡，并显示关联卷宗。
 - 显示磁盘容量、文件系统、设备名称、序列号和连接信息。
 - 查看 SMART 健康状态、温度、寿命、通电时间、介质错误和读写数据。
 - 支持查看 SMART 自检状态和历史记录。
@@ -36,6 +36,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 - 观察实时磁盘读写活动，并运行读写负载。
 - 保存、查看和管理 SMART、测速及实时活动历史。
 - 提供装载、卸载、推出、重命名、Finder 定位和占用程序查看等磁盘操作。
+- 在开发者选项中创建、编辑和推出模拟虚拟硬盘，可配置硬盘信息、分区和概览指标；模拟设备仅在当前会话中存在。
 - 支持简体中文和英文界面。
 
 ### 外接设备和 SMART 说明
@@ -78,13 +79,13 @@ Capricorn is for macOS users who need to inspect drive status, review external d
 
 ### Download And Install
 
-Download `Capricorn-v2.9.9-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn V2.9.9.app` to `Applications` or another local tools folder.
+Download `Capricorn-v2.10.0-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn V2.10.0.app` to `Applications` or another local tools folder.
 
 On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
 ### Features
 
-- Identifies local physical disks, external drives, mounted partitions, network volumes, and memory cards.
+- Identifies local physical disks, external drives, network volumes, and memory cards, with their associated volumes.
 - Shows capacity, filesystem, device name, serial number, and connection information.
 - Displays SMART health, temperature, life remaining, power-on time, media errors, and read/write data.
 - Supports SMART self-test status and history.
@@ -92,6 +93,7 @@ On first launch, if macOS Gatekeeper shows an internet-download warning, right-c
 - Shows live disk activity and runs read/write workloads.
 - Saves, reviews, and manages SMART, benchmark, and live-activity history.
 - Provides mount, unmount, eject, rename, Finder reveal, and open-file inspection actions.
+- Creates, edits, and ejects simulated virtual disks under Developer Options, with configurable identity, partitions, and overview metrics; simulated devices exist only for the current session.
 - Provides Simplified Chinese and English UI text.
 
 ### External Devices And SMART Notes

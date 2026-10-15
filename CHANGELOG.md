@@ -4,6 +4,24 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.10.0 - 2026-10-15
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.10.0) | [Release Notes / 发布说明](docs/releases/v2.10.0.md)
+
+### 中文
+
+- 开发者选项支持创建模拟虚拟硬盘，可配置硬盘信息、容量、分区和概览指标，并通过 Command+T 新建或右键菜单修改配置。
+- 虚拟硬盘名称带有“（虚拟硬盘）”标记，推出即删除；关闭虚拟硬盘开关会推出全部模拟设备，不保留缓存或历史。
+- 系统逻辑设备和安装包卷不再单独显示为硬盘；真实硬盘和虚拟硬盘的操作直接显示在硬盘右键菜单中。
+- 添加虚拟硬盘、语言切换和刷新控件合并为一行；点击侧栏版本和用户名可直接打开更新设置。
+
+### English
+
+- Developer Options supports simulated virtual disks with configurable identity, capacity, partitions, and overview metrics, Command+T creation, and context-menu editing.
+- Virtual disk names include “(Virtual Disk)”; ejecting deletes them, and disabling virtual disks ejects all simulated devices without retaining caches or history.
+- Operating-system logical devices and installer volumes are no longer listed as separate disks; real and virtual disk actions appear directly in the disk context menu.
+- Add Virtual Disk, language switching, and refresh share one row; the sidebar version and user label opens update settings.
+
 ## V2.9.9 - 2026-10-15
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.9.9) | [Release Notes / 发布说明](docs/releases/v2.9.9.md)
