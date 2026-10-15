@@ -8,6 +8,55 @@ import XCTest
 
 final class VirtualDiskPresentationTests: XCTestCase {
     @MainActor
+    func testDisablingEitherVirtualDiskSwitchEjectsAllCreatedDisks() async throws {
+        for disablesMaster in [false, true] {
+            let suite = "CapricornTests.disableVirtualDisks.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let preferences = AppPreferences(defaults: defaults)
+            preferences.enablesDeveloperOptions = true
+            preferences.enablesVirtualDisks = true
+            var physical = CapricornTests.fixtureDrive()
+            physical.isSystemDisk = true
+            let refresh = StagedDriveRefreshService(
+                discovery: DriveRefreshSnapshot(drives: [physical], snapshots: [:]),
+                updateDelayNanoseconds: 0, updates: []
+            )
+            let model = AppModel(refreshService: refresh)
+            await model.refresh()
+            var configuration = VirtualDiskConfiguration()
+            let first = try model.addSimulatedDisk(configuration)
+            configuration.serialNumber = physical.serialNumber ?? "SN"
+            let second = try model.addSimulatedDisk(configuration)
+            let window = makeWindow(
+                root: ContentView(viewModel: model, preferences: preferences)
+                    .modelContainer(try ModelContainerFactory.makeInMemory()),
+                size: NSSize(width: 1_433, height: 800)
+            )
+            window.makeKeyAndOrderFront(nil)
+            defer { window.orderOut(nil) }
+            try await Task.sleep(for: .milliseconds(150))
+
+            if disablesMaster {
+                preferences.enablesDeveloperOptions = false
+            } else {
+                preferences.enablesVirtualDisks = false
+            }
+            let ejected = await AsyncTestWaiter.wait {
+                model.drives.map(\.id) == [physical.id]
+            }
+            XCTAssertTrue(ejected)
+            XCTAssertNil(model.snapshots[first.id])
+            XCTAssertNil(model.snapshots[second.id])
+            XCTAssertEqual(model.selectedDriveID, physical.id)
+            preferences.enablesDeveloperOptions = true
+            preferences.enablesVirtualDisks = true
+            await model.refresh()
+            XCTAssertEqual(model.drives.map(\.id), [physical.id])
+        }
+    }
+
+    @MainActor
     func testConfigurationAndOverviewRenderInBothLanguages() async throws {
         guard CGPreflightScreenCaptureAccess() else {
             throw XCTSkip("Virtual disk presentation screenshots require Screen Recording permission.")

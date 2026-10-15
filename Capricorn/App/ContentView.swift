@@ -143,6 +143,7 @@ struct ContentView: View {
         .onChange(of: preferences.allowsVirtualDisks) {
             if !preferences.allowsVirtualDisks {
                 showsVirtualDiskConfiguration = false
+                viewModel.ejectAllSimulatedDisks()
             }
         }
         .onChange(of: diskCheckHistory.map(\.id)) {

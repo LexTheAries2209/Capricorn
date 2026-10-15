@@ -495,8 +495,16 @@ final class AppModel {
         return drive
     }
 
-    private func ejectSimulatedDisk(_ drive: DriveDevice) {
-        guard !isDriveSelectionLocked, simulatedDrives.contains(where: { $0.id == drive.id }) else { return }
+    func ejectAllSimulatedDisks() {
+        // Simulations cannot run hardware operations; removing them must not
+        // wait for an unrelated physical disk's activity session to finish.
+        for drive in simulatedDrives {
+            removeSimulatedDisk(drive)
+        }
+    }
+
+    private func removeSimulatedDisk(_ drive: DriveDevice) {
+        guard simulatedDrives.contains(where: { $0.id == drive.id }) else { return }
         simulatedDrives.removeAll { $0.id == drive.id }
         drives.removeAll { $0.id == drive.id }
         snapshots.removeValue(forKey: drive.id)
@@ -848,7 +856,7 @@ final class AppModel {
 
     func performDiskAction(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async {
         if drive.isVirtual {
-            if action == .eject { ejectSimulatedDisk(drive) }
+            if action == .eject, !isDriveSelectionLocked { removeSimulatedDisk(drive) }
             return
         }
         guard !diskOperations.isFirstAidBlocking else { return }

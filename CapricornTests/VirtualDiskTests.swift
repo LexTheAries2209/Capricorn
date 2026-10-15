@@ -108,6 +108,41 @@ final class VirtualDiskTests: XCTestCase {
     }
 
     @MainActor
+    func testBulkEjectRemovesAllSimulationsWhilePhysicalMonitoringRemainsActive() async throws {
+        var physical = CapricornTests.fixtureDrive()
+        physical.isSystemDisk = true
+        let refresh = StagedDriveRefreshService(
+            discovery: DriveRefreshSnapshot(drives: [physical], snapshots: [:]),
+            updateDelayNanoseconds: 0, updates: []
+        )
+        let model = AppModel(refreshService: refresh)
+        await model.refresh()
+        let originalSnapshot = model.snapshots[physical.id]
+        var configuration = VirtualDiskConfiguration()
+        let first = try model.addSimulatedDisk(configuration)
+        configuration.serialNumber = physical.serialNumber ?? "SN"
+        let second = try model.addSimulatedDisk(configuration)
+        model.selectedDriveID = physical.id
+        model.selectedFeatureTab = .liveActivity
+        model.isLiveActivityMonitoring = true
+
+        model.ejectAllSimulatedDisks()
+
+        XCTAssertEqual(model.drives.map(\.id), [physical.id])
+        XCTAssertNil(model.snapshots[first.id])
+        XCTAssertNil(model.snapshots[second.id])
+        XCTAssertEqual(model.snapshots[physical.id], originalSnapshot)
+        XCTAssertEqual(model.selectedDriveID, physical.id)
+        XCTAssertEqual(model.selectedFeatureTab, .liveActivity)
+        XCTAssertTrue(model.isLiveActivityMonitoring)
+        model.isLiveActivityMonitoring = false
+        await model.refresh()
+        XCTAssertEqual(model.drives.map(\.id), [physical.id])
+        model.ejectAllSimulatedDisks()
+        XCTAssertEqual(model.drives.map(\.id), [physical.id])
+    }
+
+    @MainActor
     func testDuplicateNamesAndSerialsHaveIndependentSessionIdentities() async throws {
         let refresh = StagedDriveRefreshService(
             discovery: DriveRefreshSnapshot(drives: [], snapshots: [:]),
