@@ -250,6 +250,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Switch feature pages in order": "按顺序切换功能页面",
         "Settings": "设置",
         "Updates": "更新",
+        "Open update settings": "打开更新设置",
         "Current Version": "当前版本",
         "Check for Updates…": "检查更新…",
         "Checking for updates…": "正在检查更新…",

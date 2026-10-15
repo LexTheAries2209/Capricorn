@@ -424,25 +424,32 @@ struct ContentView: View {
 
                 Divider()
 
-                SettingsLink {
-                    HStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    SettingsLink {
                         Label(language.t("Settings"), systemImage: "gearshape")
                             .font(.caption.weight(.semibold))
-                        Spacer(minLength: 8)
+                    }
+                    .help(language.t("Open Settings"))
+                    .accessibilityLabel(language.t("Open Settings"))
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        preferences.requestedSettingsDestination = .updates
+                        openSettings()
+                    } label: {
                         Text("Capricorn V\(AppVersion.current.displayValue) · \(NSUserName())")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .multilineTextAlignment(.trailing)
-                            .help(language.t("Capricorn version and macOS user name"))
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
+                    .help(language.t("Open update settings"))
+                    .accessibilityLabel(language.t("Open update settings"))
+                    .accessibilityIdentifier("openUpdateSettings")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help(language.t("Open Settings"))
-                .accessibilityLabel(language.t("Open Settings"))
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)

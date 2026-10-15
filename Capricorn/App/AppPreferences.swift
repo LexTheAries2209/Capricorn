@@ -38,6 +38,7 @@ enum DiskAutomaticRefreshInterval: Int, CaseIterable, Identifiable, Sendable {
 }
 
 enum CapricornSettingsDestination: String, Equatable, Sendable {
+    case updates
     case satSMARTDriver
 }
 
@@ -291,6 +292,7 @@ struct CapricornSettingsView: View {
         ScrollViewReader { proxy in
             Form {
             AppUpdateSettingsSection(updateChecker: updateChecker, language: language)
+                .id(CapricornSettingsDestination.updates)
 
             Section(language.t("Interface Display")) {
                 Picker(language.t("Language"), selection: $preferences.languageRawValue) {
@@ -598,17 +600,16 @@ struct CapricornSettingsView: View {
 
     private func revealRequestedSettings(using proxy: ScrollViewProxy) {
         guard let destination = preferences.requestedSettingsDestination else { return }
+        // Consume the request immediately so the same entry can be used again.
+        preferences.requestedSettingsDestination = nil
         withAnimation(.easeInOut(duration: 0.25)) {
-            proxy.scrollTo(destination, anchor: .center)
+            proxy.scrollTo(destination, anchor: destination == .updates ? .top : .center)
         }
         highlightedSettingsDestination = destination
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
             if highlightedSettingsDestination == destination {
                 highlightedSettingsDestination = nil
-            }
-            if preferences.requestedSettingsDestination == destination {
-                preferences.requestedSettingsDestination = nil
             }
         }
     }
