@@ -113,6 +113,7 @@ final class SmartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching {
     }
 
     private func identityKey(for drive: DriveDevice) -> String? {
+        guard !drive.isVirtual else { return nil }
         if let serial = HistoryDriveMatcher.normalize(drive.serialNumber) {
             return "serial:\(serial)"
         }

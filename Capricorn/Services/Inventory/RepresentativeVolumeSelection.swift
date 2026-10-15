@@ -104,12 +104,14 @@ struct RepresentativeVolumePreferences: Codable, Equatable, Sendable {
     }
 
     func selectedVolumeID(for drive: DriveDevice) -> String? {
-        selectionsByDrive[RepresentativeVolumeResolver.preferenceKey(for: drive)]?
+        guard !drive.isVirtual else { return nil }
+        return selectionsByDrive[RepresentativeVolumeResolver.preferenceKey(for: drive)]?
             .resolvedVolume(in: drive)?
             .deviceIdentifier
     }
 
     mutating func setSelectedVolumeID(_ volumeID: String, for drive: DriveDevice) {
+        guard !drive.isVirtual else { return }
         let volume = drive.volumes.first(where: { $0.deviceIdentifier == volumeID })
         selectionsByDrive[RepresentativeVolumeResolver.preferenceKey(for: drive)] = volume.map { RepresentativeVolumeIdentity(volume: $0) }
             ?? RepresentativeVolumeIdentity(deviceIdentifier: volumeID, volumeUUID: nil)
@@ -126,6 +128,7 @@ enum RepresentativeVolumeResolver {
     static let smallStructuralPartitionUpperBoundBytes: Int64 = 1_000_000_000
 
     static func preferenceKey(for drive: DriveDevice) -> String {
+        if drive.isVirtual { return "virtual:\(drive.id)" }
         if drive.isNetwork {
             return "network:\(drive.id)"
         }
@@ -140,7 +143,7 @@ enum RepresentativeVolumeResolver {
     }
 
     static func maySwitchVolume(for drive: DriveDevice) -> Bool {
-        !drive.isNetwork && !drive.isSystemDisk
+        !drive.isVirtual && !drive.isNetwork && !drive.isSystemDisk
     }
 
     static func orderedVolumes(for drive: DriveDevice) -> [DriveDevice.Volume] {

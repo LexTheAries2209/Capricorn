@@ -147,6 +147,7 @@ final class HistoryRepository {
 
     @discardableResult
     func saveSmart(drive: DriveDevice, snapshot: SmartSnapshot) throws -> SmartHistoryRecord {
+        try requirePersistentDrive(drive)
         let record = SmartHistoryRecord(drive: drive, snapshot: snapshot)
         modelContext.insert(record)
         try modelContext.save()
@@ -159,6 +160,7 @@ final class HistoryRepository {
         drive: DriveDevice,
         report: SmartSelfTestReport
     ) throws -> SmartSelfTestHistoryRecord {
+        try requirePersistentDrive(drive)
         let existing = try modelContext.fetch(FetchDescriptor<SmartSelfTestHistoryRecord>())
         let fingerprint = SmartSelfTestHistoryRecord.fingerprint(for: report)
         if let duplicate = existing.first(where: {
@@ -178,6 +180,7 @@ final class HistoryRepository {
         drive: DriveDevice,
         report: DiskCheckReport
     ) throws -> DiskCheckHistoryRecord? {
+        try requirePersistentDrive(drive)
         let serialNumber = HistoryDriveMatcher.normalize(drive.serialNumber)
         guard serialNumber != nil || !drive.volumeUUIDs.isEmpty else {
             CapricornLog.persistence.info(
@@ -213,6 +216,7 @@ final class HistoryRepository {
         results: [BenchmarkResult],
         activitySamples: [DiskActivitySample]
     ) throws -> [BenchmarkHistoryRecord] {
+        try requirePersistentDrive(drive)
         let activityOwnerIndex = results.indices.max {
             results[$0].measuredAt < results[$1].measuredAt
         }
@@ -237,6 +241,7 @@ final class HistoryRepository {
         startedAt: Date,
         endedAt: Date
     ) throws -> DiskActivityHistoryRecord {
+        try requirePersistentDrive(drive)
         let record = DiskActivityHistoryRecord(
             drive: drive,
             samples: samples,
@@ -248,6 +253,12 @@ final class HistoryRepository {
         try modelContext.save()
         CapricornLog.persistence.info("Activity history saved")
         return record
+    }
+
+    private func requirePersistentDrive(_ drive: DriveDevice) throws {
+        guard !drive.isVirtual else {
+            throw VirtualDiskConfigurationError.invalid("Virtual disks do not save history.")
+        }
     }
 
     func hide<T: HistoryDisplayRecord>(_ record: T, at date: Date = Date()) throws {

@@ -392,6 +392,9 @@ enum VolumeUUIDNormalizer {
 
 enum DriveStableIdentityMatcher {
     static func matches(_ lhs: DriveDevice, _ rhs: DriveDevice) -> Bool {
+        if lhs.isVirtual || rhs.isVirtual {
+            return lhs.isVirtual && rhs.isVirtual && lhs.id == rhs.id
+        }
         let lhsSerial = normalizedSerial(lhs.serialNumber)
         let rhsSerial = normalizedSerial(rhs.serialNumber)
         if let lhsSerial, let rhsSerial {
@@ -553,6 +556,7 @@ enum DiskSidebarAction: String, CaseIterable, Identifiable, Equatable {
 
 enum DiskSidebarActionPolicy {
     static func actions(for drive: DriveDevice) -> [DiskSidebarAction] {
+        if drive.isVirtual { return [.eject] }
         if drive.isNetwork {
             return [.mount, .unmount, .disconnect, .inspectOpenFiles]
         }
@@ -593,6 +597,7 @@ enum DiskSidebarActionPolicy {
         for drive: DriveDevice,
         targetVolume: DriveDevice.Volume? = nil
     ) -> Bool {
+        if drive.isVirtual { return action == .eject }
         if isProtectedSystemControlAction(action, for: drive) {
             return false
         }

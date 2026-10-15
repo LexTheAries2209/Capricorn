@@ -48,6 +48,7 @@ enum SidebarStatusTimestampFormatter {
 final class AppModel {
     var drives: [DriveDevice] = []
     var snapshots: [String: SmartSnapshot] = [:]
+    private var simulatedDrives: [DriveDevice] = []
     var selectedDriveID: String?
     var isRefreshing = false
     var refreshMessage: String? {
@@ -445,6 +446,7 @@ final class AppModel {
     }
 
     func selectRepresentativeVolume(_ volume: DriveDevice.Volume, for drive: DriveDevice) {
+        guard !drive.isVirtual else { return }
         guard RepresentativeVolumeResolver.maySwitchVolume(for: drive),
               RepresentativeVolumeResolver.isSelectable(volume) else {
             return
@@ -470,11 +472,49 @@ final class AppModel {
     }
 
     func selectNextFeatureTab() {
+        guard selectedDrive?.isVirtual != true else { return }
         selectedFeatureTab = DriveFeatureTab.next(after: selectedFeatureTab)
     }
 
     func selectPreviousFeatureTab() {
+        guard selectedDrive?.isVirtual != true else { return }
         selectedFeatureTab = DriveFeatureTab.previous(before: selectedFeatureTab)
+    }
+
+    @discardableResult
+    func addSimulatedDisk(_ configuration: VirtualDiskConfiguration) throws -> DriveDevice {
+        guard !isDriveSelectionLocked else {
+            throw VirtualDiskConfigurationError.invalid("Wait for the current disk operation to finish.")
+        }
+        let (drive, snapshot) = try configuration.makeDisk()
+        simulatedDrives.append(drive)
+        drives.append(drive)
+        snapshots[drive.id] = snapshot
+        selectedDriveID = drive.id
+        selectedFeatureTab = .overview
+        return drive
+    }
+
+    private func ejectSimulatedDisk(_ drive: DriveDevice) {
+        guard !isDriveSelectionLocked, simulatedDrives.contains(where: { $0.id == drive.id }) else { return }
+        simulatedDrives.removeAll { $0.id == drive.id }
+        drives.removeAll { $0.id == drive.id }
+        snapshots.removeValue(forKey: drive.id)
+        // Never remove a persisted entry by serial: it could belong to a real drive.
+        let key = RepresentativeVolumeResolver.preferenceKey(for: drive)
+        activeRepresentativeVolumeIDsByDrive.removeValue(forKey: key)
+        manuallySelectedRepresentativeVolumeKeys.remove(key)
+        smartSelfTestCapabilityTasks.removeValue(forKey: drive.id)?.cancel()
+        smartErrorLogCapabilityTasks.removeValue(forKey: drive.id)?.cancel()
+        smartErrorLogReadTasks.removeValue(forKey: drive.id)?.cancel()
+        smartSelfTestCapabilities.removeValue(forKey: drive.id)
+        smartErrorLogCapabilities.removeValue(forKey: drive.id)
+        smartErrorLogReports.removeValue(forKey: drive.id)
+        diskCheckReportsByDrive.removeValue(forKey: drive.id)
+        if selectedDriveID == drive.id {
+            selectedDriveID = drives.first?.id
+            selectedFeatureTab = .overview
+        }
     }
 
     func refreshIfNeeded() async {
@@ -591,11 +631,14 @@ final class AppModel {
         guard activeRefreshID == refreshID else { return }
         let previousDrives = drives
         let previousSnapshots = snapshots
-        let loadedDrives = discovery.drives
+        let loadedDrives = discovery.drives + simulatedDrives
 
         drives = loadedDrives
         refreshRepresentativeVolumeSelections(for: loadedDrives)
         snapshots = Dictionary(uniqueKeysWithValues: loadedDrives.map { drive in
+            if drive.isVirtual, let snapshot = previousSnapshots[drive.id] {
+                return (drive.id, snapshot)
+            }
             let previousDrive = previousDrives.first { DriveStableIdentityMatcher.matches($0, drive) }
             if let previousDrive, let previousSnapshot = previousSnapshots[previousDrive.id] {
                 return (drive.id, previousSnapshot.markingNativeSMARTRefreshing(for: drive))
@@ -623,6 +666,7 @@ final class AppModel {
     }
 
     private func startAutomaticSmartSelfTestCapabilityProbe(for drive: DriveDevice) {
+        guard !drive.isVirtual else { return }
         guard !drive.isSystemDisk, !drive.isNetwork, !drive.isMemoryCard else { return }
         guard smartSelfTestCapabilities[drive.id] == nil else { return }
 
@@ -655,7 +699,8 @@ final class AppModel {
 
     private func applyDriveSnapshotUpdate(_ update: DriveSnapshotUpdate, refreshID: UUID) {
         guard activeRefreshID == refreshID,
-              let drive = drives.first(where: { $0.id == update.driveID }) else { return }
+              let drive = drives.first(where: { $0.id == update.driveID }),
+              !drive.isVirtual else { return }
         let previous = snapshots[update.driveID]
         var refreshed = update.snapshot
         if let previous {
@@ -674,7 +719,8 @@ final class AppModel {
         volumePath: String? = nil,
         resultUpdatePolicy: BenchmarkResultUpdatePolicy = .replaceProfile
     ) -> Bool {
-        guard benchmarkTask == nil, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return false }
+        guard selectedDrive?.isVirtual != true,
+              benchmarkTask == nil, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return false }
         benchmarkProgress = nil
         benchmarkError = nil
         benchmarkTask = Task { [weak self] in
@@ -701,6 +747,7 @@ final class AppModel {
             return
         }
         let targetVolume = volumePath ?? representativeVolume(for: drive)?.mountPoint
+        guard !drive.isVirtual else { return }
         guard let targetVolume else {
             benchmarkError = "This drive has no mounted writable volume available for safe file-based benchmarking."
             return
@@ -800,6 +847,10 @@ final class AppModel {
     }
 
     func performDiskAction(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async {
+        if drive.isVirtual {
+            if action == .eject { ejectSimulatedDisk(drive) }
+            return
+        }
         guard !diskOperations.isFirstAidBlocking else { return }
         guard let operation = diskOperationKind(for: action),
               let diskLease = acquireDiskOperationLock(for: drive, operation: operation) else {
@@ -831,6 +882,7 @@ final class AppModel {
     }
 
     func inspectOpenFiles(on drive: DriveDevice) async {
+        guard !drive.isVirtual else { return }
         selectedDriveID = drive.id
         refreshMessage = "Inspecting open files..."
         do {
@@ -846,6 +898,7 @@ final class AppModel {
     }
 
     func runDiskCheck(_ mode: DiskCheckMode, on drive: DriveDevice) async {
+        guard !drive.isVirtual else { return }
         guard !isDiskChecking, !diskOperations.isFirstAidBlocking else { return }
         selectedDriveID = drive.id
         guard !drive.isSystemDisk else {
@@ -885,6 +938,7 @@ final class AppModel {
     }
 
     func prepareFirstAid(on drive: DriveDevice) async {
+        guard !drive.isVirtual else { return }
         guard !diskOperations.isFirstAidBlocking,
               !isDiskChecking,
               benchmarkSession.state == .idle,
@@ -1179,6 +1233,7 @@ final class AppModel {
     }
 
     func startLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {
+        guard !drive.isVirtual else { return }
         guard liveActivitySession.workloadState == .idle, !diskOperations.isFirstAidBlocking else { return }
         stopLiveActivityMonitoring()
         liveActivityDriveID = drive.id
@@ -1260,6 +1315,7 @@ final class AppModel {
         drive: DriveDevice,
         interval: DiskActivitySampleInterval
     ) {
+        guard !drive.isVirtual else { return }
         guard !isLiveActivityWorkloadRunning, !diskOperations.isFirstAidBlocking else { return }
         guard BenchmarkTargetFolderMatcher.targetFolderBelongsToDrive(configuration.targetFolderURL.path, drive: drive) else {
             liveActivityWorkloadError = "Workload target folder must be on the selected drive."
@@ -1456,6 +1512,7 @@ final class AppModel {
     }
 
     func readSmartErrorLog(for drive: DriveDevice) {
+        guard !drive.isVirtual || virtualT7DemoMode else { return }
         guard !drive.isSystemDisk else { return }
         smartErrorLogReadTasks[drive.id]?.cancel()
         smartErrorLogCapabilities[drive.id] = .checking
@@ -1519,7 +1576,7 @@ final class AppModel {
     }
 
     private func restoreCachedSmartDiagnosticsCapabilities(for drive: DriveDevice) {
-        guard !drive.isSystemDisk else { return }
+        guard !drive.isVirtual, !drive.isSystemDisk else { return }
         let version = smartctlVersion(for: drive)
         guard let entry = smartDiagnosticsCapabilityCache.cachedEntry(
             for: drive,
@@ -1555,6 +1612,7 @@ final class AppModel {
     }
 
     private func probeSmartSelfTestCapability(for drive: DriveDevice, force: Bool) {
+        guard !drive.isVirtual || virtualT7DemoMode else { return }
         guard !drive.isSystemDisk else { return }
         if virtualT7DemoMode {
             smartSelfTestCapabilities[drive.id] = .supported(VirtualT7DemoFixture.selfTestCapability)
@@ -1595,6 +1653,7 @@ final class AppModel {
     }
 
     private func probeSmartErrorLogCapability(for drive: DriveDevice, force: Bool) {
+        guard !drive.isVirtual || virtualT7DemoMode else { return }
         guard !drive.isSystemDisk else { return }
         if virtualT7DemoMode {
             smartErrorLogCapabilities[drive.id] = .unavailable("Virtual T7 demo does not query a controller error log.")
@@ -1770,6 +1829,7 @@ final class AppModel {
 
     @discardableResult
     func startSmartSelfTest(kind: SmartSelfTestKind, drive: DriveDevice) -> Bool {
+        guard !drive.isVirtual || virtualT7DemoMode else { return false }
         guard !isSmartSelfTestActive else { return false }
         guard kind == .short || kind == .long else { return false }
         guard !drive.isSystemDisk else {

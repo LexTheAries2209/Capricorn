@@ -356,6 +356,7 @@ enum HistoryDriveMatcher {
     }
 
     static func matches<T: HistoryDisplayRecord>(record: T, drive: DriveDevice) -> Bool {
+        guard !drive.isVirtual else { return false }
         let recordSerialNumber = normalize(record.serialNumber)
         let driveSerialNumber = normalize(drive.serialNumber)
 
