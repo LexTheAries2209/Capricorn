@@ -23,13 +23,15 @@ done
 
 pkill -x Capricorn 2>/dev/null || true
 
+# Keep a certificate-backed identity across local rebuilds for macOS permissions.
 xcodebuild build \
     -project "$ROOT_DIR/Capricorn.xcodeproj" \
     -scheme Capricorn \
     -configuration "$CONFIGURATION" \
     -destination "platform=macOS" \
     -derivedDataPath "$DERIVED_DATA" \
-    CODE_SIGNING_ALLOWED=NO
+    CODE_SIGNING_ALLOWED=YES \
+    CODE_SIGN_IDENTITY="Apple Development"
 
 APP_PATH="$DERIVED_DATA/Build/Products/$CONFIGURATION/Capricorn.app"
 EXECUTABLE="$APP_PATH/Contents/MacOS/Capricorn"
