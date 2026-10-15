@@ -169,6 +169,78 @@ final class VirtualDiskPresentationTests: XCTestCase {
     }
 
     @MainActor
+    func testEditingFormPrefillsSavesAndCancelsInBothLanguages() async throws {
+        guard CGPreflightScreenCaptureAccess() else {
+            throw XCTSkip("Virtual disk presentation screenshots require Screen Recording permission.")
+        }
+        for language in AppLanguage.allCases {
+            let model = AppModel()
+            var configuration = VirtualDiskConfiguration()
+            configuration.name = "Session SSD"
+            configuration.serialNumber = "EDIT-SERIAL-123"
+            configuration.capacity = "1500"
+            configuration.unit = .gb
+            configuration.partitions[0].name = "Archive"
+            let drive = try model.addSimulatedDisk(configuration)
+            let formWindow = makeWindow(
+                root: VirtualDiskConfigurationSheet(
+                    language: language, configuration: configuration,
+                    create: { try model.updateSimulatedDisk(drive.id, configuration: $0) },
+                    cancel: {}
+                ),
+                size: NSSize(width: 700, height: 760)
+            )
+            formWindow.makeKeyAndOrderFront(nil)
+            try await Task.sleep(for: .milliseconds(350))
+            let name = "editing-\(language.rawValue)"
+            let lines = try capture(window: formWindow, name: name)
+            for value in [language.t("Edit Configuration"), "Session SSD", "EDIT-SERIAL-123", "1500", "Archive"] {
+                XCTAssertTrue(lines.contains { $0.contains(value) }, "\(value): \(lines)")
+            }
+            try clickButton(window: formWindow, title: configuration.name, name: name)
+            let editor = try XCTUnwrap(formWindow.firstResponder as? NSTextView)
+            editor.selectAll(nil)
+            editor.insertText("Edited SSD", replacementRange: editor.selectedRange())
+            formWindow.makeFirstResponder(nil)
+            try clickButton(window: formWindow, title: language.t("Save"), name: name)
+            let saved = await AsyncTestWaiter.wait {
+                model.selectedDrive?.displayName == "Edited SSD"
+            }
+            XCTAssertTrue(saved)
+            XCTAssertEqual(model.drives.map(\.id), [drive.id])
+            XCTAssertEqual(model.simulatedDiskConfiguration(for: drive.id)?.capacity, "1500")
+            XCTAssertEqual(model.simulatedDiskConfiguration(for: drive.id)?.unit, .gb)
+            formWindow.orderOut(nil)
+
+            let savedConfiguration = try XCTUnwrap(model.simulatedDiskConfiguration(for: drive.id))
+            var cancelled = false
+            let cancelWindow = makeWindow(
+                root: VirtualDiskConfigurationSheet(
+                    language: language, configuration: savedConfiguration,
+                    create: { try model.updateSimulatedDisk(drive.id, configuration: $0) },
+                    cancel: { cancelled = true }
+                ),
+                size: NSSize(width: 700, height: 760)
+            )
+            cancelWindow.makeKeyAndOrderFront(nil)
+            try await Task.sleep(for: .milliseconds(350))
+            let cancelName = "editing-cancel-\(language.rawValue)"
+            _ = try capture(window: cancelWindow, name: cancelName)
+            try clickButton(window: cancelWindow, title: savedConfiguration.name, name: cancelName)
+            let cancelEditor = try XCTUnwrap(cancelWindow.firstResponder as? NSTextView)
+            cancelEditor.selectAll(nil)
+            cancelEditor.insertText("Cancelled SSD", replacementRange: cancelEditor.selectedRange())
+            cancelWindow.makeFirstResponder(nil)
+            try clickButton(window: cancelWindow, title: language.t("Cancel"), name: cancelName)
+            let didCancel = await AsyncTestWaiter.wait { cancelled }
+            XCTAssertTrue(didCancel)
+            XCTAssertEqual(model.selectedDrive?.displayName, "Edited SSD")
+            XCTAssertEqual(model.simulatedDiskConfiguration(for: drive.id)?.name, "Edited SSD")
+            cancelWindow.orderOut(nil)
+        }
+    }
+
+    @MainActor
     private func clickButton(window: NSWindow, title: String, name: String) throws {
         let url = URL(fileURLWithPath: "/tmp/Capricorn-virtual-\(name).png")
         let image = try XCTUnwrap(NSImage(contentsOf: url)?.cgImage(

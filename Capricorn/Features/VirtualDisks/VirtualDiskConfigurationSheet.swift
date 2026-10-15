@@ -3,6 +3,7 @@ import SwiftUI
 
 struct VirtualDiskConfigurationSheet: View {
     let language: AppLanguage
+    private let isEditing: Bool
     let create: (VirtualDiskConfiguration) throws -> Void
     let cancel: () -> Void
     @State private var configuration: VirtualDiskConfiguration
@@ -10,22 +11,26 @@ struct VirtualDiskConfigurationSheet: View {
 
     init(
         language: AppLanguage,
+        configuration: VirtualDiskConfiguration? = nil,
         create: @escaping (VirtualDiskConfiguration) throws -> Void,
         cancel: @escaping () -> Void
     ) {
         self.language = language
+        self.isEditing = configuration != nil
         self.create = create
         self.cancel = cancel
-        var configuration = VirtualDiskConfiguration()
-        configuration.name = language.t("Virtual Disk")
-        configuration.partitions[0].name = language.t("Data")
-        _configuration = State(initialValue: configuration)
+        var initialConfiguration = configuration ?? VirtualDiskConfiguration()
+        if configuration == nil {
+            initialConfiguration.name = language.t("Virtual Disk")
+            initialConfiguration.partitions[0].name = language.t("Data")
+        }
+        _configuration = State(initialValue: initialConfiguration)
     }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(language.t("Add virtual disk"))
+                Text(language.t(isEditing ? "Edit Configuration" : "Add virtual disk"))
                     .font(.title2.bold())
                 Spacer()
             }
@@ -148,11 +153,11 @@ struct VirtualDiskConfigurationSheet: View {
                         creationError = error.localizedDescription
                     }
                 } label: {
-                    Label(language.t("Add"), systemImage: "plus")
+                    Label(language.t(isEditing ? "Save" : "Add"), systemImage: isEditing ? "checkmark" : "plus")
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(configuration.validationMessage != nil)
-                .accessibilityIdentifier("createVirtualDisk")
+                .accessibilityIdentifier(isEditing ? "saveVirtualDisk" : "createVirtualDisk")
             }
             .padding(20)
         }

@@ -46,9 +46,15 @@ enum SidebarStatusTimestampFormatter {
 @MainActor
 @Observable
 final class AppModel {
+    private struct SimulatedDisk {
+        let id: UUID
+        var configuration: VirtualDiskConfiguration
+        var drive: DriveDevice
+    }
+
     var drives: [DriveDevice] = []
     var snapshots: [String: SmartSnapshot] = [:]
-    private var simulatedDrives: [DriveDevice] = []
+    private var simulatedDisks: [SimulatedDisk] = []
     var selectedDriveID: String?
     var isRefreshing = false
     var refreshMessage: String? {
@@ -486,8 +492,9 @@ final class AppModel {
         guard !isDriveSelectionLocked else {
             throw VirtualDiskConfigurationError.invalid("Wait for the current disk operation to finish.")
         }
-        let (drive, snapshot) = try configuration.makeDisk()
-        simulatedDrives.append(drive)
+        let id = UUID()
+        let (drive, snapshot) = try configuration.makeDisk(id: id)
+        simulatedDisks.append(SimulatedDisk(id: id, configuration: configuration, drive: drive))
         drives.append(drive)
         snapshots[drive.id] = snapshot
         selectedDriveID = drive.id
@@ -495,17 +502,38 @@ final class AppModel {
         return drive
     }
 
+    func simulatedDiskConfiguration(for driveID: String) -> VirtualDiskConfiguration? {
+        simulatedDisks.first { $0.drive.id == driveID }?.configuration
+    }
+
+    func updateSimulatedDisk(_ driveID: String, configuration: VirtualDiskConfiguration) throws {
+        guard !isDriveSelectionLocked else {
+            throw VirtualDiskConfigurationError.invalid("Wait for the current disk operation to finish.")
+        }
+        guard let index = simulatedDisks.firstIndex(where: { $0.drive.id == driveID }),
+              let driveIndex = drives.firstIndex(where: { $0.id == driveID }) else {
+            throw VirtualDiskConfigurationError.invalid("This virtual disk is no longer available.")
+        }
+        // Validate before changing session state, and preserve identity across configuration edits.
+        let (drive, snapshot) = try configuration.makeDisk(id: simulatedDisks[index].id)
+        simulatedDisks[index].configuration = configuration
+        simulatedDisks[index].drive = drive
+        drives[driveIndex] = drive
+        snapshots[driveID] = snapshot
+        activeRepresentativeVolumeIDsByDrive.removeValue(forKey: RepresentativeVolumeResolver.preferenceKey(for: drive))
+    }
+
     func ejectAllSimulatedDisks() {
         // Simulations cannot run hardware operations; removing them must not
         // wait for an unrelated physical disk's activity session to finish.
-        for drive in simulatedDrives {
-            removeSimulatedDisk(drive)
+        for disk in simulatedDisks {
+            removeSimulatedDisk(disk.drive)
         }
     }
 
     private func removeSimulatedDisk(_ drive: DriveDevice) {
-        guard simulatedDrives.contains(where: { $0.id == drive.id }) else { return }
-        simulatedDrives.removeAll { $0.id == drive.id }
+        guard simulatedDisks.contains(where: { $0.drive.id == drive.id }) else { return }
+        simulatedDisks.removeAll { $0.drive.id == drive.id }
         drives.removeAll { $0.id == drive.id }
         snapshots.removeValue(forKey: drive.id)
         // Never remove a persisted entry by serial: it could belong to a real drive.
@@ -639,7 +667,7 @@ final class AppModel {
         guard activeRefreshID == refreshID else { return }
         let previousDrives = drives
         let previousSnapshots = snapshots
-        let loadedDrives = discovery.drives + simulatedDrives
+        let loadedDrives = discovery.drives + simulatedDisks.map(\.drive)
 
         drives = loadedDrives
         refreshRepresentativeVolumeSelections(for: loadedDrives)

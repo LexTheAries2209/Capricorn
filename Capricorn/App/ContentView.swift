@@ -5,12 +5,18 @@ import SwiftUI
 
 private let capricornGitHubURL = URL(string: "https://github.com/LexTheAries2209/Capricorn")!
 
+private struct VirtualDiskEditor: Identifiable {
+    let id = UUID()
+    let driveID: String?
+    let configuration: VirtualDiskConfiguration?
+}
+
 struct ContentView: View {
     @State private var viewModel: AppModel
     @State private var preferences: AppPreferences
     @State private var showsDiskCheckReport = false
     @State private var showsSmartSelfTestSheet = false
-    @State private var showsVirtualDiskConfiguration = false
+    @State private var virtualDiskEditor: VirtualDiskEditor?
     @State private var sidebarRowWidths: [String: CGFloat] = [:]
     @State private var sidebarViewportWidth: CGFloat = 300
     @State private var sidebarAvailableRowWidth: CGFloat = 272
@@ -138,11 +144,15 @@ struct ContentView: View {
             await viewModel.runAutomaticRefresh(every: preferences.automaticRefreshInterval)
         }
         .onChange(of: viewModel.drives.map(\.id)) {
+            if let driveID = virtualDiskEditor?.driveID,
+               !viewModel.drives.contains(where: { $0.id == driveID }) {
+                virtualDiskEditor = nil
+            }
             restoreDiskCheckReports()
         }
         .onChange(of: preferences.allowsVirtualDisks) {
             if !preferences.allowsVirtualDisks {
-                showsVirtualDiskConfiguration = false
+                virtualDiskEditor = nil
                 viewModel.ejectAllSimulatedDisks()
             }
         }
@@ -258,15 +268,20 @@ struct ContentView: View {
                 opensProgressWindowAutomatically: opensSmartSelfTestProgressWindowAutomatically
             )
         }
-        .sheet(isPresented: $showsVirtualDiskConfiguration) {
+        .sheet(item: $virtualDiskEditor) { editor in
             VirtualDiskConfigurationSheet(
                 language: language,
+                configuration: editor.configuration,
                 create: { configuration in
                     guard preferences.allowsVirtualDisks else { return }
-                    try viewModel.addSimulatedDisk(configuration)
-                    showsVirtualDiskConfiguration = false
+                    if let driveID = editor.driveID {
+                        try viewModel.updateSimulatedDisk(driveID, configuration: configuration)
+                    } else {
+                        try viewModel.addSimulatedDisk(configuration)
+                    }
+                    virtualDiskEditor = nil
                 },
-                cancel: { showsVirtualDiskConfiguration = false }
+                cancel: { virtualDiskEditor = nil }
             )
         }
     }
@@ -326,7 +341,7 @@ struct ContentView: View {
                 HStack(spacing: 8) {
                     if preferences.allowsVirtualDisks {
                         Button {
-                            showsVirtualDiskConfiguration = true
+                            virtualDiskEditor = VirtualDiskEditor(driveID: nil, configuration: nil)
                         } label: {
                             Label(language.t("Add virtual disk"), systemImage: "plus")
                         }
@@ -338,7 +353,7 @@ struct ContentView: View {
                             AppCommandShortcut.addVirtualDiskKeyEquivalent,
                             modifiers: AppCommandShortcut.addVirtualDisk.modifiers
                         )
-                        .disabled(isDriveSelectionLocked || showsVirtualDiskConfiguration)
+                        .disabled(isDriveSelectionLocked || virtualDiskEditor != nil)
                         .help(language.t("Add virtual disk"))
                     }
 
@@ -574,6 +589,18 @@ struct ContentView: View {
 
     @ViewBuilder
     private func driveContextMenu(for drive: DriveDevice) -> some View {
+        if preferences.allowsVirtualDisks,
+           let configuration = viewModel.simulatedDiskConfiguration(for: drive.id) {
+            Button {
+                virtualDiskEditor = VirtualDiskEditor(driveID: drive.id, configuration: configuration)
+            } label: {
+                Label(language.t("Edit Configuration"), systemImage: "slider.horizontal.3")
+            }
+            .disabled(viewModel.isDriveSelectionLocked || virtualDiskEditor != nil)
+            .accessibilityIdentifier("editVirtualDisk")
+            Divider()
+        }
+
         Menu {
             if !drive.isVirtual {
                 representativeVolumeMenu(for: drive)

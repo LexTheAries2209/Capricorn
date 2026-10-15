@@ -70,6 +70,120 @@ final class VirtualDiskTests: XCTestCase {
     }
 
     @MainActor
+    func testEditingUpdatesConfigurationAndOverviewWithoutReplacingSessionIdentity() async throws {
+        let refresh = StagedDriveRefreshService(
+            discovery: DriveRefreshSnapshot(drives: [], snapshots: [:]),
+            updateDelayNanoseconds: 0, updates: []
+        )
+        let model = AppModel(refreshService: refresh)
+        let original = VirtualDiskConfiguration()
+        let first = try model.addSimulatedDisk(original)
+        let second = try model.addSimulatedDisk(original)
+        model.selectedDriveID = first.id
+        var edited = try XCTUnwrap(model.simulatedDiskConfiguration(for: first.id))
+        edited.name = "Edited HDD"
+        edited.model = "Simulated Model"
+        edited.serialNumber = "SHARED-SERIAL"
+        edited.capacity = "2048"
+        edited.unit = .gb
+        edited.mediaType = .hdd
+        edited.interface = .usb
+        edited.blockSize = 4096
+        edited.partitions[0].name = "Archive"
+        edited.partitions[0].capacity = "512"
+        edited.partitions[0].unit = .gb
+        edited.partitions[0].usedCapacity = "123"
+        edited.partitions[0].format = .exfat
+        var extra = VirtualDiskPartition()
+        extra.name = "Raw"
+        extra.capacity = "500"
+        extra.unit = .mb
+        extra.format = .unformatted
+        edited.partitions.append(extra)
+        edited.health = .warning
+        edited.temperature = "47.5"
+        edited.lifeRemaining = "82"
+        edited.powerOnHours = "1234"
+        edited.powerCycleCount = "45"
+        edited.mediaErrors = "6"
+        edited.unsafeShutdowns = "7"
+
+        try model.updateSimulatedDisk(first.id, configuration: edited)
+
+        XCTAssertEqual(model.drives.map(\.id), [first.id, second.id])
+        XCTAssertEqual(model.selectedDriveID, first.id)
+        let drive = try XCTUnwrap(model.selectedDrive)
+        XCTAssertEqual(drive.displayName, edited.name)
+        XCTAssertEqual(drive.model, edited.model)
+        XCTAssertEqual(drive.serialNumber, edited.serialNumber)
+        XCTAssertEqual(drive.sizeBytes, 2_048_000_000_000)
+        XCTAssertEqual(drive.isSolidState, false)
+        XCTAssertEqual(drive.protocolName, "USB")
+        XCTAssertEqual(drive.blockSize, 4096)
+        XCTAssertEqual(drive.volumes.map(\.name), ["Archive", "Raw"])
+        XCTAssertEqual(drive.volumes[0].fileSystemType, "ExFAT")
+        XCTAssertNil(drive.volumes[1].fileSystemType)
+        XCTAssertEqual(drive.capacityUsage?.usedBytes, 123_000_000_000)
+        let snapshot = try XCTUnwrap(model.snapshots[first.id])
+        XCTAssertEqual(snapshot.driveID, first.id)
+        XCTAssertEqual(snapshot.health, .warning)
+        XCTAssertEqual(snapshot.temperatureCelsius, 47.5)
+        XCTAssertEqual(snapshot.lifeRemainingPercent, 82)
+        XCTAssertEqual(snapshot.powerOnHours, 1234)
+        XCTAssertEqual(snapshot.powerCycleCount, 45)
+        XCTAssertEqual(snapshot.mediaErrors, 6)
+        XCTAssertEqual(snapshot.unsafeShutdowns, 7)
+        let saved = try XCTUnwrap(model.simulatedDiskConfiguration(for: first.id))
+        XCTAssertEqual(saved.capacity, "2048")
+        XCTAssertEqual(saved.unit, .gb)
+        XCTAssertEqual(saved.partitions.map(\.id), edited.partitions.map(\.id))
+        XCTAssertEqual(saved.partitions[1].unit, .mb)
+        XCTAssertEqual(model.drives[1], second)
+        XCTAssertEqual(model.simulatedDiskConfiguration(for: second.id)?.name, original.name)
+
+        await model.refresh()
+        XCTAssertEqual(model.drives.map(\.id), [first.id, second.id])
+        XCTAssertEqual(model.selectedDrive, drive)
+        XCTAssertEqual(model.snapshots[first.id], snapshot)
+        await model.performDiskAction(.eject, on: drive)
+        XCTAssertNil(model.simulatedDiskConfiguration(for: first.id))
+        XCTAssertNil(model.snapshots[first.id])
+        XCTAssertEqual(model.drives, [second])
+    }
+
+    @MainActor
+    func testEditingRejectsInvalidLockedPhysicalAndEjectedTargetsWithoutChangingState() async throws {
+        let model = AppModel()
+        let original = VirtualDiskConfiguration()
+        let drive = try model.addSimulatedDisk(original)
+        let snapshot = model.snapshots[drive.id]
+        var invalid = original
+        invalid.capacity = "0"
+        XCTAssertThrowsError(try model.updateSimulatedDisk(drive.id, configuration: invalid))
+        XCTAssertEqual(model.drives, [drive])
+        XCTAssertEqual(model.snapshots[drive.id], snapshot)
+        XCTAssertEqual(model.simulatedDiskConfiguration(for: drive.id)?.capacity, original.capacity)
+
+        var edited = original
+        edited.name = "Blocked edit"
+        model.isLiveActivityMonitoring = true
+        XCTAssertThrowsError(try model.updateSimulatedDisk(drive.id, configuration: edited))
+        XCTAssertEqual(model.selectedDrive, drive)
+        model.isLiveActivityMonitoring = false
+
+        let physical = CapricornTests.fixtureDrive()
+        model.drives.append(physical)
+        XCTAssertNil(model.simulatedDiskConfiguration(for: physical.id))
+        XCTAssertThrowsError(try model.updateSimulatedDisk(physical.id, configuration: edited))
+        XCTAssertEqual(model.drives, [drive, physical])
+        await model.performDiskAction(.eject, on: drive)
+        XCTAssertNil(model.simulatedDiskConfiguration(for: drive.id))
+        XCTAssertThrowsError(try model.updateSimulatedDisk(drive.id, configuration: edited))
+        XCTAssertEqual(model.drives, [physical])
+        XCTAssertNil(model.snapshots[drive.id])
+    }
+
+    @MainActor
     func testRefreshRetainsSimulationAndEjectDeletesItWithoutResurrection() async throws {
         var physical = CapricornTests.fixtureDrive()
         physical.isSystemDisk = true
@@ -131,6 +245,8 @@ final class VirtualDiskTests: XCTestCase {
         XCTAssertEqual(model.drives.map(\.id), [physical.id])
         XCTAssertNil(model.snapshots[first.id])
         XCTAssertNil(model.snapshots[second.id])
+        XCTAssertNil(model.simulatedDiskConfiguration(for: first.id))
+        XCTAssertNil(model.simulatedDiskConfiguration(for: second.id))
         XCTAssertEqual(model.snapshots[physical.id], originalSnapshot)
         XCTAssertEqual(model.selectedDriveID, physical.id)
         XCTAssertEqual(model.selectedFeatureTab, .liveActivity)
