@@ -247,6 +247,7 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     }
 
     var mediaKind: DriveMediaKind {
+        if isVirtual, isSolidStateKnown { return isSolidState ? .ssd : .hdd }
         if isNetwork { return .network }
         if isCFast { return .cfast }
         if isMemoryCard { return .memoryCard }
@@ -256,6 +257,13 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
 
     var capacityUsage: DriveCapacityUsage? {
         DriveCapacityUsage.resolve(volumes: displayableVolumes)
+    }
+
+    func displayNameWithVirtualMarker(language: AppLanguage) -> String {
+        guard isVirtual else { return displayName }
+        return language == .simplifiedChinese
+            ? "\(displayName)（虚拟硬盘）"
+            : "\(displayName) (Virtual Disk)"
     }
 
     /// The volume name used to identify a drive in the sidebar. System disks
@@ -1064,7 +1072,10 @@ enum DrivePageHeaderText {
     }
 
     static func subtitle(for drive: DriveDevice, language: AppLanguage) -> String {
-        "\(drive.bsdName) · \(drive.protocolName) · \(mediaKind(for: drive, language: language))"
+        let parts = drive.isVirtual
+            ? [drive.protocolName, mediaKind(for: drive, language: language)]
+            : [drive.bsdName, drive.protocolName, mediaKind(for: drive, language: language)]
+        return parts.joined(separator: " · ")
     }
 }
 

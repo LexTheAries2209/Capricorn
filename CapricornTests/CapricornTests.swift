@@ -1108,7 +1108,6 @@ final class CapricornTests: XCTestCase {
             "Enable custom benchmark configuration": "开启测速中的自定义配置",
             "Enable virtual disks": "开启虚拟硬盘",
             "Add virtual disk": "添加虚拟硬盘",
-            "User-defined simulated disks will be available in a future update.": "用户自定义创建的模拟虚拟硬盘将在后续更新中提供。",
             "SMART Refresh": "SMART 刷新",
             "Do not wake sleeping disks for SMART refresh": "SMART 刷新时不唤醒休眠硬盘",
             "When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up.": "当 ATA 或 SCSI 硬盘处于待机或睡眠状态时，Capricorn 会保留上一次 SMART 数据，而不会让硬盘启动旋转。",

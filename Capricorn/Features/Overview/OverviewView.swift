@@ -33,7 +33,7 @@ struct OverviewView: View {
                         StatTile(title: language.t("Available Capacity"), value: formatByteCount(capacityUsage.availableBytes), symbol: "internaldrive")
                     }
                     StatTile(title: language.t("Format"), value: drive.fileSystemSummary ?? language.t("Unavailable"), symbol: "doc.richtext")
-                    if !drive.isInternal, !drive.isNetwork {
+                    if !drive.isInternal, !drive.isNetwork, !drive.isVirtual {
                         StatTile(
                             title: language.t("Connection Speed"),
                             value: drive.connectionInfo?.detailLabel(effectiveLabel: language.t("Effective")) ?? language.t("Unavailable"),
@@ -53,12 +53,23 @@ struct OverviewView: View {
                     )
                     StatTile(title: language.t("Power-On Hours"), value: snapshot?.powerOnHours.map(String.init) ?? language.t("Unavailable"), symbol: "timer")
                     StatTile(title: language.t("Media Errors"), value: snapshot?.mediaErrors.map(String.init) ?? language.t("Unavailable"), symbol: "exclamationmark.triangle")
+                    if drive.isVirtual {
+                        StatTile(title: language.t("Power Cycles"), value: snapshot?.powerCycleCount.map(String.init) ?? language.t("Unavailable"), symbol: "power")
+                        StatTile(title: language.t("Unsafe Shutdowns"), value: snapshot?.unsafeShutdowns.map(String.init) ?? language.t("Unavailable"), symbol: "powerplug")
+                        StatTile(title: language.t("Sector Size"), value: "\(drive.blockSize) B", symbol: "square.grid.3x3")
+                        let allocated = drive.volumes.reduce(Int64(0)) { $0 + $1.sizeBytes }
+                        StatTile(title: language.t("Unallocated"), value: formatByteCount(max(0, drive.sizeBytes - allocated)), symbol: "square.dashed")
+                    }
+                }
+
+                if drive.isVirtual, let model = drive.model {
+                    LabeledContent(language.t("Model"), value: model)
                 }
 
                 InfoPanel(title: language.t("Volumes"), symbol: "opticaldiscdrive") {
                     let volumes = OverviewVolumePresentation.volumes(for: drive)
                     if volumes.isEmpty {
-                        Text(language.t("No mounted volumes are mapped to this physical disk."))
+                        Text(language.t(drive.isVirtual ? "No partitions configured." : "No mounted volumes are mapped to this physical disk."))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(volumes) { volume in
@@ -68,6 +79,11 @@ struct OverviewView: View {
                                     Text(volumeSubtitle(volume))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                    if drive.isVirtual, let available = volume.availableCapacityBytes {
+                                        Text("\(language.t("Used")) \(formatByteCount(volume.sizeBytes - available)) · \(language.t("Available")) \(formatByteCount(available))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                                 Spacer()
                                 Text(formatByteCount(volume.sizeBytes))
@@ -85,7 +101,7 @@ struct OverviewView: View {
                             Image(systemName: sourceState.symbolName)
                                 .foregroundStyle(sourceState.tint)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(language.t("Selected SMART Source"))
+                                Text(language.t(drive.isVirtual ? "Overview Values" : "Selected SMART Source"))
                                     .font(.headline)
                                 Text(sourceDescription(provider: source.name, transport: snapshot?.selectedTransport))
                                     .font(.caption)
@@ -108,7 +124,7 @@ struct OverviewView: View {
                             Image(systemName: displayState.symbolName)
                                 .foregroundStyle(displayState.tint)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(status.name)
+                                Text(drive.isVirtual ? language.t(status.name) : status.name)
                                     .font(.headline)
                                 Text(language.statusMessage(status.message))
                                     .font(.caption)
@@ -158,6 +174,7 @@ struct OverviewView: View {
     }
 
     private func sourceDescription(provider: String, transport: String?) -> String {
+        if drive.isVirtual { return language.t(provider) }
         let normalized = transport?.uppercased()
         if normalized == "SAT" || normalized?.hasSuffix("/SAT") == true {
             return "\(provider) · SAT"
@@ -169,6 +186,9 @@ struct OverviewView: View {
     }
 
     private func volumeSubtitle(_ volume: DriveDevice.Volume) -> String {
+        if drive.isVirtual {
+            return FileSystemFormatResolver.normalized(volume.fileSystemType) ?? language.t("Unformatted")
+        }
         let path = volume.mountPoint ?? volume.deviceIdentifier
         guard let format = FileSystemFormatResolver.normalized(volume.fileSystemType) else {
             return path
@@ -203,7 +223,7 @@ enum OverviewVolumePresentation {
 
 enum OverviewModuleVisibilityPolicy {
     static func showsQuickDiskCheck(for drive: DriveDevice, isEnabled: Bool) -> Bool {
-        isEnabled && !drive.isNetwork && !drive.isSystemDisk
+        isEnabled && !drive.isVirtual && !drive.isNetwork && !drive.isSystemDisk
     }
 }
 

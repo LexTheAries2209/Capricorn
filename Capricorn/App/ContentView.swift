@@ -10,7 +10,7 @@ struct ContentView: View {
     @State private var preferences: AppPreferences
     @State private var showsDiskCheckReport = false
     @State private var showsSmartSelfTestSheet = false
-    @State private var showsVirtualDiskUnavailable = false
+    @State private var showsVirtualDiskConfiguration = false
     @State private var sidebarRowWidths: [String: CGFloat] = [:]
     @State private var sidebarViewportWidth: CGFloat = 300
     @State private var sidebarAvailableRowWidth: CGFloat = 272
@@ -142,7 +142,7 @@ struct ContentView: View {
         }
         .onChange(of: preferences.allowsVirtualDisks) {
             if !preferences.allowsVirtualDisks {
-                showsVirtualDiskUnavailable = false
+                showsVirtualDiskConfiguration = false
             }
         }
         .onChange(of: diskCheckHistory.map(\.id)) {
@@ -257,10 +257,16 @@ struct ContentView: View {
                 opensProgressWindowAutomatically: opensSmartSelfTestProgressWindowAutomatically
             )
         }
-        .alert(language.t("Add virtual disk"), isPresented: $showsVirtualDiskUnavailable) {
-            Button(language.t("OK"), role: .cancel) {}
-        } message: {
-            Text(language.t("User-defined simulated disks will be available in a future update."))
+        .sheet(isPresented: $showsVirtualDiskConfiguration) {
+            VirtualDiskConfigurationSheet(
+                language: language,
+                create: { configuration in
+                    guard preferences.allowsVirtualDisks else { return }
+                    try viewModel.addSimulatedDisk(configuration)
+                    showsVirtualDiskConfiguration = false
+                },
+                cancel: { showsVirtualDiskConfiguration = false }
+            )
         }
     }
 
@@ -319,7 +325,7 @@ struct ContentView: View {
                 HStack(spacing: 8) {
                     if preferences.allowsVirtualDisks {
                         Button {
-                            showsVirtualDiskUnavailable = true
+                            showsVirtualDiskConfiguration = true
                         } label: {
                             Label(language.t("Add virtual disk"), systemImage: "plus")
                         }
@@ -327,7 +333,8 @@ struct ContentView: View {
                         .controlSize(.small)
                         .lineLimit(1)
                         .accessibilityIdentifier("addVirtualDisk")
-                        .help(language.t("User-defined simulated disks will be available in a future update."))
+                        .disabled(isDriveSelectionLocked)
+                        .help(language.t("Add virtual disk"))
                     }
 
                     Spacer(minLength: 8)
@@ -563,8 +570,10 @@ struct ContentView: View {
     @ViewBuilder
     private func driveContextMenu(for drive: DriveDevice) -> some View {
         Menu {
-            representativeVolumeMenu(for: drive)
-            Divider()
+            if !drive.isVirtual {
+                representativeVolumeMenu(for: drive)
+                Divider()
+            }
 
             let checkAndRepairActions = DiskSidebarActionPolicy.checkAndRepairActions(for: drive)
             if preferences.showsCheckAndRepairActions, !checkAndRepairActions.isEmpty {
@@ -1225,10 +1234,12 @@ struct DriveSidebarRow: View {
     }
 
     private var primaryDisplayName: String {
-        drive.networkServerDisplayName ?? representativeVolume?.name ?? drive.sidebarVolumeName
+        if drive.isVirtual { return drive.displayNameWithVirtualMarker(language: language) }
+        return drive.networkServerDisplayName ?? representativeVolume?.name ?? drive.sidebarVolumeName
     }
 
     private var iconName: String {
+        if drive.isVirtual { return "externaldrive.badge.plus" }
         if drive.isNetwork {
             return "network"
         }
@@ -1240,7 +1251,7 @@ struct DriveSidebarRow: View {
 
     private var deviceSummary: String {
         var components: [String] = []
-        if !drive.isNetwork, !drive.bsdName.isEmpty {
+        if !drive.isNetwork, !drive.isVirtual, !drive.bsdName.isEmpty {
             components.append(drive.bsdName)
         }
         if let fileSystem = drive.fileSystemSummary {
@@ -1254,7 +1265,8 @@ struct DriveSidebarRow: View {
             components.append(connectionLabel)
         }
         if drive.sizeBytes > 0 {
-            components.append(formatByteCount(drive.sizeBytes))
+            let capacity = formatByteCount(drive.sizeBytes)
+            components.append(drive.isVirtual ? capacity.replacingOccurrences(of: " ", with: "\u{00a0}") : capacity)
         }
         return components.isEmpty ? drive.bsdName : components.joined(separator: " · ")
     }
@@ -1294,6 +1306,29 @@ private struct DriveDetailView: View {
 
     var body: some View {
         @Bindable var viewModel = viewModel
+        if drive.isVirtual {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(language.t("Overview"))
+                        .font(.headline)
+                    Spacer()
+                    Button {
+                        Task { await viewModel.performDiskAction(.eject, on: drive) }
+                    } label: {
+                        Label(language.t("Eject"), systemImage: "eject")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(viewModel.isDriveSelectionLocked)
+                    .accessibilityIdentifier("ejectVirtualDisk")
+                }
+                OverviewView(
+                    drive: drive, snapshot: snapshot, diskCheckReport: nil,
+                    isDiskChecking: false, showsQuickDiskCheck: false, canRunQuickCheck: false,
+                    runQuickCheck: {}, satDriverGuidance: nil, openSATDriverSettings: {}
+                )
+            }
+            .padding(18)
+        } else {
         TabView(selection: $viewModel.selectedFeatureTab) {
             OverviewView(
                 drive: drive,
@@ -1355,6 +1390,7 @@ private struct DriveDetailView: View {
             .tag(DriveFeatureTab.history)
         }
         .padding(18)
+        }
     }
 }
 
@@ -1386,7 +1422,7 @@ struct DrivePageHeaderView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(drive.catalogHeaderDisplayName)
+                Text(drive.isVirtual ? drive.displayNameWithVirtualMarker(language: language) : drive.catalogHeaderDisplayName)
                     .font(.largeTitle.bold())
                     .lineLimit(2)
                     .help(drive.catalogDisplayHelp(language: language))

@@ -1,0 +1,199 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import SwiftUI
+
+struct VirtualDiskConfigurationSheet: View {
+    let language: AppLanguage
+    let create: (VirtualDiskConfiguration) throws -> Void
+    let cancel: () -> Void
+    @State private var configuration: VirtualDiskConfiguration
+    @State private var creationError: String?
+
+    init(
+        language: AppLanguage,
+        create: @escaping (VirtualDiskConfiguration) throws -> Void,
+        cancel: @escaping () -> Void
+    ) {
+        self.language = language
+        self.create = create
+        self.cancel = cancel
+        var configuration = VirtualDiskConfiguration()
+        configuration.name = language.t("Virtual Disk")
+        configuration.partitions[0].name = language.t("Data")
+        _configuration = State(initialValue: configuration)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(language.t("Add virtual disk"))
+                    .font(.title2.bold())
+                Spacer()
+            }
+            .padding(20)
+
+            Form {
+                Section(language.t("Disk Identity")) {
+                    TextField(language.t("Name"), text: $configuration.name)
+                    TextField(language.t("Model"), text: $configuration.model, prompt: Text(language.t("Optional")))
+                    TextField(language.t("Serial Number"), text: $configuration.serialNumber, prompt: Text(language.t("Optional")))
+                    LabeledContent(language.t("Capacity")) {
+                        VirtualDiskCapacityInput(value: $configuration.capacity, unit: $configuration.unit)
+                    }
+                    Picker(language.t("Disk Type"), selection: $configuration.mediaType) {
+                        ForEach(VirtualDiskMediaType.allCases) { type in
+                            Text(type.rawValue).tag(type)
+                        }
+                    }
+                    Picker(language.t("Interface"), selection: $configuration.interface) {
+                        ForEach(VirtualDiskInterface.allCases) { interface in
+                            Text(interface.rawValue).tag(interface)
+                        }
+                    }
+                    Picker(language.t("Sector Size"), selection: $configuration.blockSize) {
+                        Text("512 B").tag(512)
+                        Text("4096 B").tag(4096)
+                    }
+                }
+
+                Section(language.t("Partitions")) {
+                    ForEach($configuration.partitions) { $partition in
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 12) {
+                                TextField(language.t("Partition Name"), text: $partition.name)
+                                Picker(language.t("Format"), selection: $partition.format) {
+                                    ForEach(VirtualDiskFormat.allCases) { format in
+                                        Text(language.t(format.rawValue)).tag(format)
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(width: 110)
+                                Button {
+                                    configuration.partitions.removeAll { $0.id == partition.id }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.borderless)
+                                .help(language.t("Remove Partition"))
+                                .accessibilityLabel(language.t("Remove Partition"))
+                            }
+                            HStack(spacing: 16) {
+                                LabeledContent(language.t("Capacity")) {
+                                    VirtualDiskCapacityInput(value: $partition.capacity, unit: $partition.unit)
+                                }
+                                LabeledContent("\(language.t("Used Capacity")) (\(partition.unit.rawValue))") {
+                                    TextField(language.t("Used Capacity"), text: $partition.usedCapacity)
+                                        .labelsHidden()
+                                        .multilineTextAlignment(.trailing)
+                                        .frame(width: 90)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    HStack {
+                        Button {
+                            var partition = VirtualDiskPartition()
+                            partition.name = "\(language.t("Partition")) \(configuration.partitions.count + 1)"
+                            partition.unit = .gb
+                            let remainder = configuration.unallocatedBytes ?? 0
+                            partition.capacity = String(format: "%.3f", Double(remainder) / 1_000_000_000)
+                            configuration.partitions.append(partition)
+                        } label: {
+                            Label(language.t("Add Partition"), systemImage: "plus")
+                        }
+                        .buttonStyle(.borderless)
+                        Spacer()
+                        if let bytes = configuration.unallocatedBytes {
+                            Text("\(language.t("Unallocated")): \(formatByteCount(bytes))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Section(language.t("Overview Values")) {
+                    Picker(language.t("Health"), selection: $configuration.health) {
+                        ForEach(HealthStatus.allCases) { status in
+                            Text(language.healthTitle(status)).tag(status)
+                        }
+                    }
+                    metricField("Temperature", unit: "C", value: $configuration.temperature)
+                    metricField("Life Remaining", unit: "%", value: $configuration.lifeRemaining)
+                    metricField("Power-On Hours", value: $configuration.powerOnHours)
+                    metricField("Power Cycles", value: $configuration.powerCycleCount)
+                    metricField("Media Errors", value: $configuration.mediaErrors)
+                    metricField("Unsafe Shutdowns", value: $configuration.unsafeShutdowns)
+                }
+            }
+            .formStyle(.grouped)
+            .textFieldStyle(.roundedBorder)
+            .environment(\.locale, Locale(identifier: language.localeIdentifier))
+
+            Divider()
+            HStack(alignment: .center, spacing: 16) {
+                if let message = creationError ?? configuration.validationMessage {
+                    Text(language.t(message))
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Spacer()
+                }
+                Button(language.t("Cancel"), action: cancel)
+                    .keyboardShortcut(.cancelAction)
+                Button {
+                    do {
+                        try create(configuration)
+                    } catch {
+                        creationError = error.localizedDescription
+                    }
+                } label: {
+                    Label(language.t("Add"), systemImage: "plus")
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(configuration.validationMessage != nil)
+                .accessibilityIdentifier("createVirtualDisk")
+            }
+            .padding(20)
+        }
+        .frame(minWidth: 700, idealWidth: 700, maxWidth: 800, minHeight: 620, idealHeight: 760)
+        .onChange(of: configuration.validationMessage) { creationError = nil }
+    }
+
+    private func metricField(_ title: String, unit: String? = nil, value: Binding<String>) -> some View {
+        LabeledContent(language.t(title)) {
+            HStack(spacing: 8) {
+                TextField(language.t(title), text: value, prompt: Text(language.t("Optional")))
+                    .labelsHidden()
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 110)
+                if let unit {
+                    Text(unit)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, alignment: .leading)
+                }
+            }
+        }
+    }
+}
+
+private struct VirtualDiskCapacityInput: View {
+    @Binding var value: String
+    @Binding var unit: VirtualDiskCapacityUnit
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField("Capacity", text: $value)
+                .labelsHidden()
+                .multilineTextAlignment(.trailing)
+                .frame(width: 90)
+            Picker("Unit", selection: $unit) {
+                ForEach(VirtualDiskCapacityUnit.allCases) { unit in
+                    Text(unit.rawValue).tag(unit)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 70)
+        }
+    }
+}

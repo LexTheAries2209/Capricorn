@@ -399,7 +399,7 @@ final class SidebarAutoFitTests: XCTestCase {
 
     private func metadataLines(drive: DriveDevice, language: AppLanguage) -> [(String, Font)] {
         var summary = [String]()
-        if !drive.isNetwork, !drive.bsdName.isEmpty { summary.append(drive.bsdName) }
+        if !drive.isNetwork, !drive.isVirtual, !drive.bsdName.isEmpty { summary.append(drive.bsdName) }
         if let format = drive.fileSystemSummary { summary.append(format) }
         if !drive.protocolName.isEmpty,
            !summary.contains(where: { $0.caseInsensitiveCompare(drive.protocolName) == .orderedSame }) {
@@ -408,7 +408,9 @@ final class SidebarAutoFitTests: XCTestCase {
         if let connection = drive.connectionInfo?.compactLabel { summary.append(connection) }
         if drive.sizeBytes > 0 { summary.append(formatByteCount(drive.sizeBytes)) }
         var lines: [(String, Font)] = [
-            (drive.networkServerDisplayName ?? drive.volumes.first?.name ?? drive.sidebarVolumeName, DriveSidebarTypography.title),
+            (drive.isVirtual
+                ? drive.displayNameWithVirtualMarker(language: language)
+                : drive.networkServerDisplayName ?? drive.volumes.first?.name ?? drive.sidebarVolumeName, DriveSidebarTypography.title),
             (drive.catalogSidebarDisplayName, DriveSidebarTypography.model),
             (DrivePageHeaderText.serialNumberLine(for: drive, language: language, redact: false), DriveSidebarTypography.metadata),
             (summary.isEmpty ? drive.bsdName : summary.joined(separator: " · "), DriveSidebarTypography.metadata)
@@ -506,8 +508,13 @@ final class SidebarAutoFitTests: XCTestCase {
                 try VNImageRequestHandler(cgImage: image).perform([request])
                 let text = (request.results?.compactMap { $0.topCandidates(1).first?.string } ?? [])
                     .joined().replacingOccurrences(of: " ", with: "").lowercased()
-                for ending in [drive.isNetwork ? "hostend" : "volumeend", "modelend", "serialend", "protocolend", "4.1tb"] {
+                let nameEnding = drive.isVirtual ? "modelend" : drive.isNetwork ? "hostend" : "volumeend"
+                for ending in [nameEnding, "modelend", "serialend", "protocolend", "4.1tb"] {
                     XCTAssertTrue(text.contains(ending), "\(language) \(kind) native sidebar hid \(ending): \(text)")
+                }
+                if drive.isVirtual {
+                    let marker = language == .simplifiedChinese ? "虚拟硬盘" : "virtualdisk"
+                    XCTAssertTrue(text.replacingOccurrences(of: "虛", with: "虚").contains(marker))
                 }
             }
         }

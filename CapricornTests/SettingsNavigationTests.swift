@@ -40,6 +40,7 @@ final class SettingsNavigationTests: XCTestCase {
                     && scrollView.contentView.bounds.minY > topOffset + 100
             }
             XCTAssertTrue(scrolledDown, "Expected lower section; offset \(scrollView.contentView.bounds.minY), top \(topOffset)")
+            try await Task.sleep(for: .milliseconds(350))
 
             preferences.requestedSettingsDestination = .updates
             let returnedToTop = await AsyncTestWaiter.wait {
@@ -47,6 +48,7 @@ final class SettingsNavigationTests: XCTestCase {
                     && abs(scrollView.contentView.bounds.minY - topOffset) < 2
             }
             XCTAssertTrue(returnedToTop, "Expected updates at top; offset \(scrollView.contentView.bounds.minY), top \(topOffset)")
+            try await Task.sleep(for: .milliseconds(350))
         }
     }
 

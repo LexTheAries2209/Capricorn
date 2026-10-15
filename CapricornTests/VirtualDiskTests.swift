@@ -108,6 +108,31 @@ final class VirtualDiskTests: XCTestCase {
     }
 
     @MainActor
+    func testDuplicateNamesAndSerialsHaveIndependentSessionIdentities() async throws {
+        let refresh = StagedDriveRefreshService(
+            discovery: DriveRefreshSnapshot(drives: [], snapshots: [:]),
+            updateDelayNanoseconds: 0, updates: []
+        )
+        for serial in ["", "DUPLICATE-SERIAL"] {
+            let model = AppModel(refreshService: refresh)
+            var configuration = VirtualDiskConfiguration()
+            configuration.serialNumber = serial
+            let first = try model.addSimulatedDisk(configuration)
+            let second = try model.addSimulatedDisk(configuration)
+            XCTAssertNotEqual(first.id, second.id)
+            XCTAssertFalse(DriveStableIdentityMatcher.matches(first, second))
+            await model.refresh()
+            XCTAssertEqual(model.drives.map(\.id), [first.id, second.id])
+            await model.performDiskAction(.eject, on: first)
+            XCTAssertEqual(model.drives.map(\.id), [second.id])
+            XCTAssertNotNil(model.snapshots[second.id])
+            let recreated = try model.addSimulatedDisk(configuration)
+            XCTAssertNotEqual(recreated.id, first.id)
+            XCTAssertFalse(model.drives.contains { $0.id == first.id })
+        }
+    }
+
+    @MainActor
     func testSimulationNeverReadsOrWritesRealHistoryAndCachesEvenWithSameSerial() throws {
         let suite = "CapricornTests.virtualLifetime.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
