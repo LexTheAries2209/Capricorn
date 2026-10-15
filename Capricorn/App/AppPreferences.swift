@@ -307,7 +307,7 @@ struct CapricornSettingsView: View {
                     .foregroundStyle(.secondary)
 
                 Toggle(language.t("Show Quick Check and Repair"), isOn: $preferences.showsCheckAndRepairActions)
-                Text(language.t("When disabled, Quick Disk Check is hidden from Overview and Check and Repair is hidden from Disk Actions."))
+                Text(language.t("When disabled, Quick Disk Check is hidden from Overview and Check and Repair is hidden from the disk context menu."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -342,7 +342,7 @@ struct CapricornSettingsView: View {
                         Text(preference.title(language: language)).tag(preference)
                     }
                 }
-                Text(language.t("This applies only when Capricorn starts. Switching a volume from Disk Actions takes effect immediately."))
+                Text(language.t("This applies only when Capricorn starts. Switching a volume from the disk context menu takes effect immediately."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

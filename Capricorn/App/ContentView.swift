@@ -601,31 +601,27 @@ struct ContentView: View {
             Divider()
         }
 
-        Menu {
-            if !drive.isVirtual {
-                representativeVolumeMenu(for: drive)
-                Divider()
-            }
+        if !drive.isVirtual {
+            representativeVolumeMenu(for: drive)
+            Divider()
+        }
 
-            let checkAndRepairActions = DiskSidebarActionPolicy.checkAndRepairActions(for: drive)
-            if preferences.showsCheckAndRepairActions, !checkAndRepairActions.isEmpty {
-                Menu {
-                    ForEach(checkAndRepairActions) { action in
-                        sidebarActionButton(action, for: drive)
-                    }
-                } label: {
-                    Label(language.t("Check and Repair"), systemImage: "wrench.and.screwdriver")
+        let checkAndRepairActions = DiskSidebarActionPolicy.checkAndRepairActions(for: drive)
+        if preferences.showsCheckAndRepairActions, !checkAndRepairActions.isEmpty {
+            Menu {
+                ForEach(checkAndRepairActions) { action in
+                    sidebarActionButton(action, for: drive)
                 }
-                .disabled(!DiskSidebarActionPolicy.isCheckAndRepairMenuEnabled(for: drive))
-
-                Divider()
+            } label: {
+                Label(language.t("Check and Repair"), systemImage: "wrench.and.screwdriver")
             }
+            .disabled(!DiskSidebarActionPolicy.isCheckAndRepairMenuEnabled(for: drive))
 
-            ForEach(DiskSidebarActionPolicy.actionsOutsideCheckAndRepair(for: drive)) { action in
-                sidebarActionButton(action, for: drive)
-            }
-        } label: {
-            Label(language.t("Disk Actions"), systemImage: "externaldrive.badge.gearshape")
+            Divider()
+        }
+
+        ForEach(DiskSidebarActionPolicy.actionsOutsideCheckAndRepair(for: drive)) { action in
+            sidebarActionButton(action, for: drive)
         }
     }
 
