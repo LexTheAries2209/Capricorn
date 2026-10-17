@@ -13,7 +13,11 @@ final class SettingsNavigationTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let preferences = AppPreferences(defaults: defaults)
         preferences.requestedSettingsDestination = .updates
-        let checker = AppUpdateChecker(fetchLatest: { throw URLError(.notConnectedToInternet) })
+        let checker = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }),
+            language: { preferences.language },
+            allowsStartup: false
+        )
         let root = CapricornSettingsView(preferences: preferences, updateChecker: checker)
             .modelContainer(try ModelContainerFactory.makeInMemory())
         let hostingView = NSHostingView(rootView: root)

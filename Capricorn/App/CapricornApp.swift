@@ -4,9 +4,10 @@ import SwiftUI
 
 @main
 struct CapricornApp: App {
+    @NSApplicationDelegateAdaptor(CapricornAppDelegate.self) private var appDelegate
     @State private var viewModel: AppModel
     @State private var preferences: AppPreferences
-    @State private var updateChecker: AppUpdateChecker
+    @State private var updateChecker: AppUpdater
     @Environment(\.openSettings) private var openSettings
     private let modelContainer: ModelContainer
 
@@ -20,15 +21,22 @@ struct CapricornApp: App {
         #else
         let viewModel = AppModel()
         #endif
-        let updateChecker = AppUpdateChecker()
         _preferences = State(initialValue: preferences)
         _viewModel = State(initialValue: viewModel)
-        _updateChecker = State(initialValue: updateChecker)
+        let container: ModelContainer
         do {
-            modelContainer = try ModelContainerFactory.makeApplication()
+            container = try ModelContainerFactory.makeApplication()
         } catch {
             fatalError("Unable to open Capricorn history database: \(error.localizedDescription)")
         }
+        modelContainer = container
+        let safety = AppUpdateSafetyGate(
+            conflicts: { viewModel.appUpdateConflicts },
+            reserve: { viewModel.reserveAppUpdateInstallation() },
+            release: { viewModel.releaseAppUpdateInstallation() },
+            save: { try container.mainContext.save() }
+        )
+        _updateChecker = State(initialValue: AppUpdater(safety: safety, language: { preferences.language }))
     }
 
     private var language: AppLanguage {
@@ -40,19 +48,29 @@ struct CapricornApp: App {
             ContentView(viewModel: viewModel, preferences: preferences)
                 .frame(minWidth: 1050, minHeight: 680)
                 .task {
-                    guard ApplicationRuntime.allowsAutomaticStartupTasks else { return }
-                    await updateChecker.checkQuietlyAtLaunch()
+                    appDelegate.updater = updateChecker
+                    #if !DEBUG
+                    updateChecker.start()
+                    #endif
+                }
+                .onChange(of: viewModel.appUpdateConflicts) {
+                    updateChecker.conflictsDidChange()
                 }
         }
         .defaultSize(width: 1433, height: 732)
         .modelContainer(modelContainer)
         .commands {
             CommandGroup(replacing: .appSettings) {
-                Button(language.t("Check for Updates…")) {
-                    openSettings()
-                    Task { await updateChecker.checkNow() }
+                Button {
+                    updateChecker.checkNow()
+                } label: {
+                    if case .available(let version) = updateChecker.state {
+                        Label("\(language.t("Update available")): \(version)", systemImage: "arrow.down.circle.fill")
+                    } else {
+                        Text(language.t("Check for Updates…"))
+                    }
                 }
-                .disabled(updateChecker.state == .checking)
+                .disabled(updateChecker.isStarted && !updateChecker.canCheckForUpdates)
 
                 SettingsLink()
                     .keyboardShortcut(

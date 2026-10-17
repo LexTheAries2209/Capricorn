@@ -97,6 +97,8 @@ final class AppPreferences {
         didSet {
             guard !suppressesPersistence else { return }
             defaults.set(languageRawValue, forKey: Key.language)
+            // Native framework windows use the preferred language on next launch.
+            defaults.set([language.rawValue], forKey: "AppleLanguages")
         }
     }
 
@@ -240,6 +242,7 @@ final class AppPreferences {
             rawValue: defaults.string(forKey: Key.representativeVolumeStartupPreference) ?? ""
         ) ?? Defaults.representativeVolumeStartupPreference
         satSMARTDriverStatus = SATSMARTDriverService().status()
+        defaults.set([language.rawValue], forKey: "AppleLanguages")
     }
 
     var language: AppLanguage {
@@ -298,7 +301,7 @@ struct SmartDiagnosticsSettingsControls: View {
 
 struct CapricornSettingsView: View {
     @Bindable var preferences: AppPreferences
-    @Bindable var updateChecker: AppUpdateChecker
+    @Bindable var updateChecker: AppUpdater
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistoryRecords: [SmartHistoryRecord]
@@ -611,6 +614,8 @@ struct CapricornSettingsView: View {
         .alert(language.t("Reset All Settings?"), isPresented: $isConfirmingAllSettingsReset) {
             Button(language.t("Reset All Settings"), role: .destructive) {
                 preferences.resetAllSettings()
+                updateChecker.setAutomaticallyDownloadsUpdates(false)
+                updateChecker.setAutomaticallyChecksForUpdates(false)
                 settingsResetResult = preferences.language.t("All settings were restored to their defaults.")
             }
             Button(language.t("Cancel"), role: .cancel) {}

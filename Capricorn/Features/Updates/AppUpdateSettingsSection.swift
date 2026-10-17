@@ -2,23 +2,45 @@
 import SwiftUI
 
 struct AppUpdateSettingsSection: View {
-    @Bindable var updateChecker: AppUpdateChecker
+    @Bindable var updateChecker: AppUpdater
     let language: AppLanguage
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         Section(language.t("Updates")) {
-            LabeledContent(language.t("Current Version"), value: "V\(updateChecker.currentVersion.displayValue)")
+            LabeledContent(language.t("Current Version"), value: "V\(AppVersion.current.displayValue)")
+            if let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String {
+                LabeledContent(language.t("Build"), value: build)
+            }
+
+            Toggle(language.t("Automatically check for updates"), isOn: Binding(
+                get: { updateChecker.automaticallyChecksForUpdates },
+                set: {
+                    updateChecker.start()
+                    updateChecker.setAutomaticallyChecksForUpdates($0)
+                }
+            ))
+            Toggle(language.t("Automatically download and install on quit"), isOn: Binding(
+                get: { updateChecker.automaticallyDownloadsUpdates },
+                set: { updateChecker.setAutomaticallyDownloadsUpdates($0) }
+            ))
+            .disabled(!updateChecker.automaticallyChecksForUpdates)
+
+            if let lastChecked = updateChecker.lastCheckedAt {
+                LabeledContent(language.t("Last checked")) {
+                    Text(lastChecked, format: .dateTime.year().month().day().hour().minute())
+                }
+            }
 
             statusContent
 
             HStack {
                 Button {
-                    Task { await updateChecker.checkNow() }
+                    updateChecker.checkNow()
                 } label: {
                     Label(language.t("Check for Updates…"), systemImage: "arrow.clockwise")
                 }
-                .disabled(updateChecker.state == .checking)
+                .disabled(updateChecker.isStarted && !updateChecker.canCheckForUpdates)
 
                 Spacer()
 
@@ -26,9 +48,11 @@ struct AppUpdateSettingsSection: View {
                     openURL(GitHubReleaseService.releasesURL)
                 }
             }
-        }
-        .task {
-            await updateChecker.checkNow()
+            if language != updateChecker.nativeLanguage {
+                Text(language.t("Restart Capricorn to apply this language to update windows."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -44,25 +68,25 @@ struct AppUpdateSettingsSection: View {
         case .upToDate:
             Label(language.t("You are up to date."), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
-        case .failed:
+        case .failed(let issue):
+            Label(language.t(issue.rawValue), systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+        case .available(let version):
+            Label("\(language.t("Update available")): \(version)", systemImage: "arrow.down.circle.fill")
+                .foregroundStyle(.blue)
+        case .downloading:
+            ProgressView(language.t("Downloading update…"), value: updateChecker.downloadProgress)
+        case .extracting:
+            Label(language.t("Preparing update…"), systemImage: "shippingbox")
+        case .readyToInstall:
+            Label(language.t("Update ready to install"), systemImage: "checkmark.circle")
+        case .installing:
+            Label(language.t("Installing update…"), systemImage: "arrow.triangle.2.circlepath")
+        case .blocked(let conflicts):
             VStack(alignment: .leading, spacing: 6) {
-                Label(language.t("Unable to connect to GitHub."), systemImage: "wifi.exclamationmark")
+                Label(language.t("Update blocked"), systemImage: "hand.raised")
                     .foregroundStyle(.orange)
-                Text(language.t("Check your connection, retry, or open the Releases page manually."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        case .updateAvailable(let release):
-            VStack(alignment: .leading, spacing: 6) {
-                Label("\(language.t("Update available")): \(release.name)", systemImage: "arrow.down.circle.fill")
-                    .foregroundStyle(.blue)
-                if !release.body.isEmpty {
-                    Text(release.body)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(4)
-                }
-                Link(language.t("Open Release Notes"), destination: release.htmlURL)
+                Text(conflicts.map { language.t($0.rawValue) }.joined(separator: ", "))
                     .font(.caption)
             }
         }

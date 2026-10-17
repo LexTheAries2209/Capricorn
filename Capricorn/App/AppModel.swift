@@ -1815,6 +1815,7 @@ final class AppModel {
     }
 
     func requestSmartSelfTest(kind: SmartSelfTestKind, drive: DriveDevice) {
+        guard !isInstallingAppUpdate else { return }
         guard !isSmartSelfTestActive else { return }
         guard kind == .short || kind == .long else { return }
         guard !drive.isSystemDisk else {
@@ -2269,6 +2270,7 @@ final class AppModel {
         interval: DiskActivitySampleInterval,
         skipsInitialSample: Bool
     ) {
+        guard !isInstallingAppUpdate else { return }
         let runID = UUID()
         activeLiveActivityMonitoringRunID = runID
         liveActivityBaselineRunID = skipsInitialSample ? runID : nil
