@@ -1447,6 +1447,7 @@ struct SmartErrorLogReport: Codable, Hashable, Sendable {
 /// returned by the current `smartctl -l error` read. A non-zero counter is
 /// an inspection signal, not a health failure.
 enum SmartErrorLogPresentationState: Equatable, Sendable {
+    case notRead
     case unavailable
     case noEntries
     case inspectDetails
@@ -1456,7 +1457,7 @@ enum SmartErrorLogPresentationState: Equatable, Sendable {
         switch self {
         case .inspectDetails, .inspectHistoricalCount:
             return true
-        case .unavailable, .noEntries:
+        case .notRead, .unavailable, .noEntries:
             return false
         }
     }
@@ -1466,13 +1467,16 @@ enum SmartErrorLogPresentationState: Equatable, Sendable {
     }
 
     static func resolve(
-        report: SmartErrorLogReport,
+        report: SmartErrorLogReport?,
         historicalEntryCount: Int
     ) -> SmartErrorLogPresentationState {
+        // Cached read support is not evidence of an empty error report.
+        guard let report else { return .notRead }
         guard report.isSupported else { return .unavailable }
         if !report.entries.isEmpty { return .inspectDetails }
-        if historicalEntryCount >= 1 {
-            return .inspectHistoricalCount(historicalEntryCount)
+        let count = max(historicalEntryCount, report.totalEntryCount ?? 0)
+        if count >= 1 {
+            return .inspectHistoricalCount(count)
         }
         return .noEntries
     }

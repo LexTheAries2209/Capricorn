@@ -1154,13 +1154,6 @@ final class SmartErrorLogService: @unchecked Sendable {
         self.commandCoordinator = commandCoordinator
     }
 
-    func capability(for drive: DriveDevice) async throws {
-        let report = try await read(for: drive)
-        guard report.isSupported else {
-            throw SmartErrorLogServiceError.unsupported(report.message)
-        }
-    }
-
     func read(for drive: DriveDevice) async throws -> SmartErrorLogReport {
         let executable = try executable(for: drive)
         let target = await smartctlProvider.resolvedTargetDescriptors(for: [drive])[drive.id]

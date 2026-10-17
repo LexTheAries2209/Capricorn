@@ -312,6 +312,7 @@ struct SmartDiagnosticsPanel: View {
     @State private var isExpanded = true
     @State private var showsSelfTestHistory = false
     @State private var showsErrorLog = false
+    @State private var errorLogReadDriveID: String?
     @State private var isConfirmingSelfTestAbort = false
 
     private var report: SmartSelfTestReport? { snapshot?.selfTestReport }
@@ -322,8 +323,7 @@ struct SmartDiagnosticsPanel: View {
         SmartErrorLogPresentationState.historicalEntryCount(in: snapshot?.attributes ?? [])
     }
     private var errorLogPresentationState: SmartErrorLogPresentationState {
-        guard let errorLogReport else { return .unavailable }
-        return SmartErrorLogPresentationState.resolve(
+        SmartErrorLogPresentationState.resolve(
             report: errorLogReport,
             historicalEntryCount: historicalErrorEntryCount
         )
@@ -388,6 +388,25 @@ struct SmartDiagnosticsPanel: View {
                     language: language
                 )
             }
+        }
+        .onChange(of: errorLogReport?.capturedAt) { _, capturedAt in
+            guard errorLogReadDriveID == drive.id else { return }
+            guard capturedAt != nil else { return }
+            errorLogReadDriveID = nil
+            showsErrorLog = errorLogPresentationState.hasExportableDetails
+        }
+        .onChange(of: errorLogCapabilityState) { _, state in
+            guard errorLogReadDriveID == drive.id else { return }
+            switch state {
+            case .unknown, .unavailable:
+                errorLogReadDriveID = nil
+            case .supported, .checking, .retrying:
+                break
+            }
+        }
+        .onChange(of: drive.id) { _, _ in
+            errorLogReadDriveID = nil
+            showsErrorLog = false
         }
         .alert(language.t("Abort SMART Self-Test?"), isPresented: $isConfirmingSelfTestAbort) {
             Button(language.t("Abort Self-Test"), role: .destructive) {
@@ -530,7 +549,7 @@ struct SmartDiagnosticsPanel: View {
                 errorLogControls
             }
 
-            if let errorLogReport {
+            if let errorLogReport, errorLogPresentationState.hasExportableDetails {
                 HStack(spacing: 8) {
                     if let summary = errorLogSummary(errorLogReport) {
                         Text(summary)
@@ -615,27 +634,28 @@ struct SmartDiagnosticsPanel: View {
     @ViewBuilder
     private var errorLogControls: some View {
         switch errorLogCapabilityState {
-        case .supported:
+        case .unknown, .supported, .unavailable:
             Button {
+                errorLogReadDriveID = drive.id
                 viewModel.readSmartErrorLog(for: drive)
             } label: {
-                Label(language.t("Read Error Entries"), systemImage: "arrow.clockwise")
+                Label(
+                    language.t(
+                        isErrorLogReadUnavailable ? "Retry Reading Error Entries" : "Read Error Entries"
+                    ),
+                    systemImage: "arrow.clockwise"
+                )
             }
+            .disabled(drive.isNetwork || drive.isMemoryCard)
+            .accessibilityIdentifier("smart.errorLog.read")
         case .checking:
             ProgressView()
                 .controlSize(.small)
-                .help(language.t("Checking Error Log Support"))
+                .help(language.t("Reading Error Entries"))
         case let .retrying(message, attempt):
             Label("\(language.t("Retrying")) \(attempt)/3: \(language.statusMessage(message))", systemImage: "arrow.clockwise")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        case .unknown, .unavailable:
-            Button {
-                viewModel.checkSmartErrorLogCapability(for: drive)
-            } label: {
-                Label(language.t("Retry Error Log Check"), systemImage: "checkmark.shield")
-            }
-            .disabled(drive.isNetwork || drive.isMemoryCard)
         }
     }
 
@@ -688,64 +708,89 @@ struct SmartDiagnosticsPanel: View {
     }
 
     private var errorLogTitle: String {
-        if errorLogPresentationState.requiresInspection {
-            return "\(language.t("SMART Error Entries")) · \(language.t("Check"))"
-        }
         switch errorLogCapabilityState {
-        case .supported:
-            return language.t("SMART Error Entries")
         case .checking, .retrying:
-            return language.t("Checking Error Log Support")
-        case .unknown:
-            return language.t("Error Log Support Not Checked")
+            return language.t("Reading Error Entries")
         case .unavailable:
-            return language.t("Error Log Unavailable")
+            return language.t("Error Report Unavailable")
+        case .unknown, .supported:
+            break
+        }
+        switch errorLogPresentationState {
+        case .inspectDetails:
+            return "\(language.t("SMART Error Entries")) · \(language.t("Check"))"
+        case .notRead:
+            return language.t("SMART Error Entries")
+        case .noEntries:
+            return language.t("No Error Entries")
+        case .inspectHistoricalCount, .unavailable:
+            return language.t("Error Report Unavailable")
         }
     }
 
     private var errorLogDescription: String {
+        switch errorLogCapabilityState {
+        case .checking:
+            return language.t("Reading the controller error report.")
+        case let .retrying(message, attempt):
+            return "\(language.t("Retrying")) \(attempt)/3: \(language.statusMessage(message))"
+        case let .unavailable(message):
+            let reason = language.statusMessage(message)
+            if historicalErrorEntryCount > 0 {
+                return "\(language.smartErrorLogHistoryWithoutDetailsMessage(count: historicalErrorEntryCount))\n\(reason)"
+            }
+            return reason
+        case .unknown, .supported:
+            break
+        }
         switch errorLogPresentationState {
+        case .notRead:
+            return language.smartErrorLogPendingReadMessage(count: historicalErrorEntryCount)
         case let .inspectHistoricalCount(count):
             return language.smartErrorLogHistoryWithoutDetailsMessage(count: count)
         case .inspectDetails, .noEntries:
-            if let errorLogReport {
-                return language.statusMessage(errorLogReport.message)
-            }
+            return language.statusMessage(errorLogReport?.message ?? "")
         case .unavailable:
-            break
-        }
-        switch errorLogCapabilityState {
-        case .supported:
-            return language.t("Read ATA or NVMe controller error entries on demand.")
-        case .checking:
-            return language.t("Checking error-log support automatically.")
-        case let .retrying(message, attempt):
-            return "\(language.t("Retrying")) \(attempt)/3: \(language.statusMessage(message))"
-        case .unknown:
-            return language.t("Error-log support has not been checked yet.")
-        case let .unavailable(message):
-            return language.statusMessage(message)
+            return language.statusMessage(
+                errorLogReport?.message ?? "The error report could not be retrieved."
+            )
         }
     }
 
     private var errorLogSymbol: String {
-        if errorLogPresentationState.requiresInspection {
-            return "magnifyingglass"
-        }
         switch errorLogCapabilityState {
-        case .supported: return "checkmark.circle.fill"
         case .checking, .retrying: return "arrow.clockwise"
-        case .unknown, .unavailable: return "questionmark.circle"
+        case .unavailable: return "exclamationmark.circle"
+        case .unknown, .supported: break
+        }
+        switch errorLogPresentationState {
+        case .notRead: return "doc.text.magnifyingglass"
+        case .inspectDetails: return "magnifyingglass"
+        case .noEntries: return "checkmark.circle.fill"
+        case .inspectHistoricalCount, .unavailable: return "exclamationmark.circle"
         }
     }
 
     private var errorLogTint: Color {
-        if errorLogPresentationState.requiresInspection {
-            return .blue
-        }
         switch errorLogCapabilityState {
-        case .supported: return .green
-        default: return .secondary
+        case .checking, .retrying, .unavailable:
+            return .secondary
+        case .unknown, .supported:
+            break
+        }
+        switch errorLogPresentationState {
+        case .noEntries: return .green
+        case .inspectDetails, .inspectHistoricalCount: return .blue
+        case .notRead: return historicalErrorEntryCount > 0 ? .blue : .secondary
+        case .unavailable: return .secondary
+        }
+    }
+
+    private var isErrorLogReadUnavailable: Bool {
+        if case .unavailable = errorLogCapabilityState { return true }
+        switch errorLogPresentationState {
+        case .inspectHistoricalCount, .unavailable: return true
+        case .notRead, .noEntries, .inspectDetails: return false
         }
     }
 
@@ -1042,8 +1087,8 @@ private struct SmartErrorLogSheet: View {
                 switch displayState {
                 case let .inspectHistoricalCount(count):
                     ContentUnavailableView(
-                        language.t("Historical Error Count Requires Inspection"),
-                        systemImage: "magnifyingglass",
+                        language.t("Error Report Unavailable"),
+                        systemImage: "exclamationmark.circle",
                         description: Text(language.smartErrorLogHistoryWithoutDetailsMessage(count: count))
                     )
                     .foregroundStyle(.blue)
@@ -1055,9 +1100,9 @@ private struct SmartErrorLogSheet: View {
                         description: Text(language.statusMessage(report.message))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .unavailable:
+                case .notRead, .unavailable:
                     ContentUnavailableView(
-                        language.t("Error Log Unavailable"),
+                        language.t("Error Report Unavailable"),
                         systemImage: "questionmark.circle",
                         description: Text(language.statusMessage(report.message))
                     )

@@ -2613,6 +2613,14 @@ final class CapricornTests: XCTestCase {
     }
 
     func testSmartErrorLogPresentationSeparatesHistoricalCountFromReadDetails() {
+        XCTAssertEqual(
+            SmartErrorLogPresentationState.resolve(report: nil, historicalEntryCount: 2),
+            .notRead
+        )
+        XCTAssertEqual(
+            SmartErrorLogPresentationState.resolve(report: nil, historicalEntryCount: 0),
+            .notRead
+        )
         let historicalOnly = SmartErrorLogReport(
             isSupported: true,
             message: "No SMART error log entries were reported.",
@@ -2633,6 +2641,15 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(
             SmartErrorLogPresentationState.resolve(report: historicalOnly, historicalEntryCount: 0),
             .noEntries
+        )
+        var reportedErrorsWithoutDetails = historicalOnly
+        reportedErrorsWithoutDetails.totalEntryCount = 2
+        XCTAssertEqual(
+            SmartErrorLogPresentationState.resolve(
+                report: reportedErrorsWithoutDetails,
+                historicalEntryCount: 0
+            ),
+            .inspectHistoricalCount(2)
         )
 
         let details = SmartErrorLogReport(
@@ -2715,19 +2732,31 @@ final class CapricornTests: XCTestCase {
     func testSmartErrorLogHistoricalCountMessagesAreLocalizedAndPluralized() {
         XCTAssertEqual(
             AppLanguage.simplifiedChinese.smartErrorLogHistoryWithoutDetailsMessage(count: 1),
-            "控制器记录了 1 条历史错误，但本次读取未返回可解析的硬件错误详情。"
+            "控制器记录了 1 条历史错误，但无法获取错误报告。"
         )
         XCTAssertEqual(
             AppLanguage.english.smartErrorLogHistoryWithoutDetailsMessage(count: 1),
-            "The controller reports 1 historical error, but this read returned no parseable hardware error details."
+            "The controller reports 1 historical error, but the error report could not be retrieved."
         )
         XCTAssertEqual(
             AppLanguage.english.smartErrorLogHistoryWithoutDetailsMessage(count: 2),
-            "The controller reports 2 historical errors, but this read returned no parseable hardware error details."
+            "The controller reports 2 historical errors, but the error report could not be retrieved."
         )
         XCTAssertEqual(
             AppLanguage.simplifiedChinese.t("No parseable error details are available to export."),
             "没有可供导出的可解析错误详情。"
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.smartErrorLogPendingReadMessage(count: 2),
+            "控制器记录了 2 条历史错误。尚未读取错误报告。"
+        )
+        XCTAssertEqual(
+            AppLanguage.english.smartErrorLogPendingReadMessage(count: 1),
+            "The controller reports 1 historical error. The error report has not been read yet."
+        )
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.smartErrorLogPendingReadMessage(count: 0),
+            "尚未读取错误报告。"
         )
     }
 
@@ -2915,6 +2944,126 @@ final class CapricornTests: XCTestCase {
         XCTAssertTrue(call.arguments.contains("-l"))
         XCTAssertTrue(call.arguments.contains("error"))
         XCTAssertTrue(call.arguments.contains("--json"))
+    }
+
+    @MainActor
+    func testSmartErrorLogFirstReadStoresDetailsWithoutSeparateSupportCheck() async throws {
+        var drive = Self.fixtureDrive()
+        drive.isSystemDisk = false
+        let runner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(Self.smartctlNVMeErrorLogFixture.utf8),
+                stderr: Data(),
+                terminationStatus: 0
+            )
+        ])
+        let cache = RecordingSmartDiagnosticsCapabilityCache()
+        let model = AppModel(
+            smartErrorLogService: SmartErrorLogService(
+                smartctlProvider: Self.testSmartctlProvider(),
+                runner: runner,
+                administratorRunner: runner,
+                commandCoordinator: SmartctlCommandCoordinator()
+            ),
+            smartDiagnosticsCapabilityCache: cache
+        )
+
+        XCTAssertEqual(model.smartErrorLogCapability(for: drive), .unknown)
+        model.readSmartErrorLog(for: drive)
+        model.readSmartErrorLog(for: drive)
+        let completed = await AsyncTestWaiter.wait {
+            model.smartErrorLogReports[drive.id] != nil
+        }
+
+        XCTAssertTrue(completed)
+        XCTAssertEqual(runner.calls.count, 1, "Repeated clicks must share the pending read.")
+        let report = try XCTUnwrap(model.smartErrorLogReports[drive.id])
+        XCTAssertEqual(report.entries.first?.status, "Invalid Field")
+        XCTAssertEqual(
+            SmartErrorLogPresentationState.resolve(report: report, historicalEntryCount: 2),
+            .inspectDetails
+        )
+        XCTAssertEqual(cache.lastStoredRecord?.status, .supported)
+    }
+
+    @MainActor
+    func testSmartErrorLogFailedRereadClearsOldReportAndPreservesFailureReason() async throws {
+        var drive = Self.fixtureDrive()
+        drive.isSystemDisk = false
+        let failure = "Read Error Information Log failed: GetLogPage failed"
+        let runner = SequencedCommandRunner(results: Array(
+            repeating: CommandResult(stdout: Data(), stderr: Data(failure.utf8), terminationStatus: 4),
+            count: 3
+        ))
+        let cache = RecordingSmartDiagnosticsCapabilityCache()
+        let model = AppModel(
+            smartErrorLogService: SmartErrorLogService(
+                smartctlProvider: Self.testSmartctlProvider(),
+                runner: runner,
+                administratorRunner: runner,
+                commandCoordinator: SmartctlCommandCoordinator()
+            ),
+            smartDiagnosticsCapabilityCache: cache
+        )
+        model.smartErrorLogCapabilities[drive.id] = .supported
+        model.smartErrorLogReports[drive.id] = try XCTUnwrap(SmartctlParser.parseErrorLog(
+            CommandResult(
+                stdout: Data(Self.smartctlNVMeErrorLogFixture.utf8),
+                stderr: Data(),
+                terminationStatus: 0
+            )
+        ))
+
+        model.readSmartErrorLog(for: drive)
+        XCTAssertNil(model.smartErrorLogReports[drive.id])
+        let completed = await AsyncTestWaiter.wait(timeout: 3) {
+            if case .unavailable = model.smartErrorLogCapability(for: drive) { return true }
+            return false
+        }
+
+        XCTAssertTrue(completed)
+        XCTAssertEqual(model.smartErrorLogCapability(for: drive), .unavailable(failure))
+        XCTAssertEqual(model.smartErrorLogMessage, failure)
+        XCTAssertNil(model.smartErrorLogReports[drive.id])
+        XCTAssertNil(cache.lastStoredRecord, "A transient read failure must not cache unsupported capability.")
+        XCTAssertEqual(runner.calls.count, 3)
+    }
+
+    @MainActor
+    func testSmartErrorLogFirstReadHandlesUnsupportedReport() async throws {
+        var drive = Self.fixtureDrive()
+        drive.isSystemDisk = false
+        let runner = SequencedCommandRunner(results: [
+            CommandResult(
+                stdout: Data(#"{"smartctl":{"exit_status":0}}"#.utf8),
+                stderr: Data("Error Log not supported".utf8),
+                terminationStatus: 0
+            )
+        ])
+        let cache = RecordingSmartDiagnosticsCapabilityCache()
+        let model = AppModel(
+            smartErrorLogService: SmartErrorLogService(
+                smartctlProvider: Self.testSmartctlProvider(),
+                runner: runner,
+                administratorRunner: runner,
+                commandCoordinator: SmartctlCommandCoordinator()
+            ),
+            smartDiagnosticsCapabilityCache: cache
+        )
+
+        model.readSmartErrorLog(for: drive)
+        let completed = await AsyncTestWaiter.wait {
+            model.smartErrorLogReports[drive.id] != nil
+        }
+
+        XCTAssertTrue(completed)
+        let report = try XCTUnwrap(model.smartErrorLogReports[drive.id])
+        XCTAssertEqual(
+            SmartErrorLogPresentationState.resolve(report: report, historicalEntryCount: 2),
+            .unavailable
+        )
+        XCTAssertEqual(cache.lastStoredRecord?.status, .unavailable)
+        XCTAssertEqual(runner.calls.count, 1)
     }
 
     func testSmartSelfTestCapabilityUsesOrdinaryRunnerBeforeAdministratorFallback() async throws {

@@ -68,9 +68,20 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         switch self {
         case .english:
             let noun = safeCount == 1 ? "error" : "errors"
-            return "The controller reports \(safeCount) historical \(noun), but this read returned no parseable hardware error details."
+            return "The controller reports \(safeCount) historical \(noun), but the error report could not be retrieved."
         case .simplifiedChinese:
-            return "控制器记录了 \(safeCount) 条历史错误，但本次读取未返回可解析的硬件错误详情。"
+            return "控制器记录了 \(safeCount) 条历史错误，但无法获取错误报告。"
+        }
+    }
+
+    func smartErrorLogPendingReadMessage(count: Int) -> String {
+        guard count > 0 else { return t("The error report has not been read yet.") }
+        switch self {
+        case .english:
+            let noun = count == 1 ? "error" : "errors"
+            return "The controller reports \(count) historical \(noun). The error report has not been read yet."
+        case .simplifiedChinese:
+            return "控制器记录了 \(count) 条历史错误。尚未读取错误报告。"
         }
     }
 
@@ -284,6 +295,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Export Error Entries": "导出错误条目",
         "View Error Entries": "查看错误条目",
         "Read Error Entries": "读取错误条目",
+        "Retry Reading Error Entries": "重试读取错误条目",
+        "Reading Error Entries": "正在读取错误条目",
+        "Reading the controller error report.": "正在读取控制器错误报告。",
+        "Error Report Unavailable": "无法获取错误报告",
+        "The error report could not be retrieved.": "无法获取错误报告。",
+        "The error report has not been read yet.": "尚未读取错误报告。",
         "Retry Self-Test Check": "重试自检支持检测",
         "Retry Error Log Check": "重试错误日志支持检测",
         "Checking self-test support automatically.": "正在自动检测自检支持。",

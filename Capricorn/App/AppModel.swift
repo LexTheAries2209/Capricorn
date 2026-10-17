@@ -328,7 +328,6 @@ final class AppModel {
     private var lastBenchmarkProgressPublishedAt: Date?
     private var smartSelfTestTask: Task<Void, Never>?
     private var smartSelfTestCapabilityTasks: [String: Task<Void, Never>] = [:]
-    private var smartErrorLogCapabilityTasks: [String: Task<Void, Never>] = [:]
     private var smartErrorLogReadTasks: [String: Task<Void, Never>] = [:]
     private var smartSelfTestRunID: UUID?
     private var activeSmartSelfTestDiskLease: DiskOperationLease?
@@ -541,7 +540,6 @@ final class AppModel {
         activeRepresentativeVolumeIDsByDrive.removeValue(forKey: key)
         manuallySelectedRepresentativeVolumeKeys.remove(key)
         smartSelfTestCapabilityTasks.removeValue(forKey: drive.id)?.cancel()
-        smartErrorLogCapabilityTasks.removeValue(forKey: drive.id)?.cancel()
         smartErrorLogReadTasks.removeValue(forKey: drive.id)?.cancel()
         smartSelfTestCapabilities.removeValue(forKey: drive.id)
         smartErrorLogCapabilities.removeValue(forKey: drive.id)
@@ -1506,8 +1504,6 @@ final class AppModel {
 
         smartSelfTestCapabilityTasks[drive.id]?.cancel()
         smartSelfTestCapabilityTasks.removeValue(forKey: drive.id)
-        smartErrorLogCapabilityTasks[drive.id]?.cancel()
-        smartErrorLogCapabilityTasks.removeValue(forKey: drive.id)
         smartErrorLogReadTasks[drive.id]?.cancel()
         smartErrorLogReadTasks.removeValue(forKey: drive.id)
 
@@ -1542,15 +1538,12 @@ final class AppModel {
         probeSmartSelfTestCapability(for: drive, force: true)
     }
 
-    func checkSmartErrorLogCapability(for drive: DriveDevice) {
-        guard !drive.isSystemDisk else { return }
-        probeSmartErrorLogCapability(for: drive, force: true)
-    }
-
     func readSmartErrorLog(for drive: DriveDevice) {
         guard !drive.isVirtual || virtualT7DemoMode else { return }
         guard !drive.isSystemDisk else { return }
-        smartErrorLogReadTasks[drive.id]?.cancel()
+        guard smartErrorLogReadTasks[drive.id] == nil else { return }
+        // A new read must not present an older report as its result.
+        smartErrorLogReports.removeValue(forKey: drive.id)
         smartErrorLogCapabilities[drive.id] = .checking
         smartErrorLogMessage = nil
         let service = smartErrorLogService
@@ -1558,6 +1551,7 @@ final class AppModel {
             for attempt in 1...3 {
                 do {
                     let report = try await service.read(for: drive)
+                    try Task.checkCancellation()
                     await MainActor.run { [weak self] in
                         guard let self else { return }
                         self.smartErrorLogReports[drive.id] = report
@@ -1582,11 +1576,10 @@ final class AppModel {
                     }
                     return
                 } catch is CancellationError {
-                    await MainActor.run { [weak self] in
-                        self?.smartErrorLogReadTasks[drive.id] = nil
-                    }
+                    // The caller clearing diagnostics already removes this task.
                     return
                 } catch {
+                    guard !Task.isCancelled else { return }
                     let message = error.localizedDescription
                     if attempt < 3 {
                         await MainActor.run { [weak self] in
@@ -1595,11 +1588,15 @@ final class AppModel {
                                 attempt: attempt + 1
                             )
                         }
-                        try? await Task.sleep(nanoseconds: Self.retryDelayNanoseconds(after: attempt))
+                        do {
+                            try await Task.sleep(nanoseconds: Self.retryDelayNanoseconds(after: attempt))
+                        } catch {
+                            return
+                        }
                         continue
                     }
                     await MainActor.run { [weak self] in
-                        self?.finishErrorLogCapabilityFailure(
+                        self?.finishErrorLogReadFailure(
                             error,
                             drive: drive,
                             message: message
@@ -1688,44 +1685,6 @@ final class AppModel {
         }
     }
 
-    private func probeSmartErrorLogCapability(for drive: DriveDevice, force: Bool) {
-        guard !drive.isVirtual || virtualT7DemoMode else { return }
-        guard !drive.isSystemDisk else { return }
-        if virtualT7DemoMode {
-            smartErrorLogCapabilities[drive.id] = .unavailable("Virtual T7 demo does not query a controller error log.")
-            return
-        }
-        if !force, smartErrorLogCapabilities[drive.id] != nil { return }
-        smartErrorLogCapabilityTasks[drive.id]?.cancel()
-        smartErrorLogCapabilities[drive.id] = .checking
-        let service = smartErrorLogService
-        smartErrorLogCapabilityTasks[drive.id] = Task { [weak self] in
-            do {
-                try await service.capability(for: drive)
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.smartErrorLogCapabilities[drive.id] = .supported
-                    self.storeErrorLogCapability(
-                        status: .supported,
-                        message: "SMART error log capability confirmed.",
-                        for: drive
-                    )
-                    self.smartErrorLogCapabilityTasks[drive.id] = nil
-                }
-            } catch is CancellationError {
-                await MainActor.run { [weak self] in
-                    self?.smartErrorLogCapabilityTasks[drive.id] = nil
-                }
-            } catch {
-                let message = error.localizedDescription
-                await MainActor.run { [weak self] in
-                    self?.finishErrorLogCapabilityFailure(error, drive: drive, message: message)
-                    self?.smartErrorLogCapabilityTasks[drive.id] = nil
-                }
-            }
-        }
-    }
-
     private func finishSelfTestCapabilityFailure(
         _ error: Error,
         drive: DriveDevice,
@@ -1741,18 +1700,15 @@ final class AppModel {
         }
     }
 
-    private func finishErrorLogCapabilityFailure(
+    private func finishErrorLogReadFailure(
         _ error: Error,
         drive: DriveDevice,
         message: String
     ) {
+        smartErrorLogCapabilities[drive.id] = .unavailable(message)
+        smartErrorLogMessage = message
         if isDefinitiveErrorLogUnsupported(error) {
-            smartErrorLogCapabilities[drive.id] = .unavailable(message)
-            smartErrorLogMessage = message
             storeErrorLogCapability(status: .unavailable, message: message, for: drive)
-        } else {
-            smartErrorLogCapabilities[drive.id] = .unknown
-            smartErrorLogMessage = "SMART error log support could not be verified. Use Retry Error Log Check to try again."
         }
     }
 
