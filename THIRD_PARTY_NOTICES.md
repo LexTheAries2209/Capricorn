@@ -8,10 +8,13 @@ Capricorn uses the unmodified Sparkle framework for signed app updates.
 - Pinned dependency: Sparkle 2.10.0, recorded in Xcode's `Package.resolved`.
 - Complete upstream license and bundled component notices:
   `ThirdParty/Sparkle/LICENSE`, also included in the App at
-  `Contents/Resources/Sparkle/LICENSE`.
+  `Contents/Resources/LICENSE`.
 
 The full notice includes Sparkle's MIT license and the BSD and other licenses
 for its included components. Preserve the complete notice when redistributing.
+
+The application menu and Settings provide a Third-Party Licenses window with
+the complete bundled Sparkle and smartctl license texts.
 
 ## smartmontools 7.5
 

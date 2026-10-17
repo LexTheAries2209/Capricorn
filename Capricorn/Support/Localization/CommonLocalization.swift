@@ -250,6 +250,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
 
     private static let zhHans: [String: String] = [
+        "Third-Party Licenses": "第三方许可",
+        "View Third-Party Licenses": "查看第三方许可",
+        "Component": "组件",
+        "License text is unavailable.": "无法读取许可文本",
         "No Drives": "无硬盘",
         "Refresh to scan attached storage.": "刷新以扫描已连接的存储设备。",
         "Drives": "硬盘",

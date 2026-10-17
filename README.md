@@ -138,6 +138,15 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn -destination 'pla
 
 ## License / 授权
 
+Sparkle 2.10.0 is provided under the MIT license, with additional notices for its
+bundled components. See [ThirdParty/Sparkle/LICENSE](ThirdParty/Sparkle/LICENSE)
+and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The App includes the complete
+notice and provides a Third-Party Licenses window from its application menu and Settings.
+
+Sparkle 2.10.0 按 MIT 许可提供，并附带其内置组件的其他许可声明。详见
+[完整许可](ThirdParty/Sparkle/LICENSE) 和 [第三方说明](THIRD_PARTY_NOTICES.md)。
+App 内保留完整声明，可从应用菜单和设置打开“第三方许可”窗口查看。
+
 Bundled smartctl and its corresponding source are provided under `GPL-2.0-or-later`. See [ThirdParty/smartmontools](ThirdParty/smartmontools) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, licenses, and build instructions.
 
 内置 smartctl 及对应源代码按 `GPL-2.0-or-later` 提供。源代码、许可证和构建说明见 [ThirdParty/smartmontools](ThirdParty/smartmontools) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

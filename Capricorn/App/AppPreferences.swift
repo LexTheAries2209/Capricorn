@@ -318,6 +318,7 @@ struct CapricornSettingsView: View {
     @Bindable var preferences: AppPreferences
     @Bindable var updateChecker: AppUpdater
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistoryRecords: [SmartHistoryRecord]
     @Query(sort: \SmartSelfTestHistoryRecord.capturedAt, order: .reverse) private var selfTestHistoryRecords: [SmartSelfTestHistoryRecord]
@@ -559,6 +560,14 @@ struct CapricornSettingsView: View {
             }
 
             DeveloperSettingsSection(preferences: preferences)
+
+            Section(language.t("Third-Party Licenses")) {
+                Button {
+                    openWindow(id: ThirdPartyLicensesView.windowID)
+                } label: {
+                    Label(language.t("View Third-Party Licenses"), systemImage: "doc.text")
+                }
+            }
 
             Section {
                 VStack(spacing: 14) {
