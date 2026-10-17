@@ -7,6 +7,44 @@ import XCTest
 
 final class SmartErrorLogPresentationTests: XCTestCase {
     @MainActor
+    func testTitleRowButtonCollapsesAndExpandsDiagnosticsWithoutSummary() async throws {
+        var drive = CapricornTests.fixtureDrive()
+        drive.isSystemDisk = false
+        for language in AppLanguage.allCases {
+            let hostingView = NSHostingView(rootView: panel(model: AppModel(), drive: drive, language: language))
+            let window = makeWindow(hostingView)
+            defer { window.orderOut(nil) }
+
+            for expanded in [true, false, true] {
+                try await Task.sleep(for: .milliseconds(250))
+                hostingView.layoutSubtreeIfNeeded()
+                let image = try capturedImage(
+                    in: hostingView, name: "title-row-\(language.rawValue)-\(expanded)"
+                )
+                let observations = try textObservations(in: image)
+                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
+                let title = try XCTUnwrap(observations.first {
+                    normalized($0.topCandidates(1).first?.string ?? "")
+                        .contains(normalized(language.t("SMART Diagnostics")))
+                })
+                let text = normalized(lines.joined())
+                XCTAssertEqual(text.contains(normalized(language.t("Retry Self-Test Check"))), expanded)
+                XCTAssertEqual(text.contains(normalized(language.t("SMART Error Entries"))), expanded)
+                XCTAssertFalse(text.contains(normalized(language.t("Self-tests and saved reports."))))
+                XCTAssertFalse(text.contains(normalized(language.t("Self-tests, saved reports, and controller error entries."))))
+
+                // Click at the title's height to verify the button shares that row.
+                let point = NSPoint(
+                    x: hostingView.bounds.width - 40,
+                    y: (hostingView.isFlipped ? 1 - title.boundingBox.midY : title.boundingBox.midY)
+                        * hostingView.bounds.height
+                )
+                try click(in: hostingView, window: window, at: point)
+            }
+        }
+    }
+
+    @MainActor
     func testSettingsRevealErrorEntryReaderBelowEnabledDiagnosticsInBothLanguages() async throws {
         let suiteName = "CapricornTests.errorReaderSettings.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -93,9 +131,8 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                     text.contains(normalized(language.t("SMART Error Entries"))),
                     diagnostics && errorReader
                 )
-                if diagnostics && !errorReader {
-                    XCTAssertTrue(text.contains(normalized(language.t("Self-tests and saved reports."))))
-                }
+                XCTAssertFalse(text.contains(normalized(language.t("Self-tests and saved reports."))))
+                XCTAssertFalse(text.contains(normalized(language.t("Self-tests, saved reports, and controller error entries."))))
                 XCTAssertTrue(model.smartErrorLogReports.isEmpty, "Changing visibility must not read a drive.")
             }
         }
@@ -138,19 +175,7 @@ final class SmartErrorLogPresentationTests: XCTestCase {
             y: (hostingView.isFlipped ? 1 - label.boundingBox.midY : label.boundingBox.midY)
                 * hostingView.bounds.height
         )
-        let location = hostingView.convert(point, to: nil)
-        let mouseUp = try XCTUnwrap(NSEvent.mouseEvent(
-            with: .leftMouseUp, location: location, modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-            context: nil, eventNumber: 1, clickCount: 1, pressure: 0
-        ))
-        let mouseDown = try XCTUnwrap(NSEvent.mouseEvent(
-            with: .leftMouseDown, location: location, modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-            context: nil, eventNumber: 0, clickCount: 1, pressure: 1
-        ))
-        NSApp.postEvent(mouseUp, atStart: true)
-        window.sendEvent(mouseDown)
+        try click(in: hostingView, window: window, at: point)
         let opened = await AsyncTestWaiter.wait(timeout: 3) { !window.sheets.isEmpty }
 
         XCTAssertTrue(opened, "The first read should open its details without a View action.")
@@ -286,6 +311,23 @@ final class SmartErrorLogPresentationTests: XCTestCase {
         .environment(\.appLanguage, language)
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
         .padding(16)
+    }
+
+    @MainActor
+    private func click(in view: NSView, window: NSWindow, at point: NSPoint) throws {
+        let location = view.convert(point, to: nil)
+        let mouseUp = try XCTUnwrap(NSEvent.mouseEvent(
+            with: .leftMouseUp, location: location, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+            context: nil, eventNumber: 1, clickCount: 1, pressure: 0
+        ))
+        let mouseDown = try XCTUnwrap(NSEvent.mouseEvent(
+            with: .leftMouseDown, location: location, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+            context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+        ))
+        NSApp.postEvent(mouseUp, atStart: true)
+        window.sendEvent(mouseDown)
     }
 
     @MainActor

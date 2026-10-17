@@ -356,27 +356,14 @@ struct SmartDiagnosticsPanel: View {
     }
 
     var body: some View {
-        InfoPanel(title: language.t("SMART Diagnostics"), symbol: "stethoscope") {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(language.t(
-                        showsErrorLogSection
-                            ? "Self-tests, saved reports, and controller error entries."
-                            : "Self-tests and saved reports."
-                    ))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        isExpanded.toggle()
-                    } label: {
-                        Image(systemName: isExpanded ? "chevron.down.circle" : "chevron.right.circle")
-                    }
-                    .buttonStyle(.borderless)
-                    .help(language.t(isExpanded ? "Collapse SMART Diagnostics" : "Show SMART Diagnostics"))
-                }
-
-                if isExpanded {
+        InfoPanel(
+            title: language.t("SMART Diagnostics"),
+            symbol: "stethoscope",
+            expansion: $isExpanded,
+            expansionHelp: language.t(isExpanded ? "Collapse SMART Diagnostics" : "Show SMART Diagnostics")
+        ) {
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 12) {
                     selfTestSection
                     if showsErrorLogSection {
                         Divider()

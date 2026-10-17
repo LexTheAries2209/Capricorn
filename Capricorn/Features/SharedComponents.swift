@@ -5,12 +5,28 @@ import SwiftUI
 struct InfoPanel<Content: View>: View {
     let title: String
     let symbol: String
+    var expansion: Binding<Bool>? = nil
+    var expansionHelp = ""
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: symbol)
-                .font(.headline)
+            HStack {
+                Label(title, systemImage: symbol)
+                    .font(.headline)
+                if let expansion {
+                    Spacer()
+                    Button {
+                        expansion.wrappedValue.toggle()
+                    } label: {
+                        Image(systemName: expansion.wrappedValue ? "chevron.down.circle" : "chevron.right.circle")
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(expansionHelp)
+                    .accessibilityLabel(expansionHelp)
+                }
+            }
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
