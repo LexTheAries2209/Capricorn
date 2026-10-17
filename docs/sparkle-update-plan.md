@@ -1,13 +1,13 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
-调研日期：2026-10-17，Asia/Shanghai。状态：P0–P2 已在功能分支实现，公开更新源尚未发布。
+调研日期：2026-10-17，Asia/Shanghai。状态：P0–P2 已实现，正准备 V2.10.2 / Build 0042 的首次公开更新源。
 
 ## 实施记录
 
 分支：`codex/sparkle-updates-p0-p2`。以下记录描述本地实现，后文保留最初研究与分期依据；实际交互以本节为准。
 
 - 已锁定 Sparkle 2.10.0，通过单一更新器接管菜单与设置入口；设置页出现不再主动检查。
-- 营销版本为完整 `2.10.1`，内部构建号现为 `0042`：已核实历史有 41 次正式 Release，以此作为一次性迁移基线。后续采用四位、全局递增的独立发布构建号；这是开发分支元数据，并未发布同名新 Release。详见 [版本规则](versioning.md) 和 [构建号分配记录](../Configuration/ReleaseBuilds.json)。
+- 首次集成版本为完整 `2.10.2`，内部构建号 `0042`：已核实此前有 41 次正式 Release，以此作为一次性迁移基线。后续采用四位、全局递增的独立发布构建号。详见 [版本规则](versioning.md) 和 [构建号分配记录](../Configuration/ReleaseBuilds.json)。
 - 保持 App 产物固定名 `Capricorn.app` 和 bundle ID `lex.Capricorn`。
 - 自动检查现已改为用户启用后每次启动检查一次，不再按时间间隔检查。自动下载/退出时安装另行选择，默认关闭；后台更新采用温和提醒，菜单显示可用版本。
 - 任何冲突任务均弹窗并阻止更新检查或安装，不会强行停止磁盘任务；已下载更新在退出时仍需通过冲突与保存检查。手动下载期间出现冲突会取消下载。后台自动下载可能已取得部分或全部字节，但不能因此越过安装和退出检查。
@@ -35,11 +35,11 @@
 | 关闭启动检查 | 即使旧 Sparkle 开关曾开启，仍不启动更新器或请求清单 |
 | 启动时有冲突 | 弹出阻止提示，零网络请求 |
 
-验证环境为本机 Apple silicon。安装测试使用无 Hardened Runtime 的 ad-hoc 测试 App，不证明 Developer ID、公证、隔离下载、Intel 或 macOS 14 真机上的安装行为；正式发布前仍需补齐这些验证。业务数据库已有测试在正常测试套件中回归，安装测试不等于对真实用户数据库进行了迁移演练。
+验证环境为本机 Apple silicon。安装测试使用无 Hardened Runtime 的 ad-hoc 测试 App，不证明 Developer ID、公证、隔离下载、Intel 或 macOS 14 真机上的安装行为。V2.10.2 同样采用完整 bundle ad-hoc 签名并关闭 Hardened Runtime，已验证归档 App 正常启动；没有 Developer ID 或公证信任链。业务数据库已有测试在正常测试套件中回归，安装测试不等于对真实用户数据库进行了迁移演练。
 
-生产 Ed25519 私钥已保存在登录 Keychain 的 `lex.Capricorn` 账号中，公钥嵌入 App。没有将生产私钥导出为文件；其备份和恢复演练尚未完成。测试工具首次访问 Keychain 的等待通过独立测试密钥避开，正式发布签名工具仍可能需要用户在系统 Keychain 提示中授权。
+生产 Ed25519 私钥已保存在登录 Keychain 的 `lex.Capricorn` 账号中，公钥嵌入 App。V2.10.2 已成功使用该密钥签名清单和安装包，并验证签名；没有将生产私钥导出为文件，其备份和恢复演练尚未完成。独立安装测试仍使用测试密钥。
 
-配置的稳定 feed 地址是 GitHub Releases 的 `releases/latest/download/appcast.xml`。当前公开 Release 尚无该附件，且本次未上传、推送或发布任何资源。功能代码与本地升级链验证不能描述为现有用户已经能够在线自动更新。首个正式集成版仍需手动安装一次。
+配置的稳定 feed 地址是 GitHub Releases 的 `releases/latest/download/appcast.xml`。V2.10.1 及更早公开版本没有 Sparkle，需手动安装 V2.10.2 一次。发布前已通过实际生产签名清单的本地只读 Sparkle 检查：旧 Build 0041 发现 2.10.2 / 0042，当前 0042 判定为最新。公开源结果在发布后补充；后文保留历史阶段的验证记录。
 
 ### 四位构建号迁移
 
@@ -107,7 +107,7 @@ python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenar
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario launch-conflict
 ```
 
-正式发布保持三段营销版本和四位全局递增 Build。发布准备脚本的 `--previous-build` 在首次迁移时使用 `0041`，之后使用实际上一分发构建的全局序号；脚本拒绝非四位、零值、相同或倒退的构建。`--download-url-prefix` 指向即将发布的固定版本附件目录，输出目录必须尚不存在。首次使用生产签名工具前先处理 Keychain 授权并完成密钥备份。发布准备脚本本轮仅完成静态检查及拒绝路径验证，没有调用生产私钥生成正式更新产物。
+正式发布保持三段营销版本和四位全局递增 Build。发布准备脚本的 `--previous-build` 在首次迁移时使用 `0041`，之后使用实际上一分发构建的全局序号；脚本拒绝非四位、零值、相同或倒退的构建。`--download-url-prefix` 指向即将发布的固定版本附件目录，输出目录必须尚不存在。V2.10.2 已通过生产密钥签名及复验。没有 Developer ID 和公证时，使用 `--allow-unnotarized`（兼容旧参数 `--allow-development-signing`）明确接受信任限制，但仍强制验证完整 bundle 和 Ed25519 签名。密钥备份建议尽快完成，不作为这次发布的先决条件。
 
 ## 结论
 

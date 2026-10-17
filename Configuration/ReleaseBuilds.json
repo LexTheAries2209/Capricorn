@@ -21,8 +21,8 @@
     {
       "build": "0042",
       "status": "reserved",
-      "version": null,
-      "tag": null
+      "version": "2.10.2",
+      "tag": "v2.10.2"
     }
   ]
 }

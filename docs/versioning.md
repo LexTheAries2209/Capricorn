@@ -1,8 +1,8 @@
 # Version And Build Rules / 版本与构建号规则
 
-Effective on the development branch from 2026-10-17; not a new public release.
+Effective from V2.10.2, prepared on 2026-10-17.
 
-自 2026-10-17 起在开发分支采用以下规则；本次规则调整不代表发布了新版本。
+自 2026-10-17 准备的 V2.10.2 起采用以下规则。
 
 ## 中文
 
@@ -20,14 +20,14 @@ Effective on the development branch from 2026-10-17; not a new public release.
 
 历史上没有记录全部本地编译次数，因此采用这 41 次可验证的发布构建作为一次性的迁移基线，下一发布构建预留为 **`0042`**。基线序号 `0041` 不代表历史 `v2.10.1` 当时写入了这个值：它实际使用 Version `2.10`、Build `1`。已发布的安装包、标签和历史发布说明保持原样。
 
-当前开发分支的完整版本为 `2.10.1`、Build 为 `0042`。这是下一发布构建的预留编号，尚未发布，也未决定下一次公开版本号；正式发布时再按明确的版本请求调整完整版本号。
+V2.10.2 使用完整版本 `2.10.2`、Build `0042`，复用迁移时预留的编号。实际发布状态以构建号分配记录为准；下一次新的发布构建为 `0043`。
 
 原开发编号 `1000` 没有公开发布，不作为累计次数或后续编号的基线。若本地装有该开发构建，应手动替换为新构建，不能期待 Sparkle 将 `0042` 判定为比 `1000` 更新。
 
 ### 后续发布
 
 1. 核对最新 GitHub Release、构建号分配记录和实际分发 App 的元数据，不根据补丁号或本地标签数量推算次数。
-2. 同一次未完成的发布准备复用已预留编号；尚未绑定版本的 `0042` 用于下一次明确的发布请求，不因首次确定版本号而再加一。新的分发构建取已分配最大序号加一，按十进制计算后格式化为四位。已经对外分发或放弃的编号保留记录，不因删除 Release 或修改营销版本而复用。
+2. 同一次未完成的发布准备复用已预留编号；`0042` 已绑定 V2.10.2，不因首次确定版本号而再加一。新的分发构建取已分配最大序号加一，按十进制计算后格式化为四位。已经对外分发或放弃的编号保留记录，不因删除 Release 或修改营销版本而复用。
 3. 在 [ReleaseBuilds.json](../Configuration/ReleaseBuilds.json) 中记录编号及状态；预留时不虚构版本或标签，发布后补齐实际版本、标签，并将状态改为 `published`。历史基线只记录本次迁移，不在每次发布后重新编号。
 4. 同步 App target 的 Debug/Release 配置；测试 target 的独立版本配置不计入发布构建。
 5. 验证生成的 `Info.plist` 和签名 appcast 保留前导零，且构建号数值严格递增。迁移后的首个更新包准备使用 `--previous-build 0041`；以后按实际上一分发构建传值。
@@ -46,9 +46,9 @@ gh api --paginate --slurp repos/LexTheAries2209/Capricorn/releases \
 
 `MARKETING_VERSION` / `CFBundleShortVersionString` contains the complete public version, such as `2.11.0`. `CURRENT_PROJECT_VERSION` / `CFBundleVersion` is an independent, globally increasing release-build sequence formatted as four decimal digits: `0030` is followed by `0031`. Build numbers are compared numerically and are never appended to the public version or reset for a new marketing version. The App, appcast `sparkle:version`, and release notes must agree, including leading zeros.
 
-The October 17, 2026 audit found **41 published stable GitHub Releases**, from `v1.0.2` through `v2.10.1`, matching 41 changelog entries and 41 combined release-note files. This verified release history provides the migration baseline; the complete count of past local compilations is unavailable. **`0042` is reserved for the next distributable build.** Debug builds, tests, and repeated validation of the same candidate do not automatically allocate another number.
+The October 17, 2026 audit found **41 published stable GitHub Releases**, from `v1.0.2` through `v2.10.1`, matching 41 changelog entries and 41 combined release-note files at that time. This verified release history provides the migration baseline; the complete count of past local compilations is unavailable. **V2.10.2 uses the reserved Build `0042`; the next new release build is `0043`.** Debug builds, tests, and repeated validation of the same candidate do not automatically allocate another number.
 
-Historical ordinal 41 is not a claim that `v2.10.1` shipped with Build `0041`; its actual metadata was Version `2.10`, Build `1`. Existing releases and historical metadata are preserved. The development branch currently uses full Version `2.10.1`, Build `0042`; no new release or public version has been selected. The unpublished development value `1000` is excluded from the release baseline; installations using it need manual replacement.
+Historical ordinal 41 is not a claim that `v2.10.1` shipped with Build `0041`; its actual metadata was Version `2.10`, Build `1`. Existing releases and historical metadata are preserved. The allocation ledger records the actual publication status of Version `2.10.2`, Build `0042`. The unpublished development value `1000` is excluded from the release baseline; installations using it need manual replacement.
 
 Use [ReleaseBuilds.json](../Configuration/ReleaseBuilds.json) to retain the baseline and build allocations. Reuse a reservation for the same unfinished release attempt; allocate the next number for a new distributable build, retaining abandoned or distributed numbers. After publication, record the exact version/tag and mark the allocation `published`. Never reset the sequence by recounting or deleting releases.
 

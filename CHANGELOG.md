@@ -4,9 +4,25 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
-开发分支的版本规则已改为完整版本号与独立四位 Build；历史发布记录保留原始元数据。详见[版本规则](docs/versioning.md)。本次规则调整不是一次新 Release。
+自 V2.10.2 起采用完整版本号与独立四位 Build；历史发布记录保留原始元数据。详见[版本规则](docs/versioning.md)。
 
-The development branch now separates the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md); this policy change is not a new Release.
+V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
+
+## V2.10.2 - 2026-10-17
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.10.2) | [Release Notes / 发布说明](docs/releases/v2.10.2.md)
+
+### 中文
+
+- 新增应用内手动更新、启动时检查更新，以及可选的自动下载和退出安装，更新偏好会保存。
+- 有磁盘任务冲突时提示并阻止更新，安装前保存历史；更新设置更紧凑。
+- 版本号与四位递增 Build 独立，本版为 `2.10.2` / `0042`；构建号默认隐藏，可在开发者选项中显示。
+
+### English
+
+- Adds manual in-app updates, checks on launch, and optional automatic downloads with installation on quit; update choices persist.
+- Conflicting disk tasks block updates with a warning, history is saved before installation, and update settings are more compact.
+- Separates the complete version from a four-digit increasing Build: `2.10.2` / `0042`; build visibility is optional under Developer Options.
 
 ## V2.10.1 - 2026-10-17
 

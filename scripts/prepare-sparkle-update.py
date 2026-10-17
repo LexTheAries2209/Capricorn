@@ -24,7 +24,9 @@ def main():
     parser.add_argument("--previous-build", required=True, type=int,
                         help="Previous global release build in decimal, e.g. 0041 at the migration baseline.")
     parser.add_argument("--key-account", default="lex.Capricorn")
-    parser.add_argument("--allow-development-signing", action="store_true")
+    parser.add_argument("--allow-unnotarized", "--allow-development-signing", dest="allow_unnotarized",
+                        action="store_true",
+                        help="Allow valid ad-hoc/development signatures without requiring Developer ID or notarization.")
     options = parser.parse_args()
     app = options.app.resolve()
     tools = options.sparkle_bin.resolve()
@@ -50,9 +52,9 @@ def main():
         parser.error("Signed feeds and validation before extraction must be enabled.")
     run("codesign", "--verify", "--deep", "--strict", str(app))
     identity = run("codesign", "-dv", "--verbose=2", str(app), capture_output=True).stderr
-    if not options.allow_development_signing:
+    if not options.allow_unnotarized:
         if "Authority=Developer ID Application:" not in identity:
-            parser.error("Public updates require Developer ID signing. Use --allow-development-signing only for local validation.")
+            parser.error("This packaging policy requires Developer ID. Use --allow-unnotarized to accept valid ad-hoc/development signing.")
         run("spctl", "--assess", "--type", "execute", "--verbose=2", str(app))
         run("xcrun", "stapler", "validate", str(app))
     public_key = run(str(tools / "generate_keys"), "--account", options.key_account, "-p", capture_output=True).stdout.strip()
@@ -78,8 +80,8 @@ def main():
     signature = enclosure.attrib["{" + ns["s"] + "}edSignature"]
     run(str(tools / "sign_update"), "--account", options.key_account, "--verify", str(archive), signature)
     print(f"Verified build {build}. Upload the immutable archive first, and appcast.xml last: {destination}")
-    if options.allow_development_signing:
-        print("Development validation only; Developer ID, notarization, and Gatekeeper trust are not established.")
+    if options.allow_unnotarized:
+        print("Bundle signatures verified; Developer ID, notarization, and Gatekeeper trust are not established.")
 
 
 if __name__ == "__main__":
