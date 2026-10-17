@@ -349,24 +349,18 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1000;
+				CAPRICORN_UPDATE_FEED_URL = "https://github.com/LexTheAries2209/Capricorn/releases/latest/download/appcast.xml";
+				CAPRICORN_UPDATE_PUBLIC_KEY = "2fnds6AczH82TtMwseyFTcJ3dBVyHfzlYRCDeIyOFxw=";
 				DEVELOPMENT_TEAM = 6PYLB6N93R;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Configuration/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Capricorn V2.10.1";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_SUAutomaticallyUpdate = NO;
-				INFOPLIST_KEY_SUBundleName = Capricorn;
-				INFOPLIST_KEY_SUEnableSystemProfiling = NO;
-				INFOPLIST_KEY_SUFeedURL = "https://github.com/LexTheAries2209/Capricorn/releases/latest/download/appcast.xml";
-				INFOPLIST_KEY_SUPublicEDKey = "2fnds6AczH82TtMwseyFTcJ3dBVyHfzlYRCDeIyOFxw=";
-				INFOPLIST_KEY_SURequireSignedFeed = YES;
-				INFOPLIST_KEY_SUScheduledCheckInterval = 86400;
-				INFOPLIST_KEY_SUSignedFeedFailureExpirationInterval = 0;
-				INFOPLIST_KEY_SUVerifyUpdateBeforeExtraction = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -391,24 +385,18 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1000;
+				CAPRICORN_UPDATE_FEED_URL = "https://github.com/LexTheAries2209/Capricorn/releases/latest/download/appcast.xml";
+				CAPRICORN_UPDATE_PUBLIC_KEY = "2fnds6AczH82TtMwseyFTcJ3dBVyHfzlYRCDeIyOFxw=";
 				DEVELOPMENT_TEAM = 6PYLB6N93R;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Configuration/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Capricorn V2.10.1";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_SUAutomaticallyUpdate = NO;
-				INFOPLIST_KEY_SUBundleName = Capricorn;
-				INFOPLIST_KEY_SUEnableSystemProfiling = NO;
-				INFOPLIST_KEY_SUFeedURL = "https://github.com/LexTheAries2209/Capricorn/releases/latest/download/appcast.xml";
-				INFOPLIST_KEY_SUPublicEDKey = "2fnds6AczH82TtMwseyFTcJ3dBVyHfzlYRCDeIyOFxw=";
-				INFOPLIST_KEY_SURequireSignedFeed = YES;
-				INFOPLIST_KEY_SUScheduledCheckInterval = 86400;
-				INFOPLIST_KEY_SUSignedFeedFailureExpirationInterval = 0;
-				INFOPLIST_KEY_SUVerifyUpdateBeforeExtraction = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

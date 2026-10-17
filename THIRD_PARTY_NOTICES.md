@@ -1,5 +1,18 @@
 # Third-Party Notices
 
+## Sparkle 2.10.0
+
+Capricorn uses the unmodified Sparkle framework for signed app updates.
+
+- Project and source: <https://github.com/sparkle-project/Sparkle/tree/2.10.0>
+- Pinned dependency: Sparkle 2.10.0, recorded in Xcode's `Package.resolved`.
+- Complete upstream license and bundled component notices:
+  `ThirdParty/Sparkle/LICENSE`, also included in the App at
+  `Contents/Resources/Sparkle/LICENSE`.
+
+The full notice includes Sparkle's MIT license and the BSD and other licenses
+for its included components. Preserve the complete notice when redistributing.
+
 ## smartmontools 7.5
 
 Capricorn includes the `smartctl` executable and `drivedb.h` from smartmontools

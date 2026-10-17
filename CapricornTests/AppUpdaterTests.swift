@@ -5,6 +5,17 @@ import XCTest
 
 @MainActor
 final class AppUpdaterTests: XCTestCase {
+    func testApplicationBundleContainsStrictSignedUpdateConfiguration() throws {
+        let info = try XCTUnwrap(Bundle(for: AppUpdater.self).infoDictionary)
+        let configuration = try AppUpdateConfiguration(info: info)
+        XCTAssertEqual(configuration.feedURL.scheme, "https")
+        XCTAssertEqual(info["SURequireSignedFeed"] as? Bool, true)
+        XCTAssertEqual(info["SUVerifyUpdateBeforeExtraction"] as? Bool, true)
+        XCTAssertEqual(info["SUSignedFeedFailureExpirationInterval"] as? Int, 0)
+        XCTAssertEqual(info["SUEnableSystemProfiling"] as? Bool, false)
+        XCTAssertEqual(info["SUAutomaticallyUpdate"] as? Bool, false)
+    }
+
     func testConfigurationRejectsInsecureFeedsAndInvalidKeys() throws {
         let key = Data(repeating: 1, count: 32).base64EncodedString()
         for feed in ["http://example.com/appcast.xml", "file:///tmp/appcast.xml", "https://user:pass@example.com/appcast.xml"] {
