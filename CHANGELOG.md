@@ -8,6 +8,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V2.10.3 - 2026-10-17
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.10.3) | [Release Notes / 发布说明](docs/releases/v2.10.3.md)
+
+### 中文
+
+- 更新检查、结果和错误提示采用统一的紧凑中文窗口，内容居中，按句子换行。
+- 启动检查 15 秒无结果自动结束，可在下次启动或手动重试；修复等待圈残留与确认按钮无响应。
+- 设置标题与更新状态布局更清晰；应用菜单和设置新增第三方许可入口。
+
+### English
+
+- Unifies update progress, results, and errors in compact localized prompts with centered content and sentence-aware line breaks.
+- Ends unanswered launch checks after 15 seconds until the next launch or manual retry; fixes lingering spinners and unresponsive confirmation buttons.
+- Clarifies the settings title and update status layout, and adds third-party license access in the application menu and Settings.
+
 ## V2.10.2 - 2026-10-17
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.10.2) | [Release Notes / 发布说明](docs/releases/v2.10.2.md)
