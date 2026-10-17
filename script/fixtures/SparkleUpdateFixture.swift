@@ -64,35 +64,68 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                 container.mainContext.insert(UpdateFixtureHistory(marker: "history-before-update"))
                 try container.mainContext.save()
             }
-            if scenario == "conflict" { conflicts = [.benchmark] }
+            let usesLaunchCheck = ["automatic", "launch-checks", "launch-disabled", "launch-conflict"].contains(scenario)
+            let defaults = UserDefaults.standard
+            if scenario == "launch-checks" {
+                if !FileManager.default.fileExists(atPath: root.appendingPathComponent("first-launch-result.json").path) {
+                    defaults.removeObject(forKey: AppUpdater.PreferenceKey.checksOnLaunch)
+                    defaults.set(true, forKey: AppUpdater.PreferenceKey.legacyAutomaticChecks)
+                }
+                // A recent attempt must not suppress the next process's launch check.
+                defaults.set(Date(), forKey: AppUpdater.PreferenceKey.lastCheck)
+                defaults.set(false, forKey: AppUpdater.PreferenceKey.automaticDownloads)
+            } else if usesLaunchCheck {
+                defaults.set(scenario != "launch-disabled", forKey: AppUpdater.PreferenceKey.checksOnLaunch)
+                defaults.set(true, forKey: AppUpdater.PreferenceKey.legacyAutomaticChecks)
+                defaults.set(scenario == "automatic", forKey: AppUpdater.PreferenceKey.automaticDownloads)
+            }
+            if scenario == "conflict" || scenario == "launch-conflict" { conflicts = [.benchmark] }
             let safety = AppUpdateSafetyGate(
                 conflicts: { [weak self] in self?.conflicts ?? [.diskCommand] },
                 save: { try container.mainContext.save() }
             )
             let owner = AppUpdater(
-                safety: safety, language: { .english }, allowsStartup: false,
+                safety: safety, language: { .english }, allowsStartup: usesLaunchCheck,
                 presentAlert: { [weak self] title, detail in
                     self?.finish(["result": "blocked", "title": title, "detail": detail, "build": build])
                 }
             )
             self.owner = owner
-            guard owner.authorizeUpdate() else { return }
-            let standard = AutomatedFixtureUserDriver { [weak self] error in
-                self?.finish(["result": "unexpected", "detail": error])
-            }
-            let driver = GuardedUpdateUserDriver(standard: standard, owner: owner)
-            let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: owner)
-            self.updater = updater
-            try updater.start()
-            if scenario == "automatic" {
-                updater.checkForUpdatesInBackground()
+            if usesLaunchCheck {
+                let enabledBeforeLaunch = owner.automaticallyChecksForUpdates
+                owner.applicationDidLaunch()
+                owner.applicationDidLaunch() // Repeated scene tasks must not duplicate a check.
+                if scenario == "launch-disabled" {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                        self?.finish(["result": "disabled", "enabledBeforeLaunch": enabledBeforeLaunch, "started": owner.isStarted])
+                    }
+                }
                 timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
                     MainActor.assumeIsolated {
-                        guard let self, self.owner?.hasPendingInstallation == true else { return }
-                        NSApp.terminate(nil)
+                        guard let self, let owner = self.owner else { return }
+                        if self.scenario == "automatic", owner.hasPendingInstallation {
+                            NSApp.terminate(nil)
+                        } else if self.scenario == "launch-checks", case .available = owner.state, owner.canCheckForUpdates {
+                            self.finish([
+                                "result": "checked", "enabledBeforeLaunch": enabledBeforeLaunch,
+                                "savedChoice": UserDefaults.standard.bool(forKey: AppUpdater.PreferenceKey.checksOnLaunch),
+                                "timerEnabled": UserDefaults.standard.bool(forKey: AppUpdater.PreferenceKey.legacyAutomaticChecks),
+                                "build": build
+                            ])
+                        }
                     }
                 }
             } else {
+                guard owner.authorizeUpdate() else { return }
+                let standard = AutomatedFixtureUserDriver { [weak self] error in
+                    self?.finish(["result": "unexpected", "detail": error])
+                }
+                let driver = GuardedUpdateUserDriver(standard: standard, owner: owner)
+                let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: owner)
+                self.updater = updater
+                updater.automaticallyChecksForUpdates = false
+                updater.automaticallyDownloadsUpdates = false
+                try updater.start()
                 updater.checkForUpdates()
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 40) { [weak self] in

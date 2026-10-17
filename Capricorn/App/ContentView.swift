@@ -12,6 +12,7 @@ private struct VirtualDiskEditor: Identifiable {
 }
 
 struct ContentView: View {
+    private var onStartupCompleted: (() -> Void)?
     @State private var viewModel: AppModel
     @State private var preferences: AppPreferences
     @State private var showsDiskCheckReport = false
@@ -46,9 +47,10 @@ struct ContentView: View {
     }
 
     @MainActor
-    init(viewModel: AppModel, preferences: AppPreferences) {
+    init(viewModel: AppModel, preferences: AppPreferences, onStartupCompleted: (() -> Void)? = nil) {
         _viewModel = State(initialValue: viewModel)
         _preferences = State(initialValue: preferences)
+        self.onStartupCompleted = onStartupCompleted
     }
 
     private var language: AppLanguage {
@@ -138,6 +140,7 @@ struct ContentView: View {
             viewModel.startDriveSystemEventMonitoring()
             await viewModel.refreshIfNeeded()
             restoreDiskCheckReports()
+            onStartupCompleted?()
         }
         .task(id: preferences.automaticRefreshInterval) {
             guard ApplicationRuntime.allowsAutomaticStartupTasks else { return }

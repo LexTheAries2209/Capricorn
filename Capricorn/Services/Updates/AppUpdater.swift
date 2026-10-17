@@ -6,6 +6,13 @@ import Sparkle
 @MainActor
 @Observable
 final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandardUserDriverDelegate {
+    enum PreferenceKey {
+        static let checksOnLaunch = "checksForUpdatesOnLaunch"
+        static let legacyAutomaticChecks = "SUEnableAutomaticChecks"
+        static let automaticDownloads = "SUAutomaticallyUpdate"
+        static let lastCheck = "SULastCheckTime"
+    }
+
     private(set) var state: AppUpdaterState = .idle
     private(set) var canCheckForUpdates = false
     private(set) var automaticallyChecksForUpdates = false
@@ -22,16 +29,19 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     @ObservationIgnored private let language: () -> AppLanguage
     @ObservationIgnored private let hostBundle: Bundle
     @ObservationIgnored private let allowsStartup: Bool
+    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let presentAlert: ((String, String) -> Void)?
     @ObservationIgnored private var isShowingAlert = false
     @ObservationIgnored private var hasAttemptedStart = false
     @ObservationIgnored private var postponedRelaunch: (() -> Void)?
+    @ObservationIgnored private var hasHandledApplicationLaunch = false
 
     init(
         safety: AppUpdateSafetyGate,
         language: @escaping () -> AppLanguage,
         hostBundle: Bundle = .main,
         allowsStartup: Bool = ApplicationRuntime.allowsAutomaticStartupTasks,
+        defaults: UserDefaults = .standard,
         presentAlert: ((String, String) -> Void)? = nil
     ) {
         self.safety = safety
@@ -39,6 +49,12 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         nativeLanguage = language()
         self.hostBundle = hostBundle
         self.allowsStartup = allowsStartup
+        self.defaults = defaults
+        // Read saved choices before creating Sparkle, including in Debug and with an invalid feed.
+        automaticallyChecksForUpdates = defaults.object(forKey: PreferenceKey.checksOnLaunch) as? Bool
+            ?? defaults.object(forKey: PreferenceKey.legacyAutomaticChecks) as? Bool ?? false
+        automaticallyDownloadsUpdates = defaults.bool(forKey: PreferenceKey.automaticDownloads)
+        lastCheckedAt = defaults.object(forKey: PreferenceKey.lastCheck) as? Date
         self.presentAlert = presentAlert
         super.init()
     }
@@ -56,16 +72,20 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
             let updater = SPUUpdater(hostBundle: hostBundle, applicationBundle: hostBundle, userDriver: driver, delegate: self)
             userDriver = driver
             self.updater = updater
+            // Migrate consent before disabling Sparkle's independent timer. Only the app schedules checks.
+            defaults.set(automaticallyChecksForUpdates, forKey: PreferenceKey.checksOnLaunch)
+            updater.automaticallyChecksForUpdates = false
+            updater.automaticallyDownloadsUpdates = automaticallyDownloadsUpdates
             try updater.start()
             isStarted = true
             observations = [
                 updater.observe(\.canCheckForUpdates, options: [.new]) { [weak self] _, _ in
                     Task { @MainActor [weak self] in self?.synchronizeSettings() }
                 },
-                updater.observe(\.automaticallyChecksForUpdates, options: [.new]) { [weak self] _, _ in
+                updater.observe(\.automaticallyDownloadsUpdates, options: [.new]) { [weak self] _, _ in
                     Task { @MainActor [weak self] in self?.synchronizeSettings() }
                 },
-                updater.observe(\.automaticallyDownloadsUpdates, options: [.new]) { [weak self] _, _ in
+                updater.observe(\.lastUpdateCheckDate, options: [.new]) { [weak self] _, _ in
                     Task { @MainActor [weak self] in self?.synchronizeSettings() }
                 }
             ]
@@ -73,6 +93,15 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         } catch {
             state = .failed(.configuration)
         }
+    }
+
+    func applicationDidLaunch() {
+        guard !hasHandledApplicationLaunch else { return }
+        hasHandledApplicationLaunch = true
+        guard allowsStartup, automaticallyChecksForUpdates, authorizeUpdate() else { return }
+        start()
+        guard let updater, isStarted, updater.canCheckForUpdates else { return }
+        updater.checkForUpdatesInBackground()
     }
 
     func checkNow() {
@@ -93,13 +122,18 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     }
 
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
-        updater?.automaticallyChecksForUpdates = enabled
-        synchronizeSettings()
+        defaults.set(enabled, forKey: PreferenceKey.checksOnLaunch)
+        automaticallyChecksForUpdates = enabled
     }
 
     func setAutomaticallyDownloadsUpdates(_ enabled: Bool) {
-        updater?.automaticallyDownloadsUpdates = enabled
-        synchronizeSettings()
+        if let updater {
+            updater.automaticallyDownloadsUpdates = enabled
+            synchronizeSettings()
+        } else {
+            defaults.set(enabled, forKey: PreferenceKey.automaticDownloads)
+            automaticallyDownloadsUpdates = enabled
+        }
     }
 
     func conflictsDidChange() {
@@ -240,12 +274,11 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     private func synchronizeSettings() {
         guard let updater else { return }
         canCheckForUpdates = updater.canCheckForUpdates
-        automaticallyChecksForUpdates = updater.automaticallyChecksForUpdates
         automaticallyDownloadsUpdates = updater.automaticallyDownloadsUpdates
         lastCheckedAt = updater.lastUpdateCheckDate
     }
 
-    // Sparkle calls these for scheduled checks too, including background downloads.
+    // Launch checks and manual checks share these guards, including background downloads.
     func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
         guard authorizeUpdate() else { throw blockedNSError() }
         state = .checking

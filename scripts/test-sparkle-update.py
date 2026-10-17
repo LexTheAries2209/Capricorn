@@ -25,7 +25,10 @@ def run(*args, **kwargs):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sparkle-root", required=True, type=pathlib.Path)
-    parser.add_argument("--scenario", choices=["update", "automatic", "conflict", "archive-signature", "feed-signature", "missing-feed"], default="update")
+    parser.add_argument("--scenario", choices=[
+        "update", "automatic", "conflict", "archive-signature", "feed-signature", "missing-feed",
+        "launch-checks", "launch-disabled", "launch-conflict"
+    ], default="update")
     options = parser.parse_args()
     repo = pathlib.Path(__file__).resolve().parents[1]
     tools = options.sparkle_root.resolve()
@@ -49,7 +52,14 @@ def main():
         ]), "-o", str(executable))
     feed_dir = root / "feed"
     feed_dir.mkdir()
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(feed_dir))
+    requests = []
+
+    class RecordingHandler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            requests.append(self.path)
+            super().do_GET()
+
+    handler = functools.partial(RecordingHandler, directory=str(feed_dir))
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     base_url = f"http://127.0.0.1:{server.server_port}/"
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -74,7 +84,8 @@ def main():
                 "SUVerifyUpdateBeforeExtraction": True,
                 "SURequireSignedFeed": True,
                 "SUSignedFeedFailureExpirationInterval": 0,
-                "SUEnableAutomaticChecks": options.scenario == "automatic",
+                "SUEnableAutomaticChecks": False,
+                "SUAllowsAutomaticUpdates": True,
                 "SUAutomaticallyUpdate": options.scenario == "automatic",
                 "SUEnableSystemProfiling": False,
                 "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},
@@ -127,14 +138,39 @@ def main():
                     run("kill", "-TERM", pid)
             raise RuntimeError(f"No fixture result; artifacts retained at {root}")
         result = json.loads(result_path.read_text())
-        print(json.dumps({"scenario": options.scenario, "artifacts": str(root), **result}, indent=2))
+        if options.scenario == "launch-checks":
+            assert result["result"] == "checked" and result["enabledBeforeLaunch"], result
+            assert result["savedChoice"] and not result["timerEnabled"], result
+            assert requests.count("/appcast.xml") == 1, requests
+            shutil.move(result_path, root / "first-launch-result.json")
+            run(*launch)
+            deadline = time.monotonic() + 45
+            while time.monotonic() < deadline and not result_path.exists():
+                time.sleep(0.2)
+            if not result_path.exists():
+                raise RuntimeError(f"No second launch result; artifacts retained at {root}")
+            result = json.loads(result_path.read_text())
+            assert result["result"] == "checked" and result["enabledBeforeLaunch"], result
+            assert result["savedChoice"] and not result["timerEnabled"], result
+            assert requests.count("/appcast.xml") == 2, requests
+        print(json.dumps({
+            "scenario": options.scenario, "artifacts": str(root),
+            "feedRequests": requests.count("/appcast.xml"), **result
+        }, indent=2))
         if options.scenario in ("update", "automatic"):
             assert result["result"] == "updated", result
             assert result["historyRetained"] and result["preferencesRetained"], result
+        elif options.scenario == "launch-checks":
+            assert result["build"] == "1000", result
+        elif options.scenario == "launch-disabled":
+            assert result["result"] == "disabled", result
+            assert not result["enabledBeforeLaunch"] and not result["started"], result
+            assert not requests, requests
         else:
             assert result["result"] == "blocked" and result["build"] == "1000", result
-            if options.scenario == "conflict":
+            if options.scenario in ("conflict", "launch-conflict"):
                 assert "Benchmark" in result["detail"], result
+                assert not requests, requests
             elif options.scenario == "missing-feed":
                 assert "confirm the update files are available" in result["detail"], result
                 assert "could not be reached" not in result["detail"], result

@@ -14,12 +14,9 @@ struct AppUpdateSettingsSection: View {
                 LabeledContent(language.t("Build"), value: build)
             }
 
-            Toggle(language.t("Automatically check for updates"), isOn: Binding(
+            Toggle(language.t("Check for updates on launch"), isOn: Binding(
                 get: { updateChecker.automaticallyChecksForUpdates },
-                set: {
-                    updateChecker.start()
-                    updateChecker.setAutomaticallyChecksForUpdates($0)
-                }
+                set: { updateChecker.setAutomaticallyChecksForUpdates($0) }
             ))
             Toggle(language.t("Automatically download and install on quit"), isOn: Binding(
                 get: { updateChecker.automaticallyDownloadsUpdates },

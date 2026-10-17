@@ -18,7 +18,9 @@
     <false/>
     <key>SUAutomaticallyUpdate</key>
     <false/>
-    <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
+    <key>SUAllowsAutomaticUpdates</key>
+    <true/>
 </dict>
 </plist>

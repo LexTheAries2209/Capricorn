@@ -9,7 +9,7 @@
 - 已锁定 Sparkle 2.10.0，通过单一更新器接管菜单与设置入口；设置页出现不再主动检查。
 - 营销版本迁移为完整 `2.10.1`，内部构建号迁移为 `1000`；这是开发分支元数据，并未发布同名新 Release。
 - 保持 App 产物固定名 `Capricorn.app` 和 bundle ID `lex.Capricorn`。
-- 自动检查与自动下载/退出时安装均可选，自动安装默认关闭；后台更新采用温和提醒，菜单显示可用版本。
+- 自动检查现已改为用户启用后每次启动检查一次，不再按时间间隔检查。自动下载/退出时安装另行选择，默认关闭；后台更新采用温和提醒，菜单显示可用版本。
 - 任何冲突任务均弹窗并阻止更新检查或安装，不会强行停止磁盘任务；已下载更新在退出时仍需通过冲突与保存检查。手动下载期间出现冲突会取消下载。后台自动下载可能已取得部分或全部字节，但不能因此越过安装和退出检查。
 - 安装获准后禁止新磁盘任务进入，并保存主 SwiftData context；保存失败会释放安装占用并拒绝退出。
 - 拦截安装确认回复和恢复安装路径，使用 AppKit 应用退出代理覆盖退出时安装，不能只依赖 relaunch 代理。
@@ -31,12 +31,29 @@
 | 确认窗口出现后才开始冲突任务 | 单元测试验证安装回复被转换为取消，不占用安装许可 |
 | 自动更新已准备后出现冲突 | 单元测试验证提示并拒绝更新退出 |
 | 保存失败 | 单元测试验证拒绝安装、释放占用 |
+| 连续两次启动 | 即使上次检查时间刚更新，每个进程仍恰好请求一次清单；同一进程重复启动回调不重复请求 |
+| 关闭启动检查 | 即使旧 Sparkle 开关曾开启，仍不启动更新器或请求清单 |
+| 启动时有冲突 | 弹出阻止提示，零网络请求 |
 
 验证环境为本机 Apple silicon。安装测试使用无 Hardened Runtime 的 ad-hoc 测试 App，不证明 Developer ID、公证、隔离下载、Intel 或 macOS 14 真机上的安装行为；正式发布前仍需补齐这些验证。业务数据库已有测试在正常测试套件中回归，安装测试不等于对真实用户数据库进行了迁移演练。
 
 生产 Ed25519 私钥已保存在登录 Keychain 的 `lex.Capricorn` 账号中，公钥嵌入 App。没有将生产私钥导出为文件；其备份和恢复演练尚未完成。测试工具首次访问 Keychain 的等待通过独立测试密钥避开，正式发布签名工具仍可能需要用户在系统 Keychain 提示中授权。
 
 配置的稳定 feed 地址是 GitHub Releases 的 `releases/latest/download/appcast.xml`。当前公开 Release 尚无该附件，且本次未上传、推送或发布任何资源。功能代码与本地升级链验证不能描述为现有用户已经能够在线自动更新。首个正式集成版仍需手动安装一次。
+
+### 启动检查与偏好持久化
+
+2026-10-17 后续调整以本节为准，替代原计划中的每日定时检查和 Sparkle 默认询问机制。
+
+- 设置改名为“启动时自动检查更新”，默认关闭。开关在 `AppUpdater` 初始化时读取，修改时立即保存，不再依赖更新器启动来加载或写入，因此 Debug 下重新打开应用也能正确显示。
+- 应用完成首次磁盘刷新后调用启动检查，每个进程只处理一次；重复打开窗口不会再查。开启后的下次启动会检查，不依据 `SULastCheckTime` 或 24 小时间隔；本次打开设置或修改开关不会发起网络请求。
+- Release 和 Debug 均遵循已保存的显式选择；测试、演示及禁用启动任务的环境仍不自动联网。手动检查不受启动检查开关限制。
+- 新键 `checksForUpdatesOnLaunch` 表示应用自管的启动检查。没有该键时读取原 `SUEnableAutomaticChecks` 的用户选择，首次启动更新器时先保存迁移值，再关闭 Sparkle 的定时调度；迁移后新选择优先。
+- `SUEnableAutomaticChecks=NO` 禁用 Sparkle 自身的定时器和默认许可询问，移除 `SUScheduledCheckInterval`。`SUAllowsAutomaticUpdates=YES` 保留用户另行开启自动下载的能力，不代表默认启用；下载偏好继续使用 `SUAutomaticallyUpdate`，默认关闭。
+- 上次检查时间在更新器未启动时也能加载，仅供显示，不决定是否检查。有冲突仍提示并阻止，本次启动不会在任务结束后自动补查；可手动重试。
+- “重置所有设置”会关闭启动检查与自动下载。
+
+增量验证：21 项更新、冲突、设置导航和翻译测试通过，无失败、无跳过，严格并发构建与 Swift 6 构建通过；Swift 6 仍有原有 `init(cString:)` 弃用警告。独立测试 App 验证连续两次启动共两次清单请求、关闭时零请求、冲突时零请求，以及手动完整更新、启动检查后的自动下载/退出安装两条路径；两条安装路径均为 Build 1000 → 1001，测试历史与偏好保留。没有发布公开更新源。
 
 ### 系统代理与网络诊断
 
@@ -60,7 +77,7 @@ Sparkle 不为 HTTP 失败提供结构化状态码，而是同样使用 `SUDownl
 
 官方依据：[Sparkle 2.10.0 下载器](https://github.com/sparkle-project/Sparkle/blob/2.10.0/Downloader/SPUDownloader.m)；[Apple connectionProxyDictionary](https://developer.apple.com/documentation/foundation/urlsessionconfiguration/connectionproxydictionary)。
 
-P0–P2 初始实现的本地验证记录（代理诊断增量验证见上节）：
+P0–P2 初始实现的本地验证记录（后续增量验证见上述各节）：
 
 - 最终全量测试：439 项通过，无失败、无跳过。
 - 严格并发与 Swift 6 兼容构建通过；Swift 6 保留原有 `init(cString:)` 弃用警告。
@@ -79,6 +96,9 @@ python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenar
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario archive-signature
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario feed-signature
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario missing-feed
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario launch-checks
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario launch-disabled
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario launch-conflict
 ```
 
 正式发布必须继续保持三段营销版本和全局递增 Build。发布准备脚本的 `--previous-build` 必须传入上一个已发布构建号；脚本会拒绝相同或倒退的构建。`--download-url-prefix` 指向即将发布的固定版本附件目录，输出目录必须尚不存在。首次使用生产签名工具前先处理 Keychain 授权并完成密钥备份。发布准备脚本本轮仅完成静态检查及拒绝路径验证，没有调用生产私钥生成正式更新产物。
@@ -136,7 +156,7 @@ python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenar
 - 设置页出现不再强制触发检查；菜单的“检查更新”直接进入 Sparkle 的用户主动检查流程。
 - GitHub API 路径只保留明确用途，例如仍在维护的旧版或开发构建；线上稳定版不同时启用两套更新调度。
 - 对测试和演示构建沿用 `ApplicationRuntime` 的启动任务隔离；调试构建默认不访问正式更新源。
-- Sparkle 的偏好直接绑定其已有持久化属性，不在 `AppPreferences` 再维护一份冲突的开关。[S3][S5]
+- 原计划将偏好直接绑定 Sparkle；后续已改为应用控制启动检查，迁移与调度方式见“启动检查与偏好持久化”。下载偏好仍复用 Sparkle 的存储键与启动后的 API。[S3][S5]
 
 ### 2. 版本和应用身份
 

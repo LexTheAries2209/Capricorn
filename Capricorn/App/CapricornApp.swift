@@ -45,13 +45,12 @@ struct CapricornApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(viewModel: viewModel, preferences: preferences)
+            ContentView(viewModel: viewModel, preferences: preferences, onStartupCompleted: {
+                updateChecker.applicationDidLaunch()
+            })
                 .frame(minWidth: 1050, minHeight: 680)
                 .task {
                     appDelegate.updater = updateChecker
-                    #if !DEBUG
-                    updateChecker.start()
-                    #endif
                 }
                 .onChange(of: viewModel.appUpdateConflicts) {
                     updateChecker.conflictsDidChange()

@@ -14,6 +14,116 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertEqual(info["SUSignedFeedFailureExpirationInterval"] as? Int, 0)
         XCTAssertEqual(info["SUEnableSystemProfiling"] as? Bool, false)
         XCTAssertEqual(info["SUAutomaticallyUpdate"] as? Bool, false)
+        XCTAssertEqual(info["SUEnableAutomaticChecks"] as? Bool, false)
+        XCTAssertEqual(info["SUAllowsAutomaticUpdates"] as? Bool, true)
+        XCTAssertNil(info["SUScheduledCheckInterval"])
+    }
+
+    func testSavedUpdateChoicesLoadAndPersistWithoutStartingSparkle() throws {
+        let suite = "CapricornTests.updateChoices.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let makeUpdater = {
+            AppUpdater(safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+                       allowsStartup: false, defaults: defaults)
+        }
+        let updater = makeUpdater()
+        XCTAssertFalse(updater.automaticallyChecksForUpdates)
+        XCTAssertFalse(updater.automaticallyDownloadsUpdates)
+        updater.setAutomaticallyChecksForUpdates(true)
+        updater.setAutomaticallyDownloadsUpdates(true)
+        let previousCheck = Date()
+        defaults.set(previousCheck, forKey: AppUpdater.PreferenceKey.lastCheck)
+
+        let reopened = makeUpdater()
+        XCTAssertTrue(reopened.automaticallyChecksForUpdates)
+        XCTAssertTrue(reopened.automaticallyDownloadsUpdates)
+        XCTAssertEqual(reopened.lastCheckedAt, previousCheck)
+        XCTAssertFalse(reopened.isStarted)
+        reopened.applicationDidLaunch()
+        XCTAssertFalse(reopened.isStarted, "Test startup isolation must still prevent network requests")
+
+        reopened.setAutomaticallyChecksForUpdates(false)
+        reopened.setAutomaticallyDownloadsUpdates(false)
+        XCTAssertFalse(makeUpdater().automaticallyChecksForUpdates)
+        XCTAssertFalse(makeUpdater().automaticallyDownloadsUpdates)
+    }
+
+    func testLegacyAutomaticCheckConsentIsPreservedAndNewChoiceTakesPriority() throws {
+        let suite = "CapricornTests.updateConsent.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for legacyConsent in [true, false] {
+            defaults.removeObject(forKey: AppUpdater.PreferenceKey.checksOnLaunch)
+            defaults.set(legacyConsent, forKey: AppUpdater.PreferenceKey.legacyAutomaticChecks)
+            let updater = AppUpdater(
+                safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+                allowsStartup: false, defaults: defaults
+            )
+            XCTAssertEqual(updater.automaticallyChecksForUpdates, legacyConsent)
+            updater.setAutomaticallyChecksForUpdates(!legacyConsent)
+            let reopened = AppUpdater(
+                safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+                allowsStartup: false, defaults: defaults
+            )
+            XCTAssertEqual(reopened.automaticallyChecksForUpdates, !legacyConsent)
+        }
+    }
+
+    func testLaunchCheckWithConflictWarnsOnlyOnceAndDoesNotRetryWhenTasksFinish() throws {
+        let suite = "CapricornTests.updateLaunchConflict.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: AppUpdater.PreferenceKey.checksOnLaunch)
+        var conflicts: [AppUpdateConflict] = [.benchmark]
+        var alerts = 0
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { conflicts }), language: { .english },
+            allowsStartup: true, defaults: defaults, presentAlert: { _, _ in alerts += 1 }
+        )
+        updater.applicationDidLaunch()
+        updater.applicationDidLaunch()
+        XCTAssertEqual(alerts, 1)
+        XCTAssertEqual(updater.state, .blocked([.benchmark]))
+        conflicts = []
+        updater.applicationDidLaunch()
+        XCTAssertFalse(updater.isStarted)
+    }
+
+    func testDisabledLaunchDoesNotStartUpdaterAndManualCheckRemainsAvailable() throws {
+        let suite = "CapricornTests.updateLaunchDisabled.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var alerts = 0
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [.workload] }), language: { .english },
+            allowsStartup: true, defaults: defaults, presentAlert: { _, _ in alerts += 1 }
+        )
+        updater.applicationDidLaunch()
+        XCTAssertFalse(updater.isStarted)
+        XCTAssertEqual(alerts, 0)
+        updater.checkNow()
+        XCTAssertEqual(alerts, 1)
+        XCTAssertEqual(updater.state, .blocked([.workload]))
+    }
+
+    func testResetAllSettingsClearsLaunchCheckAndDownloadChoices() throws {
+        let suite = "CapricornTests.updateReset.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            allowsStartup: false, defaults: defaults
+        )
+        updater.setAutomaticallyChecksForUpdates(true)
+        updater.setAutomaticallyDownloadsUpdates(true)
+        AppPreferences(defaults: defaults).resetAllSettings()
+        let reopened = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            allowsStartup: false, defaults: defaults
+        )
+        XCTAssertFalse(reopened.automaticallyChecksForUpdates)
+        XCTAssertFalse(reopened.automaticallyDownloadsUpdates)
     }
 
     func testConfigurationRejectsInsecureFeedsAndInvalidKeys() throws {
