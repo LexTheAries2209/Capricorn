@@ -70,7 +70,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             let noun = safeCount == 1 ? "error" : "errors"
             return "The controller reports \(safeCount) historical \(noun), but the error report could not be retrieved."
         case .simplifiedChinese:
-            return "控制器记录了 \(safeCount) 条历史错误，但无法获取错误报告。"
+            return "控制器记录了 \(safeCount) 条历史错误，\n但无法获取错误报告。"
         }
     }
 
