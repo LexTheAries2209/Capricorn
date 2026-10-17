@@ -31,7 +31,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     @ObservationIgnored private let allowsStartup: Bool
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let presentAlert: ((String, String) -> Void)?
-    @ObservationIgnored private var isShowingAlert = false
+    @ObservationIgnored private let promptPresenter: any AppUpdatePromptPresenting
     @ObservationIgnored private var hasAttemptedStart = false
     @ObservationIgnored private var postponedRelaunch: (() -> Void)?
     @ObservationIgnored private var hasHandledApplicationLaunch = false
@@ -42,7 +42,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         hostBundle: Bundle = .main,
         allowsStartup: Bool = ApplicationRuntime.allowsAutomaticStartupTasks,
         defaults: UserDefaults = .standard,
-        presentAlert: ((String, String) -> Void)? = nil
+        presentAlert: ((String, String) -> Void)? = nil,
+        promptPresenter: (any AppUpdatePromptPresenting)? = nil
     ) {
         self.safety = safety
         self.language = language
@@ -56,6 +57,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         automaticallyDownloadsUpdates = defaults.bool(forKey: PreferenceKey.automaticDownloads)
         lastCheckedAt = defaults.object(forKey: PreferenceKey.lastCheck) as? Date
         self.presentAlert = presentAlert
+        self.promptPresenter = promptPresenter ?? AppUpdatePromptController()
         super.init()
     }
 
@@ -144,6 +146,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         } catch {
             guard userDriver?.cancelDownload != nil || updater?.sessionInProgress == true || hasPendingInstallation else { return }
             userDriver?.cancelActiveDownload()
+            userDriver?.cancelActiveCheck()
             if let blocked = error as? AppUpdateBlockedError, state == .blocked(blocked.conflicts) { return }
             reportBlocked(error)
         }
@@ -185,29 +188,74 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         downloadProgress = progress.map { min(1, max(0, $0)) }
     }
 
-    func showIssue(_ issue: AppUpdateIssue) {
-        state = .failed(issue)
-        showAlert(title: language().t("Update unavailable"), detail: language().t(issue.rawValue))
+    func showCheckingPrompt(cancellation: @escaping () -> Void) {
+        promptPresenter.show(AppUpdatePrompt(
+            windowTitle: language().t("Software Update"),
+            title: language().t("Checking for updates…"),
+            detail: "", buttonTitle: language().t("Cancel"), isChecking: true, belongsToUpdateSession: true
+        ), action: cancellation)
     }
 
-    func handleError(_ error: Error, showingAlert: Bool) {
+    func dismissCheckingPrompt() {
+        promptPresenter.dismissChecking()
+    }
+
+    func dismissPrompt() {
+        promptPresenter.dismissUpdateSession()
+    }
+
+    func showPromptInFocus() -> Bool {
+        promptPresenter.showInFocus()
+    }
+
+    func showCheckResult(_ error: Error, acknowledgement: @escaping () -> Void) {
+        if case .blocked = state {
+            acknowledgement()
+            return
+        }
+        state = .upToDate
+        let error = error as NSError
+        showAlert(
+            title: error.localizedDescription,
+            detail: error.localizedRecoverySuggestion ?? language().t("You are up to date."),
+            acknowledgement: acknowledgement, belongsToUpdateSession: true
+        )
+    }
+
+    func showIssue(
+        _ issue: AppUpdateIssue, acknowledgement: @escaping () -> Void = {},
+        belongsToUpdateSession: Bool = false
+    ) {
+        state = .failed(issue)
+        showAlert(title: language().t("Update unavailable"), detail: language().t(issue.rawValue),
+                  acknowledgement: acknowledgement, belongsToUpdateSession: belongsToUpdateSession)
+    }
+
+    func handleError(_ error: Error, showingAlert: Bool, acknowledgement: @escaping () -> Void = {}) {
         let nsError = error as NSError
-        if nsError.domain == "lex.Capricorn.UpdateBlocked" { return }
+        if nsError.domain == "lex.Capricorn.UpdateBlocked" {
+            acknowledgement()
+            return
+        }
         if (nsError.domain == NSURLErrorDomain && nsError.code == URLError.cancelled.rawValue)
             || (nsError.domain == SUSparkleErrorDomain && nsError.code == Int(SUError.installationCanceledError.rawValue)) {
             markPendingInstallation(false)
+            acknowledgement()
             if case .blocked = state { return }
             state = .idle
             return
         }
-        let issue = Self.issue(for: nsError)
         markPendingInstallation(false)
-        if showingAlert {
-            showIssue(issue)
-        } else if case .blocked = state {
+        if case .blocked = state {
+            acknowledgement()
             return
+        }
+        let issue = Self.issue(for: nsError)
+        if showingAlert {
+            showIssue(issue, acknowledgement: acknowledgement, belongsToUpdateSession: true)
         } else {
             state = .failed(issue)
+            acknowledgement()
         }
     }
 
@@ -251,24 +299,19 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         }
     }
 
-    private func showAlert(title: String, detail: String) {
+    private func showAlert(
+        title: String, detail: String, acknowledgement: @escaping () -> Void = {},
+        belongsToUpdateSession: Bool = false
+    ) {
         if let presentAlert {
             presentAlert(title, detail)
+            acknowledgement()
             return
         }
-        guard !isShowingAlert else { return }
-        isShowingAlert = true
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = title
-        alert.informativeText = detail
-        alert.addButton(withTitle: language().t("OK"))
-        if let window = NSApp.keyWindow ?? NSApp.mainWindow, window.attachedSheet == nil {
-            alert.beginSheetModal(for: window) { [weak self] _ in self?.isShowingAlert = false }
-        } else {
-            alert.runModal()
-            isShowingAlert = false
-        }
+        promptPresenter.show(AppUpdatePrompt(
+            windowTitle: language().t("Software Update"), title: title, detail: detail,
+            buttonTitle: language().t("OK"), isChecking: false, belongsToUpdateSession: belongsToUpdateSession
+        ), action: acknowledgement)
     }
 
     private func synchronizeSettings() {
@@ -293,6 +336,10 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+        if case .blocked = state {
+            synchronizeSettings()
+            return
+        }
         state = .upToDate
         synchronizeSettings()
     }

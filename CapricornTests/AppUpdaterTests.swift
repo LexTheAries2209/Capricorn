@@ -288,17 +288,136 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertEqual(detail, "无法下载更新。请检查网络或查看 Releases。")
         XCTAssertFalse(detail.contains("无法连接"))
     }
+
+    func testManualCheckAndResultUseSharedPresenterWithoutOpeningSparkleWindows() {
+        let presenter = RecordingUpdatePromptPresenter()
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .simplifiedChinese },
+            allowsStartup: false, promptPresenter: presenter
+        )
+        let standard = RecordingUpdateUserDriver()
+        let driver = GuardedUpdateUserDriver(standard: standard, owner: updater)
+        var cancellations = 0
+        driver.showUserInitiatedUpdateCheck { cancellations += 1 }
+        XCTAssertEqual(presenter.prompt?.title, "正在检查更新…")
+        XCTAssertEqual(presenter.prompt?.buttonTitle, "取消")
+        XCTAssertEqual(presenter.prompt?.windowTitle, "软件更新")
+        XCTAssertTrue(presenter.prompt?.isChecking == true)
+        XCTAssertEqual(standard.checkingWindows, 0)
+
+        var acknowledgements = 0
+        driver.showUpdateNotFoundWithError(NSError(
+            domain: SUSparkleErrorDomain, code: Int(SUError.noUpdateError.rawValue),
+            userInfo: [
+                NSLocalizedDescriptionKey: "当前已是最新版本。",
+                NSLocalizedRecoverySuggestionErrorKey: "Capricorn 2.10.2 是当前的最新版本。"
+            ]
+        )) { acknowledgements += 1 }
+        XCTAssertEqual(presenter.prompt?.title, "当前已是最新版本。")
+        XCTAssertEqual(presenter.prompt?.detail, "Capricorn 2.10.2 是当前的最新版本。")
+        XCTAssertEqual(presenter.prompt?.buttonTitle, "好")
+        XCTAssertFalse(presenter.prompt?.isChecking == true)
+        XCTAssertEqual(standard.resultWindows, 0)
+        XCTAssertEqual(cancellations, 0)
+        XCTAssertEqual(acknowledgements, 0)
+        XCTAssertNotNil(presenter.prompt, "A result waits for the user's acknowledgement")
+        presenter.respond()
+        XCTAssertEqual(acknowledgements, 1)
+        driver.dismissUpdateInstallation()
+        XCTAssertNil(presenter.prompt)
+        XCTAssertEqual(acknowledgements, 1)
+    }
+
+    func testCheckCancellationRunsOnceAndResetsCheckingState() {
+        let presenter = RecordingUpdatePromptPresenter()
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            allowsStartup: false, promptPresenter: presenter
+        )
+        let driver = GuardedUpdateUserDriver(standard: RecordingUpdateUserDriver(), owner: updater)
+        var cancellations = 0
+        driver.showUserInitiatedUpdateCheck { cancellations += 1 }
+        presenter.respond()
+        driver.cancelActiveCheck()
+        XCTAssertEqual(cancellations, 1)
+        XCTAssertEqual(updater.state, .idle)
+        XCTAssertNil(driver.cancelCheck)
+    }
+
+    func testErrorsAndConflictsUseSharedPresenterAndPreserveBlockedResult() {
+        let presenter = RecordingUpdatePromptPresenter()
+        var conflicts: [AppUpdateConflict] = []
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { conflicts }), language: { .simplifiedChinese },
+            allowsStartup: false, promptPresenter: presenter
+        )
+        let driver = GuardedUpdateUserDriver(standard: RecordingUpdateUserDriver(), owner: updater)
+        driver.showUserInitiatedUpdateCheck {}
+        var acknowledgements = 0
+        driver.showUpdaterError(URLError(.notConnectedToInternet)) { acknowledgements += 1 }
+        XCTAssertEqual(presenter.prompt?.title, "暂时无法更新")
+        XCTAssertEqual(presenter.prompt?.windowTitle, "软件更新")
+        XCTAssertFalse(presenter.prompt?.isChecking == true)
+        XCTAssertEqual(acknowledgements, 0)
+        presenter.respond()
+        XCTAssertEqual(acknowledgements, 1)
+
+        conflicts = [.benchmark]
+        XCTAssertFalse(updater.authorizeUpdate())
+        let blockedPrompt = presenter.prompt
+        driver.showUpdateNotFoundWithError(NSError(domain: SUSparkleErrorDomain, code: Int(SUError.noUpdateError.rawValue))) {
+            acknowledgements += 1
+        }
+        XCTAssertEqual(presenter.prompt, blockedPrompt, "A late result must not overwrite the conflict warning")
+        XCTAssertEqual(updater.state, .blocked([.benchmark]))
+        XCTAssertEqual(acknowledgements, 2)
+        driver.dismissUpdateInstallation()
+        XCTAssertEqual(presenter.prompt, blockedPrompt, "Sparkle must not close an app-owned conflict warning")
+    }
+}
+
+@MainActor
+private final class RecordingUpdatePromptPresenter: AppUpdatePromptPresenting {
+    var prompt: AppUpdatePrompt?
+    var action: (() -> Void)?
+    func show(_ prompt: AppUpdatePrompt, action: @escaping () -> Void) {
+        self.prompt = prompt
+        self.action = action
+    }
+    func dismissChecking() {
+        if prompt?.isChecking == true {
+            prompt = nil
+            action = nil
+        }
+    }
+    func dismissUpdateSession() {
+        guard prompt?.belongsToUpdateSession == true else { return }
+        if prompt?.isChecking == true {
+            dismissChecking()
+        } else {
+            respond()
+        }
+    }
+    func showInFocus() -> Bool { prompt != nil }
+    func respond() {
+        let response = action
+        action = nil
+        prompt = nil
+        response?()
+    }
 }
 
 @MainActor
 private final class RecordingUpdateUserDriver: NSObject, SPUUserDriver {
     var readyReply: ((SPUUserUpdateChoice) -> Void)?
+    var checkingWindows = 0
+    var resultWindows = 0
     func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) {}
-    func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {}
+    func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) { checkingWindows += 1 }
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {}
     func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {}
     func showUpdateReleaseNotesFailedToDownloadWithError(_ error: Error) {}
-    func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) {}
+    func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) { resultWindows += 1 }
     func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {}
     func showDownloadInitiated(cancellation: @escaping () -> Void) {}
     func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) {}

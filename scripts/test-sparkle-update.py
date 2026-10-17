@@ -49,7 +49,7 @@ def main():
         str(repo / "script/fixtures/SparkleUpdateFixture.swift"),
         *(str(sources / name) for name in [
             "AppUpdateSafety.swift", "AppUpdateConfiguration.swift",
-            "AppUpdater.swift", "GuardedUpdateUserDriver.swift"
+            "AppUpdatePromptController.swift", "AppUpdater.swift", "GuardedUpdateUserDriver.swift"
         ]), "-o", str(executable))
     feed_dir = root / "feed"
     feed_dir.mkdir()

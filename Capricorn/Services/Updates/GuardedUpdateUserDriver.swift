@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Sparkle
 
-/// Keep Sparkle's standard UI and installer, intercepting every install reply.
+/// Use one app-owned check/result prompt and keep Sparkle's update UI and installer.
 /// The updater delegate alone cannot veto all resume/installation paths.
 @MainActor
 final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     private let standard: SPUUserDriver
     private weak var owner: AppUpdater?
     private(set) var cancelDownload: (() -> Void)?
+    private(set) var cancelCheck: (() -> Void)?
     private var expectedLength: UInt64 = 0
     private var receivedLength: UInt64 = 0
 
@@ -19,6 +20,14 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     func cancelActiveDownload() {
         let cancellation = cancelDownload
         cancelDownload = nil
+        cancellation?()
+    }
+
+    func cancelActiveCheck() {
+        let cancellation = cancelCheck
+        cancelCheck = nil
+        owner?.dismissCheckingPrompt()
+        if owner?.state == .checking { owner?.transition(to: .idle) }
         cancellation?()
     }
 
@@ -34,10 +43,17 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
 
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {
         owner?.transition(to: .checking)
-        standard.showUserInitiatedUpdateCheck(cancellation: cancellation)
+        cancelCheck = cancellation
+        if let owner {
+            owner.showCheckingPrompt { [weak self] in self?.cancelActiveCheck() }
+        } else {
+            standard.showUserInitiatedUpdateCheck(cancellation: cancellation)
+        }
     }
 
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        cancelCheck = nil
+        owner?.dismissCheckingPrompt()
         // A prepared installer may survive the previous app process.
         if state.stage == .installing { owner?.markPendingInstallation(true) }
         guard owner?.authorizeUpdate() == true else {
@@ -67,14 +83,22 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     }
 
     func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) {
-        owner?.transition(to: .upToDate)
-        standard.showUpdateNotFoundWithError(error, acknowledgement: acknowledgement)
+        cancelCheck = nil
+        if let owner {
+            owner.showCheckResult(error, acknowledgement: acknowledgement)
+        } else {
+            standard.showUpdateNotFoundWithError(error, acknowledgement: acknowledgement)
+        }
     }
 
     func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {
+        cancelCheck = nil
         standard.dismissUpdateInstallation()
-        owner?.handleError(error, showingAlert: true)
-        acknowledgement()
+        if let owner {
+            owner.handleError(error, showingAlert: true, acknowledgement: acknowledgement)
+        } else {
+            acknowledgement()
+        }
     }
 
     func showDownloadInitiated(cancellation: @escaping () -> Void) {
@@ -142,11 +166,14 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
 
     func dismissUpdateInstallation() {
         cancelDownload = nil
+        cancelCheck = nil
+        owner?.dismissPrompt()
         standard.dismissUpdateInstallation()
         if owner?.hasPendingInstallation == false { owner?.safety.endInstallation() }
     }
 
     func showUpdateInFocus() {
+        if owner?.showPromptInFocus() == true { return }
         standard.showUpdateInFocus?()
     }
 }

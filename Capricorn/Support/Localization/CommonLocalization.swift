@@ -261,6 +261,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Switch feature pages in order": "按顺序切换功能页面",
         "Settings": "设置",
         "Updates": "更新",
+        "Software Update": "软件更新",
         "Build": "构建号",
         "Disk Check": "磁盘检查",
         "First Aid": "磁盘急救",
