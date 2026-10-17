@@ -118,8 +118,9 @@ struct VirtualDiskConfigurationSheet: View {
 
                 Section(language.t("Overview Values")) {
                     Picker(language.t("Health"), selection: $configuration.health) {
+                        Text(language.t("Automatic")).tag(nil as HealthStatus?)
                         ForEach(HealthStatus.allCases) { status in
-                            Text(language.healthTitle(status)).tag(status)
+                            Text(language.healthTitle(status)).tag(Optional(status))
                         }
                     }
                     metricField("Temperature", unit: "C", value: $configuration.temperature)

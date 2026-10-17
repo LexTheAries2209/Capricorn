@@ -4,6 +4,78 @@ import XCTest
 @testable import Capricorn
 
 final class VirtualDiskTests: XCTestCase {
+    func testAutomaticHealthIsDefaultAndUsesOverviewMetrics() throws {
+        var config = VirtualDiskConfiguration()
+        XCTAssertNil(config.health)
+        XCTAssertEqual(try config.makeDisk().snapshot.health, .good)
+
+        let cases: [(life: String, mediaErrors: String, expected: HealthStatus)] = [
+            ("100", "0", .good), ("21", "0", .good),
+            ("20", "0", .warning), ("11", "0", .warning),
+            ("10", "0", .preFail), ("1", "0", .preFail),
+            ("0", "0", .failed), ("100", "1", .preFail),
+            ("20", "1", .preFail), ("0", "1", .failed),
+            ("", "1", .preFail), ("", "", .good)
+        ]
+        for item in cases {
+            config.lifeRemaining = item.life
+            config.mediaErrors = item.mediaErrors
+            XCTAssertEqual(
+                try config.makeDisk().snapshot.health, item.expected,
+                "Life: \(item.life), media errors: \(item.mediaErrors)"
+            )
+        }
+    }
+
+    func testAutomaticHealthKeepsTemperatureAndUsageCountersSeparate() throws {
+        var config = VirtualDiskConfiguration()
+        config.powerOnHours = "100000"
+        config.powerCycleCount = "10000"
+        config.unsafeShutdowns = "1000"
+        for temperature in ["", "35", "70", "85"] {
+            config.temperature = temperature
+            XCTAssertEqual(try config.makeDisk().snapshot.health, .good, temperature)
+        }
+    }
+
+    func testManualHealthOverridesAutomaticEvaluationUntilAutomaticIsReselected() throws {
+        var config = VirtualDiskConfiguration()
+        config.lifeRemaining = "0"
+        config.mediaErrors = "1"
+        for status in HealthStatus.allCases {
+            config.health = status
+            XCTAssertEqual(try config.makeDisk().snapshot.health, status)
+        }
+        config.health = nil
+        XCTAssertEqual(try config.makeDisk().snapshot.health, .failed)
+    }
+
+    @MainActor
+    func testEditingAutomaticHealthRecalculatesAndPreservesSelection() throws {
+        let model = AppModel()
+        let drive = try model.addSimulatedDisk(VirtualDiskConfiguration())
+        var config = try XCTUnwrap(model.simulatedDiskConfiguration(for: drive.id))
+        XCTAssertNil(config.health)
+        XCTAssertEqual(model.snapshots[drive.id]?.health, .good)
+
+        config.lifeRemaining = "20"
+        try model.updateSimulatedDisk(drive.id, configuration: config)
+        XCTAssertEqual(model.snapshots[drive.id]?.health, .warning)
+        XCTAssertNil(model.simulatedDiskConfiguration(for: drive.id)?.health)
+
+        config.health = .good
+        config.lifeRemaining = "0"
+        try model.updateSimulatedDisk(drive.id, configuration: config)
+        XCTAssertEqual(model.snapshots[drive.id]?.health, .good)
+        XCTAssertEqual(model.simulatedDiskConfiguration(for: drive.id)?.health, .good)
+
+        config.health = nil
+        try model.updateSimulatedDisk(drive.id, configuration: config)
+        XCTAssertEqual(model.snapshots[drive.id]?.health, .failed)
+        XCTAssertNil(model.simulatedDiskConfiguration(for: drive.id)?.health)
+        XCTAssertEqual(model.selectedDriveID, drive.id)
+    }
+
     func testConfigurationBuildsOverviewWithoutRealStorageTargets() throws {
         var config = VirtualDiskConfiguration()
         config.name = "Preview SSD"

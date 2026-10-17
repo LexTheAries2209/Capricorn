@@ -66,7 +66,8 @@ struct VirtualDiskConfiguration: Sendable {
     var interface: VirtualDiskInterface = .nvme
     var blockSize = 512
     var partitions = [VirtualDiskPartition()]
-    var health: HealthStatus = .good
+    // A nil override uses the same health evaluation as physical disks.
+    var health: HealthStatus?
     var temperature = "35"
     var lifeRemaining = "100"
     var powerOnHours = "0"
@@ -145,8 +146,8 @@ struct VirtualDiskConfiguration: Sendable {
             model: model.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             serialNumber: serialNumber.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         )
-        let snapshot = SmartSnapshot(
-            driveID: drive.id, capturedAt: Date(), health: health,
+        var snapshot = SmartSnapshot(
+            driveID: drive.id, capturedAt: Date(), health: health ?? .unavailable,
             summary: "User-defined simulated disk",
             providerStatuses: [ProviderStatus(name: "Simulation", state: .available, message: "User-defined overview values")],
             attributes: [], temperatureCelsius: Double(temperature), lifeRemainingPercent: Int(lifeRemaining),
@@ -154,6 +155,9 @@ struct VirtualDiskConfiguration: Sendable {
             mediaErrors: Int64(mediaErrors), unsafeShutdowns: Int64(unsafeShutdowns),
             smartStatusRaw: nil, selfTestStatus: nil, selectedProvider: "Simulation"
         )
+        if health == nil {
+            snapshot.health = DriveHealthEvaluator().evaluate(drive: drive, snapshot: snapshot)
+        }
         return (drive, snapshot)
     }
 }
