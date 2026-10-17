@@ -27,6 +27,15 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         return Self.zhHans[key] ?? key
     }
 
+    func updateAvailableMessage(version: String) -> String {
+        switch self {
+        case .english:
+            "Update available: \(version). Click “Check for Updates” to download and install."
+        case .simplifiedChinese:
+            "有可用更新：\(version)，请点击“检查更新”下载并安装。"
+        }
+    }
+
     func diskOperationLockMessage(_ notice: DiskOperationLockNotice) -> String {
         if let failureMessage = notice.failureMessage {
             switch self {

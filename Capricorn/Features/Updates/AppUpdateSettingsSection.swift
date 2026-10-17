@@ -78,8 +78,9 @@ struct AppUpdateSettingsSection: View {
             Label(language.t(issue.rawValue), systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
         case .available(let version):
-            Label("\(language.t("Update available")): \(version)", systemImage: "arrow.down.circle.fill")
+            Label(language.updateAvailableMessage(version: version), systemImage: "arrow.down.circle.fill")
                 .foregroundStyle(.blue)
+                .fixedSize(horizontal: false, vertical: true)
         case .downloading:
             ProgressView(language.t("Downloading update…"), value: updateChecker.downloadProgress)
         case .extracting:
