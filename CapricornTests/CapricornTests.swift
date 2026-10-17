@@ -2732,7 +2732,7 @@ final class CapricornTests: XCTestCase {
     func testSmartErrorLogHistoricalCountMessagesAreLocalizedAndPluralized() {
         XCTAssertEqual(
             AppLanguage.simplifiedChinese.smartErrorLogHistoryWithoutDetailsMessage(count: 1),
-            "控制器记录了 1 条历史错误，\n但无法获取错误报告。"
+            "控制器记录了 1 条历史错误，但无法获取错误报告。"
         )
         XCTAssertEqual(
             AppLanguage.english.smartErrorLogHistoryWithoutDetailsMessage(count: 1),

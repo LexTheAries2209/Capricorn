@@ -154,6 +154,12 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                 let text = normalized(lines.joined())
                 let expected = normalized(language.smartErrorLogHistoryWithoutDetailsMessage(count: 2))
                 XCTAssertTrue(text.contains(expected), "\(language), \(height): \(lines)")
+                if language == .simplifiedChinese {
+                    XCTAssertTrue(
+                        lines.contains { normalized($0).contains(expected) },
+                        "The Chinese explanation should fit on one line: \(lines)"
+                    )
+                }
                 XCTAssertTrue(
                     text.contains(normalized(language.t("Retry Reading Error Entries"))),
                     "The retry control must remain visible."
