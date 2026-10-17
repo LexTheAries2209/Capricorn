@@ -9,7 +9,6 @@ struct CapricornApp: App {
     @State private var preferences: AppPreferences
     @State private var updateChecker: AppUpdater
     @Environment(\.openSettings) private var openSettings
-    @Environment(\.openWindow) private var openWindow
     private let modelContainer: ModelContainer
 
     init() {
@@ -60,12 +59,6 @@ struct CapricornApp: App {
         .defaultSize(width: 1433, height: 732)
         .modelContainer(modelContainer)
         .commands {
-            CommandGroup(after: .appInfo) {
-                Button(language.t("Third-Party Licenses")) {
-                    openWindow(id: ThirdPartyLicensesView.windowID)
-                }
-            }
-
             CommandGroup(replacing: .appSettings) {
                 Button {
                     updateChecker.checkNow()
@@ -119,12 +112,6 @@ struct CapricornApp: App {
             }
             .padding(8)
         }
-
-        Window(language.t("Third-Party Licenses"), id: ThirdPartyLicensesView.windowID) {
-            ThirdPartyLicensesView(language: language)
-        }
-        .defaultSize(width: 640, height: 480)
-        .windowResizability(.contentMinSize)
 
         Settings {
             CapricornSettingsView(

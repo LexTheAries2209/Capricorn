@@ -2,6 +2,7 @@
 import AppKit
 import Foundation
 import Observation
+import Sparkle
 import SwiftData
 import SwiftUI
 
@@ -318,7 +319,6 @@ struct CapricornSettingsView: View {
     @Bindable var preferences: AppPreferences
     @Bindable var updateChecker: AppUpdater
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SmartHistoryRecord.capturedAt, order: .reverse) private var smartHistoryRecords: [SmartHistoryRecord]
     @Query(sort: \SmartSelfTestHistoryRecord.capturedAt, order: .reverse) private var selfTestHistoryRecords: [SmartSelfTestHistoryRecord]
@@ -417,7 +417,13 @@ struct CapricornSettingsView: View {
 
             }
 
-            Section("SMART") {
+            Section(language.t("Third-Party Components")) {
+                LabeledContent("Sparkle", value: Self.sparkleVersion)
+
+                Link(destination: Self.sparkleProjectURL) {
+                    Label(language.t("Open Sparkle Project"), systemImage: "safari")
+                }
+
                 LabeledContent("smartctl") {
                     if let smartctlExecutableInfo {
                         Text(smartctlExecutableInfo.version ?? language.t("Unavailable"))
@@ -561,14 +567,6 @@ struct CapricornSettingsView: View {
 
             DeveloperSettingsSection(preferences: preferences)
 
-            Section(language.t("Third-Party Licenses")) {
-                Button {
-                    openWindow(id: ThirdPartyLicensesView.windowID)
-                } label: {
-                    Label(language.t("View Third-Party Licenses"), systemImage: "doc.text")
-                }
-            }
-
             Section {
                 VStack(spacing: 14) {
                     Button(role: .destructive) {
@@ -659,6 +657,9 @@ struct CapricornSettingsView: View {
         .navigationTitle("\(language.t("Settings")) - Capricorn V\(AppVersion.current.displayValue)")
     }
 
+    private static let sparkleVersion = Bundle(for: SPUUpdater.self)
+        .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    private static let sparkleProjectURL = URL(string: "https://github.com/sparkle-project/Sparkle")!
     private static let smartmontoolsProjectURL = URL(string: "https://www.smartmontools.org/")!
 
     private func revealRequestedSettings(using proxy: ScrollViewProxy) {

@@ -4,6 +4,10 @@
 
 V2.10.3 发布核验：全量 460 项测试通过，零失败、零跳过；严格并发、Swift 6、Universal Release Archive 和存档源码独立构建通过。[GitHub CI](https://github.com/LexTheAries2209/Capricorn/actions/runs/39029308503) 三项检查全部通过。10 个隔离更新场景通过；公开签名源已由真实 Sparkle 核验，旧 `0042` 发现 `2.10.3 / 0043`，当前 `0043` 判定为最新。ZIP 大小与 GitHub 摘要一致，归档 App 的两处许可入口与完整文本切换通过界面验证。安装回归使用独立测试 App，不替换真实用户 App；保留的旧版备份、ZIP/feed、完整 xcarchive 与 dSYM 均已核验。
 
+### V2.10.3 后续设置调整（未发布）
+
+移除应用菜单、设置中的第三方许可阅读入口及独立窗口。原“SMART”设置模块改为“第三方组件”，按 Sparkle、smartctl、SAT SMART Drive 的顺序显示组件信息和项目链接。Sparkle 版本读取实际加载框架的元数据。完整第三方说明和上游许可继续保存在源码中，保留随包许可资源，不在软件界面展示全文；历史发布说明和已发布产物不改写。本次只合并源码到 Main，不创建新 Release。
+
 ## 实施记录
 
 分支：`codex/sparkle-updates-p0-p2`。以下记录描述本地实现，后文保留最初研究与分期依据；实际交互以本节为准。

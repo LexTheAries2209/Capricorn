@@ -13,8 +13,9 @@ Capricorn uses the unmodified Sparkle framework for signed app updates.
 The full notice includes Sparkle's MIT license and the BSD and other licenses
 for its included components. Preserve the complete notice when redistributing.
 
-The application menu and Settings provide a Third-Party Licenses window with
-the complete bundled Sparkle and smartctl license texts.
+Settings lists Sparkle, smartctl, and SAT SMART Drive under Third-Party Components,
+with component information and project links. Complete license notices are
+maintained in this source tree; there is no in-app license reader.
 
 ## smartmontools 7.5
 
