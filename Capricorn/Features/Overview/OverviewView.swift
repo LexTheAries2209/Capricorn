@@ -56,7 +56,7 @@ struct OverviewView: View {
                     if drive.isVirtual {
                         StatTile(title: language.t("Power Cycles"), value: snapshot?.powerCycleCount.map(String.init) ?? language.t("Unavailable"), symbol: "power")
                         StatTile(title: language.t("Unsafe Shutdowns"), value: snapshot?.unsafeShutdowns.map(String.init) ?? language.t("Unavailable"), symbol: "powerplug")
-                        StatTile(title: language.t("Sector Size"), value: "\(drive.blockSize) B", symbol: "square.grid.3x3")
+                        StatTile(title: language.t("Sector Size"), value: drive.blockSize == 4096 ? "4KB" : "512B", symbol: "square.grid.3x3")
                         let allocated = drive.volumes.reduce(Int64(0)) { $0 + $1.sizeBytes }
                         StatTile(title: language.t("Unallocated"), value: formatByteCount(max(0, drive.sizeBytes - allocated)), symbol: "square.dashed")
                     }

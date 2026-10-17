@@ -275,6 +275,7 @@ struct ContentView: View {
             VirtualDiskConfigurationSheet(
                 language: language,
                 configuration: editor.configuration,
+                existingDiskNames: viewModel.drives.map(\.displayName),
                 create: { configuration in
                     guard preferences.allowsVirtualDisks else { return }
                     if let driveID = editor.driveID {

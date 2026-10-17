@@ -128,6 +128,7 @@ final class VirtualDiskPresentationTests: XCTestCase {
             try clickButton(window: formWindow, title: language.t("Add"), name: "configuration-\(language.rawValue)")
             let created = await AsyncTestWaiter.wait { createdFromForm != nil }
             XCTAssertTrue(created)
+            XCTAssertEqual(createdFromForm?.displayName, language.t("Virtual Disk") + "01")
             if let createdFromForm { await model.performDiskAction(.eject, on: createdFromForm) }
             XCTAssertTrue(model.drives.isEmpty)
             formWindow.orderOut(nil)

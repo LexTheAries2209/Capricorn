@@ -79,7 +79,7 @@ struct VirtualDiskPartition: Identifiable, Sendable {
 }
 
 struct VirtualDiskConfiguration: Sendable {
-    var name = "Virtual Disk"
+    var name = "Virtual Disk01"
     var model = ""
     var serialNumber = ""
     var capacity = "1"
@@ -96,6 +96,21 @@ struct VirtualDiskConfiguration: Sendable {
     var powerCycleCount = "0"
     var mediaErrors = "0"
     var unsafeShutdowns = "0"
+
+    static func defaults(language: AppLanguage, existingNames: [String] = []) -> Self {
+        let names = Set(existingNames.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+        var number = 1
+        // Reserve the same number in either language when the interface language changes.
+        while AppLanguage.allCases.contains(where: {
+            names.contains($0.t("Virtual Disk") + String(format: "%02d", number))
+        }) {
+            number += 1
+        }
+        var configuration = Self()
+        configuration.name = language.t("Virtual Disk") + String(format: "%02d", number)
+        configuration.partitions[0].name = language.t("Data")
+        return configuration
+    }
 
     var validationMessage: String? {
         if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

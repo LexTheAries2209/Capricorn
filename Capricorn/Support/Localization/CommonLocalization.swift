@@ -407,6 +407,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Sector Size": "扇区大小",
         "Partitions": "分区",
         "Partition Name": "分区名称",
+        "Partition Type": "分区类型",
         "Remove Partition": "移除分区",
         "Partition": "分区",
         "Add Partition": "添加分区",

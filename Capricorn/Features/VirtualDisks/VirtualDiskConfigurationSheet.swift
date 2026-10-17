@@ -12,6 +12,7 @@ struct VirtualDiskConfigurationSheet: View {
     init(
         language: AppLanguage,
         configuration: VirtualDiskConfiguration? = nil,
+        existingDiskNames: [String] = [],
         create: @escaping (VirtualDiskConfiguration) throws -> Void,
         cancel: @escaping () -> Void
     ) {
@@ -19,12 +20,9 @@ struct VirtualDiskConfigurationSheet: View {
         self.isEditing = configuration != nil
         self.create = create
         self.cancel = cancel
-        var initialConfiguration = configuration ?? VirtualDiskConfiguration()
-        if configuration == nil {
-            initialConfiguration.name = language.t("Virtual Disk")
-            initialConfiguration.partitions[0].name = language.t("Data")
-        }
-        _configuration = State(initialValue: initialConfiguration)
+        _configuration = State(initialValue: configuration ?? .defaults(
+            language: language, existingNames: existingDiskNames
+        ))
     }
 
     var body: some View {
@@ -55,42 +53,46 @@ struct VirtualDiskConfigurationSheet: View {
                         }
                     }
                     Picker(language.t("Sector Size"), selection: $configuration.blockSize) {
-                        Text("512 B").tag(512)
-                        Text("4096 B").tag(4096)
+                        Text("512B").tag(512)
+                        Text("4KB").tag(4096)
                     }
                 }
 
                 Section(language.t("Partitions")) {
                     ForEach($configuration.partitions) { $partition in
                         VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 12) {
-                                TextField(language.t("Partition Name"), text: $partition.name)
-                                Picker(language.t("Format"), selection: $partition.format) {
+                            LabeledContent(language.t("Partition Name")) {
+                                HStack(spacing: 12) {
+                                    TextField(language.t("Partition Name"), text: $partition.name)
+                                        .labelsHidden()
+                                        .multilineTextAlignment(.trailing)
+                                    Button {
+                                        configuration.partitions.removeAll { $0.id == partition.id }
+                                    } label: {
+                                        Image(systemName: "minus.circle")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help(language.t("Remove Partition"))
+                                    .accessibilityLabel(language.t("Remove Partition"))
+                                }
+                            }
+                            LabeledContent(language.t("Partition Type")) {
+                                Picker(language.t("Partition Type"), selection: $partition.format) {
                                     ForEach(VirtualDiskFormat.allCases) { format in
                                         Text(language.t(format.rawValue)).tag(format)
                                     }
                                 }
                                 .labelsHidden()
                                 .frame(width: 110)
-                                Button {
-                                    configuration.partitions.removeAll { $0.id == partition.id }
-                                } label: {
-                                    Image(systemName: "minus.circle")
-                                }
-                                .buttonStyle(.borderless)
-                                .help(language.t("Remove Partition"))
-                                .accessibilityLabel(language.t("Remove Partition"))
                             }
-                            HStack(spacing: 16) {
-                                LabeledContent(language.t("Capacity")) {
-                                    VirtualDiskCapacityInput(value: $partition.capacity, unit: $partition.unit)
-                                }
-                                LabeledContent("\(language.t("Used Capacity")) (\(partition.unit.rawValue))") {
-                                    TextField(language.t("Used Capacity"), text: $partition.usedCapacity)
-                                        .labelsHidden()
-                                        .multilineTextAlignment(.trailing)
-                                        .frame(width: 90)
-                                }
+                            LabeledContent(language.t("Capacity")) {
+                                VirtualDiskCapacityInput(value: $partition.capacity, unit: $partition.unit)
+                            }
+                            LabeledContent("\(language.t("Used Capacity")) (\(partition.unit.rawValue))") {
+                                TextField(language.t("Used Capacity"), text: $partition.usedCapacity)
+                                    .labelsHidden()
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 90)
                             }
                         }
                         .padding(.vertical, 4)

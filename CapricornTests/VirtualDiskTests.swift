@@ -4,6 +4,41 @@ import XCTest
 @testable import Capricorn
 
 final class VirtualDiskTests: XCTestCase {
+    func testDefaultNamesUseFirstAvailableNumberAcrossLanguages() {
+        let chinese = AppLanguage.simplifiedChinese
+        XCTAssertEqual(VirtualDiskConfiguration.defaults(language: chinese).name, "虚拟硬盘01")
+        XCTAssertEqual(VirtualDiskConfiguration.defaults(language: .english).name, "Virtual Disk01")
+        XCTAssertEqual(VirtualDiskConfiguration.defaults(
+            language: chinese, existingNames: ["虚拟硬盘01", "虚拟硬盘02", "Archive"]
+        ).name, "虚拟硬盘03")
+        XCTAssertEqual(VirtualDiskConfiguration.defaults(
+            language: chinese, existingNames: ["虚拟硬盘01", "虚拟硬盘03"]
+        ).name, "虚拟硬盘02")
+        XCTAssertEqual(VirtualDiskConfiguration.defaults(
+            language: chinese, existingNames: ["Virtual Disk01", " 虚拟硬盘02 "]
+        ).name, "虚拟硬盘03")
+        XCTAssertEqual(VirtualDiskConfiguration.defaults(language: chinese).partitions[0].name, "数据")
+        let names = (1...99).map { "虚拟硬盘" + String(format: "%02d", $0) }
+        XCTAssertEqual(VirtualDiskConfiguration.defaults(language: chinese, existingNames: names).name, "虚拟硬盘100")
+    }
+
+    @MainActor
+    func testDefaultNamesFollowCreatedAndRenamedDisks() throws {
+        let model = AppModel()
+        let language = AppLanguage.simplifiedChinese
+        let first = try model.addSimulatedDisk(.defaults(language: language, existingNames: model.drives.map(\.displayName)))
+        let second = try model.addSimulatedDisk(.defaults(language: language, existingNames: model.drives.map(\.displayName)))
+        XCTAssertEqual(first.displayName, "虚拟硬盘01")
+        XCTAssertEqual(second.displayName, "虚拟硬盘02")
+        var edited = try XCTUnwrap(model.simulatedDiskConfiguration(for: first.id))
+        edited.name = "Archive"
+        try model.updateSimulatedDisk(first.id, configuration: edited)
+        XCTAssertEqual(VirtualDiskConfiguration.defaults(
+            language: language, existingNames: model.drives.map(\.displayName)
+        ).name, "虚拟硬盘01")
+        XCTAssertEqual(model.simulatedDiskConfiguration(for: first.id)?.name, "Archive")
+    }
+
     func testSimulatedMediaTypesKeepExplicitClassificationAndRoundTrip() throws {
         for mediaType in VirtualDiskMediaType.allCases {
             var config = VirtualDiskConfiguration()
