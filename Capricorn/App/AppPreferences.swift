@@ -280,7 +280,7 @@ struct SmartDiagnosticsSettingsControls: View {
 
     var body: some View {
         Toggle(preferences.language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
-        Text(preferences.language.t("When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART."))
+        Text(preferences.language.t("When disabled, the SMART page hides self-test controls, saved reports, and error-log tools."))
             .font(.caption)
             .foregroundStyle(.secondary)
 
@@ -289,7 +289,6 @@ struct SmartDiagnosticsSettingsControls: View {
                 preferences.language.t("Show error entry reader"),
                 isOn: $preferences.showsSmartErrorLogInterface
             )
-            .padding(.leading, 20)
         }
     }
 }

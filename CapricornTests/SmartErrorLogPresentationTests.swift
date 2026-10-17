@@ -78,7 +78,15 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                     $0.topCandidates(1).first?.string.contains(language.t("Show error entry reader")) == true
                 }
                 XCTAssertEqual(child != nil, enabled)
-                if let child { XCTAssertLessThan(child.boundingBox.midY, main.boundingBox.midY) }
+                if let child {
+                    XCTAssertLessThan(child.boundingBox.midY, main.boundingBox.midY)
+                    XCTAssertEqual(child.boundingBox.minX, main.boundingBox.minX, accuracy: 0.01)
+                }
+                let text = normalized(observations.compactMap { $0.topCandidates(1).first?.string }.joined())
+                XCTAssertTrue(text.contains(normalized(language.t(
+                    "When disabled, the SMART page hides self-test controls, saved reports, and error-log tools."
+                ))))
+                XCTAssertFalse(text.contains(normalized(language.t("Overview"))))
                 XCTAssertFalse(preferences.showsSmartErrorLogInterface)
             }
         }
