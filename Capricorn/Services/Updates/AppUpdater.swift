@@ -283,7 +283,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         state = .upToDate
         let error = error as NSError
         showAlert(
-            title: error.localizedDescription,
+            title: language() == .simplifiedChinese
+                ? language().t("Updated to the latest version") : error.localizedDescription,
             detail: error.localizedRecoverySuggestion ?? language().t("You are up to date."),
             acknowledgement: acknowledgement, belongsToUpdateSession: true
         )

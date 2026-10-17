@@ -299,6 +299,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Checking for updates…": "正在检查更新…",
         "Not checked yet.": "尚未检查。",
         "You are up to date.": "当前已是最新版本。",
+        "Updated to the latest version": "您已经更新至最新版本",
         "Update available": "有可用更新",
         "Unable to connect to GitHub.": "无法连接 GitHub。",
         "Check your connection, retry, or open the Releases page manually.": "请检查网络连接、重试，或手动打开 Releases 页面。",

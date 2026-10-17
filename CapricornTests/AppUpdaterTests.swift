@@ -407,11 +407,11 @@ final class AppUpdaterTests: XCTestCase {
         driver.showUpdateNotFoundWithError(NSError(
             domain: SUSparkleErrorDomain, code: Int(SUError.noUpdateError.rawValue),
             userInfo: [
-                NSLocalizedDescriptionKey: "当前已是最新版本。",
+                NSLocalizedDescriptionKey: "您使用的就是最新版！",
                 NSLocalizedRecoverySuggestionErrorKey: "Capricorn 2.10.2 是当前的最新版本。"
             ]
         )) { acknowledgements += 1 }
-        XCTAssertEqual(presenter.prompt?.title, "当前已是最新版本。")
+        XCTAssertEqual(presenter.prompt?.title, "您已经更新至最新版本")
         XCTAssertEqual(presenter.prompt?.detail, "Capricorn 2.10.2 是当前的最新版本。")
         XCTAssertEqual(presenter.prompt?.buttonTitle, "好")
         XCTAssertFalse(presenter.prompt?.isChecking == true)
