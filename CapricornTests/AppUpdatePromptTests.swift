@@ -111,6 +111,11 @@ final class AppUpdatePromptTests: XCTestCase {
             AppUpdatePromptText.paragraphs(text),
             "Capricorn 2.10.2 无法更新。\n请打开 https://github.com/LexTheAries2209/Capricorn。\n稍后重试！"
         )
+        XCTAssertEqual(
+            AppUpdatePromptText.displayText(text),
+            "Capricorn 2.10.2 无法更新\n请打开 https://github.com/LexTheAries2209/Capricorn\n稍后重试"
+        )
+        XCTAssertEqual(AppUpdatePromptText.displayText("https://example.com/update!"), "https://example.com/update!")
     }
 
     func testSentenceBreaksPreserveExistingParagraphsAndTaskLists() {
@@ -125,8 +130,13 @@ final class AppUpdatePromptTests: XCTestCase {
     func testNativeAlertReceivesSentenceFormattedText() {
         let presenter = AppUpdatePromptController()
         defer { presenter.dismiss() }
-        presenter.show(prompt(checking: false, detail: "无法下载更新。请检查网络或查看 Releases。")) {}
-        XCTAssertEqual(presenter.alert?.informativeText, "无法下载更新。\n请检查网络或查看 Releases。")
+        presenter.show(AppUpdatePrompt(
+            windowTitle: "软件更新", title: "暂时无法更新！",
+            detail: "无法下载更新。请检查网络或查看 Releases。",
+            buttonTitle: "好", isChecking: false, belongsToUpdateSession: true
+        )) {}
+        XCTAssertEqual(presenter.alert?.messageText, "暂时无法更新")
+        XCTAssertEqual(presenter.alert?.informativeText, "无法下载更新\n请检查网络或查看 Releases")
     }
 
     private func prompt(checking: Bool, detail: String = "") -> AppUpdatePrompt {

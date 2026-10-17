@@ -20,6 +20,26 @@ protocol AppUpdatePromptPresenting: AnyObject {
 }
 
 enum AppUpdatePromptText {
+    static func displayText(_ text: String) -> String {
+        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        let punctuation = ".。!！?？…:：;；,，"
+        return paragraphs(text).components(separatedBy: "\n").map { line in
+            var line = line.trimmingCharacters(in: .whitespaces)
+            let links = detector?.matches(in: line, range: NSRange(line.startIndex..., in: line)) ?? []
+            while let last = line.last, punctuation.contains(last) {
+                if let url = URL(string: line), ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                   url.absoluteString == line {
+                    break
+                }
+                let lastRange = NSRange(line.index(before: line.endIndex)..<line.endIndex, in: line)
+                // Keep punctuation that belongs to a URL rather than to the sentence.
+                guard !links.contains(where: { NSLocationInRange(lastRange.location, $0.range) }) else { break }
+                line.removeLast()
+            }
+            return line
+        }.joined(separator: "\n")
+    }
+
     static func paragraphs(_ text: String) -> String {
         guard text.range(of: #"\p{Han}"#, options: .regularExpression) != nil else { return text }
         // Preserve explicit paragraphs and lists while recognizing real sentence boundaries.
@@ -137,11 +157,11 @@ final class AppUpdatePromptController: NSObject, AppUpdatePromptPresenting {
     }
 
     private func makeAlert(_ prompt: AppUpdatePrompt) -> NSAlert {
-        let alert = NSAlert()
+        let alert = CenteredAppUpdateAlert()
         alert.alertStyle = .informational
         alert.icon = NSApplication.shared.applicationIconImage
-        alert.messageText = prompt.title
-        alert.informativeText = AppUpdatePromptText.paragraphs(prompt.detail)
+        alert.messageText = AppUpdatePromptText.displayText(prompt.title)
+        alert.informativeText = AppUpdatePromptText.displayText(prompt.detail)
         alert.addButton(withTitle: prompt.buttonTitle)
         alert.buttons[0].keyEquivalent = prompt.isChecking ? "\u{1b}" : "\r"
         let window = alert.window
@@ -174,5 +194,30 @@ final class AppUpdatePromptController: NSObject, AppUpdatePromptPresenting {
             y: min(max(center.y - size.height / 2, visible.minY), visible.maxY - size.height)
         )
         window.setFrameOrigin(origin)
+    }
+}
+
+/// NSAlert defaults to leading alignment for multiline messages; keep update prompts consistent.
+@MainActor
+private final class CenteredAppUpdateAlert: NSAlert {
+    override func layout() {
+        super.layout()
+        guard let content = window.contentView else { return }
+        for view in content.subviews {
+            if let label = view as? NSTextField, !label.isEditable {
+                label.alignment = .center
+                let text = NSMutableAttributedString(attributedString: label.attributedStringValue)
+                let paragraph = NSMutableParagraphStyle()
+                paragraph.alignment = .center
+                paragraph.lineBreakMode = label.lineBreakMode
+                text.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: text.length))
+                label.attributedStringValue = text
+            } else if view is NSImageView {
+                view.setFrameOrigin(NSPoint(
+                    x: (content.bounds.width - view.frame.width) / 2,
+                    y: view.frame.minY
+                ))
+            }
+        }
     }
 }
