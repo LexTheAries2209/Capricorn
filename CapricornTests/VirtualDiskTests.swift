@@ -4,6 +4,59 @@ import XCTest
 @testable import Capricorn
 
 final class VirtualDiskTests: XCTestCase {
+    func testSimulatedMediaTypesKeepExplicitClassificationAndRoundTrip() throws {
+        for mediaType in VirtualDiskMediaType.allCases {
+            var config = VirtualDiskConfiguration()
+            config.mediaType = mediaType
+            config.name = "Editable CFast SSD SD Network Name"
+            let (drive, _) = try config.makeDisk()
+            XCTAssertEqual(drive.mediaKind, mediaType.mediaKind)
+            XCTAssertEqual(drive.isCFast, mediaType == .cfast)
+            XCTAssertEqual(drive.isNetwork, mediaType == .network)
+            XCTAssertEqual(drive.isMemoryCard, mediaType == .sd)
+            XCTAssertEqual(drive.isSolidState, mediaType.isSolidState)
+            let restored = try JSONDecoder().decode(DriveDevice.self, from: JSONEncoder().encode(drive))
+            XCTAssertEqual(restored.mediaKind, mediaType.mediaKind)
+            XCTAssertEqual(restored.isCFast, mediaType == .cfast)
+            XCTAssertEqual(DiskSidebarActionPolicy.actions(for: drive), [.eject])
+            XCTAssertEqual(drive.deviceNode, "")
+            XCTAssertNil(drive.primaryMountPoint)
+        }
+    }
+
+    func testBuiltInSimulationMarksSystemDiskAndKeepsPartitionsVisible() throws {
+        var config = VirtualDiskConfiguration()
+        config.interface = .builtIn
+        config.partitions[0].capacity = "500"
+        config.partitions[0].unit = .gb
+        var data = VirtualDiskPartition()
+        data.capacity = "500"
+        data.unit = .gb
+        config.partitions.append(data)
+        let (drive, _) = try config.makeDisk()
+        XCTAssertTrue(drive.isInternal)
+        XCTAssertTrue(drive.isSystemDisk)
+        XCTAssertFalse(drive.isRemovable)
+        XCTAssertTrue(drive.volumes[0].isSystem)
+        XCTAssertFalse(drive.volumes[1].isSystem)
+        XCTAssertEqual(OverviewVolumePresentation.volumes(for: drive), drive.volumes)
+        XCTAssertEqual(DiskSidebarActionPolicy.actions(for: drive), [.eject])
+        XCTAssertTrue(DiskSidebarActionPolicy.isEnabled(.eject, for: drive))
+        XCTAssertEqual(drive.deviceNode, "")
+        XCTAssertNil(drive.primaryMountPoint)
+        XCTAssertNil(drive.benchmarkMountPoint)
+        XCTAssertEqual(DrivePageHeaderText.subtitle(for: drive, language: .simplifiedChinese), "内置 · SSD")
+    }
+
+    func testLegacyDrivesDecodeWithoutSimulatedMediaMetadata() throws {
+        let (drive, _) = try VirtualDiskConfiguration().makeDisk()
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(drive)) as? [String: Any])
+        json.removeValue(forKey: "simulatedMediaKind")
+        let restored = try JSONDecoder().decode(DriveDevice.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(restored.simulatedMediaKind)
+        XCTAssertEqual(restored.mediaKind, .ssd)
+    }
+
     func testAutomaticHealthIsDefaultAndUsesOverviewMetrics() throws {
         var config = VirtualDiskConfiguration()
         XCTAssertNil(config.health)

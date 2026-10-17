@@ -402,6 +402,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Optional": "可选",
         "Disk Type": "硬盘类型",
         "Interface": "接口",
+        "Built-in": "内置",
+        "Built-in (System Disk)": "内置（模拟系统盘）",
         "Sector Size": "扇区大小",
         "Partitions": "分区",
         "Partition Name": "分区名称",

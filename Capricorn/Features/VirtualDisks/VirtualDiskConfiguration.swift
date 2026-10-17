@@ -27,15 +27,37 @@ enum VirtualDiskCapacityUnit: String, CaseIterable, Identifiable, Sendable {
 enum VirtualDiskMediaType: String, CaseIterable, Identifiable, Sendable {
     case ssd = "SSD"
     case hdd = "HDD"
+    case cfast = "CFast 2.0"
+    case network = "Network Drive"
+    case sd = "SD Card"
     var id: Self { self }
+
+    var mediaKind: DriveMediaKind {
+        switch self {
+        case .ssd: .ssd
+        case .hdd: .hdd
+        case .cfast: .cfast
+        case .network: .network
+        case .sd: .memoryCard
+        }
+    }
+
+    var isSolidState: Bool {
+        self == .ssd || self == .cfast || self == .sd
+    }
 }
 
 enum VirtualDiskInterface: String, CaseIterable, Identifiable, Sendable {
+    case builtIn = "Built-in"
     case nvme = "NVMe"
     case sata = "SATA"
     case usb = "USB"
     case thunderbolt = "Thunderbolt"
     var id: Self { self }
+
+    var titleKey: String {
+        self == .builtIn ? "Built-in (System Disk)" : rawValue
+    }
 }
 
 enum VirtualDiskFormat: String, CaseIterable, Identifiable, Sendable {
@@ -130,7 +152,7 @@ struct VirtualDiskConfiguration: Sendable {
                 mountPoint: nil,
                 sizeBytes: size,
                 isWritable: false,
-                isSystem: false,
+                isSystem: interface == .builtIn && index == 0,
                 fileSystemType: partition.format == .unformatted ? nil : partition.format.rawValue,
                 totalCapacityBytes: size,
                 availableCapacityBytes: size - partition.unit.byteCount(partition.usedCapacity, allowsZero: true)!,
@@ -140,11 +162,14 @@ struct VirtualDiskConfiguration: Sendable {
         let drive = DriveDevice(
             bsdName: identifier, deviceNode: "", displayName: name, mediaName: name,
             protocolName: interface.rawValue, sizeBytes: unit.byteCount(capacity)!, blockSize: blockSize,
-            isInternal: false, isRemovable: true, isSolidState: mediaType == .ssd,
-            isWritable: false, isVirtual: true, isSystemDisk: false,
+            isInternal: interface == .builtIn, isRemovable: interface != .builtIn,
+            isSolidState: mediaType.isSolidState, isSolidStateKnown: mediaType != .network,
+            isWritable: false, isVirtual: true, isSystemDisk: interface == .builtIn,
+            isNetwork: mediaType == .network, isMemoryCard: mediaType == .sd,
             smartStatusRaw: nil, nativeSmartKeys: [:], volumes: volumes,
             model: model.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-            serialNumber: serialNumber.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            serialNumber: serialNumber.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            simulatedMediaKind: mediaType.mediaKind
         )
         var snapshot = SmartSnapshot(
             driveID: drive.id, capturedAt: Date(), health: health ?? .unavailable,

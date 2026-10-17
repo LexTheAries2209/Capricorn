@@ -46,12 +46,12 @@ struct VirtualDiskConfigurationSheet: View {
                     }
                     Picker(language.t("Disk Type"), selection: $configuration.mediaType) {
                         ForEach(VirtualDiskMediaType.allCases) { type in
-                            Text(type.rawValue).tag(type)
+                            Text(language.t(type.rawValue)).tag(type)
                         }
                     }
                     Picker(language.t("Interface"), selection: $configuration.interface) {
                         ForEach(VirtualDiskInterface.allCases) { interface in
-                            Text(interface.rawValue).tag(interface)
+                            Text(language.t(interface.titleKey)).tag(interface)
                         }
                     }
                     Picker(language.t("Sector Size"), selection: $configuration.blockSize) {

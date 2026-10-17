@@ -212,7 +212,7 @@ struct OverviewView: View {
 
 enum OverviewVolumePresentation {
     static func volumes(for drive: DriveDevice) -> [DriveDevice.Volume] {
-        guard drive.isSystemDisk else { return drive.displayableVolumes }
+        guard drive.isSystemDisk, !drive.isVirtual else { return drive.displayableVolumes }
         // Filter only this panel; other features still need the full volume topology.
         guard let rootVolume = drive.volumes.first(where: { $0.mountPoint == "/" }) else {
             return []

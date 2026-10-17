@@ -230,11 +230,14 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     /// such as "Elements 2621" identify the enclosure rather than the disk.
     var usbDevice: DriveUSBDeviceIdentity? = nil
     var connectionInfo: DriveConnectionInfo? = nil
+    /// Explicit simulation metadata avoids guessing media type from editable names.
+    var simulatedMediaKind: DriveMediaKind? = nil
 
     /// Identifies CFast media from the device or its USB reader identity.
     /// CFast readers commonly expose USB as the bus protocol and do not set
     /// diskutil's SolidState flag, so the media type must remain separate.
     var isCFast: Bool {
+        if isVirtual, let simulatedMediaKind { return simulatedMediaKind == .cfast }
         let identifiers = [displayName, mediaName, model, usbDevice?.productName]
             .compactMap { $0?.lowercased() }
         return identifiers.contains { value in
@@ -247,7 +250,10 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     }
 
     var mediaKind: DriveMediaKind {
-        if isVirtual, isSolidStateKnown { return isSolidState ? .ssd : .hdd }
+        if isVirtual {
+            if let simulatedMediaKind { return simulatedMediaKind }
+            if isSolidStateKnown { return isSolidState ? .ssd : .hdd }
+        }
         if isNetwork { return .network }
         if isCFast { return .cfast }
         if isMemoryCard { return .memoryCard }
@@ -1075,7 +1081,7 @@ enum DrivePageHeaderText {
 
     static func subtitle(for drive: DriveDevice, language: AppLanguage) -> String {
         let parts = drive.isVirtual
-            ? [drive.protocolName, mediaKind(for: drive, language: language)]
+            ? [language.t(drive.protocolName), mediaKind(for: drive, language: language)]
             : [drive.bsdName, drive.protocolName, mediaKind(for: drive, language: language)]
         return parts.joined(separator: " · ")
     }
@@ -1141,6 +1147,7 @@ extension DriveDevice {
         case model
         case serialNumber
         case usbDevice
+        case simulatedMediaKind
     }
 
     init(from decoder: Decoder) throws {
@@ -1167,6 +1174,7 @@ extension DriveDevice {
         model = try container.decodeIfPresent(String.self, forKey: .model)
         serialNumber = try container.decodeIfPresent(String.self, forKey: .serialNumber)
         usbDevice = try container.decodeIfPresent(DriveUSBDeviceIdentity.self, forKey: .usbDevice)
+        simulatedMediaKind = try container.decodeIfPresent(DriveMediaKind.self, forKey: .simulatedMediaKind)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1193,6 +1201,7 @@ extension DriveDevice {
         try container.encodeIfPresent(model, forKey: .model)
         try container.encodeIfPresent(serialNumber, forKey: .serialNumber)
         try container.encodeIfPresent(usbDevice, forKey: .usbDevice)
+        try container.encodeIfPresent(simulatedMediaKind, forKey: .simulatedMediaKind)
     }
 }
 
