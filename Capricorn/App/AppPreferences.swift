@@ -473,10 +473,6 @@ struct CapricornSettingsView: View {
                             Label(language.t("Open SAT SMART Drive Open Source Project"), systemImage: "chevron.left.forwardslash.chevron.right")
                         }
                     }
-
-                    Text(language.t("SAT SMART Drive is an optional third-party component for compatible USB-SATA devices. Capricorn does not install, load, or change system security settings."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 } header: {
                     Text(language.t("SAT SMART Drive"))
                         .font(.body)

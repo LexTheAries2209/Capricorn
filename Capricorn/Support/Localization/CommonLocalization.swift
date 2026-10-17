@@ -610,7 +610,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Recheck SAT SMART Drive": "重新检测 SAT SMART Drive",
         "Open Binary Fruit SAT SMART Drive Guide": "打开 Binary Fruit SAT SMART Drive 说明",
         "Open SAT SMART Drive Open Source Project": "打开 SAT SMART Drive 开源项目",
-        "SAT SMART Drive is an optional third-party component for compatible USB-SATA devices. Capricorn does not install, load, or change system security settings.": "SAT SMART Drive 是适用于兼容 USB-SATA 设备的可选第三方组件。Capricorn 不会安装、加载驱动或修改系统安全设置。",
         "SAT SMART Drive May Be Required": "可能需要 SAT SMART Drive",
         "SAT SMART Drive Needs Attention": "SAT SMART Drive 需要处理",
         "Driver Conflict": "驱动冲突",
