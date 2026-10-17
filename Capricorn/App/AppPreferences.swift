@@ -647,6 +647,7 @@ struct CapricornSettingsView: View {
             revealRequestedSettings(using: proxy)
         }
         }
+        .navigationTitle("\(language.t("Settings"))-Capricorn V\(AppVersion.current.displayValue)")
     }
 
     private static let smartmontoolsProjectURL = URL(string: "https://www.smartmontools.org/")!
