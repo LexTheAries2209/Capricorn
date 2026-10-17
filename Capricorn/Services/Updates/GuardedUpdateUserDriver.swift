@@ -13,6 +13,7 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     private var receivedLength: UInt64 = 0
     private var isInvalidated = false
     private var readyReply: ((SPUUserUpdateChoice) -> Void)?
+    private var isAutomaticUpdate = false
 
     init(standard: SPUUserDriver, owner: AppUpdater) {
         self.standard = standard
@@ -63,6 +64,7 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
 
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
         cancelCheck = nil
+        isAutomaticUpdate = false
         owner?.dismissCheckingPrompt()
         // Cancel an installer staged by a legacy automatic update instead of adopting install-on-quit.
         if state.stage == .installing {
@@ -73,6 +75,12 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
         }
         guard owner?.authorizeUpdate() == true else {
             reply(.dismiss)
+            return
+        }
+        if owner?.allowsAutomaticUpdateInstallation == true,
+           !appcastItem.isInformationOnlyUpdate, !appcastItem.isMajorUpgrade {
+            isAutomaticUpdate = true
+            reply(.install)
             return
         }
         standard.showUpdateFound(with: appcastItem, state: state) { [weak self] choice in
@@ -156,6 +164,10 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
         guard owner?.registerPreparedInstallationCancellation({ [weak self] in
             self?.respondToReady(.skip)
         }) == true else { return }
+        if isAutomaticUpdate, owner?.allowsAutomaticUpdateInstallation == true {
+            respondToReady(.install)
+            return
+        }
         standard.showReady(toInstallAndRelaunch: { [weak self] choice in self?.respondToReady(choice) })
     }
 
@@ -188,6 +200,7 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
         cancelDownload = nil
         cancelCheck = nil
         readyReply = nil
+        isAutomaticUpdate = false
         owner?.clearPreparedInstallationCancellation()
         owner?.dismissPrompt()
         standard.dismissUpdateInstallation()

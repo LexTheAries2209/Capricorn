@@ -387,6 +387,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "All settings were restored to their defaults.": "所有设置已恢复为默认值。",
         "Developer Options": "开发者选项",
         "Show build number": "显示构建号",
+        "Automatically download and install updates": "自动下载并安装更新",
         "Enable developer options": "开启开发者选项",
         "Enable custom benchmark configuration": "开启测速中的自定义配置",
         "Allow adding virtual disks": "允许添加虚拟硬盘",

@@ -24,6 +24,10 @@ struct DeveloperSettingsSection: View {
                     preferences.language.t("Show build number"),
                     isOn: $preferences.showsBuildNumber
                 )
+                Toggle(
+                    preferences.language.t("Automatically download and install updates"),
+                    isOn: $preferences.automaticallyDownloadsAndInstallsUpdates
+                )
             }
         }
     }

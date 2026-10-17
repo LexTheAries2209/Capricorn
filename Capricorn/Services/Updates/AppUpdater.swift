@@ -29,6 +29,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     @ObservationIgnored private let hostBundle: Bundle
     @ObservationIgnored private let allowsStartup: Bool
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let automaticUpdatesEnabled: () -> Bool
     @ObservationIgnored private let presentAlert: ((String, String) -> Void)?
     @ObservationIgnored private let promptPresenter: any AppUpdatePromptPresenting
     @ObservationIgnored private var hasAttemptedStart = false
@@ -48,7 +49,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         defaults: UserDefaults = .standard,
         presentAlert: ((String, String) -> Void)? = nil,
         promptPresenter: (any AppUpdatePromptPresenting)? = nil,
-        finishRequestedQuit: (@MainActor () -> Void)? = nil
+        finishRequestedQuit: (@MainActor () -> Void)? = nil,
+        automaticUpdatesEnabled: @escaping () -> Bool = { false }
     ) {
         self.safety = safety
         self.language = language
@@ -56,6 +58,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         self.hostBundle = hostBundle
         self.allowsStartup = allowsStartup
         self.defaults = defaults
+        self.automaticUpdatesEnabled = automaticUpdatesEnabled
         // Read saved choices before creating Sparkle, including in Debug and with an invalid feed.
         automaticallyChecksForUpdates = defaults.object(forKey: PreferenceKey.checksOnLaunch) as? Bool
             ?? defaults.object(forKey: PreferenceKey.legacyAutomaticChecks) as? Bool ?? false
@@ -84,6 +87,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
             // Migrate consent before disabling Sparkle's independent timer. Only the app schedules checks.
             defaults.set(automaticallyChecksForUpdates, forKey: PreferenceKey.checksOnLaunch)
             updater.automaticallyChecksForUpdates = false
+            // App-owned consent drives the user-driver flow. Keep Sparkle's
+            // separate preference and native opt-in checkbox disabled.
             updater.automaticallyDownloadsUpdates = false
             try updater.start()
             isStarted = true
@@ -140,6 +145,10 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
         defaults.set(enabled, forKey: PreferenceKey.checksOnLaunch)
         automaticallyChecksForUpdates = enabled
+    }
+
+    var allowsAutomaticUpdateInstallation: Bool {
+        automaticUpdatesEnabled()
     }
 
     func conflictsDidChange() {

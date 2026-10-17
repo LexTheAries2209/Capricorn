@@ -96,6 +96,31 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertFalse(updater.isStarted)
     }
 
+    func testAutomaticInstallationRequiresDeveloperConsentAndTracksChanges() throws {
+        let suite = "CapricornTests.developerAutomaticUpdates.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads)
+        let preferences = AppPreferences(defaults: defaults)
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            allowsStartup: false, defaults: defaults,
+            automaticUpdatesEnabled: { preferences.allowsAutomaticUpdateInstallation }
+        )
+        XCTAssertFalse(updater.allowsAutomaticUpdateInstallation, "Legacy Sparkle consent is not developer consent")
+        preferences.automaticallyDownloadsAndInstallsUpdates = true
+        XCTAssertFalse(updater.allowsAutomaticUpdateInstallation)
+        preferences.enablesDeveloperOptions = true
+        XCTAssertTrue(updater.allowsAutomaticUpdateInstallation)
+        preferences.enablesDeveloperOptions = false
+        XCTAssertFalse(updater.allowsAutomaticUpdateInstallation)
+        preferences.enablesDeveloperOptions = true
+        XCTAssertTrue(updater.allowsAutomaticUpdateInstallation)
+        preferences.resetAllSettings()
+        XCTAssertFalse(updater.allowsAutomaticUpdateInstallation)
+        XCTAssertFalse(updater.isStarted, "Changing consent must not start a network request")
+    }
+
     func testLegacyAutomaticCheckConsentIsPreservedAndNewChoiceTakesPriority() throws {
         let suite = "CapricornTests.updateConsent.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

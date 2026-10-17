@@ -28,6 +28,8 @@ def main():
     parser.add_argument("--sparkle-root", required=True, type=pathlib.Path)
     parser.add_argument("--scenario", choices=[
         "update", "manual-only", "cancel-install", "quit-before-install",
+        "developer-auto", "developer-auto-disabled", "developer-auto-conflict",
+        "developer-auto-off-during-download", "developer-auto-ready-conflict",
         "conflict", "archive-signature", "feed-signature", "missing-feed",
         "launch-checks", "launch-disabled", "launch-conflict", "launch-timeout"
     ], default="update")
@@ -203,10 +205,10 @@ def main():
             "scenario": options.scenario, "artifacts": str(root),
             "feedRequests": requests.count("/appcast.xml"), "archiveDelay": options.archive_delay, **result
         }, indent=2))
-        if options.scenario == "update":
+        if options.scenario in ("update", "developer-auto"):
             assert result["result"] == "updated", result
             assert result["historyRetained"] and result["preferencesRetained"], result
-        elif options.scenario == "manual-only":
+        elif options.scenario in ("manual-only", "developer-auto-disabled"):
             assert result["result"] == "manual-required" and result["build"] == "0041", result
             assert result["legacyDownloadsDisabled"] and not result["preparedInstallation"], result
             assert not any(path.endswith(".zip") for path in requests), requests
@@ -214,10 +216,12 @@ def main():
             time.sleep(1)
             with (installed / "Contents/Info.plist").open("rb") as stream:
                 assert plistlib.load(stream)["CFBundleVersion"] == "0041"
-        elif options.scenario in ("cancel-install", "quit-before-install"):
+        elif options.scenario in ("cancel-install", "quit-before-install", "developer-auto-off-during-download"):
             assert result["result"] == "cancelled", result
             assert not result["preparedInstallation"] and not result["installationReserved"], result
             assert any(path.endswith(".zip") for path in requests), requests
+            if options.scenario == "developer-auto-off-during-download":
+                assert result["requiredManualConfirmation"], result
             time.sleep(1)
             with (installed / "Contents/Info.plist").open("rb") as stream:
                 assert plistlib.load(stream)["CFBundleVersion"] == "0041"
@@ -235,9 +239,10 @@ def main():
             assert result["requestCancelled"], result
         else:
             assert result["result"] == "blocked" and result["build"] == "0041", result
-            if options.scenario in ("conflict", "launch-conflict"):
+            if options.scenario in ("conflict", "launch-conflict", "developer-auto-conflict", "developer-auto-ready-conflict"):
                 assert "Benchmark" in result["detail"], result
-                assert not requests, requests
+                if options.scenario != "developer-auto-ready-conflict":
+                    assert not requests, requests
             elif options.scenario == "missing-feed":
                 assert result["detail"] == "Unable to download updates. Check your network or Releases.", result
                 assert "could not be reached" not in result["detail"], result

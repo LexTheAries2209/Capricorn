@@ -36,7 +36,10 @@ struct CapricornApp: App {
             release: { viewModel.releaseAppUpdateInstallation() },
             save: { try container.mainContext.save() }
         )
-        _updateChecker = State(initialValue: AppUpdater(safety: safety, language: { preferences.language }))
+        _updateChecker = State(initialValue: AppUpdater(
+            safety: safety, language: { preferences.language },
+            automaticUpdatesEnabled: { preferences.allowsAutomaticUpdateInstallation }
+        ))
     }
 
     private var language: AppLanguage {
