@@ -24,8 +24,6 @@ struct AppUpdateSettingsSection: View {
             ))
             .disabled(!updateChecker.automaticallyChecksForUpdates)
 
-            statusContent
-
             HStack(spacing: 10) {
                 Button {
                     updateChecker.checkNow()
@@ -59,6 +57,8 @@ struct AppUpdateSettingsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            statusContent
         }
     }
 
