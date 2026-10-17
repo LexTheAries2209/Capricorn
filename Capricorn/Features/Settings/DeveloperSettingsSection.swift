@@ -20,6 +20,10 @@ struct DeveloperSettingsSection: View {
                     preferences.language.t("Enable virtual disks"),
                     isOn: $preferences.enablesVirtualDisks
                 )
+                Toggle(
+                    preferences.language.t("Show build number"),
+                    isOn: $preferences.showsBuildNumber
+                )
             }
         }
     }

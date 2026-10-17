@@ -4,12 +4,13 @@ import SwiftUI
 struct AppUpdateSettingsSection: View {
     @Bindable var updateChecker: AppUpdater
     let language: AppLanguage
+    let showsBuildNumber: Bool
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         Section(language.t("Updates")) {
             LabeledContent(language.t("Current Version"), value: "V\(AppVersion.current.displayValue)")
-            if let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String {
+            if showsBuildNumber, let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String {
                 LabeledContent(language.t("Build"), value: build)
             }
 

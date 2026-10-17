@@ -1105,6 +1105,7 @@ final class CapricornTests: XCTestCase {
             "This resets settings and saved interface choices. Disk caches and history records will not be changed.": "这会重置设置和已保存的界面选项，但不会更改硬盘缓存和历史记录。",
             "All settings were restored to their defaults.": "所有设置已恢复为默认值。",
             "Developer Options": "开发者选项",
+            "Show build number": "显示构建号",
             "Enable developer options": "开启开发者选项",
             "Enable custom benchmark configuration": "开启测速中的自定义配置",
             "Enable virtual disks": "开启虚拟硬盘",

@@ -50,6 +50,7 @@ final class AppPreferences {
         static let enablesDeveloperOptions = false
         static let enablesCustomBenchmarkConfiguration = false
         static let enablesVirtualDisks = false
+        static let showsBuildNumber = false
         static let showsSmartSelfTestInterface = false
         static let showsSmartErrorLogInterface = false
         static let avoidWakingSleepingDisks = false
@@ -69,6 +70,7 @@ final class AppPreferences {
         static let enablesDeveloperOptions = "enablesDeveloperOptions"
         static let enablesCustomBenchmarkConfiguration = "enablesCustomBenchmarkConfiguration"
         static let enablesVirtualDisks = "enablesVirtualDisks"
+        static let showsBuildNumber = "showsBuildNumber"
         // Earlier builds allowed an external smartctl override. Keep the key
         // only long enough to clear it when the bundled-only policy is loaded.
         static let legacySmartctlPath = "smartctlPath"
@@ -131,6 +133,17 @@ final class AppPreferences {
 
     var allowsVirtualDisks: Bool {
         enablesDeveloperOptions && enablesVirtualDisks
+    }
+
+    var showsBuildNumber: Bool {
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(showsBuildNumber, forKey: Key.showsBuildNumber)
+        }
+    }
+
+    var allowsBuildNumberDisplay: Bool {
+        enablesDeveloperOptions && showsBuildNumber
     }
 
     /// SMART diagnostics include active self-tests and controller error logs.
@@ -225,6 +238,7 @@ final class AppPreferences {
         enablesDeveloperOptions = defaults.object(forKey: Key.enablesDeveloperOptions) as? Bool ?? Defaults.enablesDeveloperOptions
         enablesCustomBenchmarkConfiguration = defaults.object(forKey: Key.enablesCustomBenchmarkConfiguration) as? Bool ?? Defaults.enablesCustomBenchmarkConfiguration
         enablesVirtualDisks = defaults.object(forKey: Key.enablesVirtualDisks) as? Bool ?? Defaults.enablesVirtualDisks
+        showsBuildNumber = defaults.object(forKey: Key.showsBuildNumber) as? Bool ?? Defaults.showsBuildNumber
         defaults.removeObject(forKey: Key.legacySmartctlPath)
         defaults.removeObject(forKey: Key.legacyAllowSystemDiskSelfTests)
         showsSmartSelfTestInterface = defaults.object(forKey: Key.showsSmartSelfTestInterface) as? Bool ?? Defaults.showsSmartSelfTestInterface
@@ -262,6 +276,7 @@ final class AppPreferences {
         enablesDeveloperOptions = Defaults.enablesDeveloperOptions
         enablesCustomBenchmarkConfiguration = Defaults.enablesCustomBenchmarkConfiguration
         enablesVirtualDisks = Defaults.enablesVirtualDisks
+        showsBuildNumber = Defaults.showsBuildNumber
         showsSmartSelfTestInterface = Defaults.showsSmartSelfTestInterface
         showsSmartErrorLogInterface = Defaults.showsSmartErrorLogInterface
         avoidWakingSleepingDisks = Defaults.avoidWakingSleepingDisks
@@ -327,7 +342,10 @@ struct CapricornSettingsView: View {
     var body: some View {
         ScrollViewReader { proxy in
             Form {
-            AppUpdateSettingsSection(updateChecker: updateChecker, language: language)
+            AppUpdateSettingsSection(
+                updateChecker: updateChecker, language: language,
+                showsBuildNumber: preferences.allowsBuildNumberDisplay
+            )
                 .id(CapricornSettingsDestination.updates)
 
             Section(language.t("Interface Display")) {

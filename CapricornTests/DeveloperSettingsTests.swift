@@ -125,11 +125,12 @@ final class DeveloperSettingsTests: XCTestCase {
                 try VNImageRequestHandler(cgImage: image).perform([request])
                 let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
                 XCTAssertTrue(lines.contains { $0.contains(language.t("Enable developer options")) }, "\(lines)")
-                for title in ["Enable custom benchmark configuration", "Enable virtual disks"] {
+                for title in ["Enable custom benchmark configuration", "Enable virtual disks", "Show build number"] {
                     XCTAssertEqual(lines.contains { $0.contains(language.t(title)) }, enabled, "\(lines)")
                 }
                 XCTAssertFalse(preferences.enablesCustomBenchmarkConfiguration)
                 XCTAssertFalse(preferences.enablesVirtualDisks)
+                XCTAssertFalse(preferences.showsBuildNumber)
             }
         }
     }

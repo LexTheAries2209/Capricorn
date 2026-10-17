@@ -94,33 +94,42 @@ extension CapricornTests {
         XCTAssertFalse(preferences.enablesVirtualDisks)
         XCTAssertFalse(preferences.allowsCustomBenchmarkConfiguration)
         XCTAssertFalse(preferences.allowsVirtualDisks)
+        XCTAssertFalse(preferences.showsBuildNumber)
+        XCTAssertFalse(preferences.allowsBuildNumberDisplay)
 
         preferences.enablesDeveloperOptions = true
         XCTAssertFalse(preferences.allowsCustomBenchmarkConfiguration)
         XCTAssertFalse(preferences.allowsVirtualDisks)
         preferences.enablesCustomBenchmarkConfiguration = true
         preferences.enablesVirtualDisks = true
+        preferences.showsBuildNumber = true
 
         let reloaded = AppPreferences(defaults: defaults)
         XCTAssertTrue(reloaded.enablesDeveloperOptions)
         XCTAssertTrue(reloaded.allowsCustomBenchmarkConfiguration)
         XCTAssertTrue(reloaded.allowsVirtualDisks)
+        XCTAssertTrue(reloaded.allowsBuildNumberDisplay)
 
         reloaded.enablesDeveloperOptions = false
         let disabled = AppPreferences(defaults: defaults)
         XCTAssertFalse(disabled.allowsCustomBenchmarkConfiguration)
         XCTAssertFalse(disabled.allowsVirtualDisks)
+        XCTAssertFalse(disabled.allowsBuildNumberDisplay)
         XCTAssertTrue(disabled.enablesCustomBenchmarkConfiguration)
         XCTAssertTrue(disabled.enablesVirtualDisks)
+        XCTAssertTrue(disabled.showsBuildNumber)
         disabled.enablesDeveloperOptions = true
         XCTAssertTrue(disabled.allowsCustomBenchmarkConfiguration)
         XCTAssertTrue(disabled.allowsVirtualDisks)
+        XCTAssertTrue(disabled.allowsBuildNumberDisplay)
 
         disabled.enablesCustomBenchmarkConfiguration = false
         disabled.enablesVirtualDisks = false
+        disabled.showsBuildNumber = false
         let turnedOff = AppPreferences(defaults: defaults)
         XCTAssertFalse(turnedOff.allowsCustomBenchmarkConfiguration)
         XCTAssertFalse(turnedOff.allowsVirtualDisks)
+        XCTAssertFalse(turnedOff.allowsBuildNumberDisplay)
     }
 
     @MainActor
@@ -140,6 +149,7 @@ extension CapricornTests {
         preferences.enablesDeveloperOptions = true
         preferences.enablesCustomBenchmarkConfiguration = true
         preferences.enablesVirtualDisks = true
+        preferences.showsBuildNumber = true
         preferences.showsSmartSelfTestInterface = true
         preferences.showsSmartErrorLogInterface = true
         preferences.avoidWakingSleepingDisks = true
@@ -160,11 +170,14 @@ extension CapricornTests {
         XCTAssertFalse(preferences.enablesDeveloperOptions)
         XCTAssertFalse(preferences.enablesCustomBenchmarkConfiguration)
         XCTAssertFalse(preferences.enablesVirtualDisks)
+        XCTAssertFalse(preferences.showsBuildNumber)
+        XCTAssertFalse(preferences.allowsBuildNumberDisplay)
         XCTAssertFalse(preferences.allowsCustomBenchmarkConfiguration)
         XCTAssertFalse(preferences.allowsVirtualDisks)
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.enablesDeveloperOptions))
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.enablesCustomBenchmarkConfiguration))
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.enablesVirtualDisks))
+        XCTAssertNil(defaults.object(forKey: AppPreferences.Key.showsBuildNumber))
         XCTAssertEqual(preferences.showsSmartSelfTestInterface, AppPreferences.Defaults.showsSmartSelfTestInterface)
         XCTAssertFalse(preferences.showsSmartErrorLogInterface)
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.showsSmartErrorLogInterface))
