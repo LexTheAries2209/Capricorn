@@ -49,6 +49,7 @@ struct ThirdPartyLicensesView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
 
             HStack {
                 Link(destination: selection.projectURL) {
