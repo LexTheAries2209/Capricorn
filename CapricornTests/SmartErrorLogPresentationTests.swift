@@ -82,13 +82,14 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                     XCTAssertLessThan(child.boundingBox.midY, main.boundingBox.midY)
                     XCTAssertEqual(child.boundingBox.minX, main.boundingBox.minX, accuracy: 0.01)
                 }
-                let text = normalized(observations.compactMap { $0.topCandidates(1).first?.string }.joined())
-                XCTAssertTrue(text.contains(normalized(language.t(
+                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
+                let text = normalized(lines.joined())
+                XCTAssertTrue(captionIsVisible(language.t(
                     "When disabled, the SMART page hides self-test controls, saved reports, and error-log tools."
-                ))), "\(language), diagnostics enabled: \(enabled): \(text)")
-                XCTAssertEqual(text.contains(normalized(language.t(
+                ), in: lines), "\(language), diagnostics enabled: \(enabled): \(lines)")
+                XCTAssertEqual(captionIsVisible(language.t(
                     "When enabled, the SMART page shows tools to read, view, and export controller error reports."
-                ))), enabled, "\(language), diagnostics enabled: \(enabled): \(text)")
+                ), in: lines), enabled, "\(language), diagnostics enabled: \(enabled): \(lines)")
                 XCTAssertFalse(text.contains(normalized(language.t("Overview"))))
                 XCTAssertFalse(preferences.showsSmartErrorLogInterface)
             }
@@ -225,7 +226,11 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                     ? language.smartErrorLogPendingReadMessage(count: 2)
                     : language.t(state == "empty" ? "No Error Entries" : "Error Report Unavailable")
                 XCTAssertTrue(
-                    lines.contains { normalized($0).contains(normalized(expected)) },
+                    lines.contains {
+                        state == "unread"
+                            ? captionIsVisible(expected, in: [$0])
+                            : normalized($0).contains(normalized(expected))
+                    },
                     "\(state): \(lines)"
                 )
                 XCTAssertFalse(lines.contains { $0.contains(language.t("Retry Error Log Check")) })
@@ -284,11 +289,11 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                 )
                 let lines = try textObservations(in: image).compactMap { $0.topCandidates(1).first?.string }
                 let text = normalized(lines.joined())
-                let expected = normalized(language.smartErrorLogHistoryWithoutDetailsMessage(count: 2))
-                XCTAssertTrue(text.contains(expected), "\(language), \(height): \(lines)")
+                let expected = language.smartErrorLogHistoryWithoutDetailsMessage(count: 2)
+                XCTAssertTrue(captionIsVisible(expected, in: lines), "\(language), \(height): \(lines)")
                 if language == .simplifiedChinese {
                     XCTAssertTrue(
-                        lines.contains { normalized($0).contains(expected) },
+                        lines.contains { captionIsVisible(expected, in: [$0]) },
                         "The Chinese explanation should fit on one line: \(lines)"
                     )
                 }
@@ -298,6 +303,28 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                 )
             }
         }
+    }
+
+    @MainActor
+    func testCaptionRecognitionAcceptsGlyphErrorsButRejectsTruncation() {
+        let chinese = AppLanguage.simplifiedChinese.smartErrorLogHistoryWithoutDetailsMessage(count: 2)
+        let english = AppLanguage.english.t(
+            "When enabled, the SMART page shows tools to read, view, and export controller error reports."
+        )
+        XCTAssertTrue(captionIsVisible(chinese, in: [
+            "控制器记录了2条历史错误，但无法犹取错误报告。"
+        ]))
+        XCTAssertTrue(captionIsVisible(english, in: [
+            "when enabled, the SMART page shows tools to read, view, and export controler error reports."
+        ]))
+        for caption in [chinese, english] {
+            XCTAssertFalse(captionIsVisible(caption, in: [String(caption.prefix(caption.count / 2)) + "..."]))
+            XCTAssertFalse(captionIsVisible(caption, in: [String(caption.dropLast(3)) + "..."]))
+            XCTAssertFalse(captionIsVisible(caption, in: []))
+        }
+        let parts = chinese.split(separator: "，").map(String.init)
+        XCTAssertTrue(captionIsVisible(chinese, in: parts))
+        XCTAssertFalse(parts.contains { captionIsVisible(chinese, in: [$0]) })
     }
 
     @MainActor
@@ -387,6 +414,36 @@ final class SmartErrorLogPresentationTests: XCTestCase {
 
     private func normalized(_ text: String) -> String {
         text.filter { !$0.isWhitespace }
+    }
+
+    private func captionIsVisible(_ expected: String, in lines: [String]) -> Bool {
+        func glyphs(_ text: String) -> [Character] {
+            Array(text.lowercased().filter { $0.isLetter || $0.isNumber })
+        }
+        let target = glyphs(expected)
+        let observed = glyphs(lines.joined(separator: " "))
+        guard target.count >= 2, observed.count >= 2 else { return false }
+
+        // OCR may confuse a few glyphs; require the full caption and its ending.
+        // Free outer text allows nearby labels without forgiving a missing clause.
+        let allowance = max(2, target.count / 20)
+        var previous = Array(repeating: 0, count: observed.count + 1)
+        for (row, character) in target.enumerated() {
+            var current = Array(repeating: 0, count: observed.count + 1)
+            current[0] = row + 1
+            for column in 1...observed.count {
+                current[column] = min(
+                    previous[column] + 1,
+                    current[column - 1] + 1,
+                    previous[column - 1] + (character == observed[column - 1] ? 0 : 1)
+                )
+            }
+            previous = current
+        }
+        return (2...observed.count).contains { end in
+            previous[end] <= allowance
+                && observed[(end - 2)..<end].elementsEqual(target.suffix(2))
+        }
     }
 }
 
