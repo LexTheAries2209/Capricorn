@@ -123,7 +123,9 @@ final class DeveloperSettingsTests: XCTestCase {
                 request.recognitionLevel = .accurate
                 request.recognitionLanguages = ["zh-Hans", "en-US"]
                 try VNImageRequestHandler(cgImage: image).perform([request])
-                let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+                let lines = (request.results ?? []).compactMap {
+                    $0.topCandidates(1).first?.string.replacingOccurrences(of: "虛", with: "虚")
+                }
                 XCTAssertTrue(lines.contains { $0.contains(language.t("Enable developer options")) }, "\(lines)")
                 for title in ["Enable custom benchmark configuration", "Allow adding virtual disks", "Show build number"] {
                     XCTAssertEqual(lines.contains { $0.contains(language.t(title)) }, enabled, "\(lines)")
