@@ -1,6 +1,63 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
-调研日期：2026-10-17，Asia/Shanghai。状态：提案，尚未实现。
+调研日期：2026-10-17，Asia/Shanghai。状态：P0–P2 已在功能分支实现，公开更新源尚未发布。
+
+## 实施记录
+
+分支：`codex/sparkle-updates-p0-p2`。以下记录描述本地实现，后文保留最初研究与分期依据；实际交互以本节为准。
+
+- 已锁定 Sparkle 2.10.0，通过单一更新器接管菜单与设置入口；设置页出现不再主动检查。
+- 营销版本迁移为完整 `2.10.1`，内部构建号迁移为 `1000`；这是开发分支元数据，并未发布同名新 Release。
+- 保持 App 产物固定名 `Capricorn.app` 和 bundle ID `lex.Capricorn`。
+- 自动检查与自动下载/退出时安装均可选，自动安装默认关闭；后台更新采用温和提醒，菜单显示可用版本。
+- 任何冲突任务均弹窗并阻止更新检查或安装，不会强行停止磁盘任务；已下载更新在退出时仍需通过冲突与保存检查。手动下载期间出现冲突会取消下载。后台自动下载可能已取得部分或全部字节，但不能因此越过安装和退出检查。
+- 安装获准后禁止新磁盘任务进入，并保存主 SwiftData context；保存失败会释放安装占用并拒绝退出。
+- 拦截安装确认回复和恢复安装路径，使用 AppKit 应用退出代理覆盖退出时安装，不能只依赖 relaunch 代理。
+- 更新 UI 与错误提示提供中英文。原生 Sparkle 窗口采用应用下次启动时的语言；应用内切换语言后显示重启提示。
+- 启用解压前签名验证、更新清单签名及无限期拒绝无效清单，不启用失败过期回退。禁用系统画像数据发送。
+- 新增 `scripts/prepare-sparkle-update.py`，校验 App 身份、签名和版本，生成完整包与已签名 appcast，并检查包长和签名；脚本不发布任何资源。
+- 完整 Sparkle 与附带组件许可已加入仓库和 App Resources。
+
+真实安装测试使用 `scripts/test-sparkle-update.py` 和仅用于测试的独立 App，bundle ID 为 `lex.Capricorn.UpdateFixture`，运行目录位于用户 Caches 下。测试使用独立临时密钥、偏好和 SwiftData store，没有访问 Capricorn 的实际历史数据库，也未使用生产私钥。
+
+| 测试场景 | 已验证结果 |
+| --- | --- |
+| 手动完整包更新 | Build 1000 → 1001，替换后重启；测试历史与偏好保留 |
+| 自动下载后退出安装 | 退出后安装 Build 1001，再次启动；测试历史与偏好保留 |
+| 有测速冲突 | 弹窗回调被触发，无更新下载；保持 Build 1000 |
+| 更新包字节被篡改 | 显示签名错误，保持 Build 1000 |
+| 已签名更新清单被篡改 | 显示签名错误，不下载安装包；保持 Build 1000 |
+| 确认窗口出现后才开始冲突任务 | 单元测试验证安装回复被转换为取消，不占用安装许可 |
+| 自动更新已准备后出现冲突 | 单元测试验证提示并拒绝更新退出 |
+| 保存失败 | 单元测试验证拒绝安装、释放占用 |
+
+验证环境为本机 Apple silicon。安装测试使用无 Hardened Runtime 的 ad-hoc 测试 App，不证明 Developer ID、公证、隔离下载、Intel 或 macOS 14 真机上的安装行为；正式发布前仍需补齐这些验证。业务数据库已有测试在正常测试套件中回归，安装测试不等于对真实用户数据库进行了迁移演练。
+
+生产 Ed25519 私钥已保存在登录 Keychain 的 `lex.Capricorn` 账号中，公钥嵌入 App。没有将生产私钥导出为文件；其备份和恢复演练尚未完成。测试工具首次访问 Keychain 的等待通过独立测试密钥避开，正式发布签名工具仍可能需要用户在系统 Keychain 提示中授权。
+
+配置的稳定 feed 地址是 GitHub Releases 的 `releases/latest/download/appcast.xml`。当前公开 Release 尚无该附件，且本次未上传、推送或发布任何资源。功能代码与本地升级链验证不能描述为现有用户已经能够在线自动更新。首个正式集成版仍需手动安装一次。
+
+本地验证记录：
+
+- 最终全量测试：439 项通过，无失败、无跳过。
+- 严格并发与 Swift 6 兼容构建通过；Swift 6 保留原有 `init(cString:)` 弃用警告。
+- Universal Release Archive 成功，包含 arm64 和 x86_64；主程序与 dSYM UUID 对应。
+- 归档使用 Apple Development 签名与 Hardened Runtime，`codesign --verify --deep --strict` 通过；不代表 Developer ID 或公证完成。
+- 已在真实 Capricorn 界面启动只读活动监控，确认“检查更新”弹出中文冲突提示；之后已停止测试监控。
+- 中英文更新设置布局及语言重启提示已人工检查，原中文偏好已恢复。
+- 安装测试覆盖两种成功升级路径和三种拒绝路径；测试日志位于工作区 `tmp/sparkle-*.log`，测试 App 和独立 store 位于 `~/Library/Caches/CapricornUpdateFixtures/`。
+
+后续验证可使用解压后的官方 Sparkle 2.10.0 完整归档目录（包含 `Sparkle.framework` 和 `bin`）：
+
+```sh
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario update
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario automatic
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario conflict
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario archive-signature
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario feed-signature
+```
+
+正式发布必须继续保持三段营销版本和全局递增 Build。发布准备脚本的 `--previous-build` 必须传入上一个已发布构建号；脚本会拒绝相同或倒退的构建。`--download-url-prefix` 指向即将发布的固定版本附件目录，输出目录必须尚不存在。首次使用生产签名工具前先处理 Keychain 授权并完成密钥备份。发布准备脚本本轮仅完成静态检查及拒绝路径验证，没有调用生产私钥生成正式更新产物。
 
 ## 结论
 
@@ -10,7 +67,7 @@
 
 截至调研时，Sparkle 最新正式版为 **2.10.0**，发布于 2026-09-13；其 Swift Package 清单最低要求 macOS 12，低于 Capricorn 的 macOS 14 最低要求。[S1][S2]
 
-本轮检查了源码、工程配置、CI、当前发布说明、GitHub Release 元数据及桌面的 `Capricorn V2.10.1.app`。没有集成框架、生成密钥、构建更新包、修改线上资源或进行真实升级测试。
+最初研究阶段检查了源码、工程配置、CI、当时的发布说明、GitHub Release 元数据及桌面的 `Capricorn V2.10.1.app`。研究阶段尚未集成框架或进行真实升级测试；后续实施结果见前文。
 
 ## 当前机制与差距
 
