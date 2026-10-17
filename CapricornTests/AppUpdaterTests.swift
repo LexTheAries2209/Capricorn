@@ -5,6 +5,17 @@ import XCTest
 
 @MainActor
 final class AppUpdaterTests: XCTestCase {
+    func testApplicationBundleSupportsNativeUpdateWindowLanguages() throws {
+        let host = Bundle(for: AppUpdater.self)
+        // The host's supported languages also constrain Sparkle's native windows.
+        for language in AppLanguage.allCases {
+            let preferred = Bundle.preferredLocalizations(
+                from: host.localizations, forPreferences: [language.rawValue]
+            )
+            XCTAssertEqual(preferred.first, language.rawValue)
+        }
+    }
+
     func testApplicationBundleContainsStrictSignedUpdateConfiguration() throws {
         let info = try XCTUnwrap(Bundle(for: AppUpdater.self).infoDictionary)
         let configuration = try AppUpdateConfiguration(info: info)
