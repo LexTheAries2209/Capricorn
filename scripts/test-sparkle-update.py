@@ -178,7 +178,7 @@ def main():
                 assert "Benchmark" in result["detail"], result
                 assert not requests, requests
             elif options.scenario == "missing-feed":
-                assert "confirm the update files are available" in result["detail"], result
+                assert result["detail"] == "Unable to download updates. Check your network or Releases.", result
                 assert "could not be reached" not in result["detail"], result
             else:
                 assert "signature" in result["detail"].lower(), result

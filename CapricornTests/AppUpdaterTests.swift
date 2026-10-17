@@ -274,7 +274,7 @@ final class AppUpdaterTests: XCTestCase {
             showingAlert: true
         )
         XCTAssertEqual(updater.state, .failed(.download))
-        XCTAssertTrue(detail.contains("更新文件是否已发布"))
+        XCTAssertEqual(detail, "无法下载更新。请检查网络或查看 Releases。")
         XCTAssertFalse(detail.contains("无法连接"))
     }
 }

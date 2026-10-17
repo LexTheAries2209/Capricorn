@@ -272,7 +272,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Finish or stop these tasks, then try updating again:": "请先完成或停止以下任务，然后重新尝试更新：",
         "Automatic updates are not configured correctly. Open Releases to download manually.": "自动更新配置不正确。请打开 Releases 手动下载。",
         "The update server could not be reached. Check your connection and system proxy, then try again.": "无法连接更新服务器。请检查网络连接和系统代理后重试。",
-        "The update information or package could not be downloaded. Check your connection or open Releases to confirm the update files are available.": "无法下载更新信息或安装包。请检查网络，或打开 Releases 确认更新文件是否已发布。",
+        "Unable to download updates. Check your network or Releases.": "无法下载更新。请检查网络或查看 Releases。",
         "The update channel is unavailable or invalid. Retry later or open Releases.": "更新通道暂不可用或内容无效。请稍后重试，或打开 Releases。",
         "The update signature could not be verified. The update was blocked.": "无法验证更新签名，已阻止此次更新。",
         "The update could not be installed. Check application permissions or download it from Releases.": "无法安装更新。请检查应用权限，或从 Releases 手动下载。",
