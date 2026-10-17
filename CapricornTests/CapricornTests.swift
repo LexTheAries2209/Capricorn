@@ -2514,10 +2514,11 @@ final class CapricornTests: XCTestCase {
 
     func testSmartDiagnosticsHidesErrorLogSectionForSystemDisk() {
         var drive = Self.fixtureDrive()
-        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive))
+        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive, isEnabled: true))
 
         drive.isSystemDisk = false
-        XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive))
+        XCTAssertTrue(SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive, isEnabled: true))
+        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive, isEnabled: false))
     }
 
     func testSmartSnapshotHeaderFollowsCurrentAttributesAfterRecovery() {

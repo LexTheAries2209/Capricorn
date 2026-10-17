@@ -51,6 +51,7 @@ final class AppPreferences {
         static let enablesCustomBenchmarkConfiguration = false
         static let enablesVirtualDisks = false
         static let showsSmartSelfTestInterface = false
+        static let showsSmartErrorLogInterface = false
         static let avoidWakingSleepingDisks = false
         static let redactSerialNumbers = false
         static let automaticRefreshInterval = DiskAutomaticRefreshInterval.off
@@ -75,6 +76,7 @@ final class AppPreferences {
         // longer operates on system disks, so clear the persisted legacy key.
         static let legacyAllowSystemDiskSelfTests = "allowSystemDiskSelfTests"
         static let showsSmartSelfTestInterface = "showsSmartSelfTestInterface"
+        static let showsSmartErrorLogInterface = "showsSmartErrorLogInterface"
         static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
         static let redactSerialNumbers = "redactSerialNumbers"
         static let automaticRefreshIntervalMinutes = "automaticRefreshIntervalMinutes"
@@ -135,6 +137,14 @@ final class AppPreferences {
         didSet {
             guard !suppressesPersistence else { return }
             defaults.set(showsSmartSelfTestInterface, forKey: Key.showsSmartSelfTestInterface)
+        }
+    }
+
+    /// Controller error reports are a separate opt-in within SMART diagnostics.
+    var showsSmartErrorLogInterface: Bool {
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(showsSmartErrorLogInterface, forKey: Key.showsSmartErrorLogInterface)
         }
     }
 
@@ -216,6 +226,7 @@ final class AppPreferences {
         defaults.removeObject(forKey: Key.legacySmartctlPath)
         defaults.removeObject(forKey: Key.legacyAllowSystemDiskSelfTests)
         showsSmartSelfTestInterface = defaults.object(forKey: Key.showsSmartSelfTestInterface) as? Bool ?? Defaults.showsSmartSelfTestInterface
+        showsSmartErrorLogInterface = defaults.object(forKey: Key.showsSmartErrorLogInterface) as? Bool ?? Defaults.showsSmartErrorLogInterface
         avoidWakingSleepingDisks = defaults.object(forKey: Key.avoidWakingSleepingDisks) as? Bool ?? Defaults.avoidWakingSleepingDisks
         redactSerialNumbers = defaults.object(forKey: Key.redactSerialNumbers) as? Bool ?? Defaults.redactSerialNumbers
         automaticRefreshInterval = DiskAutomaticRefreshInterval(
@@ -249,6 +260,7 @@ final class AppPreferences {
         enablesCustomBenchmarkConfiguration = Defaults.enablesCustomBenchmarkConfiguration
         enablesVirtualDisks = Defaults.enablesVirtualDisks
         showsSmartSelfTestInterface = Defaults.showsSmartSelfTestInterface
+        showsSmartErrorLogInterface = Defaults.showsSmartErrorLogInterface
         avoidWakingSleepingDisks = Defaults.avoidWakingSleepingDisks
         redactSerialNumbers = Defaults.redactSerialNumbers
         automaticRefreshInterval = Defaults.automaticRefreshInterval
@@ -261,6 +273,25 @@ final class AppPreferences {
         suppressesPersistence = false
     }
 
+}
+
+struct SmartDiagnosticsSettingsControls: View {
+    @Bindable var preferences: AppPreferences
+
+    var body: some View {
+        Toggle(preferences.language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
+        Text(preferences.language.t("When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART."))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+        if preferences.showsSmartSelfTestInterface {
+            Toggle(
+                preferences.language.t("Show error entry reader"),
+                isOn: $preferences.showsSmartErrorLogInterface
+            )
+            .padding(.leading, 20)
+        }
+    }
 }
 
 struct CapricornSettingsView: View {
@@ -311,10 +342,7 @@ struct CapricornSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Toggle(language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
-                Text(language.t("When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                SmartDiagnosticsSettingsControls(preferences: preferences)
 
                 Toggle(
                     language.t("Open benchmark progress window by default"),

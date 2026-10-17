@@ -7,6 +7,101 @@ import XCTest
 
 final class SmartErrorLogPresentationTests: XCTestCase {
     @MainActor
+    func testSettingsRevealErrorEntryReaderBelowEnabledDiagnosticsInBothLanguages() async throws {
+        let suiteName = "CapricornTests.errorReaderSettings.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = AppPreferences(defaults: defaults)
+
+        for language in AppLanguage.allCases {
+            preferences.languageRawValue = language.rawValue
+            let root = Form {
+                SmartDiagnosticsSettingsControls(preferences: preferences)
+            }
+            .formStyle(.grouped)
+            .padding(20)
+            .frame(width: 620, height: 260)
+            let hostingView = NSHostingView(rootView: root)
+            let window = makeWindow(hostingView)
+            defer { window.orderOut(nil) }
+
+            for enabled in [false, true, false] {
+                preferences.showsSmartSelfTestInterface = enabled
+                try await Task.sleep(for: .milliseconds(250))
+                hostingView.layoutSubtreeIfNeeded()
+                let image = try capturedImage(
+                    in: hostingView, name: "settings-\(language.rawValue)-\(enabled)"
+                )
+                let observations = try textObservations(in: image)
+                let main = try XCTUnwrap(observations.first {
+                    $0.topCandidates(1).first?.string.contains(language.t("Show SMART diagnostics")) == true
+                })
+                let child = observations.first {
+                    $0.topCandidates(1).first?.string.contains(language.t("Show error entry reader")) == true
+                }
+                XCTAssertEqual(child != nil, enabled)
+                if let child { XCTAssertLessThan(child.boundingBox.midY, main.boundingBox.midY) }
+                XCTAssertFalse(preferences.showsSmartErrorLogInterface)
+            }
+        }
+    }
+
+    @MainActor
+    func testSmartPageHidesErrorReaderByDefaultAndTracksBothSettings() async throws {
+        let suiteName = "CapricornTests.errorReaderVisibility.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = AppPreferences(defaults: defaults)
+        var drive = CapricornTests.fixtureDrive()
+        drive.isSystemDisk = false
+        var snapshot = CapricornTests.fixtureSnapshot(for: drive)
+        snapshot.attributes = [SmartAttribute(
+            id: "nvme.num_err_log_entries", name: "Error Log Entries",
+            rawValue: "2", current: nil, worst: nil, threshold: nil,
+            status: .good, source: "smartctl"
+        )]
+        let model = AppModel()
+        for language in AppLanguage.allCases {
+            let root = SmartAttributesView(
+                drive: drive, snapshot: snapshot, viewModel: model, selfTestHistory: [],
+                saveSnapshot: { _ in "" }, exportSelfTestHistory: { _, _, _ in "" },
+                exportErrorLog: { _, _, _ in "" }, satDriverGuidance: nil,
+                openSATDriverSettings: {}
+            )
+            .defaultAppStorage(defaults)
+            .environment(\.appLanguage, language)
+            .environment(\.locale, Locale(identifier: language.localeIdentifier))
+            .frame(width: 1_000, height: 650)
+            let hostingView = NSHostingView(rootView: root)
+            let window = makeWindow(hostingView)
+            defer { window.orderOut(nil) }
+
+            for (diagnostics, errorReader) in [(true, false), (true, true), (false, true), (true, true), (true, false)] {
+                preferences.showsSmartSelfTestInterface = diagnostics
+                preferences.showsSmartErrorLogInterface = errorReader
+                try await Task.sleep(for: .milliseconds(250))
+                hostingView.layoutSubtreeIfNeeded()
+                let image = try capturedImage(
+                    in: hostingView,
+                    name: "visibility-\(language.rawValue)-\(diagnostics)-\(errorReader)"
+                )
+                let text = normalized(try textObservations(in: image).compactMap {
+                    $0.topCandidates(1).first?.string
+                }.joined())
+                XCTAssertEqual(text.contains(normalized(language.t("SMART Diagnostics"))), diagnostics)
+                XCTAssertEqual(
+                    text.contains(normalized(language.t("SMART Error Entries"))),
+                    diagnostics && errorReader
+                )
+                if diagnostics && !errorReader {
+                    XCTAssertTrue(text.contains(normalized(language.t("Self-tests and saved reports."))))
+                }
+                XCTAssertTrue(model.smartErrorLogReports.isEmpty, "Changing visibility must not read a drive.")
+            }
+        }
+    }
+
+    @MainActor
     func testOneClickReadsAndOpensDetailsWithCachedSupport() async throws {
         let suiteName = "CapricornTests.errorLogClick.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -112,6 +207,7 @@ final class SmartErrorLogPresentationTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(true, forKey: AppPreferences.Key.showsSmartSelfTestInterface)
+        defaults.set(true, forKey: AppPreferences.Key.showsSmartErrorLogInterface)
         var drive = CapricornTests.fixtureDrive()
         drive.isSystemDisk = false
         var snapshot = CapricornTests.fixtureSnapshot(for: drive)
@@ -182,7 +278,8 @@ final class SmartErrorLogPresentationTests: XCTestCase {
             status: .good, source: "smartctl"
         )]
         return SmartDiagnosticsPanel(
-            drive: drive, snapshot: snapshot, viewModel: model, selfTestHistory: [],
+            drive: drive, snapshot: snapshot, showsErrorLogInterface: true,
+            viewModel: model, selfTestHistory: [],
             exportSelfTestHistory: { _, _, _ in "" }, exportErrorLog: { _, _, _ in "" },
             saveMessage: .constant(nil)
         )

@@ -16,6 +16,7 @@ struct SmartAttributesView: View {
     let openSATDriverSettings: () -> Void
     @Environment(\.appLanguage) private var language
     @AppStorage(AppPreferences.Key.showsSmartSelfTestInterface) private var showsSmartSelfTestInterface = false
+    @AppStorage(AppPreferences.Key.showsSmartErrorLogInterface) private var showsSmartErrorLogInterface = false
     @AppStorage("smartSnapshotExportFolder") private var snapshotExportFolderPath = ""
     @State private var saveMessage: String?
 
@@ -59,6 +60,7 @@ struct SmartAttributesView: View {
                 SmartDiagnosticsPanel(
                     drive: drive,
                     snapshot: snapshot,
+                    showsErrorLogInterface: showsSmartErrorLogInterface,
                     viewModel: viewModel,
                     selfTestHistory: selfTestHistory,
                     exportSelfTestHistory: exportSelfTestHistory,
@@ -294,8 +296,8 @@ enum SmartDiagnosticsVisibilityPolicy {
             && attributes.contains { $0.source.caseInsensitiveCompare("smartctl") == .orderedSame }
     }
 
-    static func showsErrorLogSection(for drive: DriveDevice) -> Bool {
-        !drive.isSystemDisk
+    static func showsErrorLogSection(for drive: DriveDevice, isEnabled: Bool) -> Bool {
+        isEnabled && !drive.isSystemDisk
     }
 
 }
@@ -303,6 +305,7 @@ enum SmartDiagnosticsVisibilityPolicy {
 struct SmartDiagnosticsPanel: View {
     let drive: DriveDevice
     let snapshot: SmartSnapshot?
+    let showsErrorLogInterface: Bool
     let viewModel: AppModel
     let selfTestHistory: [SmartSelfTestHistoryRecord]
     let exportSelfTestHistory: ([SmartSelfTestHistoryRecord], String?, SmartDiagnosticsExportFormat) -> String
@@ -319,6 +322,11 @@ struct SmartDiagnosticsPanel: View {
     private var capabilityState: SmartSelfTestCapabilityState { viewModel.smartSelfTestCapability(for: drive) }
     private var errorLogCapabilityState: SmartErrorLogCapabilityState { viewModel.smartErrorLogCapability(for: drive) }
     private var errorLogReport: SmartErrorLogReport? { viewModel.smartErrorLogReports[drive.id] }
+    private var showsErrorLogSection: Bool {
+        SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(
+            for: drive, isEnabled: showsErrorLogInterface
+        )
+    }
     private var historicalErrorEntryCount: Int {
         SmartErrorLogPresentationState.historicalEntryCount(in: snapshot?.attributes ?? [])
     }
@@ -352,7 +360,7 @@ struct SmartDiagnosticsPanel: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text(language.t(
-                        SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive)
+                        showsErrorLogSection
                             ? "Self-tests, saved reports, and controller error entries."
                             : "Self-tests and saved reports."
                     ))
@@ -370,7 +378,7 @@ struct SmartDiagnosticsPanel: View {
 
                 if isExpanded {
                     selfTestSection
-                    if SmartDiagnosticsVisibilityPolicy.showsErrorLogSection(for: drive) {
+                    if showsErrorLogSection {
                         Divider()
                         errorLogSection
                     }
@@ -407,6 +415,12 @@ struct SmartDiagnosticsPanel: View {
         .onChange(of: drive.id) { _, _ in
             errorLogReadDriveID = nil
             showsErrorLog = false
+        }
+        .onChange(of: showsErrorLogInterface) { _, isEnabled in
+            if !isEnabled {
+                errorLogReadDriveID = nil
+                showsErrorLog = false
+            }
         }
         .alert(language.t("Abort SMART Self-Test?"), isPresented: $isConfirmingSelfTestAbort) {
             Button(language.t("Abort Self-Test"), role: .destructive) {

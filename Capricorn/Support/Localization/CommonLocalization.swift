@@ -278,6 +278,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Show SMART self-test status and controls": "显示 SMART 自检状态和测试功能",
         "When disabled, self-test status, records, and controls are hidden in Overview and SMART.": "关闭后，概览和 SMART 界面不会显示自检状态、记录或测试控制。",
         "Show SMART diagnostics": "显示 SMART 诊断",
+        "Show error entry reader": "显示读取错误条目",
         "When disabled, self-test controls, saved reports, and error-log tools are hidden in Overview and SMART.": "关闭后，概览和 SMART 页面将隐藏自检控制、已保存报告和错误日志工具。",
         "Show Quick Check and Repair": "显示快速自检与修复",
         "When disabled, Quick Disk Check is hidden from Overview and Check and Repair is hidden from the disk context menu.": "关闭后，概览页面将隐藏快速自检模块，硬盘右键菜单也不会显示“检查与修复”。",

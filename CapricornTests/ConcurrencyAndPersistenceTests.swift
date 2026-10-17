@@ -15,6 +15,7 @@ extension CapricornTests {
         defaults.set(true, forKey: AppPreferences.Key.legacyShowVirtualDisks)
         let preferences = AppPreferences(defaults: defaults)
         XCTAssertFalse(preferences.showsSmartSelfTestInterface)
+        XCTAssertFalse(preferences.showsSmartErrorLogInterface)
         XCTAssertFalse(preferences.avoidWakingSleepingDisks)
         XCTAssertFalse(preferences.redactSerialNumbers)
         XCTAssertEqual(preferences.automaticRefreshInterval, .off)
@@ -25,6 +26,7 @@ extension CapricornTests {
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyAllowSystemDiskSelfTests))
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyShowVirtualDisks))
         preferences.showsSmartSelfTestInterface = true
+        preferences.showsSmartErrorLogInterface = true
         preferences.avoidWakingSleepingDisks = true
         preferences.redactSerialNumbers = true
         preferences.automaticRefreshInterval = .every15Minutes
@@ -37,11 +39,32 @@ extension CapricornTests {
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyAllowSystemDiskSelfTests))
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.legacyShowVirtualDisks))
         XCTAssertTrue(reloaded.showsSmartSelfTestInterface)
+        XCTAssertTrue(reloaded.showsSmartErrorLogInterface)
         XCTAssertTrue(reloaded.avoidWakingSleepingDisks)
         XCTAssertTrue(reloaded.redactSerialNumbers)
         XCTAssertEqual(reloaded.automaticRefreshInterval, .every15Minutes)
         XCTAssertTrue(reloaded.showsCheckAndRepairActions)
         XCTAssertEqual(reloaded.representativeVolumeStartupPreference, .lastSelected)
+    }
+
+    @MainActor
+    func testErrorEntryReaderDefaultsOffForExistingDiagnosticsUsersAndRetainsSavedChoice() throws {
+        let suiteName = "CapricornTests.errorEntryReader.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: AppPreferences.Key.showsSmartSelfTestInterface)
+
+        let preferences = AppPreferences(defaults: defaults)
+        XCTAssertTrue(preferences.showsSmartSelfTestInterface)
+        XCTAssertFalse(preferences.showsSmartErrorLogInterface)
+        preferences.showsSmartErrorLogInterface = true
+        preferences.showsSmartSelfTestInterface = false
+
+        let reloaded = AppPreferences(defaults: defaults)
+        XCTAssertFalse(reloaded.showsSmartSelfTestInterface)
+        XCTAssertTrue(reloaded.showsSmartErrorLogInterface)
+        reloaded.showsSmartSelfTestInterface = true
+        XCTAssertTrue(AppPreferences(defaults: defaults).showsSmartErrorLogInterface)
     }
 
     @MainActor
@@ -118,6 +141,7 @@ extension CapricornTests {
         preferences.enablesCustomBenchmarkConfiguration = true
         preferences.enablesVirtualDisks = true
         preferences.showsSmartSelfTestInterface = true
+        preferences.showsSmartErrorLogInterface = true
         preferences.avoidWakingSleepingDisks = true
         preferences.redactSerialNumbers = true
         preferences.automaticRefreshInterval = .every15Minutes
@@ -142,6 +166,9 @@ extension CapricornTests {
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.enablesCustomBenchmarkConfiguration))
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.enablesVirtualDisks))
         XCTAssertEqual(preferences.showsSmartSelfTestInterface, AppPreferences.Defaults.showsSmartSelfTestInterface)
+        XCTAssertFalse(preferences.showsSmartErrorLogInterface)
+        XCTAssertNil(defaults.object(forKey: AppPreferences.Key.showsSmartErrorLogInterface))
+        XCTAssertFalse(AppPreferences(defaults: defaults).showsSmartErrorLogInterface)
         XCTAssertFalse(preferences.avoidWakingSleepingDisks)
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.avoidWakingSleepingDisks))
         XCTAssertFalse(AppPreferences(defaults: defaults).avoidWakingSleepingDisks)
