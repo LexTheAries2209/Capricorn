@@ -35,56 +35,32 @@ enum AppUpdatePromptText {
     }
 }
 
-/// Reuse the original system alert, preserving its center as native layout adapts to the message.
+/// Present native alerts with their own modal lifecycle, preserving the center between states.
 @MainActor
 final class AppUpdatePromptController: NSObject, AppUpdatePromptPresenting {
     private var prompt: AppUpdatePrompt?
     private var response: (() -> Void)?
-    private var progressAccessory: NSView?
-    private var progressIndicator: NSProgressIndicator?
-    private var modalSession: NSApplication.ModalSession?
-    private var modalPoll: Timer?
-    private var isPollingModalSession = false
+    private var runningAlert: NSAlert?
+    private var presentationScheduled = false
     private(set) var alert: NSAlert?
     var window: NSWindow? { alert?.window }
 
     func show(_ prompt: AppUpdatePrompt, action: @escaping () -> Void) {
-        pollModalSession()
         let previousCenter = window.flatMap { $0.isVisible ? NSPoint(x: $0.frame.midX, y: $0.frame.midY) : nil }
         // A replaced result must still acknowledge Sparkle; a completed check must not cancel it.
         let previousResponse = self.prompt?.isChecking == false ? response : nil
-        response = nil
+        hide()
         previousResponse?()
-        if alert == nil { makeAlert() }
-        guard let alert, let window else { return }
+        // NSAlert can retain an accessory's view hierarchy after accessoryView becomes nil.
+        let alert = makeAlert(prompt)
+        self.alert = alert
+        let window = alert.window
         self.prompt = prompt
         response = action
-        alert.messageText = prompt.title
-        alert.informativeText = AppUpdatePromptText.paragraphs(prompt.detail)
-        alert.buttons[0].title = prompt.buttonTitle
-        alert.accessoryView = prompt.isChecking ? progressAccessory : nil
-        if prompt.isChecking {
-            progressIndicator?.startAnimation(nil)
-        } else {
-            progressIndicator?.stopAnimation(nil)
-        }
         alert.layout()
-        let button = alert.buttons[0]
-        button.keyEquivalent = prompt.isChecking ? "\u{1b}" : "\r"
-        window.title = prompt.windowTitle
         position(window, center: previousCenter)
         window.makeKeyAndOrderFront(nil)
-        if modalSession == nil {
-            // A nonblocking modal session keeps NSAlert's reserved button actions intact.
-            modalSession = NSApp.beginModalSession(for: window)
-            let timer = Timer(timeInterval: 0.03, repeats: true) { [weak self] timer in
-                guard let self else { timer.invalidate(); return }
-                MainActor.assumeIsolated { self.pollModalSession() }
-            }
-            modalPoll = timer
-            RunLoop.main.add(timer, forMode: .common)
-            pollModalSession()
-        }
+        schedulePresentation()
     }
 
     func dismissChecking() {
@@ -109,11 +85,25 @@ final class AppUpdatePromptController: NSObject, AppUpdatePromptPresenting {
         return true
     }
 
-    private func pollModalSession() {
-        guard let modalSession, !isPollingModalSession else { return }
-        isPollingModalSession = true
-        defer { isPollingModalSession = false }
-        if NSApp.runModalSession(modalSession) != .continue { respond() }
+    private func schedulePresentation() {
+        guard prompt != nil, runningAlert == nil, !presentationScheduled else { return }
+        presentationScheduled = true
+        RunLoop.main.perform(inModes: [.common, .modalPanel]) { [weak self] in
+            MainActor.assumeIsolated { self?.runPresentation() }
+        }
+    }
+
+    private func runPresentation() {
+        presentationScheduled = false
+        guard runningAlert == nil, prompt != nil, let alert else { return }
+        runningAlert = alert
+        // NSAlert owns event routing and its reserved button actions. Polling an
+        // NSApplication modal session alone does not handle real mouse clicks reliably.
+        alert.runModal()
+        runningAlert = nil
+        if self.alert === alert, prompt != nil { respond() }
+        // A replacement waits for the old modal loop to unwind before entering its own.
+        schedulePresentation()
     }
 
     private func respond() {
@@ -125,35 +115,52 @@ final class AppUpdatePromptController: NSObject, AppUpdatePromptPresenting {
     private func hide() {
         response = nil
         prompt = nil
-        modalPoll?.invalidate()
-        modalPoll = nil
-        if let modalSession {
-            NSApp.endModalSession(modalSession)
-            self.modalSession = nil
+        if let runningAlert, NSApp.modalWindow === runningAlert.window {
+            NSApp.abortModal()
+            // A network/timer callback can finish while AppKit is waiting for an
+            // event. Wake that wait so the old modal loop exits before replacement.
+            if let event = NSEvent.otherEvent(
+                with: .applicationDefined, location: .zero, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: runningAlert.window.windowNumber, context: nil,
+                subtype: 0, data1: 0, data2: 0
+            ) {
+                NSApp.postEvent(event, atStart: true)
+            }
         }
-        progressIndicator?.stopAnimation(nil)
+        alert?.accessoryView?.subviews.compactMap { $0 as? NSProgressIndicator }.forEach {
+            $0.stopAnimation(nil)
+        }
+        alert?.accessoryView?.removeFromSuperview()
+        alert?.accessoryView = nil
         window?.orderOut(nil)
     }
 
-    private func makeAlert() {
+    private func makeAlert(_ prompt: AppUpdatePrompt) -> NSAlert {
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.icon = NSApplication.shared.applicationIconImage
-        alert.addButton(withTitle: "")
+        alert.messageText = prompt.title
+        alert.informativeText = AppUpdatePromptText.paragraphs(prompt.detail)
+        alert.addButton(withTitle: prompt.buttonTitle)
+        alert.buttons[0].keyEquivalent = prompt.isChecking ? "\u{1b}" : "\r"
         let window = alert.window
+        window.title = prompt.windowTitle
         window.identifier = NSUserInterfaceItemIdentifier("appUpdatePrompt")
         window.isReleasedWhenClosed = false
         window.isRestorable = false
         window.collectionBehavior = [.fullScreenAuxiliary]
-        let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 228, height: 20))
-        let indicator = NSProgressIndicator(frame: NSRect(x: 106, y: 2, width: 16, height: 16))
-        indicator.style = .spinning
-        indicator.controlSize = .small
-        indicator.isIndeterminate = true
-        accessory.addSubview(indicator)
-        progressAccessory = accessory
-        progressIndicator = indicator
-        self.alert = alert
+        if prompt.isChecking {
+            let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 228, height: 20))
+            let indicator = NSProgressIndicator(frame: NSRect(x: 106, y: 2, width: 16, height: 16))
+            indicator.style = .spinning
+            indicator.controlSize = .small
+            indicator.isIndeterminate = true
+            accessory.addSubview(indicator)
+            alert.accessoryView = accessory
+            indicator.startAnimation(nil)
+        }
+        return alert
     }
 
     private func position(_ window: NSWindow, center: NSPoint?) {

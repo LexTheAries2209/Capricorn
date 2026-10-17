@@ -5,7 +5,7 @@ import XCTest
 
 @MainActor
 final class AppUpdatePromptTests: XCTestCase {
-    func testCheckErrorAndResultReuseNativeAlertAndKeepItsCenter() throws {
+    func testCheckErrorAndResultUseFreshNativeAlertsAndKeepTheirCenter() throws {
         let presenter = AppUpdatePromptController()
         var cancellations = 0
         presenter.show(prompt(checking: true)) { cancellations += 1 }
@@ -18,22 +18,23 @@ final class AppUpdatePromptTests: XCTestCase {
             errorAcknowledgements += 1
             presenter.dismiss()
         }
-        XCTAssertTrue(presenter.window === window)
-        XCTAssertEqual(window.frame.midX, center.x, accuracy: 1)
-        XCTAssertEqual(window.frame.midY, center.y, accuracy: 1)
+        let errorWindow = try XCTUnwrap(presenter.window)
+        XCTAssertFalse(errorWindow === window)
+        XCTAssertFalse(window.isVisible)
+        XCTAssertEqual(errorWindow.frame.midX, center.x, accuracy: 1)
+        XCTAssertEqual(errorWindow.frame.midY, center.y, accuracy: 1)
+        XCTAssertFalse(Self.containsProgressIndicator(in: errorWindow.contentView))
         XCTAssertEqual(cancellations, 0, "Completing a check must not invoke its cancellation")
         presenter.dismissChecking()
-        XCTAssertTrue(window.isVisible, "A result stays visible until acknowledged")
+        XCTAssertTrue(errorWindow.isVisible, "A result stays visible until acknowledged")
         var resultAcknowledgements = 0
         presenter.show(prompt(checking: false)) { resultAcknowledgements += 1 }
         XCTAssertEqual(errorAcknowledgements, 1, "Replacing a result must release Sparkle's callback")
-        XCTAssertEqual(window.frame.midX, center.x, accuracy: 1)
-        XCTAssertEqual(window.frame.midY, center.y, accuracy: 1)
-        presenter.alert?.buttons.first?.performClick(nil)
-        presenter.alert?.buttons.first?.performClick(nil)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.08))
+        XCTAssertEqual(presenter.window!.frame.midX, center.x, accuracy: 1)
+        XCTAssertEqual(presenter.window!.frame.midY, center.y, accuracy: 1)
+        respondToModalAlert(presenter)
         XCTAssertEqual(resultAcknowledgements, 1)
-        XCTAssertFalse(window.isVisible)
+        XCTAssertFalse(presenter.window!.isVisible)
     }
 
     func testCancelButtonRunsOnceButProgrammaticDismissalDoesNotCancel() throws {
@@ -41,9 +42,7 @@ final class AppUpdatePromptTests: XCTestCase {
         var cancellations = 0
         presenter.show(prompt(checking: true)) { cancellations += 1 }
         let window = try XCTUnwrap(presenter.window)
-        presenter.alert?.buttons.first?.performClick(nil)
-        presenter.alert?.buttons.first?.performClick(nil)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.08))
+        respondToModalAlert(presenter)
         XCTAssertEqual(cancellations, 1)
         presenter.show(prompt(checking: true)) { cancellations += 1 }
         presenter.dismissChecking()
@@ -73,9 +72,37 @@ final class AppUpdatePromptTests: XCTestCase {
         presenter.dismissUpdateSession()
         XCTAssertTrue(window.isVisible)
         XCTAssertEqual(acknowledgements, 0)
-        presenter.alert?.buttons.first?.performClick(nil)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.08))
+        respondToModalAlert(presenter)
         XCTAssertEqual(acknowledgements, 1)
+    }
+
+    func testRunningCheckTransitionsToResultWithoutStaleSpinnerOrModalSession() throws {
+        let presenter = AppUpdatePromptController()
+        defer { presenter.dismiss() }
+        var cancellations = 0
+        var acknowledgements = 0
+        for _ in 0..<2 {
+            presenter.show(prompt(checking: true)) { cancellations += 1 }
+            let checkingWindow = try XCTUnwrap(presenter.window)
+            XCTAssertTrue(Self.containsProgressIndicator(in: checkingWindow.contentView))
+            let resultPrompt = prompt(checking: false, detail: "Capricorn 2.10.2 是当前的最新版本。")
+            let transition = Timer(timeInterval: 0.02, repeats: false) { _ in
+                MainActor.assumeIsolated {
+                    XCTAssertTrue(NSApp.modalWindow === checkingWindow)
+                    presenter.show(resultPrompt) {
+                        acknowledgements += 1
+                    }
+                    XCTAssertFalse(checkingWindow.isVisible)
+                    XCTAssertFalse(Self.containsProgressIndicator(in: presenter.window?.contentView))
+                }
+            }
+            RunLoop.main.add(transition, forMode: .modalPanel)
+            respondToModalAlert(presenter, delay: 0.05)
+            XCTAssertFalse(presenter.window!.isVisible)
+            XCTAssertNil(NSApp.modalWindow)
+        }
+        XCTAssertEqual(cancellations, 0)
+        XCTAssertEqual(acknowledgements, 2)
     }
 
     func testChinesePromptBreaksAtSentencesWithoutBreakingVersionsOrURLs() {
@@ -108,5 +135,40 @@ final class AppUpdatePromptTests: XCTestCase {
             detail: detail, buttonTitle: checking ? "Cancel" : "OK", isChecking: checking,
             belongsToUpdateSession: true
         )
+    }
+
+    private static func containsProgressIndicator(in view: NSView?) -> Bool {
+        guard let view else { return false }
+        return view is NSProgressIndicator || view.subviews.contains { containsProgressIndicator(in: $0) }
+    }
+
+    private func respondToModalAlert(_ presenter: AppUpdatePromptController, delay: TimeInterval = 0.02) {
+        var didRespond = false
+        let responseTimer = Timer(timeInterval: delay, repeats: true) { timer in
+            MainActor.assumeIsolated {
+                guard NSApp.modalWindow === presenter.window else { return }
+                timer.invalidate()
+                presenter.alert?.buttons.first?.performClick(nil)
+                didRespond = true
+            }
+        }
+        let watchdog = Timer(timeInterval: 1, repeats: false) { _ in
+            MainActor.assumeIsolated {
+                XCTFail("Native alert did not finish its modal session")
+                presenter.dismiss()
+            }
+        }
+        RunLoop.main.add(responseTimer, forMode: .modalPanel)
+        RunLoop.main.add(watchdog, forMode: .common)
+        RunLoop.main.add(watchdog, forMode: .modalPanel)
+        defer {
+            responseTimer.invalidate()
+            watchdog.invalidate()
+        }
+        let deadline = Date().addingTimeInterval(1)
+        while !didRespond, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        }
+        XCTAssertTrue(didRespond)
     }
 }
