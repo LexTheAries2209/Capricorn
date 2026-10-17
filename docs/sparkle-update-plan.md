@@ -27,6 +27,7 @@
 | 有测速冲突 | 弹窗回调被触发，无更新下载；保持 Build 1000 |
 | 更新包字节被篡改 | 显示签名错误，保持 Build 1000 |
 | 已签名更新清单被篡改 | 显示签名错误，不下载安装包；保持 Build 1000 |
+| 更新清单返回 HTTP 404 | 显示下载失败与检查发布文件提示；保持 Build 1000 |
 | 确认窗口出现后才开始冲突任务 | 单元测试验证安装回复被转换为取消，不占用安装许可 |
 | 自动更新已准备后出现冲突 | 单元测试验证提示并拒绝更新退出 |
 | 保存失败 | 单元测试验证拒绝安装、释放占用 |
@@ -37,7 +38,29 @@
 
 配置的稳定 feed 地址是 GitHub Releases 的 `releases/latest/download/appcast.xml`。当前公开 Release 尚无该附件，且本次未上传、推送或发布任何资源。功能代码与本地升级链验证不能描述为现有用户已经能够在线自动更新。首个正式集成版仍需手动安装一次。
 
-本地验证记录：
+### 系统代理与网络诊断
+
+Sparkle 2.10.0 的 `SPUDownloader` 使用 `URLSessionConfiguration.default`，没有覆盖代理字典。Apple 文档说明代理字典默认为空时遵循系统设置。因此检查清单、发布说明和更新包下载共用 macOS 的代理策略，包括代理自动配置与绕过规则；应用未设置“先直连再代理”的策略，也未固定任何本地端口。仅在终端设置代理环境变量不等于已配置 macOS 系统代理。
+
+2026-10-17 本机实测：默认配置和显式复制系统代理配置均报告 `URLSessionTaskTransactionMetrics.isProxyConnection = true`，目标 feed 均返回 HTTP 404；GitHub 首页可达，而最新 `v2.10.1` Release 只有 ZIP，尚无 `appcast.xml`。此时无法更新的原因是清单未发布，不能归因为系统代理未生效。
+
+只读诊断脚本使用与 Sparkle 相同的默认会话配置，输出每一跳的主机、是否经代理及 HTTP 状态，不修改系统网络设置，也不输出代理凭据：
+
+```sh
+xcrun swift scripts/diagnose-update-network.swift \
+  https://github.com \
+  https://github.com/LexTheAries2209/Capricorn/releases/latest/download/appcast.xml
+```
+
+所有请求成功时退出码为 0；HTTP 错误或连接失败时为 1，参数错误为 2。`proxy=true` 说明该跳使用代理，不说明代理服务内部一定选择了远端代理线路。
+
+Sparkle 不为 HTTP 失败提供结构化状态码，而是同样使用 `SUDownloadError`。应用对其显示通用下载失败与检查 Release 文件的恢复提示；只有底层连接错误才显示网络/系统代理提示，不解析本地化错误字符串来猜测 404。清单解析、签名验证和冲突阻止仍保留独立提示。
+
+本次增量验证：`AppUpdaterTests` 10 项通过，无失败或跳过；真实 Sparkle 的 `missing-feed` 场景返回 404 后显示下载失败，保持 Build 1000；诊断脚本通过 Swift 6 与 warnings-as-errors 检查，且成功报告代理路径与状态码。首次 Xcode 测试宿主在 Desktop 构建目录的动态库加载阶段等待，结束该测试后改用 `~/Library/Caches/CapricornProxyValidation` 构建输出并通过；未结束用户原来运行的 Capricorn。
+
+官方依据：[Sparkle 2.10.0 下载器](https://github.com/sparkle-project/Sparkle/blob/2.10.0/Downloader/SPUDownloader.m)；[Apple connectionProxyDictionary](https://developer.apple.com/documentation/foundation/urlsessionconfiguration/connectionproxydictionary)。
+
+P0–P2 初始实现的本地验证记录（代理诊断增量验证见上节）：
 
 - 最终全量测试：439 项通过，无失败、无跳过。
 - 严格并发与 Swift 6 兼容构建通过；Swift 6 保留原有 `init(cString:)` 弃用警告。
@@ -55,6 +78,7 @@ python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenar
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario conflict
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario archive-signature
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario feed-signature
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario missing-feed
 ```
 
 正式发布必须继续保持三段营销版本和全局递增 Build。发布准备脚本的 `--previous-build` 必须传入上一个已发布构建号；脚本会拒绝相同或倒退的构建。`--download-url-prefix` 指向即将发布的固定版本附件目录，输出目录必须尚不存在。首次使用生产签名工具前先处理 Keychain 授权并完成密钥备份。发布准备脚本本轮仅完成静态检查及拒绝路径验证，没有调用生产私钥生成正式更新产物。
