@@ -13,10 +13,12 @@ final class SettingsNavigationTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let preferences = AppPreferences(defaults: defaults)
         preferences.requestedSettingsDestination = .updates
+        defaults.set(Date(), forKey: AppUpdater.PreferenceKey.lastCheck)
         let checker = AppUpdater(
             safety: AppUpdateSafetyGate(conflicts: { [] }),
             language: { preferences.language },
-            allowsStartup: false
+            allowsStartup: false,
+            defaults: defaults
         )
         let root = CapricornSettingsView(preferences: preferences, updateChecker: checker)
             .modelContainer(try ModelContainerFactory.makeInMemory())

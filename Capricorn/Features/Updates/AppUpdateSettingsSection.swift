@@ -24,27 +24,35 @@ struct AppUpdateSettingsSection: View {
             ))
             .disabled(!updateChecker.automaticallyChecksForUpdates)
 
-            if let lastChecked = updateChecker.lastCheckedAt {
-                LabeledContent(language.t("Last checked")) {
-                    Text(lastChecked, format: .dateTime.year().month().day().hour().minute())
-                }
-            }
-
             statusContent
 
-            HStack {
+            HStack(spacing: 10) {
                 Button {
                     updateChecker.checkNow()
                 } label: {
                     Label(language.t("Check for Updates…"), systemImage: "arrow.clockwise")
                 }
                 .disabled(updateChecker.isStarted && !updateChecker.canCheckForUpdates)
+                .fixedSize()
 
-                Spacer()
+                if let lastChecked = updateChecker.lastCheckedAt {
+                    let formattedDate = lastChecked.formatted(
+                        .dateTime.year().month(.twoDigits).day(.twoDigits)
+                            .hour().minute().locale(Locale(identifier: language.localeIdentifier))
+                    )
+                    Text("\(language.t("Last checked")): \(formattedDate)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help(Text(lastChecked, format: .dateTime.year().month().day().hour().minute()))
+                }
+
+                Spacer(minLength: 4)
 
                 Button(language.t("Open Releases")) {
                     openURL(GitHubReleaseService.releasesURL)
                 }
+                .fixedSize()
             }
             if language != updateChecker.nativeLanguage {
                 Text(language.t("Restart Capricorn to apply this language to update windows."))
