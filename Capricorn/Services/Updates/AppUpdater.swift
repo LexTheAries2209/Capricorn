@@ -103,11 +103,14 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     }
 
     func conflictsDidChange() {
-        guard !safety.isReserved, userDriver?.cancelDownload != nil else { return }
+        guard !safety.isReserved else { return }
         do {
             try safety.check()
+            if case .blocked = state { state = .idle }
         } catch {
+            guard userDriver?.cancelDownload != nil || updater?.sessionInProgress == true || hasPendingInstallation else { return }
             userDriver?.cancelActiveDownload()
+            if let blocked = error as? AppUpdateBlockedError, state == .blocked(blocked.conflicts) { return }
             reportBlocked(error)
         }
     }
@@ -174,11 +177,16 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         }
     }
 
-    static func issue(for error: NSError) -> AppUpdateIssue {
+    static func issue(for error: NSError, depth: Int = 0) -> AppUpdateIssue {
+        guard depth < 8 else { return .installation }
+        var children = error.userInfo[NSMultipleUnderlyingErrorsKey] as? [NSError] ?? []
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError { children.append(underlying) }
+        let underlyingIssues = children.map { issue(for: $0, depth: depth + 1) }
+        if underlyingIssues.contains(.signature) { return .signature }
         if error.domain == NSURLErrorDomain { return .network }
-        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError,
-           underlying.domain == NSURLErrorDomain { return .network }
-        guard error.domain == SUSparkleErrorDomain else { return .installation }
+        guard error.domain == SUSparkleErrorDomain else {
+            return underlyingIssues.first(where: { $0 != .installation }) ?? .installation
+        }
         switch SUError(rawValue: OSStatus(error.code)) {
         case .signatureError, .validationError, .insufficientSigningError: return .signature
         case .appcastError, .appcastParseError, .resumeAppcastError: return .feed
@@ -186,7 +194,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         case .invalidFeedURLError, .insecureFeedURLError, .invalidUpdaterError,
              .invalidHostVersionError, .invalidHostBundleIdentifierError, .noPublicDSAFoundError:
             return .configuration
-        default: return .installation
+        default: return underlyingIssues.first(where: { $0 != .installation }) ?? .installation
         }
     }
 
@@ -278,10 +286,15 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
 
     func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
         hasPendingInstallation = true
+        _ = authorizeUpdate()
         return false
     }
 
     var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    func allowedSystemProfileKeys(for updater: SPUUpdater) -> [String]? {
+        []
+    }
 
     func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool {
         false

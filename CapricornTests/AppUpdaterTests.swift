@@ -60,6 +60,27 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertFalse(gate.isReserved)
     }
 
+    func testNewConflictWithPreparedAutomaticUpdatePresentsWarningOnce() {
+        var conflicts: [AppUpdateConflict] = []
+        var alertCount = 0
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { conflicts }),
+            language: { .english }, allowsStartup: false,
+            presentAlert: { _, _ in alertCount += 1 }
+        )
+        updater.markPendingInstallation(true)
+        conflicts = [.selfTest]
+        updater.conflictsDidChange()
+        updater.conflictsDidChange()
+        XCTAssertEqual(alertCount, 1)
+        XCTAssertEqual(updater.state, .blocked([.selfTest]))
+        XCTAssertFalse(updater.applicationMayTerminate())
+        conflicts = []
+        updater.conflictsDidChange()
+        XCTAssertEqual(updater.state, .idle)
+        XCTAssertFalse(updater.safety.isReserved)
+    }
+
     func testReadyDialogRechecksForConflictsAtReplyAndCancelsPreparedInstall() {
         var conflicts: [AppUpdateConflict] = []
         let updater = AppUpdater(
@@ -99,6 +120,14 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertEqual(AppUpdater.issue(for: NSError(domain: SUSparkleErrorDomain, code: Int(SUError.signatureError.rawValue))), .signature)
         XCTAssertEqual(AppUpdater.issue(for: URLError(.notConnectedToInternet) as NSError), .network)
         XCTAssertEqual(AppUpdater.issue(for: NSError(domain: SUSparkleErrorDomain, code: Int(SUError.appcastParseError.rawValue))), .feed)
+        let nested = NSError(
+            domain: SUSparkleErrorDomain, code: Int(SUError.installationError.rawValue),
+            userInfo: [NSUnderlyingErrorKey: NSError(
+                domain: SUSparkleErrorDomain, code: Int(SUError.unarchivingError.rawValue),
+                userInfo: [NSUnderlyingErrorKey: NSError(domain: SUSparkleErrorDomain, code: Int(SUError.signatureError.rawValue))]
+            )]
+        )
+        XCTAssertEqual(AppUpdater.issue(for: nested), .signature)
     }
 }
 

@@ -23,7 +23,13 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     }
 
     func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) {
-        standard.show(request, reply: reply)
+        standard.show(request) { response in
+            reply(SUUpdatePermissionResponse(
+                automaticUpdateChecks: response.automaticUpdateChecks,
+                automaticUpdateDownloading: response.automaticUpdateDownloading,
+                sendSystemProfile: false
+            ))
+        }
     }
 
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {
@@ -32,7 +38,10 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     }
 
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        // A prepared installer may survive the previous app process.
+        if state.stage == .installing { owner?.markPendingInstallation(true) }
         guard owner?.authorizeUpdate() == true else {
+            if state.stage == .installing { owner?.markPendingInstallation(false) }
             reply(state.stage == .installing ? .skip : .dismiss)
             return
         }
@@ -40,6 +49,7 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
             guard let self else { reply(.dismiss); return }
             if choice == .install,
                self.owner?.authorizeUpdate(installing: state.stage == .installing) != true {
+                if state.stage == .installing { self.owner?.markPendingInstallation(false) }
                 reply(state.stage == .installing ? .skip : .dismiss)
             } else {
                 if choice == .skip { self.owner?.markPendingInstallation(false) }
