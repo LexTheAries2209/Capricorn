@@ -289,7 +289,7 @@ struct SmartDiagnosticsSettingsControls: View {
                 preferences.language.t("Show error entry reader"),
                 isOn: $preferences.showsSmartErrorLogInterface
             )
-            Text(preferences.language.t("Off by default. When enabled, the SMART page shows tools to read, view, and export controller error reports."))
+            Text(preferences.language.t("When enabled, the SMART page shows tools to read, view, and export controller error reports."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
