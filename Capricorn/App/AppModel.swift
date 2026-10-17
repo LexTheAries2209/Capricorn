@@ -81,6 +81,31 @@ final class AppModel {
     var smartErrorLogMessage: String?
     var completedSmartSelfTest: SmartSelfTestCompletion?
     var diskOperationLockNotice: DiskOperationLockNotice?
+    private(set) var isInstallingAppUpdate = false
+    private var activeDiskCommandCount = 0
+
+    var appUpdateConflicts: [AppUpdateConflict] {
+        var conflicts: [AppUpdateConflict] = []
+        if isBenchmarking || benchmarkTask != nil { conflicts.append(.benchmark) }
+        if isLiveActivityWorkloadRunning || liveActivityWorkloadTask != nil { conflicts.append(.workload) }
+        if isLiveActivityMonitoring { conflicts.append(.monitoring) }
+        if isDiskChecking { conflicts.append(.diskCheck) }
+        if isFirstAidBlocking || firstAidEventTask != nil { conflicts.append(.firstAid) }
+        if isSmartSelfTestActive || smartSelfTestTask != nil { conflicts.append(.selfTest) }
+        if activeDiskCommandCount > 0 { conflicts.append(.diskCommand) }
+        if !smartSelfTestCapabilityTasks.isEmpty || !smartErrorLogReadTasks.isEmpty { conflicts.append(.diagnostics) }
+        if isRefreshing || refreshTask != nil { conflicts.append(.refresh) }
+        if isInstallingAppUpdate { conflicts.append(.installation) }
+        return conflicts
+    }
+
+    func reserveAppUpdateInstallation() {
+        isInstallingAppUpdate = true
+    }
+
+    func releaseAppUpdateInstallation() {
+        isInstallingAppUpdate = false
+    }
     private(set) var diskCheckReportsByDrive: [String: DiskCheckReport] = [:]
     private var representativeVolumePreferences = RepresentativeVolumePreferences()
     private var activeRepresentativeVolumeIDsByDrive: [String: String] = [:]
@@ -616,6 +641,7 @@ final class AppModel {
     }
 
     func refresh(allowDuringFirstAid: Bool = false) async {
+        guard !isInstallingAppUpdate else { return }
         guard allowDuringFirstAid || !diskOperations.isFirstAidBlocking else { return }
         refreshTask?.cancel()
         let refreshID = UUID()
@@ -753,7 +779,7 @@ final class AppModel {
         volumePath: String? = nil,
         resultUpdatePolicy: BenchmarkResultUpdatePolicy = .replaceProfile
     ) -> Bool {
-        guard selectedDrive?.isVirtual != true,
+        guard !isInstallingAppUpdate, selectedDrive?.isVirtual != true,
               benchmarkTask == nil, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return false }
         benchmarkProgress = nil
         benchmarkError = nil
@@ -775,7 +801,7 @@ final class AppModel {
         volumePath: String? = nil,
         resultUpdatePolicy: BenchmarkResultUpdatePolicy = .replaceProfile
     ) async {
-        guard benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return }
+        guard !isInstallingAppUpdate, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return }
         guard let drive = selectedDrive else {
             benchmarkError = "Select a drive before running a benchmark."
             return
@@ -881,6 +907,7 @@ final class AppModel {
     }
 
     func performDiskAction(_ action: DiskSidebarAction, on drive: DriveDevice, newName: String? = nil) async {
+        guard !isInstallingAppUpdate else { return }
         if drive.isVirtual {
             if action == .eject, !isDriveSelectionLocked { removeSimulatedDisk(drive) }
             return
@@ -891,6 +918,8 @@ final class AppModel {
             return
         }
         defer { diskLease.release() }
+        activeDiskCommandCount += 1
+        defer { activeDiskCommandCount -= 1 }
         CapricornLog.diskOperations.info("Disk operation started: \(action.rawValue, privacy: .public)")
         selectedDriveID = drive.id
         refreshMessage = "Running disk action..."
@@ -916,7 +945,10 @@ final class AppModel {
     }
 
     func inspectOpenFiles(on drive: DriveDevice) async {
+        guard !isInstallingAppUpdate else { return }
         guard !drive.isVirtual else { return }
+        activeDiskCommandCount += 1
+        defer { activeDiskCommandCount -= 1 }
         selectedDriveID = drive.id
         refreshMessage = "Inspecting open files..."
         do {
@@ -972,6 +1004,7 @@ final class AppModel {
     }
 
     func prepareFirstAid(on drive: DriveDevice) async {
+        guard !isInstallingAppUpdate else { return }
         guard !drive.isVirtual else { return }
         guard !diskOperations.isFirstAidBlocking,
               !isDiskChecking,
@@ -1234,6 +1267,7 @@ final class AppModel {
         for drive: DriveDevice,
         operation: DiskOperationKind
     ) -> DiskOperationLease? {
+        guard !isInstallingAppUpdate else { return nil }
         do {
             return try diskOperationLockCoordinator.acquire(for: drive, operation: operation)
         } catch let DiskOperationLockError.conflict(conflict) {
@@ -1267,6 +1301,7 @@ final class AppModel {
     }
 
     func startLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {
+        guard !isInstallingAppUpdate else { return }
         guard !drive.isVirtual else { return }
         guard liveActivitySession.workloadState == .idle, !diskOperations.isFirstAidBlocking else { return }
         stopLiveActivityMonitoring()
@@ -1539,6 +1574,7 @@ final class AppModel {
     }
 
     func readSmartErrorLog(for drive: DriveDevice) {
+        guard !isInstallingAppUpdate else { return }
         guard !drive.isVirtual || virtualT7DemoMode else { return }
         guard !drive.isSystemDisk else { return }
         guard smartErrorLogReadTasks[drive.id] == nil else { return }
@@ -1645,6 +1681,7 @@ final class AppModel {
     }
 
     private func probeSmartSelfTestCapability(for drive: DriveDevice, force: Bool) {
+        guard !isInstallingAppUpdate else { return }
         guard !drive.isVirtual || virtualT7DemoMode else { return }
         guard !drive.isSystemDisk else { return }
         if virtualT7DemoMode {
