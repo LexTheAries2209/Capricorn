@@ -506,7 +506,15 @@ final class SidebarAutoFitTests: XCTestCase {
                 request.recognitionLevel = .accurate
                 request.recognitionLanguages = ["zh-Hans", "en-US"]
                 try VNImageRequestHandler(cgImage: image).perform([request])
-                let text = (request.results?.compactMap { $0.topCandidates(1).first?.string } ?? [])
+                // Vision can return a wrapped unit before its preceding number.
+                // Restore visual reading order before checking complete field values.
+                let observations = (request.results ?? []).sorted { left, right in
+                    if abs(left.boundingBox.midY - right.boundingBox.midY) > 0.005 {
+                        return left.boundingBox.midY > right.boundingBox.midY
+                    }
+                    return left.boundingBox.minX < right.boundingBox.minX
+                }
+                let text = observations.compactMap { $0.topCandidates(1).first?.string }
                     .joined().replacingOccurrences(of: " ", with: "").lowercased()
                 let nameEnding = drive.isVirtual ? "modelend" : drive.isNetwork ? "hostend" : "volumeend"
                 for ending in [nameEnding, "modelend", "serialend", "protocolend", "4.1tb"] {
