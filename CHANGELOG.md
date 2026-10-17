@@ -8,6 +8,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V2.10.4 - 2026-10-17
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.10.4) | [Release Notes / 发布说明](docs/releases/v2.10.4.md)
+
+### 中文
+
+- 更新下载、安装和重启均需用户确认，移除自动下载与退出时安装；发现新版本后提示手动更新入口。
+- 设置统一展示 Sparkle、smartctl 和 SAT SMART Drive 的版本与项目链接，移除独立许可阅读窗口。
+- 精简 SAT 信息布局，虚拟硬盘开关改名为“允许添加虚拟硬盘”。
+
+### English
+
+- Requires user confirmation for update downloads, installation, and relaunch; removes automatic downloads and installation on quit, with clearer guidance when an update is available.
+- Groups Sparkle, smartctl, and SAT SMART Drive versions and project links in Settings and removes the separate license reader.
+- Compacts SAT information and renames the virtual-disk option to “Allow adding virtual disks”.
+
 ## V2.10.3 - 2026-10-17
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.10.3) | [Release Notes / 发布说明](docs/releases/v2.10.3.md)
