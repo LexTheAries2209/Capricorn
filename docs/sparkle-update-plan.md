@@ -1,6 +1,6 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
-调研日期：2026-10-17，Asia/Shanghai。状态：P0–P2 已实现，正准备 V2.10.2 / Build 0042 的首次公开更新源。
+调研日期：2026-10-17，Asia/Shanghai。状态：P0–P2 已随 V2.10.2 / Build 0042 发布，公开签名更新源验证通过。
 
 ## 实施记录
 
@@ -39,7 +39,7 @@
 
 生产 Ed25519 私钥已保存在登录 Keychain 的 `lex.Capricorn` 账号中，公钥嵌入 App。V2.10.2 已成功使用该密钥签名清单和安装包，并验证签名；没有将生产私钥导出为文件，其备份和恢复演练尚未完成。独立安装测试仍使用测试密钥。
 
-配置的稳定 feed 地址是 GitHub Releases 的 `releases/latest/download/appcast.xml`。V2.10.1 及更早公开版本没有 Sparkle，需手动安装 V2.10.2 一次。发布前已通过实际生产签名清单的本地只读 Sparkle 检查：旧 Build 0041 发现 2.10.2 / 0042，当前 0042 判定为最新。公开源结果在发布后补充；后文保留历史阶段的验证记录。
+配置的稳定 feed 地址是 GitHub Releases 的 `releases/latest/download/appcast.xml`。V2.10.1 及更早公开版本没有 Sparkle，需手动安装 V2.10.2 一次。发布后已使用真实 Sparkle 读取公开签名清单：旧 Build 0041 发现 2.10.2 / 0042，当前 0042 判定为最新；实际归档 App 的手动检查也显示 2.10.2 为最新。公开 ZIP 大小与 GitHub SHA-256 digest 均匹配本地最终包。全量测试、严格并发、Swift 6 的 [发布 CI](https://github.com/LexTheAries2209/Capricorn/actions/runs/39008671960) 全部通过；后文保留历史阶段的验证记录。
 
 ### 四位构建号迁移
 

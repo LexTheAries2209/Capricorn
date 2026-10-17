@@ -20,7 +20,7 @@
   "allocations": [
     {
       "build": "0042",
-      "status": "reserved",
+      "status": "published",
       "version": "2.10.2",
       "tag": "v2.10.2"
     }
