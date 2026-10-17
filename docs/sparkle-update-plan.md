@@ -9,7 +9,7 @@
 - 已锁定 Sparkle 2.10.0，通过单一更新器接管菜单与设置入口；设置页出现不再主动检查。
 - 首次集成版本为完整 `2.10.2`，内部构建号 `0042`：已核实此前有 41 次正式 Release，以此作为一次性迁移基线。后续采用四位、全局递增的独立发布构建号。详见 [版本规则](versioning.md) 和 [构建号分配记录](../Configuration/ReleaseBuilds.json)。
 - 保持 App 产物固定名 `Capricorn.app` 和 bundle ID `lex.Capricorn`。
-- 自动检查现已改为用户启用后每次启动检查一次，不再按时间间隔检查。自动下载/退出时安装另行选择，默认关闭；后台更新采用温和提醒，菜单显示可用版本。
+- 自动检查现已改为用户启用后每次启动检查一次，不再按时间间隔检查。自动下载/退出时安装另行选择，默认关闭；后台更新采用温和提醒，菜单显示可用版本。后续本地改动另加入启动检查 15 秒无结果自动结束、不自动重试的策略，尚未发布。
 - 任何冲突任务均弹窗并阻止更新检查或安装，不会强行停止磁盘任务；已下载更新在退出时仍需通过冲突与保存检查。手动下载期间出现冲突会取消下载。后台自动下载可能已取得部分或全部字节，但不能因此越过安装和退出检查。
 - 安装获准后禁止新磁盘任务进入，并保存主 SwiftData context；保存失败会释放安装占用并拒绝退出。
 - 拦截安装确认回复和恢复安装路径，使用 AppKit 应用退出代理覆盖退出时安装，不能只依赖 relaunch 代理。
@@ -75,7 +75,11 @@ V2.10.2 的主 App 未声明中文本地化，导致即使 `appLanguage` 和 `Ap
 - 新键 `checksForUpdatesOnLaunch` 表示应用自管的启动检查。没有该键时读取原 `SUEnableAutomaticChecks` 的用户选择，首次启动更新器时先保存迁移值，再关闭 Sparkle 的定时调度；迁移后新选择优先。
 - `SUEnableAutomaticChecks=NO` 禁用 Sparkle 自身的定时器和默认许可询问，移除 `SUScheduledCheckInterval`。`SUAllowsAutomaticUpdates=YES` 保留用户另行开启自动下载的能力，不代表默认启用；下载偏好继续使用 `SUAutomaticallyUpdate`，默认关闭。
 - 上次检查时间在更新器未启动时也能加载，仅供显示，不决定是否检查。有冲突仍提示并阻止，本次启动不会在任务结束后自动补查；可手动重试。
+- 启动检查设 15 秒总截止时间（后续本地改动，尚未发布），不按网络是否持续返回少量数据续期。超时后清理当前 Sparkle 检查器，依靠其销毁流程取消清单请求，设置页显示超时状态，不弹出错误窗口、不安排自动重试；下次启动或手动检查时可创建新实例。旧驱动解除与应用的绑定，迟到的取消、结果与界面清理回调不会覆盖新的检查状态。
+- 收到可用版本、确认无更新、检查失败或离开检查阶段时取消截止计时。手动检查及已经开始的更新包下载、解压和安装不受此 15 秒限制；任务冲突提示继续保留。
 - “重置所有设置”会关闭启动检查与自动下载。
+
+15 秒截止的后续验证（尚未发布）：32 项更新控制器、提示框和安全检查测试通过，严格并发构建通过，真实测试 App 使用 Swift 6 编译。每秒持续返回清单字节的请求在 15.004 秒结束，服务器确认连接被取消；应用保持打开不自动重试，随后手动检查成功。更新包响应另暂停 16 秒，自动下载及退出安装仍成功完成，测试历史与偏好保留。
 
 增量验证：21 项更新、冲突、设置导航和翻译测试通过，无失败、无跳过，严格并发构建与 Swift 6 构建通过；Swift 6 仍有原有 `init(cString:)` 弃用警告。独立测试 App 验证连续两次启动共两次清单请求、关闭时零请求、冲突时零请求，以及手动完整更新、启动检查后的自动下载/退出安装两条路径；两条安装路径均为 Build 1000 → 1001，测试历史与偏好保留。没有发布公开更新源。
 
@@ -123,6 +127,8 @@ python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenar
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario launch-checks
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario launch-disabled
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario launch-conflict
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario launch-timeout
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario automatic --archive-delay 16
 ```
 
 正式发布保持三段营销版本和四位全局递增 Build。发布准备脚本的 `--previous-build` 在首次迁移时使用 `0041`，之后使用实际上一分发构建的全局序号；脚本拒绝非四位、零值、相同或倒退的构建。`--download-url-prefix` 指向即将发布的固定版本附件目录，输出目录必须尚不存在。V2.10.2 已通过生产密钥签名及复验。没有 Developer ID 和公证时，使用 `--allow-unnotarized`（兼容旧参数 `--allow-development-signing`）明确接受信任限制，但仍强制验证完整 bundle 和 Ed25519 签名。密钥备份建议尽快完成，不作为这次发布的先决条件。

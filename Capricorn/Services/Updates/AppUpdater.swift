@@ -35,6 +35,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     @ObservationIgnored private var hasAttemptedStart = false
     @ObservationIgnored private var postponedRelaunch: (() -> Void)?
     @ObservationIgnored private var hasHandledApplicationLaunch = false
+    @ObservationIgnored private var launchCheckDeadline: (id: UUID, timer: Timer)?
 
     init(
         safety: AppUpdateSafetyGate,
@@ -103,6 +104,16 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         guard allowsStartup, automaticallyChecksForUpdates, authorizeUpdate() else { return }
         start()
         guard let updater, isStarted, updater.canCheckForUpdates else { return }
+        let checkID = UUID()
+        let deadline = Timer(timeInterval: 15, repeats: false) { [weak self, weak updater] _ in
+            MainActor.assumeIsolated {
+                guard let self, let updater else { return }
+                self.expireLaunchCheck(updater, id: checkID)
+            }
+        }
+        launchCheckDeadline = (checkID, deadline)
+        RunLoop.main.add(deadline, forMode: .common)
+        RunLoop.main.add(deadline, forMode: .modalPanel)
         updater.checkForUpdatesInBackground()
     }
 
@@ -181,7 +192,39 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     }
 
     func transition(to state: AppUpdaterState) {
+        if state != .checking { finishLaunchCheckDeadline() }
         self.state = state
+    }
+
+    private func finishLaunchCheckDeadline() {
+        launchCheckDeadline?.timer.invalidate()
+        launchCheckDeadline = nil
+    }
+
+    private func expireLaunchCheck(_ expiredUpdater: SPUUpdater, id: UUID) {
+        guard updater === expiredUpdater, launchCheckDeadline?.id == id else { return }
+        finishLaunchCheckDeadline()
+        // Finding a result, downloading, and installing end the deadline before this point.
+        switch state {
+        case .idle, .checking, .blocked: break
+        default: return
+        }
+        observations.forEach { $0.invalidate() }
+        observations.removeAll()
+        promptPresenter.dismissChecking()
+        userDriver?.invalidate()
+        userDriver = nil
+        // Sparkle aborts its driver and cancels the downloader in SPUUpdater.dealloc.
+        // The timer holds only a weak reference, so the retired updater can be released.
+        updater = nil
+        isStarted = false
+        hasAttemptedStart = false
+        canCheckForUpdates = true
+        let checkedAt = Date()
+        lastCheckedAt = checkedAt
+        defaults.set(checkedAt, forKey: PreferenceKey.lastCheck)
+        if case .blocked = state { return }
+        state = .failed(.checkTimeout)
     }
 
     func receivedDownloadProgress(_ progress: Double?) {
@@ -332,10 +375,12 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     }
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        finishLaunchCheckDeadline()
         state = .available(item.displayVersionString)
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+        finishLaunchCheckDeadline()
         if case .blocked = state {
             synchronizeSettings()
             return
@@ -345,6 +390,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     }
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
+        defer { finishLaunchCheckDeadline() }
         synchronizeSettings()
         if let error {
             let nsError = error as NSError

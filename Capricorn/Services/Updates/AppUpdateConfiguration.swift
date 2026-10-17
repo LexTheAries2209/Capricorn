@@ -25,6 +25,7 @@ struct AppUpdateConfiguration: Equatable, Sendable {
 enum AppUpdateIssue: String, Equatable, Sendable {
     case configuration = "Automatic updates are not configured correctly. Open Releases to download manually."
     case network = "The update server could not be reached. Check your connection and system proxy, then try again."
+    case checkTimeout = "Update check timed out. Retry manually or on the next launch."
     case download = "Unable to download updates. Check your network or Releases."
     case feed = "The update channel is unavailable or invalid. Retry later or open Releases."
     case signature = "The update signature could not be verified. The update was blocked."

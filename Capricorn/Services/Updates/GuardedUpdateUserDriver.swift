@@ -11,10 +11,18 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     private(set) var cancelCheck: (() -> Void)?
     private var expectedLength: UInt64 = 0
     private var receivedLength: UInt64 = 0
+    private var isInvalidated = false
 
     init(standard: SPUUserDriver, owner: AppUpdater) {
         self.standard = standard
         self.owner = owner
+    }
+
+    func invalidate() {
+        isInvalidated = true
+        cancelCheck = nil
+        cancelDownload = nil
+        owner = nil
     }
 
     func cancelActiveDownload() {
@@ -24,11 +32,11 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     }
 
     func cancelActiveCheck() {
-        let cancellation = cancelCheck
+        guard let cancellation = cancelCheck else { return }
         cancelCheck = nil
         owner?.dismissCheckingPrompt()
         if owner?.state == .checking { owner?.transition(to: .idle) }
-        cancellation?()
+        cancellation()
     }
 
     func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) {
@@ -42,6 +50,7 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     }
 
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {
+        guard !isInvalidated else { cancellation(); return }
         owner?.transition(to: .checking)
         cancelCheck = cancellation
         if let owner {
@@ -83,6 +92,7 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     }
 
     func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) {
+        guard !isInvalidated else { acknowledgement(); return }
         cancelCheck = nil
         if let owner {
             owner.showCheckResult(error, acknowledgement: acknowledgement)

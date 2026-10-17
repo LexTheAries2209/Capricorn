@@ -28,8 +28,10 @@ def main():
     parser.add_argument("--sparkle-root", required=True, type=pathlib.Path)
     parser.add_argument("--scenario", choices=[
         "update", "automatic", "conflict", "archive-signature", "feed-signature", "missing-feed",
-        "launch-checks", "launch-disabled", "launch-conflict"
+        "launch-checks", "launch-disabled", "launch-conflict", "launch-timeout"
     ], default="update")
+    parser.add_argument("--archive-delay", type=float, default=0,
+                        help="Pause a fixture ZIP response after its first byte to exercise slow downloads.")
     options = parser.parse_args()
     repo = pathlib.Path(__file__).resolve().parents[1]
     tools = options.sparkle_root.resolve()
@@ -54,10 +56,45 @@ def main():
     feed_dir = root / "feed"
     feed_dir.mkdir()
     requests = []
+    launch_request_cancelled = threading.Event()
 
     class RecordingHandler(http.server.SimpleHTTPRequestHandler):
         def do_GET(self):
             requests.append(self.path)
+            if options.scenario == "launch-timeout" and self.path == "/appcast.xml":
+                if requests.count("/appcast.xml") == 1:
+                    data = (feed_dir / "appcast.xml").read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/xml")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    try:
+                        # Keep delivering bytes: the 15-second limit must be total, not idle time.
+                        for byte in data[:30]:
+                            self.wfile.write(bytes([byte]))
+                            self.wfile.flush()
+                            time.sleep(1)
+                    except (BrokenPipeError, ConnectionResetError):
+                        launch_request_cancelled.set()
+                else:
+                    data = (feed_dir / "manual" / "appcast.xml").read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/xml")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                return
+            if options.archive_delay > 0 and self.path.endswith(".zip"):
+                data = (feed_dir / self.path.lstrip("/")).read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data[:1])
+                self.wfile.flush()
+                time.sleep(options.archive_delay)
+                self.wfile.write(data[1:])
+                return
             super().do_GET()
 
     handler = functools.partial(RecordingHandler, directory=str(feed_dir))
@@ -111,6 +148,13 @@ def main():
         )
         if build_in_feed != "0042":
             raise ValueError("The signed appcast must retain the padded build 0042.")
+        if options.scenario == "launch-timeout":
+            manual_feed = feed_dir / "manual"
+            manual_feed.mkdir()
+            run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
+                str(installed), str(manual_feed / "Capricorn-0.0.1.zip"))
+            run(str(tools / "bin/generate_appcast"), "--ed-key-file", str(private_key),
+                "--maximum-deltas", "0", "--download-url-prefix", base_url, str(manual_feed))
         if options.scenario == "archive-signature":
             with archive.open("r+b") as stream:
                 stream.seek(128)
@@ -159,9 +203,11 @@ def main():
             assert result["result"] == "checked" and result["enabledBeforeLaunch"], result
             assert result["savedChoice"] and not result["timerEnabled"], result
             assert requests.count("/appcast.xml") == 2, requests
+        if options.scenario == "launch-timeout":
+            result["requestCancelled"] = launch_request_cancelled.wait(timeout=2)
         print(json.dumps({
             "scenario": options.scenario, "artifacts": str(root),
-            "feedRequests": requests.count("/appcast.xml"), **result
+            "feedRequests": requests.count("/appcast.xml"), "archiveDelay": options.archive_delay, **result
         }, indent=2))
         if options.scenario in ("update", "automatic"):
             assert result["result"] == "updated", result
@@ -172,6 +218,12 @@ def main():
             assert result["result"] == "disabled", result
             assert not result["enabledBeforeLaunch"] and not result["started"], result
             assert not requests, requests
+        elif options.scenario == "launch-timeout":
+            assert result["result"] == "timed-out-then-retried", result
+            assert 14.5 <= result["timeoutElapsed"] <= 18, result
+            assert requests.count("/appcast.xml") == 2, requests
+            assert result["build"] == "0041", result
+            assert result["requestCancelled"], result
         else:
             assert result["result"] == "blocked" and result["build"] == "0041", result
             if options.scenario in ("conflict", "launch-conflict"):

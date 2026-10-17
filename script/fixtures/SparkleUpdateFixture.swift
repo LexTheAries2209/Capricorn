@@ -40,6 +40,9 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
     private var root: URL!
     private var scenario = ""
     private var hasFinished = false
+    private var launchCheckStartedAt: TimeInterval = 0
+    private var launchCheckTimedOutAt: TimeInterval?
+    private var manualRetryStarted = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
@@ -64,7 +67,7 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                 container.mainContext.insert(UpdateFixtureHistory(marker: "history-before-update"))
                 try container.mainContext.save()
             }
-            let usesLaunchCheck = ["automatic", "launch-checks", "launch-disabled", "launch-conflict"].contains(scenario)
+            let usesLaunchCheck = ["automatic", "launch-checks", "launch-disabled", "launch-conflict", "launch-timeout"].contains(scenario)
             let defaults = UserDefaults.standard
             if scenario == "launch-checks" {
                 if !FileManager.default.fileExists(atPath: root.appendingPathComponent("first-launch-result.json").path) {
@@ -87,12 +90,21 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
             let owner = AppUpdater(
                 safety: safety, language: { .english }, allowsStartup: usesLaunchCheck,
                 presentAlert: { [weak self] title, detail in
+                    if let self, self.scenario == "launch-timeout", self.manualRetryStarted,
+                       self.owner?.state == .upToDate, let timedOutAt = self.launchCheckTimedOutAt {
+                        self.finish([
+                            "result": "timed-out-then-retried", "build": build,
+                            "timeoutElapsed": timedOutAt - self.launchCheckStartedAt
+                        ])
+                        return
+                    }
                     self?.finish(["result": "blocked", "title": title, "detail": detail, "build": build])
                 }
             )
             self.owner = owner
             if usesLaunchCheck {
                 let enabledBeforeLaunch = owner.automaticallyChecksForUpdates
+                launchCheckStartedAt = ProcessInfo.processInfo.systemUptime
                 owner.applicationDidLaunch()
                 owner.applicationDidLaunch() // Repeated scene tasks must not duplicate a check.
                 if scenario == "launch-disabled" {
@@ -105,6 +117,19 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                         guard let self, let owner = self.owner else { return }
                         if self.scenario == "automatic", owner.hasPendingInstallation {
                             NSApp.terminate(nil)
+                        } else if self.scenario == "launch-timeout" {
+                            let now = ProcessInfo.processInfo.systemUptime
+                            if owner.state == .failed(.checkTimeout), owner.canCheckForUpdates,
+                               self.launchCheckTimedOutAt == nil {
+                                self.launchCheckTimedOutAt = now
+                            }
+                            if let timedOutAt = self.launchCheckTimedOutAt,
+                               now - timedOutAt >= 2, !self.manualRetryStarted {
+                                // Staying open and repeating the launch callback must not retry.
+                                owner.applicationDidLaunch()
+                                self.manualRetryStarted = true
+                                owner.checkNow()
+                            }
                         } else if self.scenario == "launch-checks", case .available = owner.state, owner.canCheckForUpdates {
                             self.finish([
                                 "result": "checked", "enabledBeforeLaunch": enabledBeforeLaunch,
@@ -129,7 +154,10 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                 updater.checkForUpdates()
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 40) { [weak self] in
-                self?.finish(["result": "timeout"])
+                self?.finish([
+                    "result": "timeout", "state": "\(owner.state)",
+                    "canCheck": owner.canCheckForUpdates
+                ])
             }
         } catch {
             finish(["result": "fixture-error", "detail": error.localizedDescription])

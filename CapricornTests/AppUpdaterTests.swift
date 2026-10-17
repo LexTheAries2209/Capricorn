@@ -33,6 +33,29 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertGreaterThan(try XCTUnwrap(Int(build)), 0)
     }
 
+    func testRetiredDriverCannotOverwriteTimeoutDuringManualRetry() {
+        let presenter = RecordingUpdatePromptPresenter()
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            allowsStartup: false, promptPresenter: presenter
+        )
+        let standard = RecordingUpdateUserDriver()
+        let driver = GuardedUpdateUserDriver(standard: standard, owner: updater)
+        var cancellations = 0
+        driver.showUserInitiatedUpdateCheck { cancellations += 1 }
+        driver.invalidate()
+        updater.transition(to: .failed(.checkTimeout))
+        var acknowledgements = 0
+        driver.cancelActiveCheck()
+        driver.dismissUpdateInstallation()
+        driver.showUpdaterError(URLError(.cancelled)) { acknowledgements += 1 }
+        driver.showUpdateNotFoundWithError(URLError(.cancelled)) { acknowledgements += 1 }
+        XCTAssertEqual(updater.state, .failed(.checkTimeout))
+        XCTAssertEqual(cancellations, 0)
+        XCTAssertEqual(acknowledgements, 2)
+        XCTAssertEqual(standard.resultWindows, 0)
+    }
+
     func testSavedUpdateChoicesLoadAndPersistWithoutStartingSparkle() throws {
         let suite = "CapricornTests.updateChoices.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
