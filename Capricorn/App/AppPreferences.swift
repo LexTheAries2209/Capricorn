@@ -444,10 +444,6 @@ struct CapricornSettingsView: View {
                         Label(language.statusMessage(status.message), systemImage: satStatusSymbol(status.state))
                             .foregroundStyle(satStatusTint(status.state))
                     }
-                    if let version = status.version {
-                        LabeledContent(language.t("Version"), value: version)
-                    }
-
                     HStack {
                         Button {
                             SATSMARTDriverService().revealPackage()
@@ -474,10 +470,18 @@ struct CapricornSettingsView: View {
                         }
                     }
                 } header: {
-                    Text(language.t("SAT SMART Drive"))
-                        .font(.body)
-                        .fontWeight(.regular)
-                        .foregroundStyle(.primary)
+                    HStack {
+                        Text(language.t("SAT SMART Drive"))
+                        Spacer()
+                        if let version = preferences.satSMARTDriverStatus.version {
+                            Text(version)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(.body)
+                    .fontWeight(.regular)
+                    .foregroundStyle(.primary)
                 }
                 .id(CapricornSettingsDestination.satSMARTDriver)
                 .listRowBackground(
