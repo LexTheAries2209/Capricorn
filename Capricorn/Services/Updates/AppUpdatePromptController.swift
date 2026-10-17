@@ -30,6 +30,10 @@ private final class AppUpdatePromptModel {
 /// Sparkle callbacks update one window without changing its size or position.
 @MainActor
 final class AppUpdatePromptController: NSObject, AppUpdatePromptPresenting, NSWindowDelegate {
+    fileprivate static let windowSize = NSSize(width: 263, height: 202)
+    fileprivate static let contentSize = NSWindow.contentRect(
+        forFrameRect: NSRect(origin: .zero, size: windowSize), styleMask: [.titled, .closable]
+    ).size
     private let model = AppUpdatePromptModel()
     private var response: (() -> Void)?
     private(set) var window: NSWindow?
@@ -90,14 +94,17 @@ final class AppUpdatePromptController: NSObject, AppUpdatePromptPresenting, NSWi
 
     private func makeWindow() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
+            contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.titled, .closable], backing: .buffered, defer: false
         )
         window.identifier = NSUserInterfaceItemIdentifier("appUpdatePrompt")
+        window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         window.isRestorable = false
         window.collectionBehavior = [.fullScreenAuxiliary]
         window.contentViewController = NSHostingController(rootView: AppUpdatePromptView(model: model))
+        // Include window chrome in the old alert's outer dimensions.
+        window.setFrame(NSRect(origin: .zero, size: Self.windowSize), display: false)
         window.delegate = self
         model.action = { [weak self] in self?.respond() }
         self.window = window
@@ -120,17 +127,18 @@ private struct AppUpdatePromptView: View {
     let model: AppUpdatePromptModel
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 6) {
             Image(nsImage: NSApplication.shared.applicationIconImage)
                 .resizable()
-                .frame(width: 64, height: 64)
+                .frame(width: 40, height: 40)
                 .accessibilityHidden(true)
 
             if let prompt = model.prompt {
                 Text(prompt.title)
                     .font(.headline)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, minHeight: 28)
                     .accessibilityIdentifier("appUpdatePromptTitle")
 
                 Group {
@@ -144,7 +152,7 @@ private struct AppUpdatePromptView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
                 }
-                .frame(height: 76)
+                .frame(height: 42)
 
                 if prompt.isChecking {
                     actionButton(prompt.buttonTitle)
@@ -155,8 +163,8 @@ private struct AppUpdatePromptView: View {
                 }
             }
         }
-        .padding(24)
-        .frame(width: 420, height: 300)
+        .padding(8)
+        .frame(width: AppUpdatePromptController.contentSize.width, height: AppUpdatePromptController.contentSize.height)
         .background(.regularMaterial)
     }
 
@@ -165,7 +173,8 @@ private struct AppUpdatePromptView: View {
             Text(title).frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
-        .controlSize(.large)
+        .controlSize(.regular)
+        .frame(height: 26)
         .accessibilityIdentifier("appUpdatePromptAction")
     }
 
