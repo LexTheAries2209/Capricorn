@@ -26,6 +26,6 @@
     <key>SUEnableAutomaticChecks</key>
     <false/>
     <key>SUAllowsAutomaticUpdates</key>
-    <true/>
+    <false/>
 </dict>
 </plist>

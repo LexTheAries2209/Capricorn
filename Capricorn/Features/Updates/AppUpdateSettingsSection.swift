@@ -18,12 +18,6 @@ struct AppUpdateSettingsSection: View {
                 get: { updateChecker.automaticallyChecksForUpdates },
                 set: { updateChecker.setAutomaticallyChecksForUpdates($0) }
             ))
-            Toggle(language.t("Automatically download and install on quit"), isOn: Binding(
-                get: { updateChecker.automaticallyDownloadsUpdates },
-                set: { updateChecker.setAutomaticallyDownloadsUpdates($0) }
-            ))
-            .disabled(!updateChecker.automaticallyChecksForUpdates)
-
             HStack(spacing: 10) {
                 Button {
                     updateChecker.checkNow()

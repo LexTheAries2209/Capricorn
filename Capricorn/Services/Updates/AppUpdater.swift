@@ -9,14 +9,13 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     enum PreferenceKey {
         static let checksOnLaunch = "checksForUpdatesOnLaunch"
         static let legacyAutomaticChecks = "SUEnableAutomaticChecks"
-        static let automaticDownloads = "SUAutomaticallyUpdate"
+        static let legacyAutomaticDownloads = "SUAutomaticallyUpdate"
         static let lastCheck = "SULastCheckTime"
     }
 
     private(set) var state: AppUpdaterState = .idle
     private(set) var canCheckForUpdates = false
     private(set) var automaticallyChecksForUpdates = false
-    private(set) var automaticallyDownloadsUpdates = false
     private(set) var lastCheckedAt: Date?
     private(set) var downloadProgress: Double?
     private(set) var hasPendingInstallation = false
@@ -36,6 +35,10 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     @ObservationIgnored private var postponedRelaunch: (() -> Void)?
     @ObservationIgnored private var hasHandledApplicationLaunch = false
     @ObservationIgnored private var launchCheckDeadline: (id: UUID, timer: Timer)?
+    @ObservationIgnored private var cancelPreparedInstallation: (() -> Void)?
+    @ObservationIgnored private var quitsAfterCancellingUpdate = false
+    @ObservationIgnored private var isCancellingPreparedInstallation = false
+    @ObservationIgnored private let finishRequestedQuit: @MainActor () -> Void
 
     init(
         safety: AppUpdateSafetyGate,
@@ -44,7 +47,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         allowsStartup: Bool = ApplicationRuntime.allowsAutomaticStartupTasks,
         defaults: UserDefaults = .standard,
         presentAlert: ((String, String) -> Void)? = nil,
-        promptPresenter: (any AppUpdatePromptPresenting)? = nil
+        promptPresenter: (any AppUpdatePromptPresenting)? = nil,
+        finishRequestedQuit: (@MainActor () -> Void)? = nil
     ) {
         self.safety = safety
         self.language = language
@@ -55,10 +59,12 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         // Read saved choices before creating Sparkle, including in Debug and with an invalid feed.
         automaticallyChecksForUpdates = defaults.object(forKey: PreferenceKey.checksOnLaunch) as? Bool
             ?? defaults.object(forKey: PreferenceKey.legacyAutomaticChecks) as? Bool ?? false
-        automaticallyDownloadsUpdates = defaults.bool(forKey: PreferenceKey.automaticDownloads)
+        // Retire old opt-ins before Sparkle reads its preferences.
+        defaults.set(false, forKey: PreferenceKey.legacyAutomaticDownloads)
         lastCheckedAt = defaults.object(forKey: PreferenceKey.lastCheck) as? Date
         self.presentAlert = presentAlert
         self.promptPresenter = promptPresenter ?? AppUpdatePromptController()
+        self.finishRequestedQuit = finishRequestedQuit ?? { NSApp.terminate(nil) }
         super.init()
     }
 
@@ -78,14 +84,11 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
             // Migrate consent before disabling Sparkle's independent timer. Only the app schedules checks.
             defaults.set(automaticallyChecksForUpdates, forKey: PreferenceKey.checksOnLaunch)
             updater.automaticallyChecksForUpdates = false
-            updater.automaticallyDownloadsUpdates = automaticallyDownloadsUpdates
+            updater.automaticallyDownloadsUpdates = false
             try updater.start()
             isStarted = true
             observations = [
                 updater.observe(\.canCheckForUpdates, options: [.new]) { [weak self] _, _ in
-                    Task { @MainActor [weak self] in self?.synchronizeSettings() }
-                },
-                updater.observe(\.automaticallyDownloadsUpdates, options: [.new]) { [weak self] _, _ in
                     Task { @MainActor [weak self] in self?.synchronizeSettings() }
                 },
                 updater.observe(\.lastUpdateCheckDate, options: [.new]) { [weak self] _, _ in
@@ -139,16 +142,6 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         automaticallyChecksForUpdates = enabled
     }
 
-    func setAutomaticallyDownloadsUpdates(_ enabled: Bool) {
-        if let updater {
-            updater.automaticallyDownloadsUpdates = enabled
-            synchronizeSettings()
-        } else {
-            defaults.set(enabled, forKey: PreferenceKey.automaticDownloads)
-            automaticallyDownloadsUpdates = enabled
-        }
-    }
-
     func conflictsDidChange() {
         guard !safety.isReserved else { return }
         do {
@@ -179,13 +172,44 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     }
 
     func applicationMayTerminate() -> Bool {
+        guard !quitsAfterCancellingUpdate else { return false }
+        if (hasPendingInstallation && !safety.isReserved) || isCancellingPreparedInstallation {
+            // A prepared Sparkle installer watches for process termination. Cancel it
+            // and wait for the update cycle to finish before honoring an ordinary quit.
+            quitsAfterCancellingUpdate = true
+            cancelPreparedInstallation?()
+            return false
+        }
         guard hasPendingInstallation || safety.isReserved else { return true }
         return authorizeUpdate(installing: true)
+    }
+
+    func registerPreparedInstallationCancellation(_ cancellation: @escaping () -> Void) -> Bool {
+        if quitsAfterCancellingUpdate {
+            cancellation()
+            return false
+        }
+        cancelPreparedInstallation = cancellation
+        return true
+    }
+
+    func clearPreparedInstallationCancellation() {
+        cancelPreparedInstallation = nil
+    }
+
+    func didCancelPreparedInstallation() {
+        markPendingInstallation(false)
+        isCancellingPreparedInstallation = true
+        switch state {
+        case .blocked, .failed, .available: break
+        default: transition(to: .idle)
+        }
     }
 
     func markPendingInstallation(_ pending: Bool) {
         hasPendingInstallation = pending
         if !pending {
+            clearPreparedInstallationCancellation()
             postponedRelaunch = nil
             safety.endInstallation()
         }
@@ -360,11 +384,10 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     private func synchronizeSettings() {
         guard let updater else { return }
         canCheckForUpdates = updater.canCheckForUpdates
-        automaticallyDownloadsUpdates = updater.automaticallyDownloadsUpdates
         lastCheckedAt = updater.lastUpdateCheckDate
     }
 
-    // Launch checks and manual checks share these guards, including background downloads.
+    // Launch checks and user-initiated updates share the same task guards.
     func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
         guard authorizeUpdate() else { throw blockedNSError() }
         state = .checking
@@ -390,7 +413,16 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     }
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
-        defer { finishLaunchCheckDeadline() }
+        defer {
+            finishLaunchCheckDeadline()
+            isCancellingPreparedInstallation = false
+            if quitsAfterCancellingUpdate {
+                quitsAfterCancellingUpdate = false
+                markPendingInstallation(false)
+                let finishQuit = finishRequestedQuit
+                Task { @MainActor in finishQuit() }
+            }
+        }
         synchronizeSettings()
         if let error {
             let nsError = error as NSError
@@ -413,12 +445,6 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
             postponedRelaunch = installHandler
             return true
         }
-        return false
-    }
-
-    func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
-        hasPendingInstallation = true
-        _ = authorizeUpdate()
         return false
     }
 

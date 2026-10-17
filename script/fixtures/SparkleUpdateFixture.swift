@@ -43,6 +43,8 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
     private var launchCheckStartedAt: TimeInterval = 0
     private var launchCheckTimedOutAt: TimeInterval?
     private var manualRetryStarted = false
+    private var availableSince: TimeInterval?
+    private var quitResult: [String: Any]?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
@@ -67,7 +69,7 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                 container.mainContext.insert(UpdateFixtureHistory(marker: "history-before-update"))
                 try container.mainContext.save()
             }
-            let usesLaunchCheck = ["automatic", "launch-checks", "launch-disabled", "launch-conflict", "launch-timeout"].contains(scenario)
+            let usesLaunchCheck = ["manual-only", "launch-checks", "launch-disabled", "launch-conflict", "launch-timeout"].contains(scenario)
             let defaults = UserDefaults.standard
             if scenario == "launch-checks" {
                 if !FileManager.default.fileExists(atPath: root.appendingPathComponent("first-launch-result.json").path) {
@@ -76,11 +78,11 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                 }
                 // A recent attempt must not suppress the next process's launch check.
                 defaults.set(Date(), forKey: AppUpdater.PreferenceKey.lastCheck)
-                defaults.set(false, forKey: AppUpdater.PreferenceKey.automaticDownloads)
+                defaults.set(false, forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads)
             } else if usesLaunchCheck {
                 defaults.set(scenario != "launch-disabled", forKey: AppUpdater.PreferenceKey.checksOnLaunch)
                 defaults.set(true, forKey: AppUpdater.PreferenceKey.legacyAutomaticChecks)
-                defaults.set(scenario == "automatic", forKey: AppUpdater.PreferenceKey.automaticDownloads)
+                defaults.set(scenario == "manual-only", forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads)
             }
             if scenario == "conflict" || scenario == "launch-conflict" { conflicts = [.benchmark] }
             let safety = AppUpdateSafetyGate(
@@ -115,8 +117,17 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                 timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
                     MainActor.assumeIsolated {
                         guard let self, let owner = self.owner else { return }
-                        if self.scenario == "automatic", owner.hasPendingInstallation {
-                            NSApp.terminate(nil)
+                        if self.scenario == "manual-only", case .available = owner.state,
+                           owner.canCheckForUpdates {
+                            let now = ProcessInfo.processInfo.systemUptime
+                            if self.availableSince == nil { self.availableSince = now }
+                            if now - self.availableSince! >= 2 {
+                                self.finish([
+                                    "result": "manual-required", "build": build,
+                                    "legacyDownloadsDisabled": !UserDefaults.standard.bool(forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads),
+                                    "preparedInstallation": owner.hasPendingInstallation
+                                ])
+                            }
                         } else if self.scenario == "launch-timeout" {
                             let now = ProcessInfo.processInfo.systemUptime
                             if owner.state == .failed(.checkTimeout), owner.canCheckForUpdates,
@@ -142,9 +153,21 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                 }
             } else {
                 guard owner.authorizeUpdate() else { return }
-                let standard = AutomatedFixtureUserDriver { [weak self] error in
-                    self?.finish(["result": "unexpected", "detail": error])
-                }
+                let standard = AutomatedFixtureUserDriver(
+                    fail: { [weak self] error in
+                        self?.finish(["result": "unexpected", "detail": error])
+                    },
+                    onReady: { [weak self] reply in
+                        guard let self else { reply(.skip); return }
+                        if ["cancel-install", "quit-before-install"].contains(self.scenario) {
+                            self.quitResult = ["result": "cancelled", "build": build]
+                            if self.scenario == "cancel-install" { reply(.dismiss) }
+                            NSApp.terminate(nil)
+                        } else {
+                            reply(.install)
+                        }
+                    }
+                )
                 let driver = GuardedUpdateUserDriver(standard: standard, owner: owner)
                 let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: owner)
                 self.updater = updater
@@ -168,6 +191,15 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
         owner?.applicationMayTerminate() == false ? .terminateCancel : .terminateNow
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        guard var result = quitResult else { return }
+        result["preparedInstallation"] = owner?.hasPendingInstallation ?? false
+        result["installationReserved"] = owner?.safety.isReserved ?? false
+        if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: root.appendingPathComponent("result.json"))
+        }
+    }
+
     private func finish(_ result: [String: Any]) {
         guard !hasFinished else { return }
         hasFinished = true
@@ -182,7 +214,14 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 private final class AutomatedFixtureUserDriver: NSObject, SPUUserDriver {
     let fail: (String) -> Void
-    init(fail: @escaping (String) -> Void) { self.fail = fail }
+    let onReady: ((SPUUserUpdateChoice) -> Void) -> Void
+    init(
+        fail: @escaping (String) -> Void,
+        onReady: @escaping ((SPUUserUpdateChoice) -> Void) -> Void
+    ) {
+        self.fail = fail
+        self.onReady = onReady
+    }
     func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) {
         reply(SUUpdatePermissionResponse(automaticUpdateChecks: false, sendSystemProfile: false))
     }
@@ -205,7 +244,7 @@ private final class AutomatedFixtureUserDriver: NSObject, SPUUserDriver {
     func showDownloadDidReceiveData(ofLength length: UInt64) {}
     func showDownloadDidStartExtractingUpdate() {}
     func showExtractionReceivedProgress(_ progress: Double) {}
-    func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) { reply(.install) }
+    func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) { onReady(reply) }
     func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {}
     func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) { acknowledgement() }
     func dismissUpdateInstallation() {}

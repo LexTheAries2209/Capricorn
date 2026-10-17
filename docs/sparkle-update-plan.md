@@ -12,9 +12,21 @@ V2.10.3 发布核验：全量 460 项测试通过，零失败、零跳过；严�
 
 本次严格并发构建通过，30 项相关回归复核全部通过，无失败或跳过。首轮设置滚动定位断言失败，关闭预览窗口后单项与整组复核均通过；没有额外修改定位逻辑。修改仅作本地提交，不推送或发布。
 
-## 实施记录
+## 最新本地策略：仅由用户下载与安装（未推送）
 
-分支：`codex/sparkle-updates-p0-p2`。以下记录描述本地实现，后文保留最初研究与分期依据；实际交互以本节为准。
+- 保留默认关闭的启动检查与 15 秒截止，启动检查只发现版本，不下载安装包。
+- 移除设置中的自动下载/退出安装开关及 API，`SUAllowsAutomaticUpdates=NO` 隐藏 Sparkle 原生窗口的自动下载选项；初始化时将旧 `SUAutomaticallyUpdate` 偏好置为 false，更新器始终关闭自动下载。
+- 用户手动打开新版窗口并选择下载，准备完成后再明确确认安装并重启。普通退出若遇到尚未确认的准备任务，先取消并等待更新周期结束，再继续退出，不以退出作为安装确认。晚到的确认回调不能重新启动已取消的安装。
+- 对旧版本遗留的 installing 阶段任务发送 skip，取消其退出安装安排；需要更新时由用户重新手动检查。保留冲突拦截、安装前历史保存、签名验证和已确认安装的退出许可。
+- 以下自动下载/退出安装的结果属于 V2.10.2 / V2.10.3 历史验证，不描述当前本地策略。已发布产物和历史发布说明保持原样。
+
+本次验证：全量测试 464 项中 463 项通过，一项虚拟硬盘截图测试因系统截屏命令返回错误失败，单独复测通过；没有修改该测试或相关功能。严格并发与 Swift 6 构建通过，后者仅保留原有的 `init(cString:)` 弃用警告。真实 Sparkle 隔离测试确认：旧自动下载偏好为 true 时，启动检查仍只请求一次清单、零安装包请求；手动确认完成 Build 0041 → 0042 并保留测试历史与偏好；准备完成后取消或普通退出，均取消安装并保持 Build 0041，安装占用已释放。上述 Build 仅用于独立测试 App，不修改公开版本。
+
+原生中文窗口的隔离预览确认：可见操作只剩“安装更新”和“跳过这个版本”，自动下载复选框已隐藏；两按钮仍同高（y=20 pt、height=28 pt）。预览不下载安装包，未使用真实用户偏好与数据库。
+
+## 历史实施记录
+
+分支：`codex/sparkle-updates-p0-p2`。以下保留历史实现、最初研究与分期依据；当前交互以“最新本地策略”为准。
 
 - 已锁定 Sparkle 2.10.0，通过单一更新器接管菜单与设置入口；设置页出现不再主动检查。
 - 首次集成版本为完整 `2.10.2`，内部构建号 `0042`：已核实此前有 41 次正式 Release，以此作为一次性迁移基线。后续采用四位、全局递增的独立发布构建号。详见 [版本规则](versioning.md) 和 [构建号分配记录](../Configuration/ReleaseBuilds.json)。
@@ -129,7 +141,9 @@ P0–P2 初始实现的本地验证记录（后续增量验证见上述各节）
 
 ```sh
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario update
-python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario automatic
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario manual-only
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario cancel-install
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario quit-before-install
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario conflict
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario archive-signature
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario feed-signature
@@ -138,7 +152,7 @@ python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenar
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario launch-disabled
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario launch-conflict
 python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario launch-timeout
-python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario automatic --archive-delay 16
+python3 scripts/test-sparkle-update.py --sparkle-root tmp/sparkle-tools --scenario update --archive-delay 16
 ```
 
 正式发布保持三段营销版本和四位全局递增 Build。发布准备脚本的 `--previous-build` 在首次迁移时使用 `0041`，之后使用实际上一分发构建的全局序号；脚本拒绝非四位、零值、相同或倒退的构建。`--download-url-prefix` 指向即将发布的固定版本附件目录，输出目录必须尚不存在。V2.10.2 已通过生产密钥签名及复验。没有 Developer ID 和公证时，使用 `--allow-unnotarized`（兼容旧参数 `--allow-development-signing`）明确接受信任限制，但仍强制验证完整 bundle 和 Ed25519 签名。密钥备份建议尽快完成，不作为这次发布的先决条件。

@@ -26,7 +26,7 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertEqual(info["SUEnableSystemProfiling"] as? Bool, false)
         XCTAssertEqual(info["SUAutomaticallyUpdate"] as? Bool, false)
         XCTAssertEqual(info["SUEnableAutomaticChecks"] as? Bool, false)
-        XCTAssertEqual(info["SUAllowsAutomaticUpdates"] as? Bool, true)
+        XCTAssertEqual(info["SUAllowsAutomaticUpdates"] as? Bool, false)
         XCTAssertNil(info["SUScheduledCheckInterval"])
         let build = try XCTUnwrap(info["CFBundleVersion"] as? String)
         XCTAssertNotNil(build.range(of: #"^[0-9]{4}$"#, options: .regularExpression))
@@ -56,7 +56,7 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertEqual(standard.resultWindows, 0)
     }
 
-    func testSavedUpdateChoicesLoadAndPersistWithoutStartingSparkle() throws {
+    func testSavedLaunchCheckChoiceLoadsAndPersistsWithoutStartingSparkle() throws {
         let suite = "CapricornTests.updateChoices.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -66,24 +66,34 @@ final class AppUpdaterTests: XCTestCase {
         }
         let updater = makeUpdater()
         XCTAssertFalse(updater.automaticallyChecksForUpdates)
-        XCTAssertFalse(updater.automaticallyDownloadsUpdates)
         updater.setAutomaticallyChecksForUpdates(true)
-        updater.setAutomaticallyDownloadsUpdates(true)
         let previousCheck = Date()
         defaults.set(previousCheck, forKey: AppUpdater.PreferenceKey.lastCheck)
 
         let reopened = makeUpdater()
         XCTAssertTrue(reopened.automaticallyChecksForUpdates)
-        XCTAssertTrue(reopened.automaticallyDownloadsUpdates)
         XCTAssertEqual(reopened.lastCheckedAt, previousCheck)
         XCTAssertFalse(reopened.isStarted)
         reopened.applicationDidLaunch()
         XCTAssertFalse(reopened.isStarted, "Test startup isolation must still prevent network requests")
 
         reopened.setAutomaticallyChecksForUpdates(false)
-        reopened.setAutomaticallyDownloadsUpdates(false)
         XCTAssertFalse(makeUpdater().automaticallyChecksForUpdates)
-        XCTAssertFalse(makeUpdater().automaticallyDownloadsUpdates)
+    }
+
+    func testLegacyAutomaticDownloadsAreDisabledBeforeStartingSparkle() throws {
+        let suite = "CapricornTests.retiredAutomaticDownloads.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: AppUpdater.PreferenceKey.checksOnLaunch)
+        defaults.set(true, forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads)
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            allowsStartup: false, defaults: defaults
+        )
+        XCTAssertFalse(defaults.bool(forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads))
+        XCTAssertTrue(updater.automaticallyChecksForUpdates)
+        XCTAssertFalse(updater.isStarted)
     }
 
     func testLegacyAutomaticCheckConsentIsPreservedAndNewChoiceTakesPriority() throws {
@@ -153,14 +163,14 @@ final class AppUpdaterTests: XCTestCase {
             allowsStartup: false, defaults: defaults
         )
         updater.setAutomaticallyChecksForUpdates(true)
-        updater.setAutomaticallyDownloadsUpdates(true)
+        defaults.set(true, forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads)
         AppPreferences(defaults: defaults).resetAllSettings()
         let reopened = AppUpdater(
             safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
             allowsStartup: false, defaults: defaults
         )
         XCTAssertFalse(reopened.automaticallyChecksForUpdates)
-        XCTAssertFalse(reopened.automaticallyDownloadsUpdates)
+        XCTAssertFalse(defaults.bool(forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads))
     }
 
     func testConfigurationRejectsInsecureFeedsAndInvalidKeys() throws {
@@ -192,22 +202,25 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertTrue(alerts[0].contains("SMART 自检"))
     }
 
-    func testPendingQuitInstallationIsBlockedAndDoesNotReserve() {
+    func testOrdinaryQuitCancelsPreparedUpdateAndWaitsWithoutReserving() {
         var conflicts: [AppUpdateConflict] = [.workload]
         let gate = AppUpdateSafetyGate(conflicts: { conflicts })
         let updater = AppUpdater(safety: gate, language: { .english }, allowsStartup: false, presentAlert: { _, _ in })
         updater.markPendingInstallation(true)
+        var cancellations = 0
+        XCTAssertTrue(updater.registerPreparedInstallationCancellation { cancellations += 1 })
         XCTAssertFalse(updater.applicationMayTerminate())
+        XCTAssertEqual(cancellations, 1)
         XCTAssertFalse(gate.isReserved)
         conflicts = []
         XCTAssertFalse(gate.isReserved)
-        XCTAssertTrue(updater.applicationMayTerminate())
-        XCTAssertTrue(gate.isReserved)
+        XCTAssertFalse(updater.applicationMayTerminate())
+        XCTAssertEqual(cancellations, 1)
         updater.markPendingInstallation(false)
         XCTAssertFalse(gate.isReserved)
     }
 
-    func testNewConflictWithPreparedAutomaticUpdatePresentsWarningOnce() {
+    func testNewConflictWithPreparedManualUpdatePresentsWarningOnce() {
         var conflicts: [AppUpdateConflict] = []
         var alertCount = 0
         let updater = AppUpdater(
@@ -261,6 +274,68 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertEqual(receivedChoice, .skip)
         XCTAssertEqual(updater.state, .failed(.save))
         XCTAssertFalse(updater.safety.isReserved)
+    }
+
+    func testDismissingReadyDialogCancelsInsteadOfInstallingOnQuit() {
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            allowsStartup: false
+        )
+        let standard = RecordingUpdateUserDriver()
+        let driver = GuardedUpdateUserDriver(standard: standard, owner: updater)
+        updater.markPendingInstallation(true)
+        var receivedChoice: SPUUserUpdateChoice?
+        driver.showReady(toInstallAndRelaunch: { receivedChoice = $0 })
+        standard.readyReply?(.dismiss)
+        XCTAssertEqual(receivedChoice, .skip)
+        XCTAssertFalse(updater.hasPendingInstallation)
+        XCTAssertFalse(updater.safety.isReserved)
+    }
+
+    func testQuitAtReadyDialogCancelsExactlyOnceAndFinishesAfterUpdateCycle() async {
+        var finishedQuits = 0
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            allowsStartup: false, finishRequestedQuit: { finishedQuits += 1 }
+        )
+        let standard = RecordingUpdateUserDriver()
+        let driver = GuardedUpdateUserDriver(standard: standard, owner: updater)
+        updater.markPendingInstallation(true)
+        var choices: [SPUUserUpdateChoice] = []
+        driver.showReady(toInstallAndRelaunch: { choices.append($0) })
+        XCTAssertFalse(updater.applicationMayTerminate())
+        XCTAssertEqual(choices, [.skip])
+        XCTAssertFalse(updater.applicationMayTerminate())
+        XCTAssertEqual(finishedQuits, 0)
+        standard.readyReply?(.install)
+        XCTAssertEqual(choices, [.skip], "A late confirmation must not start installation")
+        let sparkler = SPUUpdater(
+            hostBundle: .main, applicationBundle: .main, userDriver: standard, delegate: nil
+        )
+        updater.updater(sparkler, didFinishUpdateCycleFor: .updates, error: nil)
+        let quitFinished = await AsyncTestWaiter.wait { finishedQuits == 1 }
+        XCTAssertTrue(quitFinished)
+        XCTAssertTrue(updater.applicationMayTerminate())
+        XCTAssertFalse(updater.safety.isReserved)
+    }
+
+    func testExplicitReadyConfirmationReservesAndSavesBeforeTerminating() {
+        var saves = 0
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }, save: { saves += 1 }),
+            language: { .english }, allowsStartup: false
+        )
+        let standard = RecordingUpdateUserDriver()
+        let driver = GuardedUpdateUserDriver(standard: standard, owner: updater)
+        updater.markPendingInstallation(true)
+        var choice: SPUUserUpdateChoice?
+        driver.showReady(toInstallAndRelaunch: { choice = $0 })
+        standard.readyReply?(.install)
+        XCTAssertEqual(choice, .install)
+        XCTAssertEqual(saves, 1)
+        XCTAssertTrue(updater.safety.isReserved)
+        XCTAssertTrue(updater.applicationMayTerminate())
+        updater.markPendingInstallation(false)
     }
 
     func testSignatureErrorsHaveSpecificRecoveryAndNetworkErrorsRemainDistinct() {

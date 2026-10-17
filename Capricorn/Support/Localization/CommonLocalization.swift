@@ -277,7 +277,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Disk Check": "磁盘检查",
         "First Aid": "磁盘急救",
         "Check for updates on launch": "启动时自动检查更新",
-        "Automatically download and install on quit": "自动下载并在退出时安装",
         "Restart Capricorn to apply this language to update windows.": "重新启动 Capricorn 后，更新窗口将使用此语言。",
         "Update blocked": "更新已阻止",
         "Update unavailable": "暂时无法更新",

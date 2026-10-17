@@ -639,7 +639,6 @@ struct CapricornSettingsView: View {
         .alert(language.t("Reset All Settings?"), isPresented: $isConfirmingAllSettingsReset) {
             Button(language.t("Reset All Settings"), role: .destructive) {
                 preferences.resetAllSettings()
-                updateChecker.setAutomaticallyDownloadsUpdates(false)
                 updateChecker.setAutomaticallyChecksForUpdates(false)
                 settingsResetResult = preferences.language.t("All settings were restored to their defaults.")
             }

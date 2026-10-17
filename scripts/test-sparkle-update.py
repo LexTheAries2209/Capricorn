@@ -27,7 +27,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sparkle-root", required=True, type=pathlib.Path)
     parser.add_argument("--scenario", choices=[
-        "update", "automatic", "conflict", "archive-signature", "feed-signature", "missing-feed",
+        "update", "manual-only", "cancel-install", "quit-before-install",
+        "conflict", "archive-signature", "feed-signature", "missing-feed",
         "launch-checks", "launch-disabled", "launch-conflict", "launch-timeout"
     ], default="update")
     parser.add_argument("--archive-delay", type=float, default=0,
@@ -123,8 +124,8 @@ def main():
                 "SURequireSignedFeed": True,
                 "SUSignedFeedFailureExpirationInterval": 0,
                 "SUEnableAutomaticChecks": False,
-                "SUAllowsAutomaticUpdates": True,
-                "SUAutomaticallyUpdate": options.scenario == "automatic",
+                "SUAllowsAutomaticUpdates": False,
+                "SUAutomaticallyUpdate": False,
                 "SUEnableSystemProfiling": False,
                 "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},
                 "CapricornFixtureRoot": str(root),
@@ -169,15 +170,8 @@ def main():
         launch = ["open", "-n", "--stdout", str(root / "stdout.log"), "--stderr", str(root / "stderr.log"), str(installed)]
         run(*launch)
         deadline = time.monotonic() + 55
-        relaunched = False
         result_path = root / "result.json"
         while time.monotonic() < deadline and not result_path.exists():
-            if options.scenario == "automatic" and not relaunched:
-                with (installed / "Contents/Info.plist").open("rb") as stream:
-                    version = plistlib.load(stream)["CFBundleVersion"]
-                if version == "0042":
-                    run(*launch)
-                    relaunched = True
             time.sleep(0.2)
         if not result_path.exists():
             # Terminate only the fixture launched from this unique test directory.
@@ -209,9 +203,24 @@ def main():
             "scenario": options.scenario, "artifacts": str(root),
             "feedRequests": requests.count("/appcast.xml"), "archiveDelay": options.archive_delay, **result
         }, indent=2))
-        if options.scenario in ("update", "automatic"):
+        if options.scenario == "update":
             assert result["result"] == "updated", result
             assert result["historyRetained"] and result["preferencesRetained"], result
+        elif options.scenario == "manual-only":
+            assert result["result"] == "manual-required" and result["build"] == "0041", result
+            assert result["legacyDownloadsDisabled"] and not result["preparedInstallation"], result
+            assert not any(path.endswith(".zip") for path in requests), requests
+            assert requests.count("/appcast.xml") == 1, requests
+            time.sleep(1)
+            with (installed / "Contents/Info.plist").open("rb") as stream:
+                assert plistlib.load(stream)["CFBundleVersion"] == "0041"
+        elif options.scenario in ("cancel-install", "quit-before-install"):
+            assert result["result"] == "cancelled", result
+            assert not result["preparedInstallation"] and not result["installationReserved"], result
+            assert any(path.endswith(".zip") for path in requests), requests
+            time.sleep(1)
+            with (installed / "Contents/Info.plist").open("rb") as stream:
+                assert plistlib.load(stream)["CFBundleVersion"] == "0041"
         elif options.scenario == "launch-checks":
             assert result["build"] == "0041", result
         elif options.scenario == "launch-disabled":
