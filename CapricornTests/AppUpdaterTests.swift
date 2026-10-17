@@ -17,6 +17,9 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertEqual(info["SUEnableAutomaticChecks"] as? Bool, false)
         XCTAssertEqual(info["SUAllowsAutomaticUpdates"] as? Bool, true)
         XCTAssertNil(info["SUScheduledCheckInterval"])
+        let build = try XCTUnwrap(info["CFBundleVersion"] as? String)
+        XCTAssertNotNil(build.range(of: #"^[0-9]{4}$"#, options: .regularExpression))
+        XCTAssertGreaterThan(try XCTUnwrap(Int(build)), 0)
     }
 
     func testSavedUpdateChoicesLoadAndPersistWithoutStartingSparkle() throws {

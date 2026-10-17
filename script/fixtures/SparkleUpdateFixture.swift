@@ -50,7 +50,7 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
             let container = try ModelContainer(for: UpdateFixtureHistory.self, configurations: configuration)
             self.container = container
             let records = try container.mainContext.fetch(FetchDescriptor<UpdateFixtureHistory>())
-            if build == "1001" {
+            if build == "0042" {
                 finish([
                     "result": "updated",
                     "build": build,

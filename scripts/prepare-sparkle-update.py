@@ -21,7 +21,8 @@ def main():
     parser.add_argument("--output", required=True, type=pathlib.Path)
     parser.add_argument("--download-url-prefix", required=True)
     parser.add_argument("--release-notes", required=True, type=pathlib.Path)
-    parser.add_argument("--previous-build", required=True, type=int)
+    parser.add_argument("--previous-build", required=True, type=int,
+                        help="Previous global release build in decimal, e.g. 0041 at the migration baseline.")
     parser.add_argument("--key-account", default="lex.Capricorn")
     parser.add_argument("--allow-development-signing", action="store_true")
     options = parser.parse_args()
@@ -41,8 +42,8 @@ def main():
         parser.error("Unexpected bundle identifier.")
     version = info["CFBundleShortVersionString"]
     build = info["CFBundleVersion"]
-    if not re.fullmatch(r"\d+\.\d+\.\d+", version) or not build.isdecimal():
-        parser.error("A complete marketing version and numeric build are required.")
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version) or not re.fullmatch(r"[0-9]{4}", build) or int(build) == 0:
+        parser.error("A complete marketing version and a four-digit build (0001-9999) are required.")
     if options.previous_build < 0 or int(build) <= options.previous_build:
         parser.error("The build must be strictly greater than the previous published build.")
     if not info.get("SURequireSignedFeed") or not info.get("SUVerifyUpdateBeforeExtraction"):

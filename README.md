@@ -12,6 +12,8 @@ Bilingual release notes / 双语发布说明：[docs/releases/v2.10.1.md](docs/r
 
 Complete release log / 完整更新记录：[CHANGELOG.md](CHANGELOG.md)
 
+Version and build rules / 版本与构建号规则：[docs/versioning.md](docs/versioning.md)
+
 ---
 
 ## 中文说明
@@ -60,6 +62,8 @@ Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，�
 - App 已内置 smartctl 7.5，无需另外安装 smartmontools。
 
 ### 构建和测试
+
+开发分支已改为“完整版本号 + 独立四位构建号”，例如版本 `2.10.1`、Build `0042`。构建号根据发布构建记录全局递增，不再拼成版本号的第三段；本次迁移以已核实的 41 次正式 Release 为基线，未修改历史发布包。详见[版本规则](docs/versioning.md)。
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build
@@ -117,6 +121,8 @@ Network volumes can be benchmarked as mounted folders, but they do not provide a
 - smartctl 7.5 is bundled with the App.
 
 ### Build And Test
+
+The development branch uses a complete version and a separate four-digit build, for example Version `2.10.1`, Build `0042`. The build increases globally with release-build allocations and is no longer the third version component. The migration uses 41 verified stable Releases as its baseline and does not modify historical packages. See the [version rules](docs/versioning.md).
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build

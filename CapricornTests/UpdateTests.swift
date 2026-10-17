@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
+import Sparkle
 import XCTest
 @testable import Capricorn
 
@@ -14,10 +15,18 @@ final class UpdateTests: XCTestCase {
     }
 
     func testFullMarketingVersionDoesNotDisplayInternalBuild() {
-        let version = AppVersion(marketingVersion: "2.10.1", build: "1000")
+        let version = AppVersion(marketingVersion: "2.10.1", build: "0042")
         XCTAssertEqual(version.displayValue, "2.10.1")
         XCTAssertEqual(version, AppVersion("v2.10.1"))
-        XCTAssertLessThan(version, AppVersion(marketingVersion: "2.11.0", build: "1001"))
+        XCTAssertLessThan(version, AppVersion(marketingVersion: "2.11.0", build: "0043"))
+    }
+
+    func testSparkleComparesPaddedBuildNumbersNumerically() {
+        let comparator = SUStandardVersionComparator()
+        XCTAssertEqual(comparator.compareVersion("0041", toVersion: "0042"), .orderedAscending)
+        XCTAssertEqual(comparator.compareVersion("0042", toVersion: "42"), .orderedSame)
+        XCTAssertEqual(comparator.compareVersion("0099", toVersion: "0100"), .orderedAscending)
+        XCTAssertEqual(comparator.compareVersion("0042", toVersion: "0041"), .orderedDescending)
     }
 
     func testGitHubReleaseParserUsesStableReleaseMetadata() throws {

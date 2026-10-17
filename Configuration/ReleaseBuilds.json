@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "historicalBaseline": {
+    "verifiedOn": "2026-10-17",
+    "repository": "LexTheAries2209/Capricorn",
+    "publishedReleaseCount": 41,
+    "lastPublishedTag": "v2.10.1",
+    "tagsOldestFirst": [
+      "v1.0.2", "v1.0.3", "v1.0.4", "v1.0.5", "v1.1.1",
+      "v1.2.5", "v1.2.10", "v1.2.11", "v1.2.12", "v2.0.1",
+      "v2.1.1", "v2.2.1", "v2.2.2", "v2.3.1", "v2.3.2",
+      "v2.4.0", "v2.4.1", "v2.4.2", "v2.5.0", "v2.5.1",
+      "v2.6.3", "v2.7.0", "v2.7.1", "v2.7.2", "v2.7.3",
+      "v2.7.4", "v2.7.5", "v2.7.6", "v2.8.0", "v2.8.1",
+      "v2.9.0", "v2.9.1", "v2.9.2", "v2.9.3", "v2.9.5",
+      "v2.9.6", "v2.9.7", "v2.9.8", "v2.9.9", "v2.10.0",
+      "v2.10.1"
+    ]
+  },
+  "allocations": [
+    {
+      "build": "0042",
+      "status": "reserved",
+      "version": null,
+      "tag": null
+    }
+  ]
+}
