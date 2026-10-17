@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A11CE001BADD1E0000000001 /* Capricorn/Resources/Smartmontools/drivedb.h in Resources */ = {isa = PBXBuildFile; fileRef = A11CE001BADD1E0000000002 /* Capricorn/Resources/Smartmontools/drivedb.h */; };
+		A11CE002BADD1E0000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A11CE002BADD1E0000000002 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,6 +52,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A11CE002BADD1E0000000001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -127,6 +129,7 @@
 			);
 			name = Capricorn;
 			packageProductDependencies = (
+				A11CE002BADD1E0000000002 /* Sparkle */,
 			);
 			productName = Capricorn;
 			productReference = 587A84672FE6BDAA0045BA20 /* Capricorn.app */;
@@ -160,6 +163,9 @@
 			);
 			mainGroup = 587A845E2FE6BDAA0045BA20;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A11CE002BADD1E0000000003 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 587A84682FE6BDAA0045BA20 /* Products */;
 			projectDirPath = "";
@@ -342,7 +348,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 1000;
 				DEVELOPMENT_TEAM = 6PYLB6N93R;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -352,11 +358,20 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Capricorn V2.10.1";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_SUAutomaticallyUpdate = NO;
+				INFOPLIST_KEY_SUBundleName = Capricorn;
+				INFOPLIST_KEY_SUEnableSystemProfiling = NO;
+				INFOPLIST_KEY_SUFeedURL = "https://github.com/LexTheAries2209/Capricorn/releases/latest/download/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "2fnds6AczH82TtMwseyFTcJ3dBVyHfzlYRCDeIyOFxw=";
+				INFOPLIST_KEY_SURequireSignedFeed = YES;
+				INFOPLIST_KEY_SUScheduledCheckInterval = 86400;
+				INFOPLIST_KEY_SUSignedFeedFailureExpirationInterval = 0;
+				INFOPLIST_KEY_SUVerifyUpdateBeforeExtraction = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.10;
+				MARKETING_VERSION = 2.10.1;
 				PRODUCT_BUNDLE_IDENTIFIER = lex.Capricorn;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -375,7 +390,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 1000;
 				DEVELOPMENT_TEAM = 6PYLB6N93R;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -385,11 +400,20 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Capricorn V2.10.1";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_SUAutomaticallyUpdate = NO;
+				INFOPLIST_KEY_SUBundleName = Capricorn;
+				INFOPLIST_KEY_SUEnableSystemProfiling = NO;
+				INFOPLIST_KEY_SUFeedURL = "https://github.com/LexTheAries2209/Capricorn/releases/latest/download/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "2fnds6AczH82TtMwseyFTcJ3dBVyHfzlYRCDeIyOFxw=";
+				INFOPLIST_KEY_SURequireSignedFeed = YES;
+				INFOPLIST_KEY_SUScheduledCheckInterval = 86400;
+				INFOPLIST_KEY_SUSignedFeedFailureExpirationInterval = 0;
+				INFOPLIST_KEY_SUVerifyUpdateBeforeExtraction = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.10;
+				MARKETING_VERSION = 2.10.1;
 				PRODUCT_BUNDLE_IDENTIFIER = lex.Capricorn;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -486,6 +510,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A11CE002BADD1E0000000003 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A11CE002BADD1E0000000002 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A11CE002BADD1E0000000003 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 587A845F2FE6BDAA0045BA20 /* Project object */;
 }

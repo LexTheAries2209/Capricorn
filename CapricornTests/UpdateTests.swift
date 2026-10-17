@@ -13,6 +13,13 @@ final class UpdateTests: XCTestCase {
         XCTAssertGreaterThan(AppVersion("1.3.0"), version)
     }
 
+    func testFullMarketingVersionDoesNotDisplayInternalBuild() {
+        let version = AppVersion(marketingVersion: "2.10.1", build: "1000")
+        XCTAssertEqual(version.displayValue, "2.10.1")
+        XCTAssertEqual(version, AppVersion("v2.10.1"))
+        XCTAssertLessThan(version, AppVersion(marketingVersion: "2.11.0", build: "1001"))
+    }
+
     func testGitHubReleaseParserUsesStableReleaseMetadata() throws {
         let data = Data("{\"tag_name\":\"v1.2.12\",\"name\":\"Capricorn V1.2.12\",\"html_url\":\"https://github.com/LexTheAries2209/Capricorn/releases/tag/v1.2.12\",\"body\":\"SMART improvements\",\"draft\":false,\"prerelease\":false}".utf8)
 

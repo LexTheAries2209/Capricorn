@@ -47,9 +47,10 @@ final class AppUpdateSafetyGate {
 
     func beginInstallation() throws {
         try check()
-        guard !isReserved else { return }
-        reserve()
-        isReserved = true
+        if !isReserved {
+            reserve()
+            isReserved = true
+        }
         do {
             try save()
         } catch {

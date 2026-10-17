@@ -17,7 +17,11 @@ struct AppVersion: Comparable, Equatable, Sendable {
             .split(separator: ".")
             .compactMap { Int($0) }
         let buildComponents = build?.split(separator: ".").compactMap { Int($0) } ?? []
-        let resolvedComponents = marketingComponents + buildComponents
+        // Older releases stored the patch in Build; new releases have a full
+        // marketing version and an independent, monotonically increasing build.
+        let resolvedComponents = marketingComponents.count >= 3
+            ? marketingComponents
+            : marketingComponents + buildComponents
         components = resolvedComponents.isEmpty ? [0] : resolvedComponents
     }
 
