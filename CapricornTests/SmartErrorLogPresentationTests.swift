@@ -85,10 +85,10 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                 let text = normalized(observations.compactMap { $0.topCandidates(1).first?.string }.joined())
                 XCTAssertTrue(text.contains(normalized(language.t(
                     "When disabled, the SMART page hides self-test controls, saved reports, and error-log tools."
-                ))))
+                ))), "\(language), diagnostics enabled: \(enabled): \(text)")
                 XCTAssertEqual(text.contains(normalized(language.t(
                     "When enabled, the SMART page shows tools to read, view, and export controller error reports."
-                ))), enabled)
+                ))), enabled, "\(language), diagnostics enabled: \(enabled): \(text)")
                 XCTAssertFalse(text.contains(normalized(language.t("Overview"))))
                 XCTAssertFalse(preferences.showsSmartErrorLogInterface)
             }
@@ -357,7 +357,16 @@ final class SmartErrorLogPresentationTests: XCTestCase {
     @MainActor
     private func capturedImage(in view: NSView, name: String) throws -> CGImage {
         let url = URL(fileURLWithPath: "/tmp/Capricorn-smart-error-report-\(name).png")
-        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        // Render at a fixed Retina resolution even on CI's non-Retina display.
+        let scale: CGFloat = 2
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int((view.bounds.width * scale).rounded(.up)),
+            pixelsHigh: Int((view.bounds.height * scale).rounded(.up)),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+            isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ))
+        bitmap.size = view.bounds.size
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let image = try XCTUnwrap(bitmap.cgImage)
         let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
