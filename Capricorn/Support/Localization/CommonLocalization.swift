@@ -388,7 +388,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Show build number": "显示构建号",
         "Enable developer options": "开启开发者选项",
         "Enable custom benchmark configuration": "开启测速中的自定义配置",
-        "Enable virtual disks": "开启虚拟硬盘",
+        "Allow adding virtual disks": "允许添加虚拟硬盘",
         "Add virtual disk": "添加虚拟硬盘",
         "Virtual Disk": "虚拟硬盘",
         "Edit Configuration": "修改配置",

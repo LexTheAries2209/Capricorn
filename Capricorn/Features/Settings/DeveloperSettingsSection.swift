@@ -17,7 +17,7 @@ struct DeveloperSettingsSection: View {
                     isOn: $preferences.enablesCustomBenchmarkConfiguration
                 )
                 Toggle(
-                    preferences.language.t("Enable virtual disks"),
+                    preferences.language.t("Allow adding virtual disks"),
                     isOn: $preferences.enablesVirtualDisks
                 )
                 Toggle(
