@@ -86,6 +86,9 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                 XCTAssertTrue(text.contains(normalized(language.t(
                     "When disabled, the SMART page hides self-test controls, saved reports, and error-log tools."
                 ))))
+                XCTAssertEqual(text.contains(normalized(language.t(
+                    "Off by default. When enabled, the SMART page shows tools to read, view, and export controller error reports."
+                ))), enabled)
                 XCTAssertFalse(text.contains(normalized(language.t("Overview"))))
                 XCTAssertFalse(preferences.showsSmartErrorLogInterface)
             }
