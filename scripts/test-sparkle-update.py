@@ -25,7 +25,7 @@ def run(*args, **kwargs):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sparkle-root", required=True, type=pathlib.Path)
-    parser.add_argument("--scenario", choices=["update", "automatic", "conflict", "archive-signature", "feed-signature"], default="update")
+    parser.add_argument("--scenario", choices=["update", "automatic", "conflict", "archive-signature", "feed-signature", "missing-feed"], default="update")
     options = parser.parse_args()
     repo = pathlib.Path(__file__).resolve().parents[1]
     tools = options.sparkle_root.resolve()
@@ -103,6 +103,8 @@ def main():
         elif options.scenario == "feed-signature":
             feed = feed_dir / "appcast.xml"
             feed.write_bytes(feed.read_bytes().replace(b"<title>", b"<title>tampered ", 1))
+        elif options.scenario == "missing-feed":
+            shutil.move(feed_dir / "appcast.xml", feed_dir / "unpublished.xml")
         launch = ["open", "-n", "--stdout", str(root / "stdout.log"), "--stderr", str(root / "stderr.log"), str(installed)]
         run(*launch)
         deadline = time.monotonic() + 55
@@ -133,6 +135,9 @@ def main():
             assert result["result"] == "blocked" and result["build"] == "1000", result
             if options.scenario == "conflict":
                 assert "Benchmark" in result["detail"], result
+            elif options.scenario == "missing-feed":
+                assert "confirm the update files are available" in result["detail"], result
+                assert "could not be reached" not in result["detail"], result
             else:
                 assert "signature" in result["detail"].lower(), result
             with (installed / "Contents/Info.plist").open("rb") as stream:

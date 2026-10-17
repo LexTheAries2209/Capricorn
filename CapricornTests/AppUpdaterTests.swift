@@ -129,6 +129,41 @@ final class AppUpdaterTests: XCTestCase {
         )
         XCTAssertEqual(AppUpdater.issue(for: nested), .signature)
     }
+
+    func testDownloadFailuresDistinguishServerResponsesFromConnectionFailures() {
+        // The real Sparkle downloader wraps HTTP failures using this domain/code.
+        let httpFailure = NSError(domain: SUSparkleErrorDomain, code: Int(SUError.downloadError.rawValue))
+        XCTAssertEqual(AppUpdater.issue(for: httpFailure), .download)
+        XCTAssertEqual(AppUpdater.issue(for: URLError(.badServerResponse) as NSError), .download)
+        XCTAssertEqual(AppUpdater.issue(for: URLError(.resourceUnavailable) as NSError), .download)
+
+        for code in [URLError.timedOut, .cannotConnectToHost, .cannotFindHost, .notConnectedToInternet] {
+            let transportFailure = NSError(
+                domain: SUSparkleErrorDomain, code: Int(SUError.downloadError.rawValue),
+                userInfo: [NSUnderlyingErrorKey: NSError(
+                    domain: SUSparkleErrorDomain, code: Int(SUError.downloadError.rawValue),
+                    userInfo: [NSUnderlyingErrorKey: URLError(code)]
+                )]
+            )
+            XCTAssertEqual(AppUpdater.issue(for: transportFailure), .network)
+        }
+    }
+
+    func testDownloadFailurePresentsLocalizedRecoveryWithoutClaimingConnectionFailed() {
+        var detail = ""
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [] }),
+            language: { .simplifiedChinese }, allowsStartup: false,
+            presentAlert: { _, body in detail = body }
+        )
+        updater.handleError(
+            NSError(domain: SUSparkleErrorDomain, code: Int(SUError.downloadError.rawValue)),
+            showingAlert: true
+        )
+        XCTAssertEqual(updater.state, .failed(.download))
+        XCTAssertTrue(detail.contains("更新文件是否已发布"))
+        XCTAssertFalse(detail.contains("无法连接"))
+    }
 }
 
 @MainActor

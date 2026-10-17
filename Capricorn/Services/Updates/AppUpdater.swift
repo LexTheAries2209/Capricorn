@@ -183,14 +183,20 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError { children.append(underlying) }
         let underlyingIssues = children.map { issue(for: $0, depth: depth + 1) }
         if underlyingIssues.contains(.signature) { return .signature }
-        if error.domain == NSURLErrorDomain { return .network }
+        if error.domain == NSURLErrorDomain {
+            switch URLError.Code(rawValue: error.code) {
+            case .badServerResponse, .resourceUnavailable, .fileDoesNotExist: return .download
+            default: return .network
+            }
+        }
         guard error.domain == SUSparkleErrorDomain else {
             return underlyingIssues.first(where: { $0 != .installation }) ?? .installation
         }
         switch SUError(rawValue: OSStatus(error.code)) {
         case .signatureError, .validationError, .insufficientSigningError: return .signature
         case .appcastError, .appcastParseError, .resumeAppcastError: return .feed
-        case .downloadError: return .network
+        // Sparkle also uses downloadError for HTTP failures, without a structured status code.
+        case .downloadError: return underlyingIssues.first(where: { $0 != .installation }) ?? .download
         case .invalidFeedURLError, .insecureFeedURLError, .invalidUpdaterError,
              .invalidHostVersionError, .invalidHostBundleIdentifierError, .noPublicDSAFoundError:
             return .configuration
