@@ -4,6 +4,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 本文记录 Capricorn 的全部公开版本，按新到旧排列，并作为发布流程的一部分持续维护。每个版本更完整的验证、兼容性和打包信息仍保留在对应发布说明中。
 
+## V2.10.1 - 2026-10-17
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.10.1) | [Release Notes / 发布说明](docs/releases/v2.10.1.md)
+
+### 中文
+
+- SMART 错误条目可一次点击读取并直接查看报告；无法获取详情时明确提示，历史错误计数不会显示为没有错误。
+- 设置新增默认关闭的“显示读取错误条目”，可单独控制错误条目模块的显示。
+- SMART 诊断区采用更紧凑的标题与收起按钮布局，完善中英文说明和文字显示。
+
+### English
+
+- Read SMART error entries and open their report with one click. Unavailable details are identified clearly, without presenting a historical error count as an empty log.
+- Adds Show Error Entry Reader in Settings, off by default, to control the error-entry section separately.
+- Makes SMART diagnostics more compact with a title-row collapse button and clearer bilingual text.
+
 ## V2.10.0 - 2026-10-15
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.10.0) | [Release Notes / 发布说明](docs/releases/v2.10.0.md)
