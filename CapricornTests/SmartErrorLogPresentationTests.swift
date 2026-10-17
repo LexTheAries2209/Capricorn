@@ -107,6 +107,62 @@ final class SmartErrorLogPresentationTests: XCTestCase {
     }
 
     @MainActor
+    func testFullSmartPageKeepsHistoricalErrorExplanationVisible() async throws {
+        let suiteName = "CapricornTests.errorReportLayout.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: AppPreferences.Key.showsSmartSelfTestInterface)
+        var drive = CapricornTests.fixtureDrive()
+        drive.isSystemDisk = false
+        var snapshot = CapricornTests.fixtureSnapshot(for: drive)
+        snapshot.attributes = [SmartAttribute(
+            id: "nvme.num_err_log_entries", name: "Error Log Entries",
+            rawValue: "2", current: nil, worst: nil, threshold: nil,
+            status: .good, source: "smartctl"
+        )]
+        let model = AppModel()
+        model.smartErrorLogCapabilities[drive.id] = .supported
+        model.smartErrorLogReports[drive.id] = SmartErrorLogReport(
+            isSupported: true, message: "No SMART error log entries were reported.",
+            entries: [], totalEntryCount: 0, capturedAt: Date()
+        )
+        model.smartSelfTestCapabilities[drive.id] = .unavailable(
+            SmartSelfTestService.macOSNativeNVMeUnavailableMessage
+        )
+
+        for language in AppLanguage.allCases {
+            for height: CGFloat in [520, 650] {
+                let root = SmartAttributesView(
+                    drive: drive, snapshot: snapshot, viewModel: model, selfTestHistory: [],
+                    saveSnapshot: { _ in "" }, exportSelfTestHistory: { _, _, _ in "" },
+                    exportErrorLog: { _, _, _ in "" }, satDriverGuidance: nil,
+                    openSATDriverSettings: {}
+                )
+                .defaultAppStorage(defaults)
+                .environment(\.appLanguage, language)
+                .environment(\.locale, Locale(identifier: language.localeIdentifier))
+                .frame(width: 1_000, height: height)
+                let hostingView = NSHostingView(rootView: root)
+                let window = makeWindow(hostingView)
+                defer { window.orderOut(nil) }
+                try await Task.sleep(for: .milliseconds(250))
+                hostingView.layoutSubtreeIfNeeded()
+                let image = try capturedImage(
+                    in: hostingView, name: "full-page-\(language.rawValue)-\(Int(height))"
+                )
+                let lines = try textObservations(in: image).compactMap { $0.topCandidates(1).first?.string }
+                let text = normalized(lines.joined())
+                let expected = normalized(language.smartErrorLogHistoryWithoutDetailsMessage(count: 2))
+                XCTAssertTrue(text.contains(expected), "\(language), \(height): \(lines)")
+                XCTAssertTrue(
+                    text.contains(normalized(language.t("Retry Reading Error Entries"))),
+                    "The retry control must remain visible."
+                )
+            }
+        }
+    }
+
+    @MainActor
     private func panel(
         model: AppModel,
         drive: DriveDevice,

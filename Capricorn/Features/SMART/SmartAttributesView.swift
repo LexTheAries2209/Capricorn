@@ -544,6 +544,9 @@ struct SmartDiagnosticsPanel: View {
                     Text(errorLogDescription)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        // Keep all lines visible when the SMART table takes remaining height.
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 errorLogControls
