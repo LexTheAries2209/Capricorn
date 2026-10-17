@@ -1,6 +1,8 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
-调研日期：2026-10-17，Asia/Shanghai。状态：P0–P2 已随 V2.10.2 / Build 0042 发布；V2.10.3 / Build 0043 包含后续提示窗口、启动检查截止与许可入口改进。
+调研日期：2026-10-17，Asia/Shanghai。状态：P0–P2 已随 V2.10.2 / Build 0042 发布；V2.10.3 / Build 0043 已发布，包含后续提示窗口、启动检查截止与许可入口改进。
+
+V2.10.3 发布核验：全量 460 项测试通过，零失败、零跳过；严格并发、Swift 6、Universal Release Archive 和存档源码独立构建通过。[GitHub CI](https://github.com/LexTheAries2209/Capricorn/actions/runs/39029308503) 三项检查全部通过。10 个隔离更新场景通过；公开签名源已由真实 Sparkle 核验，旧 `0042` 发现 `2.10.3 / 0043`，当前 `0043` 判定为最新。ZIP 大小与 GitHub 摘要一致，归档 App 的两处许可入口与完整文本切换通过界面验证。安装回归使用独立测试 App，不替换真实用户 App；保留的旧版备份、ZIP/feed、完整 xcarchive 与 dSYM 均已核验。
 
 ## 实施记录
 
