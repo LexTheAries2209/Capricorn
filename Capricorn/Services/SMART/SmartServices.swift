@@ -1951,7 +1951,7 @@ enum SmartctlParser {
                 current: nil,
                 worst: nil,
                 threshold: nil,
-                status: remaining <= 10 ? .preFail : (remaining <= 20 ? .warning : .good),
+                status: remaining <= 10 ? .error : (remaining <= 20 ? .warning : .good),
                 source: providerName
             ))
         }
@@ -1960,7 +1960,7 @@ enum SmartctlParser {
            !attributes.contains(where: { $0.name == "Available Spare" }) {
             let status: HealthStatus
             if let spareThreshold, spareAvailable < spareThreshold {
-                status = .preFail
+                status = .error
             } else if let spareThreshold, spareAvailable == spareThreshold {
                 status = .warning
             } else {
@@ -2067,7 +2067,7 @@ enum SmartctlParser {
             return .warning
         }
         if let current, let threshold, threshold > 0, current < threshold {
-            return .preFail
+            return .error
         }
         return .good
     }
@@ -2213,21 +2213,21 @@ final class DriveHealthEvaluator {
         if healthAttributes.contains(where: { $0.status == .failed }) {
             health = max(health, .failed)
         }
-        if healthAttributes.contains(where: { $0.status == .preFail }) {
-            health = max(health, .preFail)
+        if healthAttributes.contains(where: { $0.status == .error }) {
+            health = max(health, .error)
         }
         if healthAttributes.contains(where: { $0.status == .warning }) {
             health = max(health, .warning)
         }
 
         if let mediaErrors = snapshot.mediaErrors, mediaErrors > 0 {
-            health = max(health, .preFail)
+            health = max(health, .error)
         }
         if let life = snapshot.lifeRemainingPercent {
             if life <= 0 {
                 health = .failed
             } else if life <= 10 {
-                health = max(health, .preFail)
+                health = max(health, .error)
             } else if life <= 20 {
                 health = max(health, .warning)
             }
@@ -2238,7 +2238,7 @@ final class DriveHealthEvaluator {
             ?? snapshot.attributeInt(named: "Available Spare Threshold")
         if let spare = availableSpare, let threshold = availableSpareThreshold {
             if spare < threshold {
-                health = max(health, .preFail)
+                health = max(health, .error)
             } else if spare == threshold {
                 health = max(health, .warning)
             }
@@ -2269,8 +2269,8 @@ final class DriveHealthEvaluator {
             return "SMART data does not show immediate risk for \(drive.displayName)."
         case .warning:
             return "Warning indicators are present. Review highlighted attributes and keep backups current."
-        case .preFail:
-            return "Pre-fail indicators are present. Backup immediately and plan replacement."
+        case .error:
+            return "Error indicators are present. Backup immediately and plan replacement."
         case .failed:
             return "The drive reports failure. Stop non-essential writes and replace the drive."
         case .unavailable:
@@ -2285,7 +2285,7 @@ final class NotificationCoordinator {
     }
 
     func notifyIfNeeded(drive: DriveDevice, snapshot: SmartSnapshot) {
-        guard snapshot.health.severity >= HealthStatus.preFail.severity else { return }
+        guard snapshot.health.severity >= HealthStatus.error.severity else { return }
         let content = UNMutableNotificationContent()
         content.title = "Capricorn Drive Health Alert"
         content.body = "\(drive.displayName): \(snapshot.health.title). \(snapshot.summary)"

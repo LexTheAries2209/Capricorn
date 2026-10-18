@@ -4,6 +4,58 @@ import XCTest
 @testable import Capricorn
 
 extension CapricornTests {
+    func testLegacyHealthValuesDecodeAsErrorAndEncodeWithCurrentName() throws {
+        for rawValue in ["preFail", "error"] {
+            XCTAssertEqual(HealthStatus(rawValue: rawValue), .error)
+            XCTAssertEqual(
+                try JSONDecoder().decode(HealthStatus.self, from: JSONEncoder().encode(rawValue)),
+                .error
+            )
+        }
+        XCTAssertEqual(String(decoding: try JSONEncoder().encode(HealthStatus.error), as: UTF8.self), "\"error\"")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.healthTitle(.error), "错误")
+        XCTAssertEqual(AppLanguage.english.healthTitle(.error), "Error")
+        XCTAssertTrue(HealthStatus.warning < .error)
+        XCTAssertTrue(HealthStatus.error < .failed)
+        for health in HealthStatus.allCases {
+            XCTAssertEqual(HealthStatus(rawValue: health.rawValue), health)
+            XCTAssertEqual(try JSONDecoder().decode(HealthStatus.self, from: JSONEncoder().encode(health)), health)
+        }
+    }
+
+    func testLegacyHealthHistoryKeepsSnapshotAttributesAndUpdatesSummaryWording() throws {
+        let drive = Self.fixtureDrive()
+        var snapshot = Self.fixtureSnapshot(for: drive)
+        snapshot.health = .error
+        snapshot.summary = "Pre-fail indicators are present. Backup immediately and plan replacement."
+        snapshot.attributes = [SmartAttribute(
+            id: "fixture.health", name: "Available Spare", rawValue: "1%",
+            current: nil, worst: nil, threshold: nil, status: .error, source: "Fixture"
+        )]
+        let record = SmartHistoryRecord(drive: drive, snapshot: snapshot)
+        record.healthRaw = "preFail"
+        let payload = try XCTUnwrap(record.encodedSnapshot)
+        let legacyPayload = String(decoding: payload, as: UTF8.self)
+            .replacingOccurrences(of: "\"error\"", with: "\"preFail\"")
+        record.encodedSnapshot = Data(legacyPayload.utf8)
+
+        XCTAssertEqual(record.health, .error)
+        XCTAssertEqual(record.snapshot?.health, .error)
+        XCTAssertEqual(record.snapshot?.attributes.first?.status, .error)
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.statusMessage(record.summary),
+            "检测到错误指标。请立即备份并计划更换硬盘。"
+        )
+        XCTAssertEqual(
+            AppLanguage.english.statusMessage(record.summary),
+            "Error indicators are present. Backup immediately and plan replacement."
+        )
+        XCTAssertEqual(
+            DriveHealthEvaluator().summary(for: drive, snapshot: snapshot),
+            AppLanguage.english.statusMessage(record.summary)
+        )
+    }
+
     @MainActor
     func testAppPreferencesPreservesExistingUserDefaultsKeys() throws {
         let suiteName = "CapricornTests.\(UUID().uuidString)"

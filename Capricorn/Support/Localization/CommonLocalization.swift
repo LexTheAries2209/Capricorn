@@ -110,6 +110,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
 
     func statusMessage(_ message: String) -> String {
+        // Saved history summaries keep the wording from the version that wrote them.
+        let message = message == "Pre-fail indicators are present. Backup immediately and plan replacement."
+            ? "Error indicators are present. Backup immediately and plan replacement."
+            : message
         guard self == .simplifiedChinese else { return message }
 
         if let exact = Self.zhHansMessages[message] ?? Self.zhHans[message] {
@@ -999,7 +1003,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "SMART snapshot saved to history.": "SMART 快照已保存到历史。",
         "SMART snapshot saved to history, but the selected folder is unavailable.": "SMART 快照已保存到历史，但所选文件夹不可用。",
         "Warning indicators are present. Review highlighted attributes and keep backups current.": "检测到警告指标。请检查高亮属性并保持备份最新。",
-        "Pre-fail indicators are present. Backup immediately and plan replacement.": "检测到预故障指标。请立即备份并计划更换硬盘。",
+        "Error indicators are present. Backup immediately and plan replacement.": "检测到错误指标。请立即备份并计划更换硬盘。",
         "The drive reports failure. Stop non-essential writes and replace the drive.": "硬盘报告故障。请停止非必要写入并更换硬盘。",
         "SMART data was successfully read through this USB bridge.": "已通过此 USB 桥接器成功读取 SMART 数据。",
         "The USB bridge was identified, but SMART data is currently limited.": "已识别 USB 桥接器，但当前 SMART 数据有限。",

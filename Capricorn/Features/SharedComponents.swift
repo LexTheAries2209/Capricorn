@@ -270,7 +270,7 @@ extension HealthStatus {
         switch self {
         case .good: .green
         case .warning: .yellow
-        case .preFail: .orange
+        case .error: .orange
         case .failed: .red
         case .unavailable: .secondary
         }

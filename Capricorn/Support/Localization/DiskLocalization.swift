@@ -11,7 +11,7 @@ extension AppLanguage {
             return switch status {
             case .good: "良好"
             case .warning: "警告"
-            case .preFail: "预故障"
+            case .error: "错误"
             case .failed: "故障"
             case .unavailable: "不可用"
             }

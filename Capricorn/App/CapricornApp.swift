@@ -137,7 +137,7 @@ struct CapricornApp: App {
         switch viewModel.worstHealth {
         case .good: "checkmark.seal.fill"
         case .warning: "exclamationmark.triangle.fill"
-        case .preFail: "exclamationmark.octagon.fill"
+        case .error: "exclamationmark.octagon.fill"
         case .failed: "xmark.octagon.fill"
         case .unavailable: "internaldrive"
         }

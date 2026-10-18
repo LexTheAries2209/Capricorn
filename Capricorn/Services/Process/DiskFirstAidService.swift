@@ -238,7 +238,7 @@ final class DiskFirstAidService: DiskFirstAidRunning, @unchecked Sendable {
         if drive.isVirtual { return .virtualDisk }
         if drive.isSystemDisk { return .systemDisk }
         if drive.isInternal && !drive.isRemovable { return .internalDisk }
-        if health == .preFail || health == .failed { return .unhealthyMedia }
+        if health == .error || health == .failed { return .unhealthyMedia }
         return nil
     }
 

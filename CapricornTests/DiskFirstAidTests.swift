@@ -55,9 +55,11 @@ final class DiskFirstAidTests: XCTestCase {
         XCTAssertTrue(internalPlan.targets.allSatisfy { $0.support == .internalDisk })
 
         drive.isInternal = false
-        let failingPlan = try await service.prepare(drive: drive, health: .failed)
-        XCTAssertEqual(failingPlan.blockedReason, .unhealthyMedia)
-        XCTAssertFalse(failingPlan.targets.contains(where: \.isEligible))
+        for health in [HealthStatus.error, .failed] {
+            let failingPlan = try await service.prepare(drive: drive, health: health)
+            XCTAssertEqual(failingPlan.blockedReason, .unhealthyMedia)
+            XCTAssertFalse(failingPlan.targets.contains(where: \.isEligible))
+        }
     }
 
     func testPrepareBlocksNetworkVirtualAndSystemTargets() async throws {

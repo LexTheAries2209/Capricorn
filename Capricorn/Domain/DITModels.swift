@@ -5,17 +5,29 @@ import SwiftUI
 enum HealthStatus: String, Codable, CaseIterable, Identifiable, Comparable, Sendable {
     case good
     case warning
-    case preFail
+    case error
     case failed
     case unavailable
 
     var id: String { rawValue }
 
+    init?(rawValue: String) {
+        switch rawValue {
+        case "good": self = .good
+        case "warning": self = .warning
+        // Existing history and snapshot payloads used this raw value.
+        case "error", "preFail": self = .error
+        case "failed": self = .failed
+        case "unavailable": self = .unavailable
+        default: return nil
+        }
+    }
+
     var title: String {
         switch self {
         case .good: "Good"
         case .warning: "Warning"
-        case .preFail: "Pre-Fail"
+        case .error: "Error"
         case .failed: "Failed"
         case .unavailable: "Unavailable"
         }
@@ -25,7 +37,7 @@ enum HealthStatus: String, Codable, CaseIterable, Identifiable, Comparable, Send
         switch self {
         case .good: "checkmark.seal.fill"
         case .warning: "exclamationmark.triangle.fill"
-        case .preFail: "exclamationmark.octagon.fill"
+        case .error: "exclamationmark.octagon.fill"
         case .failed: "xmark.octagon.fill"
         case .unavailable: "questionmark.circle.fill"
         }
@@ -35,7 +47,7 @@ enum HealthStatus: String, Codable, CaseIterable, Identifiable, Comparable, Send
         switch self {
         case .good: 0
         case .warning: 1
-        case .preFail: 2
+        case .error: 2
         case .failed: 3
         case .unavailable: -1
         }

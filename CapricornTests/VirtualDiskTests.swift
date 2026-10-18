@@ -100,10 +100,10 @@ final class VirtualDiskTests: XCTestCase {
         let cases: [(life: String, mediaErrors: String, expected: HealthStatus)] = [
             ("100", "0", .good), ("21", "0", .good),
             ("20", "0", .warning), ("11", "0", .warning),
-            ("10", "0", .preFail), ("1", "0", .preFail),
-            ("0", "0", .failed), ("100", "1", .preFail),
-            ("20", "1", .preFail), ("0", "1", .failed),
-            ("", "1", .preFail), ("", "", .good)
+            ("10", "0", .error), ("1", "0", .error),
+            ("0", "0", .failed), ("100", "1", .error),
+            ("20", "1", .error), ("0", "1", .failed),
+            ("", "1", .error), ("", "", .good)
         ]
         for item in cases {
             config.lifeRemaining = item.life
