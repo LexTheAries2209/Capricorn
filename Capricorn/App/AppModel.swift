@@ -1452,6 +1452,7 @@ final class AppModel {
                       self.liveActivitySession.workloadState == .running || self.liveActivitySession.workloadState == .stopping else { continue }
                 switch event {
                 case let .progress(progress):
+                    if self.liveActivitySession.workloadState == .stopping && progress.phase != .cleaningUp { continue }
                     self.liveActivityWorkloadProgress = progress
                 }
             }
@@ -1474,7 +1475,8 @@ final class AppModel {
                         loopIndex: self.liveActivityWorkloadProgress?.loopIndex ?? 1,
                         completedBytes: configuration.fileSizeBytes,
                         totalBytes: configuration.fileSizeBytes,
-                        message: "Workload complete"
+                        message: "Workload complete",
+                        queueStatus: self.liveActivityWorkloadProgress?.queueStatus
                     )
                     self.isLiveActivityWorkloadRunning = false
                     self.liveActivityWorkloadTask = nil
@@ -1494,7 +1496,8 @@ final class AppModel {
                         loopIndex: self.liveActivityWorkloadProgress?.loopIndex ?? 1,
                         completedBytes: self.liveActivityWorkloadProgress?.completedBytes ?? 0,
                         totalBytes: self.liveActivityWorkloadProgress?.totalBytes ?? configuration.fileSizeBytes,
-                        message: "Workload stopped"
+                        message: "Workload stopped",
+                        queueStatus: self.liveActivityWorkloadProgress?.queueStatus
                     )
                     self.isLiveActivityWorkloadRunning = false
                     self.liveActivityWorkloadTask = nil

@@ -189,6 +189,10 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         let report: @Sendable (DiskActivityWorkloadProgress) -> Void = { value in
             latestProgress.withLock { latest in
                 if latest?.phase == .cleaningUp && value.phase != .failed { return }
+                var value = value
+                if value.queueStatus == nil && [.complete, .flushing, .flushingReadFile, .failed].contains(value.phase) {
+                    value.queueStatus = latest?.queueStatus
+                }
                 if value.phase != .cleaningUp && value.phase != .failed {
                     lastTransferProgress.withLock { $0 = value }
                 }
@@ -226,6 +230,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) throws {
         let targetURL = configuration.targetFolderURL
+        notify(progress, progressValue(configuration: configuration, phase: .starting, loopIndex: 1, completedBytes: 0, totalBytes: configuration.fileSizeBytes, message: "Starting workload"))
         let targetPath = targetURL.path
         var isDirectory: ObjCBool = false
 
@@ -608,7 +613,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
             let changedPhase = status.draining && queueStatus?.draining != true
             queueStatus = status
             let now = DispatchTime.now().uptimeNanoseconds
-            if changedPhase || now - lastReportNanoseconds >= minimumIntervalNanoseconds {
+            if changedPhase || status.finished || now - lastReportNanoseconds >= minimumIntervalNanoseconds {
                 lastReportNanoseconds = now
                 onReport(completedBytes, status)
             }

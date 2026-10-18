@@ -70,6 +70,13 @@ final class AIOBudget: @unchecked Sendable {
         condition.broadcast()
     }
 
+    func withdraw(_ client: UUID) {
+        condition.lock()
+        waiting.removeAll { $0 == client }
+        condition.broadcast()
+        condition.unlock()
+    }
+
     func wait(_ seconds: Double) {
         condition.lock()
         _ = condition.wait(until: Date(timeIntervalSinceNow: seconds))
@@ -137,9 +144,10 @@ struct AIOTransferFailure: Error, LocalizedError {
     let offset: Int64
     let code: Int32
     let status: AIOTransferStatus
+    let file: String
 
     var errorDescription: String? {
-        "Async \(operation) \(stage) failed at offset \(offset): \(String(cString: strerror(code))) (errno \(code); \(status.detail))."
+        "Async \(operation) \(stage) failed at offset \(offset): \(String(cString: strerror(code))) (errno \(code); \(status.detail); file \(file))."
     }
 }
 
@@ -222,7 +230,10 @@ final class AIOTransfer: @unchecked Sendable {
         }
 
         func failure(_ stage: String, _ request: AIOTransferOperation, _ code: Int32) -> Error {
-            AIOTransferFailure(stage: stage, operation: request.write ? "write" : "read", offset: request.offset, code: code, status: status())
+            var path = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            let hasPath = fcntl(descriptor, F_GETPATH, &path) == 0
+            let name = hasPath ? String(decoding: path.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) : "fd \(descriptor)"
+            return AIOTransferFailure(stage: stage, operation: request.write ? "write" : "read", offset: request.offset, code: code, status: status(), file: name)
         }
 
         func reap() {
@@ -251,6 +262,7 @@ final class AIOTransfer: @unchecked Sendable {
         }
 
         defer {
+            budget.withdraw(client)
             if !active.isEmpty {
                 draining = true
                 cancelResult = system.cancel(descriptor).value
@@ -299,7 +311,9 @@ final class AIOTransfer: @unchecked Sendable {
             }
             statusChanged(status())
             if !active.isEmpty {
+                let started = ProcessInfo.processInfo.systemUptime
                 let result = system.wait(active.map(\.control))
+                waitMilliseconds += Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
                 if result.value != 0 && ![EAGAIN, EINTR].contains(result.error) {
                     throw failure("wait", active[0].operation, result.error)
                 }

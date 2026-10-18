@@ -154,6 +154,20 @@ final class AIOTransferTests: XCTestCase {
         XCTAssertEqual(AIOSystemLimits(process: 0, system: 90).budget, 1)
     }
 
+    func testOccupiedBudgetWaitsForOtherClientAndThenProceeds() throws {
+        let budget = AIOBudget(limits: .init(process: 1, system: 90))
+        let owner = budget.register()
+        XCTAssertTrue(budget.acquire(owner))
+        DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(30)) {
+            budget.release(owner)
+            budget.unregister(owner)
+        }
+        let system = SimulatedAIO()
+        try run(system, budget: budget)
+        XCTAssertEqual(system.returned, 8)
+        XCTAssertEqual(budget.occupancy, 0)
+    }
+
     private func makeBudget() -> AIOBudget { AIOBudget(limits: .init(process: 4, system: 90)) }
 
     private func run(
