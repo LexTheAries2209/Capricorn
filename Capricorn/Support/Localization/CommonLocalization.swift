@@ -286,7 +286,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Restart Capricorn to apply this language to update windows.": "重新启动 Capricorn 后，更新窗口将使用此语言。",
         "Update blocked": "更新已阻止",
         "Update unavailable": "暂时无法更新",
-        "Finish or stop these tasks, then try updating again:": "请先完成或停止以下任务，然后重新尝试更新：",
+        "Finish or stop these tasks, then try updating again:": "请先完成或停止以下任务，\n然后重新尝试更新：",
         "Automatic updates are not configured correctly. Open Releases to download manually.": "自动更新配置不正确。请打开 Releases 手动下载。",
         "The update server could not be reached. Check your connection and system proxy, then try again.": "无法连接更新服务器。请检查网络连接和系统代理后重试。",
         "Update check timed out. Retry manually or on the next launch.": "检查更新超时，可手动重试或下次启动时重试。",
