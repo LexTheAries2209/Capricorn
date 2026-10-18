@@ -38,7 +38,7 @@
     },
     {
       "build": "0045",
-      "status": "reserved",
+      "status": "published",
       "version": "2.10.5",
       "tag": "v2.10.5"
     }

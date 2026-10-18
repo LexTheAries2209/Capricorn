@@ -1,5 +1,13 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
+## V2.10.5 / Build 0045：已发布
+
+2026-10-18 发布为最新正式版，标签指向 `fcb3a703fea55ea5565c5ee3851768470472efcb`。开发者自动下载并安装默认关闭，启动检查仍使用原有显式选择和 15 秒截止；未启用开发者自动更新时继续手动确认。以下各版本记录保留历史策略。
+
+本次全量测试 488 项通过，无失败或跳过；严格并发、Swift 6、Universal Archive 与存档源码独立构建通过。17 个真实 Sparkle 隔离场景通过，包含手动安装、开发者自动安装、关闭选项、取消或普通退出、冲突阻止、签名拒绝、404 和启动检查；成功安装保留测试历史与偏好。候选及发布后的公开签名源均由真实 Sparkle 核验：`0044` 发现 `2.10.5 / 0045`，`0045` 无更新。公开 ZIP 返回 HTTP 200，大小和 GitHub digest 与本地一致；[CI 三项检查全部通过](https://github.com/LexTheAries2209/Capricorn/actions/runs/39104133695)。
+
+App 继续使用有效 ad-hoc bundle 签名与既有 Ed25519 更新密钥，没有 Developer ID 或 Apple 公证；安装测试使用独立测试 App，不替换实际用户 App 或数据库。完整 xcarchive/dSYM、版本备份 App/README/源码与 `update/` ZIP/feed 均保留，无额外桌面副本。
+
 调研日期：2026-10-17，Asia/Shanghai。状态：P0–P2 已随 V2.10.2 / Build 0042 发布；V2.10.3 / Build 0043 已发布，包含后续提示窗口、启动检查截止与许可入口改进。
 
 V2.10.3 发布核验：全量 460 项测试通过，零失败、零跳过；严格并发、Swift 6、Universal Release Archive 和存档源码独立构建通过。[GitHub CI](https://github.com/LexTheAries2209/Capricorn/actions/runs/39029308503) 三项检查全部通过。10 个隔离更新场景通过；公开签名源已由真实 Sparkle 核验，旧 `0042` 发现 `2.10.3 / 0043`，当前 `0043` 判定为最新。ZIP 大小与 GitHub 摘要一致，归档 App 的两处许可入口与完整文本切换通过界面验证。安装回归使用独立测试 App，不替换真实用户 App；保留的旧版备份、ZIP/feed、完整 xcarchive 与 dSYM 均已核验。
