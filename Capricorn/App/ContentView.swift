@@ -329,6 +329,19 @@ struct ContentView: View {
                         allowsTextWrapping: sidebarAutoFitIsActive
                             && sidebarAvailableRowWidth < (sidebarRowWidths[drive.id] ?? 0)
                     )
+                        // Explicit semantic colors avoid List's white selected-row text.
+                        .foregroundStyle(Color(nsColor: .labelColor))
+                        .listRowBackground(
+                            viewModel.selectedDriveID == drive.id
+                                ? RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(nsColor: .labelColor).opacity(0.06))
+                                    .padding(.horizontal, 10)
+                                : nil
+                        )
+                        .background {
+                            DriveSidebarSelectionHighlight()
+                                .frame(width: 0, height: 0)
+                        }
                         .contextMenu {
                             driveContextMenu(for: drive)
                         }
