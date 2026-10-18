@@ -1271,9 +1271,9 @@ struct DriveSidebarRow: View {
     }
 
     private var iconName: String {
-        if drive.isVirtual { return "externaldrive.badge.plus" }
+        if drive.isVirtual { return "wrench.and.screwdriver.fill" }
         if drive.isNetwork {
-            return "network"
+            return "externaldrive.fill.badge.icloud"
         }
         if drive.isMemoryCard {
             return "sdcard.fill"
