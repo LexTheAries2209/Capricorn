@@ -1109,7 +1109,6 @@ private struct CustomBenchmarkRowsEditor: View {
     private let queueColumnWidth: CGFloat = 62
     private let threadColumnWidth: CGFloat = 62
     private let mixedColumnWidth: CGFloat = 112
-    private let deleteColumnWidth: CGFloat = 42
     private let columnSpacing: CGFloat = 8
 
     var body: some View {
@@ -1120,9 +1119,6 @@ private struct CustomBenchmarkRowsEditor: View {
             HStack(alignment: .firstTextBaseline) {
                 Label(language.t("Custom Test Groups"), systemImage: "slider.horizontal.3")
                     .font(.headline)
-                Text(language.t("Each group creates read/write tests; mixed adds a 30% write / 70% read item."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 Spacer()
                 Button {
                     addRow()
@@ -1133,26 +1129,19 @@ private struct CustomBenchmarkRowsEditor: View {
                 .disabled(isDisabled || rows.count >= BenchmarkCustomRow.maxRows)
             }
 
-            HStack(alignment: .bottom, spacing: columnSpacing) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(language.t("Loop"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .frame(width: blockSizeColumnWidth, alignment: .leading)
-                    Picker("", selection: $executionMode) {
-                        Text(language.t("Off")).tag(BenchmarkExecutionMode.finite)
-                        Text(language.t("On")).tag(BenchmarkExecutionMode.loopUntilCancelled)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: blockSizeColumnWidth, alignment: .leading)
-                    .help(language.t("Loop repeats the custom groups until you stop it manually."))
-                }
-
-                Text(language.t("Loop mode ignores test count and extra trimmed testing."))
-                    .font(.caption)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(language.t("Loop"))
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(width: blockSizeColumnWidth, alignment: .leading)
+                Picker("", selection: $executionMode) {
+                    Text(language.t("Off")).tag(BenchmarkExecutionMode.finite)
+                    Text(language.t("On")).tag(BenchmarkExecutionMode.loopUntilCancelled)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: blockSizeColumnWidth, alignment: .leading)
+                .help(language.t("Loop repeats the custom groups until you stop it manually."))
             }
             .disabled(isDisabled)
 
@@ -1166,11 +1155,9 @@ private struct CustomBenchmarkRowsEditor: View {
                         .frame(width: queueColumnWidth, alignment: .leading)
                     Text("T")
                         .frame(width: threadColumnWidth, alignment: .leading)
-                    Text(language.t("Mixed"))
+                    Text(language.t("Read / Write Mix"))
                         .frame(width: mixedColumnWidth, alignment: .leading)
                     Spacer(minLength: 0)
-                    Text(language.t("Delete"))
-                        .frame(width: deleteColumnWidth, alignment: .trailing)
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -1216,6 +1203,7 @@ private struct CustomBenchmarkRowsEditor: View {
                         .labelsHidden()
                         .pickerStyle(.segmented)
                         .frame(width: mixedColumnWidth, alignment: .leading)
+                        .accessibilityLabel(language.t("Read / Write Mix"))
 
                         Text(rows[index].label.replacingOccurrences(of: "MiB", with: "M").replacingOccurrences(of: "KiB", with: "K"))
                             .font(.caption.monospacedDigit())
@@ -1232,15 +1220,13 @@ private struct CustomBenchmarkRowsEditor: View {
                         .controlSize(.small)
                         .foregroundStyle(.secondary)
                         .help(language.t("Delete"))
+                        .accessibilityLabel(language.t("Delete"))
                         .disabled(isDisabled || rows.count <= 1)
                     }
                     .disabled(isDisabled)
                 }
             }
 
-            Text(language.t("Maximum 4 groups."))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
