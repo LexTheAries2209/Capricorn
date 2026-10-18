@@ -334,7 +334,7 @@ struct ContentView: View {
                         .listRowBackground(
                             viewModel.selectedDriveID == drive.id
                                 ? RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color(nsColor: .labelColor).opacity(0.06))
+                                    .fill(Color(nsColor: .labelColor).opacity(0.30))
                                     .padding(.horizontal, 10)
                                 : nil
                         )
