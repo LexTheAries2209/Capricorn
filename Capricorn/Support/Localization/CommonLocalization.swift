@@ -6,6 +6,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     case english = "en"
     case simplifiedChinese = "zh-Hans"
 
+    static let defaultLanguage: Self = .simplifiedChinese
+
     var id: String { rawValue }
 
     var localeIdentifier: String {
@@ -1432,7 +1434,7 @@ enum SmartAttributeCatalog {
 }
 
 private struct AppLanguageEnvironmentKey: EnvironmentKey {
-    static let defaultValue: AppLanguage = .english
+    static let defaultValue = AppLanguage.defaultLanguage
 }
 
 extension EnvironmentValues {

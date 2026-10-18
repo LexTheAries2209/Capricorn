@@ -1,9 +1,49 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import SwiftData
+import SwiftUI
 import XCTest
 @testable import Capricorn
 
 extension CapricornTests {
+    @MainActor
+    func testFirstLaunchUsesChineseForAppAndNativeFrameworks() throws {
+        let suiteName = "CapricornTests.firstLaunchLanguage.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(["en"], forKey: "AppleLanguages")
+
+        let preferences = AppPreferences(defaults: defaults)
+
+        XCTAssertEqual(AppPreferences.Defaults.language, AppLanguage.simplifiedChinese.rawValue)
+        XCTAssertEqual(preferences.languageRawValue, AppLanguage.simplifiedChinese.rawValue)
+        XCTAssertEqual(preferences.language, .simplifiedChinese)
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["zh-Hans"])
+        XCTAssertEqual(EnvironmentValues().appLanguage, .simplifiedChinese)
+        XCTAssertEqual(AppPreferences(defaults: defaults).language, .simplifiedChinese)
+    }
+
+    @MainActor
+    func testDefaultLanguagePreservesSavedChoicesAndFallsBackForInvalidValues() throws {
+        let suiteName = "CapricornTests.savedLanguage.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        for language in AppLanguage.allCases {
+            defaults.set(language.rawValue, forKey: AppPreferences.Key.language)
+            let preferences = AppPreferences(defaults: defaults)
+            XCTAssertEqual(preferences.language, language)
+            XCTAssertEqual(defaults.string(forKey: AppPreferences.Key.language), language.rawValue)
+            XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), [language.rawValue])
+        }
+
+        defaults.set("invalid-language", forKey: AppPreferences.Key.language)
+        let preferences = AppPreferences(defaults: defaults)
+        XCTAssertEqual(preferences.language, .simplifiedChinese)
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["zh-Hans"])
+        preferences.languageRawValue = AppLanguage.english.rawValue
+        XCTAssertEqual(AppPreferences(defaults: defaults).language, .english)
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en"])
+    }
+
     func testLegacyHealthValuesDecodeAsErrorAndEncodeWithCurrentName() throws {
         for rawValue in ["preFail", "error"] {
             XCTAssertEqual(HealthStatus(rawValue: rawValue), .error)
@@ -206,7 +246,7 @@ extension CapricornTests {
         defaults.set("unknown persisted interface value", forKey: "futureInterfaceSetting")
 
         let preferences = AppPreferences(defaults: defaults)
-        preferences.languageRawValue = AppLanguage.simplifiedChinese.rawValue
+        preferences.languageRawValue = AppLanguage.english.rawValue
         preferences.enablesDeveloperOptions = true
         preferences.enablesCustomBenchmarkConfiguration = true
         preferences.enablesVirtualDisks = true
@@ -229,6 +269,8 @@ extension CapricornTests {
         preferences.resetAllSettings()
 
         XCTAssertEqual(preferences.languageRawValue, AppPreferences.Defaults.language)
+        XCTAssertEqual(preferences.language, .simplifiedChinese)
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["zh-Hans"])
         XCTAssertFalse(preferences.enablesDeveloperOptions)
         XCTAssertFalse(preferences.enablesCustomBenchmarkConfiguration)
         XCTAssertFalse(preferences.enablesVirtualDisks)

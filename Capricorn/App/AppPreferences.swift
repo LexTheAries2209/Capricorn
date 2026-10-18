@@ -47,7 +47,7 @@ enum CapricornSettingsDestination: String, Equatable, Sendable {
 @Observable
 final class AppPreferences {
     enum Defaults {
-        static let language = AppLanguage.english.rawValue
+        static let language = AppLanguage.defaultLanguage.rawValue
         static let enablesDeveloperOptions = false
         static let enablesCustomBenchmarkConfiguration = false
         static let enablesVirtualDisks = false
@@ -276,7 +276,7 @@ final class AppPreferences {
     }
 
     var language: AppLanguage {
-        AppLanguage(rawValue: languageRawValue) ?? .english
+        AppLanguage(rawValue: languageRawValue) ?? .defaultLanguage
     }
 
     /// Clears every app-owned defaults value while retaining disk capability
@@ -306,6 +306,7 @@ final class AppPreferences {
         representativeVolumeStartupPreference = Defaults.representativeVolumeStartupPreference
         requestedSettingsDestination = nil
         suppressesPersistence = false
+        defaults.set([language.rawValue], forKey: "AppleLanguages")
     }
 
 }
