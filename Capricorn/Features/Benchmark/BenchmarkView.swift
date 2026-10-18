@@ -614,6 +614,15 @@ struct BenchmarkView: View {
         .buttonStyle(.borderedProminent)
         .disabled(!canRunBenchmark)
 
+        Button {
+            viewModel.stopBenchmarkAfterCurrentPass()
+        } label: {
+            Label(language.t("Stop"), systemImage: "stop.fill")
+        }
+        .disabled(!viewModel.canStopBenchmark)
+        .help(language.t("Finish the current pass, save completed measurements, and skip all remaining tests and loops."))
+        .accessibilityIdentifier("stopBenchmark")
+
         if viewModel.isBenchmarking {
             Button(language.t("View Progress")) {
                 benchmarkNotice = .monitor
@@ -623,9 +632,10 @@ struct BenchmarkView: View {
         Button {
             viewModel.cancelBenchmark()
         } label: {
-            Label(language.t("Cancel"), systemImage: "stop.fill")
+            Label(language.t("Cancel"), systemImage: "xmark")
         }
         .disabled(!viewModel.isBenchmarking)
+        .help(language.t("Cancel immediately without saving the current unfinished test."))
 
         Button {
             saveResults(profileResults, viewModel.diskActivitySamples)
@@ -715,7 +725,8 @@ struct BenchmarkView: View {
     }
 
     private var shouldShowProgressAndErrors: Bool {
-        viewModel.isBenchmarking || viewModel.benchmarkError != nil || !canRunBenchmark
+        viewModel.isBenchmarking || viewModel.benchmarkSession.didStopAfterCurrentPass
+            || viewModel.benchmarkError != nil || !canRunBenchmark
     }
 
     private var benchmarkActivityPanel: some View {
@@ -755,6 +766,10 @@ struct BenchmarkView: View {
                 Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                     .font(.caption)
+            } else if viewModel.benchmarkSession.didStopAfterCurrentPass {
+                Label(language.t(BenchmarkStopRequest.completedMessage), systemImage: "stop.circle")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
             } else if !targetFolderIsUsable {
                 Label(language.t("Select a target folder before starting the speed test."), systemImage: "folder.badge.plus")
                     .foregroundStyle(.secondary)
@@ -773,7 +788,9 @@ struct BenchmarkView: View {
     }
 
     private func progressStatusText(_ progress: BenchmarkProgress) -> String {
-        var text = language.statusMessage(progress.message)
+        var text = language.benchmarkProgressMessage(
+            progress.message, stoppingAfterCurrentPass: viewModel.isBenchmarkStopRequested
+        )
         if progress.phaseTotalBytes > 0 {
             text += " · \(formatBenchmarkFileSize(progress.phaseCompletedBytes)) / \(formatBenchmarkFileSize(progress.phaseTotalBytes))"
         }
@@ -1443,7 +1460,9 @@ private struct BenchmarkProgressSheet: View {
                                 .font(.system(.title3, design: .monospaced).weight(.semibold))
                         }
                         ProgressView(value: progress.fraction)
-                        Text(language.statusMessage(progress.message))
+                        Text(language.benchmarkProgressMessage(
+                            progress.message, stoppingAfterCurrentPass: viewModel.isBenchmarkStopRequested
+                        ))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                         if progress.phaseTotalBytes > 0 {
@@ -1463,6 +1482,10 @@ private struct BenchmarkProgressSheet: View {
             } else if let error = viewModel.benchmarkError {
                 Label(language.statusMessage(error), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
+            } else if viewModel.benchmarkSession.didStopAfterCurrentPass {
+                Label(language.t(BenchmarkStopRequest.completedMessage), systemImage: "stop.circle")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
             } else {
                 Label(language.t("Benchmark complete"), systemImage: "checkmark.circle.fill")
                     .font(.headline)
@@ -1479,11 +1502,19 @@ private struct BenchmarkProgressSheet: View {
                 Button(language.t(isActive ? "Hide Window" : "Close"), action: onDismiss)
                     .keyboardShortcut(.cancelAction)
                 if isActive {
+                    Button {
+                        viewModel.stopBenchmarkAfterCurrentPass()
+                    } label: {
+                        Label(language.t("Stop"), systemImage: "stop.fill")
+                    }
+                    .disabled(!viewModel.canStopBenchmark)
+                    .help(language.t("Finish the current pass, save completed measurements, and skip all remaining tests and loops."))
                     Button(role: .destructive) {
                         viewModel.cancelBenchmark()
                     } label: {
-                        Label(language.t("Cancel"), systemImage: "stop.fill")
+                        Label(language.t("Cancel"), systemImage: "xmark")
                     }
+                    .help(language.t("Cancel immediately without saving the current unfinished test."))
                 }
             }
         }

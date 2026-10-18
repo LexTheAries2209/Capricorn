@@ -133,6 +133,14 @@ final class AppModel {
         set { benchmarkSession.state = newValue ? .running : .idle }
     }
 
+    var canStopBenchmark: Bool {
+        benchmarkSession.state == .running && benchmarkStopRequest != nil
+    }
+
+    var isBenchmarkStopRequested: Bool {
+        benchmarkSession.state == .finishingPass
+    }
+
     var diskActivitySamples: [DiskActivitySample] {
         get { benchmarkSession.activitySamples }
         set { benchmarkSession.activitySamples = newValue }
@@ -341,6 +349,7 @@ final class AppModel {
     private var activeLiveActivityWorkloadRunID: UUID?
     private var benchmarkTask: Task<Void, Never>?
     private var activeBenchmarkRunID: UUID?
+    private var benchmarkStopRequest: BenchmarkStopRequest?
     private var refreshTask: Task<Void, Never>?
     private var activeRefreshID: UUID?
     private var driveSystemEventTask: Task<Void, Never>?
@@ -783,6 +792,7 @@ final class AppModel {
               benchmarkTask == nil, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return false }
         benchmarkProgress = nil
         benchmarkError = nil
+        benchmarkSession.didStopAfterCurrentPass = false
         benchmarkTask = Task { [weak self] in
             await self?.runBenchmark(
                 profile: profile,
@@ -820,8 +830,11 @@ final class AppModel {
         defer { diskLease.release() }
 
         benchmarkError = nil
+        benchmarkSession.didStopAfterCurrentPass = false
         CapricornLog.benchmark.info("Benchmark session started")
         let benchmarkInterval = CapricornLog.benchmarkSignposter.beginInterval("Benchmark session")
+        let stopRequest = BenchmarkStopRequest()
+        benchmarkStopRequest = stopRequest
         benchmarkSession.state = .running
         let runID = UUID()
         activeBenchmarkRunID = runID
@@ -841,6 +854,7 @@ final class AppModel {
             if activeBenchmarkRunID == runID {
                 stopDiskActivityMonitoring()
                 benchmarkSession.state = .idle
+                benchmarkStopRequest = nil
                 activeBenchmarkRunID = nil
                 CapricornLog.benchmarkSignposter.endInterval("Benchmark session", benchmarkInterval)
                 CapricornLog.benchmark.info("Benchmark session cleanup completed")
@@ -852,7 +866,7 @@ final class AppModel {
             for await event in events {
                 guard let self,
                       self.activeBenchmarkRunID == runID,
-                      self.benchmarkSession.state == .running else { continue }
+                      self.benchmarkSession.state.acceptsResults else { continue }
                 switch event {
                 case let .progress(progress):
                     self.publishBenchmarkProgress(progress)
@@ -871,6 +885,7 @@ final class AppModel {
                 profile: profile,
                 drive: drive,
                 volumePath: targetVolume,
+                stopRequest: stopRequest,
                 progress: { progress in
                     eventContinuation.yield(.progress(progress))
                 },
@@ -880,25 +895,40 @@ final class AppModel {
             )
             eventContinuation.finish()
             await eventTask.value
-            guard activeBenchmarkRunID == runID, benchmarkSession.state == .running else { return }
+            guard activeBenchmarkRunID == runID, benchmarkSession.state.acceptsResults else { return }
             switch resultUpdatePolicy {
             case .replaceProfile:
                 replaceBenchmarkResults(driveID: drive.id, profileID: profile.id, with: results)
             case .mergeTests:
                 results.forEach(upsertBenchmarkResult)
             }
+            if stopRequest.isRequested {
+                benchmarkSession.didStopAfterCurrentPass = true
+                if var progress = benchmarkProgress {
+                    progress.currentTestLabel = "Stopped"
+                    progress.message = BenchmarkStopRequest.completedMessage
+                    publishBenchmarkProgress(progress, force: true)
+                }
+            }
         } catch {
             eventContinuation.finish()
             await eventTask.value
-            guard activeBenchmarkRunID == runID, benchmarkSession.state == .running else { return }
+            guard activeBenchmarkRunID == runID, benchmarkSession.state.acceptsResults else { return }
             let error = error as NSError
             benchmarkError = error.localizedDescription
             CapricornLog.benchmark.error("Benchmark session failed: \(error.domain, privacy: .public) \(error.code)")
         }
     }
 
+    func stopBenchmarkAfterCurrentPass() {
+        guard canStopBenchmark, let benchmarkStopRequest else { return }
+        benchmarkSession.state = .finishingPass
+        benchmarkStopRequest.request()
+        CapricornLog.benchmark.info("Benchmark stop requested after current pass")
+    }
+
     func cancelBenchmark() {
-        guard benchmarkSession.state == .running || benchmarkTask != nil else { return }
+        guard benchmarkSession.state.acceptsResults || benchmarkTask != nil else { return }
         benchmarkSession.state = .stopping
         CapricornLog.benchmark.info("Benchmark cancellation requested")
         benchmarkTask?.cancel()

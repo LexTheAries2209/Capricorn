@@ -3,6 +3,86 @@ import XCTest
 @testable import Capricorn
 
 final class BenchmarkStopTests: XCTestCase {
+    @MainActor
+    func testModelKeepsSessionLockedUntilStoppedPassResultArrives() async throws {
+        for policy in [BenchmarkResultUpdatePolicy.replaceProfile, .mergeTests] {
+            let runner = PassBoundaryBenchmarkRunner()
+            defer { runner.finishPass() }
+            let model = AppModel(benchmarkRunner: runner)
+            let drive = CapricornTests.fixtureDrive(mountedAt: "/Volumes/Unit")
+            model.drives = [drive]
+            model.selectedDriveID = drive.id
+            let profile = profile(engine: .synchronous)
+            var previous = CapricornTests.fixtureBenchmarkResult(for: drive)
+            previous.profileID = profile.id
+            previous.testID = "untouched"
+            model.benchmarkResults = [previous]
+            XCTAssertTrue(model.startBenchmark(profile: profile, volumePath: "/Volumes/Unit", resultUpdatePolicy: policy))
+            let started = await AsyncTestWaiter.wait { model.benchmarkProgress?.message == "Read run 3/5" }
+            XCTAssertTrue(started)
+
+            model.stopBenchmarkAfterCurrentPass()
+            model.stopBenchmarkAfterCurrentPass()
+            XCTAssertTrue(model.isBenchmarking)
+            XCTAssertTrue(model.isBenchmarkStopRequested)
+            XCTAssertTrue(model.isDriveSelectionLocked)
+            XCTAssertFalse(model.canStopBenchmark)
+            XCTAssertTrue(model.appUpdateConflicts.contains(.benchmark))
+            XCTAssertFalse(model.startBenchmark(profile: profile, volumePath: "/Volumes/Unit"))
+            XCTAssertEqual(runner.cancelCount.snapshot(), 0)
+            XCTAssertTrue(runner.request.snapshot()?.isRequested == true)
+            XCTAssertFalse(model.benchmarkSession.didStopAfterCurrentPass)
+
+            runner.finishPass()
+            let finished = await AsyncTestWaiter.wait { !model.appUpdateConflicts.contains(.benchmark) }
+            XCTAssertTrue(finished)
+            XCTAssertFalse(model.isBenchmarking)
+            XCTAssertTrue(model.benchmarkSession.didStopAfterCurrentPass)
+            XCTAssertNil(model.benchmarkError)
+            XCTAssertEqual(model.benchmarkProgress?.message, BenchmarkStopRequest.completedMessage)
+            XCTAssertTrue(model.benchmarkResults.contains { $0.testID == "first" })
+            XCTAssertEqual(model.benchmarkResults.contains { $0.testID == "untouched" }, policy == .mergeTests)
+            XCTAssertEqual(runner.cancelCount.snapshot(), 0)
+        }
+    }
+
+    @MainActor
+    func testImmediateCancelOverridesPendingStopAndRejectsLateResult() async throws {
+        let runner = PassBoundaryBenchmarkRunner()
+        defer { runner.finishPass() }
+        let model = AppModel(benchmarkRunner: runner)
+        let drive = CapricornTests.fixtureDrive(mountedAt: "/Volumes/Unit")
+        model.drives = [drive]
+        model.selectedDriveID = drive.id
+        XCTAssertTrue(model.startBenchmark(profile: profile(engine: .synchronous), volumePath: "/Volumes/Unit"))
+        let started = await AsyncTestWaiter.wait { model.canStopBenchmark }
+        XCTAssertTrue(started)
+        model.stopBenchmarkAfterCurrentPass()
+        model.cancelBenchmark()
+        let finished = await AsyncTestWaiter.wait { !model.appUpdateConflicts.contains(.benchmark) }
+        XCTAssertTrue(finished)
+        XCTAssertEqual(runner.cancelCount.snapshot(), 1)
+        XCTAssertFalse(model.benchmarkSession.didStopAfterCurrentPass)
+        XCTAssertEqual(model.benchmarkError, BenchmarkError.cancelled.localizedDescription)
+        XCTAssertTrue(model.benchmarkResults.isEmpty)
+    }
+
+    func testStopMessagesKeepCurrentPhaseAndDescribeCompletedResultsInBothLanguages() {
+        for language in AppLanguage.allCases {
+            let phase = "Read run 3/5"
+            let pending = language.benchmarkProgressMessage(phase, stoppingAfterCurrentPass: true)
+            XCTAssertTrue(pending.contains(language.t(BenchmarkStopRequest.waitingMessage)))
+            XCTAssertTrue(pending.contains(language.statusMessage(phase)))
+            XCTAssertEqual(language.benchmarkProgressMessage(phase, stoppingAfterCurrentPass: false), language.statusMessage(phase))
+            XCTAssertEqual(
+                language.benchmarkProgressMessage(BenchmarkStopRequest.completedMessage, stoppingAfterCurrentPass: true),
+                language.t(BenchmarkStopRequest.completedMessage)
+            )
+        }
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Stop"), "停止")
+        XCTAssertTrue(AppLanguage.simplifiedChinese.t(BenchmarkStopRequest.completedMessage).contains("后续测试已跳过"))
+    }
+
     func testStopCompletesThirdPassAndSkipsLaterPassesAndTestsInBothEngines() async throws {
         for engine in [BenchmarkEngine.synchronous, .asyncQueue] {
             for operation in [BenchmarkOperation.read, .write, .mixed] {
@@ -169,5 +249,38 @@ final class BenchmarkStopTests: XCTestCase {
             id: "stop-test", name: "Stop Test", testFileSizeBytes: 32_768, runs: 5,
             usesTrimmedAverage: trimsOutliers, engine: engine, tests: [first, later]
         )
+    }
+}
+
+private final class PassBoundaryBenchmarkRunner: BenchmarkRunning, Sendable {
+    let request = LockedState<BenchmarkStopRequest?>(nil)
+    let cancelCount = LockedState(0)
+    private let pass = AsyncStream<Void>.makeStream()
+
+    func run(
+        profile: BenchmarkProfile, drive: DriveDevice, volumePath: String,
+        stopRequest: BenchmarkStopRequest,
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
+    ) async throws -> [BenchmarkResult] {
+        request.withLock { $0 = stopRequest }
+        progress(BenchmarkProgress(currentTestLabel: "SEQ1M Q1T1", completed: 3, total: 12, message: "Read run 3/5"))
+        for await _ in pass.stream { break }
+        var completed = CapricornTests.fixtureBenchmarkResult(for: drive)
+        completed.profileID = profile.id
+        completed.testID = "first"
+        result(completed)
+        progress(BenchmarkProgress(currentTestLabel: "Complete", completed: 4, total: 12, message: "Benchmark complete"))
+        return [completed]
+    }
+
+    func finishPass() {
+        pass.continuation.yield()
+        pass.continuation.finish()
+    }
+
+    func cancel() {
+        cancelCount.withLock { $0 += 1 }
+        finishPass()
     }
 }

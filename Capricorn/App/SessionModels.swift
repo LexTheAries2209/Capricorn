@@ -5,7 +5,12 @@ import Observation
 enum BenchmarkSessionState: Sendable, Equatable {
     case idle
     case running
+    case finishingPass
     case stopping
+
+    var acceptsResults: Bool {
+        self == .running || self == .finishingPass
+    }
 }
 
 enum WorkloadSessionState: Sendable, Equatable {
@@ -21,6 +26,7 @@ final class BenchmarkSessionModel {
     var progress: BenchmarkProgress?
     var results: [BenchmarkResult] = []
     var error: String?
+    var didStopAfterCurrentPass = false
     var activitySamples: [DiskActivitySample] = []
     var currentActivity: DiskActivitySample?
 

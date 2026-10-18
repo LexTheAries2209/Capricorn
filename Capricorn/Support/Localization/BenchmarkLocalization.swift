@@ -8,6 +8,12 @@ struct BenchmarkConfirmationField: Equatable {
 }
 
 extension AppLanguage {
+    func benchmarkProgressMessage(_ message: String, stoppingAfterCurrentPass: Bool) -> String {
+        let phase = statusMessage(message)
+        guard stoppingAfterCurrentPass, message != BenchmarkStopRequest.completedMessage else { return phase }
+        return "\(t(BenchmarkStopRequest.waitingMessage)) \(phase)"
+    }
+
     func operationTitle(_ operation: BenchmarkOperation) -> String {
         switch self {
         case .english:

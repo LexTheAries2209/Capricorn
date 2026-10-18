@@ -7,6 +7,8 @@ final class UpdateSafetyTests: XCTestCase {
     func testEveryActiveSessionBlocksUpdatesIncludingStoppingAndConfirmation() {
         let model = AppModel()
         XCTAssertTrue(model.appUpdateConflicts.isEmpty)
+        model.benchmarkSession.state = .finishingPass
+        XCTAssertEqual(model.appUpdateConflicts, [.benchmark])
         model.benchmarkSession.state = .stopping
         model.liveActivitySession.workloadState = .stopping
         model.isLiveActivityMonitoring = true
