@@ -8,7 +8,8 @@ import XCTest
 final class BenchmarkControlsTests: XCTestCase {
     @MainActor
     func testChineseControlGroupsAndDisabledEfficiencyAtNarrowWidth() async throws {
-        try await verifyControls(language: .simplifiedChinese, width: 780, efficiencyEnabled: false)
+        // Include the added Stop button; smaller panels intentionally scroll this row.
+        try await verifyControls(language: .simplifiedChinese, width: 860, efficiencyEnabled: false)
     }
 
     @MainActor
