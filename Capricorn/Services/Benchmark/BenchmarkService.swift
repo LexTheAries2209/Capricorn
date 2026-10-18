@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Darwin
 import Foundation
+import os
 
 enum BenchmarkEvent: Sendable {
     case progress(BenchmarkProgress)
@@ -204,12 +205,11 @@ private func openBenchmarkFile(
     fileEventHandler: ((URL) -> Void)?
 ) throws -> BenchmarkOpenFile {
     let path = url.path
-    let fd = open(path, O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR)
+    let fd = open(path, O_CREAT | O_EXCL | O_NOFOLLOW | O_RDWR, S_IRUSR | S_IWUSR)
     guard fd >= 0 else { throw BenchmarkError.openFailed(path) }
     fileEventHandler?(url)
 
-    var noCache: Int32 = 1
-    _ = fcntl(fd, F_NOCACHE, &noCache)
+    _ = fcntl(fd, F_NOCACHE, 1)
     return BenchmarkOpenFile(url: url, fd: fd, fileManager: fileManager)
 }
 
@@ -248,25 +248,7 @@ final class BenchmarkRunnerRouter: BenchmarkRunning, @unchecked Sendable {
 }
 
 final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
-    private final class AIORequest {
-        let controlBlock: UnsafeMutablePointer<aiocb>
-        let buffer: UnsafeMutableRawPointer
-        let count: Int
-        let submittedAt: UInt64
-
-        init(controlBlock: UnsafeMutablePointer<aiocb>, buffer: UnsafeMutableRawPointer, count: Int, submittedAt: UInt64) {
-            self.controlBlock = controlBlock
-            self.buffer = buffer
-            self.count = count
-            self.submittedAt = submittedAt
-        }
-
-        func release() {
-            controlBlock.deinitialize(count: 1)
-            controlBlock.deallocate()
-            buffer.deallocate()
-        }
-    }
+    private let aioTransfer: AIOTransfer
 
     private final class ByteProgressReporter: @unchecked Sendable {
         private let totalBytes: Int64
@@ -343,7 +325,8 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         passIntervalSeconds: TimeInterval = 1,
         operationSleeper: OperationSleeper? = nil,
         fileEventHandler: BenchmarkFileEventHandler? = nil,
-        temporaryRunLeaseDirectoryURL: URL? = nil
+        temporaryRunLeaseDirectoryURL: URL? = nil,
+        aioTransfer: AIOTransfer = AIOTransfer()
     ) {
         self.fileManager = fileManager
         self.operationIntervalSeconds = operationIntervalSeconds
@@ -351,6 +334,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         self.operationSleeper = operationSleeper ?? Self.defaultOperationSleeper
         self.fileEventHandler = fileEventHandler
         self.temporaryRunLeaseDirectoryURL = temporaryRunLeaseDirectoryURL
+        self.aioTransfer = aioTransfer
     }
 
     func cancel() {
@@ -1049,104 +1033,47 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             message: message,
             progress: progress
         )
-        var assignedBytes: Int64 = 0
         var nextSequentialOffset: Int64 = 0
         var totalBytes: Int64 = 0
         var totalOperations: Int64 = 0
         var minLatencyMicros = Double.greatestFiniteMagnitude
-        var activeRequests: [AIORequest] = []
-        var firstError: Error?
-
-        func reapCompletedRequests() throws {
-            var completedIndexes: [Int] = []
-            for (index, request) in activeRequests.enumerated() {
-                let error = aio_error(request.controlBlock)
-                if error == EINPROGRESS {
-                    continue
-                }
-
-                let returned = aio_return(request.controlBlock)
-                if error != 0 {
-                    firstError = BenchmarkError.ioFailed(errorMessage(for: error, operation: shouldWrite(test: test)))
-                } else if returned <= 0 {
-                    firstError = BenchmarkError.ioFailed(shouldWrite(test: test) ? "Async write test failed." : "Async read test failed.")
-                } else {
-                    let finished = DispatchTime.now().uptimeNanoseconds
-                    let transferred = min(returned, request.count)
-                    totalBytes += Int64(transferred)
-                    totalOperations += 1
-                    minLatencyMicros = min(minLatencyMicros, Double(finished - request.submittedAt) / 1_000)
-                    progressReporter.add(Int64(transferred))
-                }
-                completedIndexes.append(index)
-            }
-
-            for index in completedIndexes.reversed() {
-                let request = activeRequests.remove(at: index)
-                request.release()
-            }
-
-            if let firstError {
-                throw firstError
-            }
-        }
-
-        func releaseActiveRequests() {
-            if !activeRequests.isEmpty {
-                _ = aio_cancel(fd, nil)
-            }
-            activeRequests.forEach { $0.release() }
-            activeRequests.removeAll()
-        }
+        var lastQueueReport: UInt64 = 0
 
         progressReporter.set(0, force: true)
         let started = DispatchTime.now().uptimeNanoseconds
-        defer {
-            releaseActiveRequests()
-        }
-
-        while assignedBytes < test.testSizeBytes || !activeRequests.isEmpty {
-            try checkCancelled()
-
-            while activeRequests.count < requestDepth && assignedBytes < test.testSizeBytes {
-                try checkCancelled()
-                let count = min(blockSize, Int(test.testSizeBytes - assignedBytes))
-                let previousAssignedBytes = assignedBytes
-                let previousSequentialOffset = nextSequentialOffset
-                let offset = offsetFor(test: test, fileSize: fileSize, count: count, nextSequentialOffset: &nextSequentialOffset)
-                let shouldWrite = shouldWrite(test: test)
-                let request = makeRequest(fd: fd, test: test, count: count, offset: offset, shouldWrite: shouldWrite)
-                let submitResult = shouldWrite ? aio_write(request.controlBlock) : aio_read(request.controlBlock)
-                guard submitResult == 0 else {
-                    let submitError = errno
-                    request.release()
-                    assignedBytes = previousAssignedBytes
-                    nextSequentialOffset = previousSequentialOffset
-
-                    if isAIOResourceLimit(submitError), !activeRequests.isEmpty {
-                        try waitForAnyCompletion(activeRequests)
-                        try reapCompletedRequests()
-                        continue
-                    }
-
-                    throw BenchmarkError.ioFailed(submitErrorMessage(
-                        for: submitError,
-                        operation: shouldWrite,
-                        activeRequests: activeRequests.count,
-                        targetDepth: requestDepth
+        try aioTransfer.run(
+            descriptor: fd, bytes: test.testSizeBytes, blockSize: blockSize, depth: requestDepth,
+            checkCancelled: checkCancelled,
+            operation: { _, count in
+                AIOTransferOperation(
+                    offset: self.offsetFor(test: test, fileSize: fileSize, count: count, nextSequentialOffset: &nextSequentialOffset),
+                    write: self.shouldWrite(test: test)
+                )
+            },
+            fill: { buffer, count in self.fill(buffer, count: count, pattern: test.dataPattern) },
+            completed: { transferred, latency in
+                totalBytes += Int64(transferred)
+                totalOperations += 1
+                minLatencyMicros = min(minLatencyMicros, latency)
+                progressReporter.add(Int64(transferred))
+            },
+            statusChanged: { status in
+                let now = DispatchTime.now().uptimeNanoseconds
+                if status.draining || status.finished || now - lastQueueReport >= 250_000_000 {
+                    lastQueueReport = now
+                    self.notify(progress, BenchmarkProgress(
+                        currentTestLabel: displayLabel ?? test.label,
+                        completed: completedSteps, total: totalSteps,
+                        message: status.draining ? "Waiting for pending benchmark I/O to finish" : message,
+                        phaseCompletedBytes: totalBytes, phaseTotalBytes: test.testSizeBytes,
+                        queueStatus: status
                     ))
                 }
-                assignedBytes += Int64(count)
-                activeRequests.append(request)
+                if status.finished {
+                    CapricornLog.benchmark.info("AIO benchmark \(status.detail, privacy: .public)")
+                }
             }
-
-            if activeRequests.isEmpty {
-                continue
-            }
-
-            try waitForAnyCompletion(activeRequests)
-            try reapCompletedRequests()
-        }
+        )
 
         progressReporter.finish()
         let transferFinished = DispatchTime.now().uptimeNanoseconds
@@ -1164,7 +1091,8 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             )
             try checkCancelled()
             if fsync(fd) != 0 {
-                throw BenchmarkError.ioFailed("Could not flush benchmark writes.")
+                let code = errno
+                throw BenchmarkError.ioFailed("Could not flush benchmark writes (errno \(code)): \(String(cString: strerror(code))).")
             }
             try checkCancelled()
             durableFinished = DispatchTime.now().uptimeNanoseconds
@@ -1182,55 +1110,6 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             transferMegabytesPerSecond: transferMegabytesPerSecond,
             flushMilliseconds: flushMilliseconds
         )
-    }
-
-    private func makeRequest(fd: Int32, test: BenchmarkTest, count: Int, offset: Int64, shouldWrite: Bool) -> AIORequest {
-        let buffer = UnsafeMutableRawPointer.allocate(byteCount: count, alignment: 4_096)
-        if shouldWrite {
-            fill(buffer, count: count, pattern: test.dataPattern)
-        }
-
-        let controlBlock = UnsafeMutablePointer<aiocb>.allocate(capacity: 1)
-        controlBlock.initialize(to: aiocb())
-        controlBlock.pointee.aio_fildes = fd
-        controlBlock.pointee.aio_offset = off_t(offset)
-        controlBlock.pointee.aio_buf = buffer
-        controlBlock.pointee.aio_nbytes = count
-        controlBlock.pointee.aio_reqprio = 0
-        return AIORequest(
-            controlBlock: controlBlock,
-            buffer: buffer,
-            count: count,
-            submittedAt: DispatchTime.now().uptimeNanoseconds
-        )
-    }
-
-    private func waitForAnyCompletion(_ requests: [AIORequest]) throws {
-        let pointers: [UnsafePointer<aiocb>?] = requests.map { UnsafePointer($0.controlBlock) }
-        let result = pointers.withUnsafeBufferPointer { buffer in
-            aio_suspend(buffer.baseAddress, Int32(buffer.count), nil)
-        }
-        if result != 0, errno != EINTR {
-            throw BenchmarkError.ioFailed("Async benchmark wait failed.")
-        }
-    }
-
-    private func errorMessage(for error: Int32, operation shouldWrite: Bool) -> String {
-        let operationName = shouldWrite ? "write" : "read"
-        if let cString = strerror(error) {
-            return "Async \(operationName) failed: \(String(cString: cString))."
-        }
-        return "Async \(operationName) failed."
-    }
-
-    private func submitErrorMessage(for error: Int32, operation shouldWrite: Bool, activeRequests: Int, targetDepth: Int) -> String {
-        let operationName = shouldWrite ? "write" : "read"
-        let reason = strerror(error).map { String(cString: $0) } ?? "unknown error"
-        return "Async \(operationName) test failed to submit: \(reason) (errno \(error), active \(activeRequests)/Q\(targetDepth))."
-    }
-
-    private func isAIOResourceLimit(_ error: Int32) -> Bool {
-        error == EAGAIN || error == ENOMEM || error == ENOBUFS
     }
 
     private func benchmarkFileURL(in volumeURL: URL, runID: String, test: BenchmarkTest, runIndex: Int) -> URL {
@@ -1277,7 +1156,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         progressReporter: ByteProgressReporter?,
         flushStarted: (() -> Void)? = nil
     ) throws {
-        try resizeFile(fd: fd, size: 0)
+        try resizeFile(fd: fd, size: size)
 
         let bufferSize = max(4_096, min(blockSize, 1_048_576))
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: bufferSize, alignment: 4_096)

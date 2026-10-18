@@ -3,6 +3,15 @@ import Foundation
 import SwiftUI
 
 extension AppLanguage {
+    func aioQueueDescription(_ status: AIOTransferStatus) -> String {
+        switch self {
+        case .english:
+            "Requested Q\(status.targetDepth) per path · active \(status.active) · peak \(status.peakActive) · shared \(status.processUsed)/\(min(status.processLimit, status.systemLimit))"
+        case .simplifiedChinese:
+            "每路目标 Q\(status.targetDepth) · 当前 \(status.active) · 实际峰值 \(status.peakActive) · 进程共享 \(status.processUsed)/\(min(status.processLimit, status.systemLimit))"
+        }
+    }
+
     func activityWorkloadConfirmationMessage(isNetworkDrive: Bool) -> String {
         t(isNetworkDrive
             ? "The workload creates temporary files in the selected target folder. Live activity monitoring is unavailable for network drives."

@@ -322,6 +322,11 @@ struct DiskActivityView: View {
                         Text(workloadProgressText(progress))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if let queueStatus = progress.queueStatus {
+                            Text(language.aioQueueDescription(queueStatus))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
@@ -589,6 +594,9 @@ struct DiskActivityView: View {
             "\(language.t("Loop")) \(progress.loopIndex)",
             language.statusMessage(progress.message)
         ]
+        if let failedPhase = progress.failedPhaseMessage {
+            parts.append("\(language.t("Failed phase")): \(language.statusMessage(failedPhase))")
+        }
         if progress.totalBytes > 0 {
             parts.append("\(formatBenchmarkFileSize(progress.completedBytes)) / \(formatBenchmarkFileSize(progress.totalBytes))")
         }

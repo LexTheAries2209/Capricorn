@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Darwin
 import Foundation
+import os
 
 enum DiskActivityWorkloadOperation: String, Codable, CaseIterable, Identifiable, Sendable {
     case read
@@ -46,6 +47,8 @@ struct DiskActivityWorkloadConfiguration: Equatable, Sendable {
 enum DiskActivityWorkloadPhase: String, Codable, Sendable {
     case starting
     case preparingReadFile
+    case sizingFile
+    case flushingReadFile
     case reading
     case writing
     case mixed
@@ -53,6 +56,7 @@ enum DiskActivityWorkloadPhase: String, Codable, Sendable {
     case cleaningUp
     case complete
     case stopped
+    case failed
 }
 
 struct DiskActivityWorkloadProgress: Equatable, Sendable {
@@ -62,6 +66,8 @@ struct DiskActivityWorkloadProgress: Equatable, Sendable {
     var completedBytes: Int64
     var totalBytes: Int64
     var message: String
+    var queueStatus: AIOTransferStatus? = nil
+    var failedPhaseMessage: String? = nil
 
     var fraction: Double {
         guard totalBytes > 0 else { return 0 }
@@ -148,24 +154,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
     static let usesZeroFill = true
     static var requestDepth: Int { queueDepth * threadCount }
 
-    private final class AIORequest {
-        let controlBlock: UnsafeMutablePointer<aiocb>
-        let buffer: UnsafeMutableRawPointer
-        let count: Int
-
-        init(controlBlock: UnsafeMutablePointer<aiocb>, buffer: UnsafeMutableRawPointer, count: Int) {
-            self.controlBlock = controlBlock
-            self.buffer = buffer
-            self.count = count
-        }
-
-        func release() {
-            controlBlock.deinitialize(count: 1)
-            controlBlock.deallocate()
-            buffer.deallocate()
-        }
-    }
-
+    private let transfer: AIOTransfer
     private let fileManager: FileManager
     private let fileEventHandler: WorkloadFileEventHandler?
     private let temporaryRunLeaseDirectoryURL: URL?
@@ -176,11 +165,13 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
     init(
         fileManager: FileManager = .default,
         fileEventHandler: WorkloadFileEventHandler? = nil,
-        temporaryRunLeaseDirectoryURL: URL? = nil
+        temporaryRunLeaseDirectoryURL: URL? = nil,
+        transfer: AIOTransfer = AIOTransfer()
     ) {
         self.fileManager = fileManager
         self.fileEventHandler = fileEventHandler
         self.temporaryRunLeaseDirectoryURL = temporaryRunLeaseDirectoryURL
+        self.transfer = transfer
     }
 
     func cancel() {
@@ -193,13 +184,36 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) async throws {
         setCancelled(false)
+        let latestProgress = LockedState<DiskActivityWorkloadProgress?>(nil)
+        let lastTransferProgress = LockedState<DiskActivityWorkloadProgress?>(nil)
+        let report: @Sendable (DiskActivityWorkloadProgress) -> Void = { value in
+            latestProgress.withLock { latest in
+                if latest?.phase == .cleaningUp && value.phase != .failed { return }
+                if value.phase != .cleaningUp && value.phase != .failed {
+                    lastTransferProgress.withLock { $0 = value }
+                }
+                latest = value
+                progress(value)
+            }
+        }
 
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    try self.runBlocking(configuration: configuration, drive: drive, progress: progress)
+                    try self.runBlocking(configuration: configuration, drive: drive, progress: report)
                     continuation.resume()
                 } catch {
+                    if case BenchmarkError.cancelled = error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    if var failed = lastTransferProgress.snapshot() ?? latestProgress.snapshot() {
+                        failed.failedPhaseMessage = failed.message
+                        failed.phase = .failed
+                        failed.message = "Workload failed"
+                        report(failed)
+                    }
+                    CapricornLog.workload.error("Workload failed: \(error.localizedDescription, privacy: .public)")
                     continuation.resume(throwing: error)
                 }
             }
@@ -286,22 +300,24 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) throws -> DiskActivityWorkloadOpenFile {
         let url = workloadFileURL(in: configuration.targetFolderURL, runID: runID, role: "read-source", loopIndex: loopIndex)
-        let file = try openWorkloadFile(at: url)
+        notify(progress, progressValue(configuration: configuration, phase: .sizingFile, loopIndex: loopIndex, completedBytes: 0, totalBytes: configuration.fileSizeBytes, message: "Sizing workload file"))
+        let file = try openWorkloadFile(at: url, size: configuration.fileSizeBytes)
         do {
-            let reporter = ByteProgressReporter(totalBytes: configuration.fileSizeBytes) { completedBytes in
+            let reporter = ByteProgressReporter(totalBytes: configuration.fileSizeBytes) { completedBytes, queueStatus in
                 self.notify(progress, self.progressValue(
                     configuration: configuration,
                     phase: .preparingReadFile,
                     loopIndex: loopIndex,
                     completedBytes: completedBytes,
                     totalBytes: configuration.fileSizeBytes,
-                    message: "Preparing read workload file"
+                    message: "Preparing read workload file",
+                    queueStatus: queueStatus
                 ))
             }
             try writeFullFile(fd: file.fd, size: configuration.fileSizeBytes, reporter: reporter)
-            notify(progress, progressValue(configuration: configuration, phase: .flushing, loopIndex: loopIndex, completedBytes: configuration.fileSizeBytes, totalBytes: configuration.fileSizeBytes, message: "Flushing workload writes"))
+            notify(progress, progressValue(configuration: configuration, phase: .flushingReadFile, loopIndex: loopIndex, completedBytes: configuration.fileSizeBytes, totalBytes: configuration.fileSizeBytes, message: "Flushing prepared workload file"))
             if fsync(file.fd) != 0 {
-                throw BenchmarkError.ioFailed("Could not flush workload writes.")
+                throw flushError(fd: file.fd, stage: "prepared workload")
             }
             return file
         } catch {
@@ -316,14 +332,15 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         loopIndex: Int,
         progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) throws {
-        let reporter = ByteProgressReporter(totalBytes: configuration.fileSizeBytes) { completedBytes in
+        let reporter = ByteProgressReporter(totalBytes: configuration.fileSizeBytes) { completedBytes, queueStatus in
             self.notify(progress, self.progressValue(
                 configuration: configuration,
                 phase: .reading,
                 loopIndex: loopIndex,
                 completedBytes: completedBytes,
                 totalBytes: configuration.fileSizeBytes,
-                message: "Reading workload file"
+                message: "Reading workload file",
+                queueStatus: queueStatus
             ))
         }
         try readFullFile(fd: file.fd, size: configuration.fileSizeBytes, reporter: reporter)
@@ -336,23 +353,25 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) throws {
         let url = workloadFileURL(in: configuration.targetFolderURL, runID: runID, role: "write", loopIndex: loopIndex)
-        let file = try openWorkloadFile(at: url)
+        notify(progress, progressValue(configuration: configuration, phase: .sizingFile, loopIndex: loopIndex, completedBytes: 0, totalBytes: configuration.fileSizeBytes, message: "Sizing workload file"))
+        let file = try openWorkloadFile(at: url, size: configuration.fileSizeBytes)
         defer { file.closeAndRemove() }
 
-        let reporter = ByteProgressReporter(totalBytes: configuration.fileSizeBytes) { completedBytes in
+        let reporter = ByteProgressReporter(totalBytes: configuration.fileSizeBytes) { completedBytes, queueStatus in
             self.notify(progress, self.progressValue(
                 configuration: configuration,
                 phase: .writing,
                 loopIndex: loopIndex,
                 completedBytes: completedBytes,
                 totalBytes: configuration.fileSizeBytes,
-                message: "Writing workload file"
+                message: "Writing workload file",
+                queueStatus: queueStatus
             ))
         }
         try writeFullFile(fd: file.fd, size: configuration.fileSizeBytes, reporter: reporter)
         notify(progress, progressValue(configuration: configuration, phase: .flushing, loopIndex: loopIndex, completedBytes: configuration.fileSizeBytes, totalBytes: configuration.fileSizeBytes, message: "Flushing workload writes"))
         if fsync(file.fd) != 0 {
-            throw BenchmarkError.ioFailed("Could not flush workload writes.")
+            throw flushError(fd: file.fd, stage: "workload")
         }
     }
 
@@ -364,20 +383,23 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         progress: @escaping @Sendable (DiskActivityWorkloadProgress) -> Void
     ) throws {
         let url = workloadFileURL(in: configuration.targetFolderURL, runID: runID, role: "mixed-write", loopIndex: loopIndex)
-        let writeFile = try openWorkloadFile(at: url)
+        notify(progress, progressValue(configuration: configuration, phase: .sizingFile, loopIndex: loopIndex, completedBytes: 0, totalBytes: configuration.fileSizeBytes * 2, message: "Sizing workload file"))
+        let writeFile = try openWorkloadFile(at: url, size: configuration.fileSizeBytes)
         defer { writeFile.closeAndRemove() }
 
         let totalBytes = configuration.fileSizeBytes * 2
-        let reporter = ByteProgressReporter(totalBytes: totalBytes) { completedBytes in
+        let reporter = ByteProgressReporter(totalBytes: totalBytes) { completedBytes, queueStatus in
             self.notify(progress, self.progressValue(
                 configuration: configuration,
                 phase: .mixed,
                 loopIndex: loopIndex,
                 completedBytes: completedBytes,
                 totalBytes: totalBytes,
-                message: "Running mixed workload"
+                message: "Running mixed workload",
+                queueStatus: queueStatus
             ))
         }
+        reporter.set(0, force: true)
 
         let firstError = LockedState<Error?>(nil)
         let group = DispatchGroup()
@@ -408,10 +430,6 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
             defer { group.leave() }
             do {
                 try self.transferFullFile(fd: writeFile.fd, size: configuration.fileSizeBytes, shouldWrite: true, reporter: reporter, resetReporter: false, finishReporter: false)
-                self.notify(progress, self.progressValue(configuration: configuration, phase: .flushing, loopIndex: loopIndex, completedBytes: totalBytes, totalBytes: totalBytes, message: "Flushing workload writes"))
-                if fsync(writeFile.fd) != 0 {
-                    throw BenchmarkError.ioFailed("Could not flush workload writes.")
-                }
             } catch {
                 record(error)
             }
@@ -421,7 +439,13 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         if let firstError = firstError.snapshot() {
             throw firstError
         }
+        try checkCancelled()
         reporter.finish()
+        notify(progress, progressValue(configuration: configuration, phase: .flushing, loopIndex: loopIndex, completedBytes: totalBytes, totalBytes: totalBytes, message: "Flushing workload writes"))
+        if fsync(writeFile.fd) != 0 {
+            throw flushError(fd: writeFile.fd, stage: "mixed workload")
+        }
+        try checkCancelled()
     }
 
     private func writeFullFile(fd: Int32, size: Int64, reporter: ByteProgressReporter) throws {
@@ -440,156 +464,52 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         resetReporter: Bool = true,
         finishReporter: Bool = true
     ) throws {
-        let requestDepth = Self.requestDepth
         let chunkSize = max(4_096, min(Self.transferChunkSizeBytes, Int(max(0, size))))
-        var assignedBytes: Int64 = 0
-        var activeRequests: [AIORequest] = []
-        var firstError: Error?
-
         if resetReporter {
             reporter.set(0, force: true)
         }
-
-        func reapCompletedRequests() throws {
-            var completedIndexes: [Int] = []
-            for (index, request) in activeRequests.enumerated() {
-                let error = aio_error(request.controlBlock)
-                if error == EINPROGRESS {
-                    continue
+        try transfer.run(
+            descriptor: fd, bytes: size, blockSize: chunkSize, depth: Self.requestDepth,
+            checkCancelled: checkCancelled,
+            operation: { offset, _ in AIOTransferOperation(offset: offset, write: shouldWrite) },
+            fill: { buffer, count in memset(buffer, 0, count) },
+            completed: { bytes, _ in reporter.add(Int64(bytes)) },
+            statusChanged: { status in
+                reporter.update(status)
+                if status.finished {
+                    CapricornLog.workload.info("AIO workload \(status.detail, privacy: .public)")
                 }
-
-                let returned = aio_return(request.controlBlock)
-                if error != 0 {
-                    firstError = BenchmarkError.ioFailed(errorMessage(for: error, shouldWrite: shouldWrite))
-                } else if returned <= 0 {
-                    firstError = BenchmarkError.ioFailed(shouldWrite ? "Write workload failed." : "Read workload failed.")
-                } else {
-                    let transferred = min(returned, request.count)
-                    reporter.add(Int64(transferred))
-                }
-                completedIndexes.append(index)
             }
-
-            for index in completedIndexes.reversed() {
-                let request = activeRequests.remove(at: index)
-                request.release()
-            }
-
-            if let firstError {
-                throw firstError
-            }
-        }
-
-        func releaseActiveRequests() {
-            if !activeRequests.isEmpty {
-                _ = aio_cancel(fd, nil)
-            }
-            activeRequests.forEach { $0.release() }
-            activeRequests.removeAll()
-        }
-
-        defer {
-            releaseActiveRequests()
-        }
-
-        while assignedBytes < size || !activeRequests.isEmpty {
-            try checkCancelled()
-
-            while activeRequests.count < requestDepth && assignedBytes < size {
-                try checkCancelled()
-                let count = min(chunkSize, Int(size - assignedBytes))
-                let offset = assignedBytes
-                let request = makeRequest(fd: fd, count: count, offset: offset, shouldWrite: shouldWrite)
-                let submitResult = shouldWrite ? aio_write(request.controlBlock) : aio_read(request.controlBlock)
-                guard submitResult == 0 else {
-                    let submitError = errno
-                    request.release()
-
-                    if isAIOResourceLimit(submitError), !activeRequests.isEmpty {
-                        try waitForAnyCompletion(activeRequests)
-                        try reapCompletedRequests()
-                        continue
-                    }
-
-                    throw BenchmarkError.ioFailed(submitErrorMessage(
-                        for: submitError,
-                        shouldWrite: shouldWrite,
-                        activeRequests: activeRequests.count,
-                        targetDepth: requestDepth
-                    ))
-                }
-                assignedBytes += Int64(count)
-                activeRequests.append(request)
-            }
-
-            if activeRequests.isEmpty {
-                continue
-            }
-
-            try waitForAnyCompletion(activeRequests)
-            try reapCompletedRequests()
-        }
-
+        )
         if finishReporter {
             reporter.finish()
         }
-    }
-
-    private func makeRequest(fd: Int32, count: Int, offset: Int64, shouldWrite: Bool) -> AIORequest {
-        let buffer = UnsafeMutableRawPointer.allocate(byteCount: count, alignment: 4_096)
-        if shouldWrite {
-            memset(buffer, 0, count)
-        }
-
-        let controlBlock = UnsafeMutablePointer<aiocb>.allocate(capacity: 1)
-        controlBlock.initialize(to: aiocb())
-        controlBlock.pointee.aio_fildes = fd
-        controlBlock.pointee.aio_offset = off_t(offset)
-        controlBlock.pointee.aio_buf = buffer
-        controlBlock.pointee.aio_nbytes = count
-        controlBlock.pointee.aio_reqprio = 0
-        return AIORequest(controlBlock: controlBlock, buffer: buffer, count: count)
-    }
-
-    private func waitForAnyCompletion(_ requests: [AIORequest]) throws {
-        let pointers: [UnsafePointer<aiocb>?] = requests.map { UnsafePointer($0.controlBlock) }
-        let result = pointers.withUnsafeBufferPointer { buffer in
-            aio_suspend(buffer.baseAddress, Int32(buffer.count), nil)
-        }
-        if result != 0, errno != EINTR {
-            throw BenchmarkError.ioFailed("Async workload wait failed.")
-        }
-    }
-
-    private func errorMessage(for error: Int32, shouldWrite: Bool) -> String {
-        let operationName = shouldWrite ? "write" : "read"
-        let reason = strerror(error).map { String(cString: $0) } ?? "unknown error"
-        return "Async workload \(operationName) failed: \(reason)."
-    }
-
-    private func submitErrorMessage(for error: Int32, shouldWrite: Bool, activeRequests: Int, targetDepth: Int) -> String {
-        let operationName = shouldWrite ? "write" : "read"
-        let reason = strerror(error).map { String(cString: $0) } ?? "unknown error"
-        return "Async workload \(operationName) failed to submit: \(reason) (errno \(error), active \(activeRequests)/Q\(targetDepth))."
-    }
-
-    private func isAIOResourceLimit(_ error: Int32) -> Bool {
-        error == EAGAIN || error == ENOMEM || error == ENOBUFS
     }
 
     private func workloadFileURL(in targetURL: URL, runID: String, role: String, loopIndex: Int) -> URL {
         targetURL.appendingPathComponent("\(workloadFilePrefix)\(runID)-\(role)-loop\(loopIndex)-\(UUID().uuidString).tmp")
     }
 
-    private func openWorkloadFile(at url: URL) throws -> DiskActivityWorkloadOpenFile {
+    private func openWorkloadFile(at url: URL, size: Int64) throws -> DiskActivityWorkloadOpenFile {
         let path = url.path
-        let fd = open(path, O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR)
+        let fd = open(path, O_CREAT | O_EXCL | O_NOFOLLOW | O_RDWR, S_IRUSR | S_IWUSR)
         guard fd >= 0 else { throw BenchmarkError.openFailed(path) }
         fileEventHandler?(url)
 
-        var noCache: Int32 = 1
-        _ = fcntl(fd, F_NOCACHE, &noCache)
-        return DiskActivityWorkloadOpenFile(url: url, fd: fd, fileManager: fileManager)
+        let file = DiskActivityWorkloadOpenFile(url: url, fd: fd, fileManager: fileManager)
+        do {
+            try AIOFilePreparation.resize(fd, bytes: size)
+            _ = fcntl(fd, F_NOCACHE, 1)
+            return file
+        } catch {
+            file.closeAndRemove()
+            throw error
+        }
+    }
+
+    private func flushError(fd: Int32, stage: String) -> BenchmarkError {
+        let code = errno
+        return .ioFailed("Could not flush \(stage) writes (fd \(fd), errno \(code)): \(String(cString: strerror(code))).")
     }
 
     private func cleanupWorkloadFiles(in url: URL, runID: String) {
@@ -607,15 +527,17 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         loopIndex: Int,
         completedBytes: Int64,
         totalBytes: Int64,
-        message: String
+        message: String,
+        queueStatus: AIOTransferStatus? = nil
     ) -> DiskActivityWorkloadProgress {
         DiskActivityWorkloadProgress(
             operation: configuration.operation,
-            phase: phase,
+            phase: queueStatus?.draining == true ? .cleaningUp : phase,
             loopIndex: loopIndex,
             completedBytes: completedBytes,
             totalBytes: totalBytes,
-            message: message
+            message: queueStatus?.draining == true ? "Waiting for pending workload I/O to finish" : message,
+            queueStatus: queueStatus
         )
     }
 
@@ -645,50 +567,50 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
     private final class ByteProgressReporter: @unchecked Sendable {
         private let totalBytes: Int64
         private let minimumIntervalNanoseconds: UInt64
-        private let onReport: (Int64) -> Void
+        private let onReport: (Int64, AIOTransferStatus?) -> Void
         private let lock = NSLock()
         private var completedBytes: Int64 = 0
         private var lastReportNanoseconds = DispatchTime.now().uptimeNanoseconds
+        private var queueStatus: AIOTransferStatus?
 
-        init(totalBytes: Int64, minimumIntervalNanoseconds: UInt64 = 250_000_000, onReport: @escaping @Sendable (Int64) -> Void) {
+        init(totalBytes: Int64, minimumIntervalNanoseconds: UInt64 = 250_000_000, onReport: @escaping @Sendable (Int64, AIOTransferStatus?) -> Void) {
             self.totalBytes = max(0, totalBytes)
             self.minimumIntervalNanoseconds = minimumIntervalNanoseconds
             self.onReport = onReport
         }
 
         func add(_ bytes: Int64) {
-            let reportBytes: Int64?
             lock.lock()
+            defer { lock.unlock() }
             completedBytes = min(totalBytes, max(0, completedBytes + bytes))
             let now = DispatchTime.now().uptimeNanoseconds
             if completedBytes >= totalBytes || now - lastReportNanoseconds >= minimumIntervalNanoseconds {
                 lastReportNanoseconds = now
-                reportBytes = completedBytes
-            } else {
-                reportBytes = nil
-            }
-            lock.unlock()
-
-            if let reportBytes {
-                onReport(reportBytes)
+                onReport(completedBytes, queueStatus)
             }
         }
 
         func set(_ bytes: Int64, force: Bool = false) {
-            let reportBytes: Int64?
             lock.lock()
+            defer { lock.unlock() }
             completedBytes = min(totalBytes, max(0, bytes))
             let now = DispatchTime.now().uptimeNanoseconds
             if force || completedBytes >= totalBytes || now - lastReportNanoseconds >= minimumIntervalNanoseconds {
                 lastReportNanoseconds = now
-                reportBytes = completedBytes
-            } else {
-                reportBytes = nil
+                onReport(completedBytes, queueStatus)
             }
-            lock.unlock()
+        }
 
-            if let reportBytes {
-                onReport(reportBytes)
+        func update(_ status: AIOTransferStatus) {
+            lock.lock()
+            defer { lock.unlock() }
+            if queueStatus?.draining == true && !status.draining { return }
+            let changedPhase = status.draining && queueStatus?.draining != true
+            queueStatus = status
+            let now = DispatchTime.now().uptimeNanoseconds
+            if changedPhase || now - lastReportNanoseconds >= minimumIntervalNanoseconds {
+                lastReportNanoseconds = now
+                onReport(completedBytes, status)
             }
         }
 

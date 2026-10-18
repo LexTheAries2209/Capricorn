@@ -1456,6 +1456,11 @@ private struct BenchmarkProgressSheet: View {
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
+                        if let queueStatus = progress.queueStatus {
+                            Text(language.aioQueueDescription(queueStatus))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
                     } else {
                         ProgressView()
                         Text(language.t("Starting"))

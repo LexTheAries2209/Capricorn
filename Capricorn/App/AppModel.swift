@@ -1449,7 +1449,7 @@ final class AppModel {
             for await event in events {
                 guard let self,
                       self.activeLiveActivityWorkloadRunID == runID,
-                      self.liveActivitySession.workloadState == .running else { continue }
+                      self.liveActivitySession.workloadState == .running || self.liveActivitySession.workloadState == .stopping else { continue }
                 switch event {
                 case let .progress(progress):
                     self.liveActivityWorkloadProgress = progress
@@ -1514,7 +1514,7 @@ final class AppModel {
                     self.liveActivityWorkloadTask = nil
                     self.liveActivityWorkloadEventTask = nil
                     self.activeLiveActivityWorkloadRunID = nil
-                    CapricornLog.workload.error("Live workload failed: \(error.domain, privacy: .public) \(error.code)")
+                    CapricornLog.workload.error("Live workload failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
         }

@@ -2410,6 +2410,7 @@ struct BenchmarkProgress: Equatable, Sendable {
     var message: String
     var phaseCompletedBytes: Int64 = 0
     var phaseTotalBytes: Int64 = 0
+    var queueStatus: AIOTransferStatus? = nil
 
     var fraction: Double {
         guard total > 0 else { return 0 }
