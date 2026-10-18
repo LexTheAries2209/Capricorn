@@ -7,6 +7,13 @@ import XCTest
 @testable import Capricorn
 
 final class DeveloperSettingsTests: XCTestCase {
+    // OCR may use full-width parentheses, insert spaces, or recognize a variant glyph.
+    private func normalized(_ text: String) -> String {
+        text.folding(options: .widthInsensitive, locale: nil)
+            .replacingOccurrences(of: "虛", with: "虚")
+            .replacingOccurrences(of: " ", with: "")
+    }
+
     @MainActor
     func testSidebarAddVirtualDiskRequiresBothDeveloperSwitchesInBothLanguages() async throws {
         guard CGPreflightScreenCaptureAccess() else {
@@ -59,12 +66,11 @@ final class DeveloperSettingsTests: XCTestCase {
                 request.recognitionLevel = .accurate
                 request.recognitionLanguages = ["zh-Hans", "en-US"]
                 try VNImageRequestHandler(cgImage: image).perform([request])
-                // Vision can recognize the small Simplified Chinese glyph as its traditional form.
                 let lines = (request.results ?? []).compactMap {
-                    $0.topCandidates(1).first?.string.replacingOccurrences(of: "虛", with: "虚")
+                    $0.topCandidates(1).first.map { normalized($0.string) }
                 }
                 XCTAssertEqual(
-                    lines.contains { $0.contains(language.t("Add virtual disk (Beta)")) },
+                    lines.contains { $0.contains(normalized(language.t("Add virtual disk (Beta)"))) },
                     developer && virtualDisks,
                     "\(language): \(lines)"
                 )
@@ -124,14 +130,14 @@ final class DeveloperSettingsTests: XCTestCase {
                 request.recognitionLanguages = ["zh-Hans", "en-US"]
                 try VNImageRequestHandler(cgImage: image).perform([request])
                 let lines = (request.results ?? []).compactMap {
-                    $0.topCandidates(1).first?.string.replacingOccurrences(of: "虛", with: "虚")
+                    $0.topCandidates(1).first.map { normalized($0.string) }
                 }
-                XCTAssertTrue(lines.contains { $0.contains(language.t("Enable developer options")) }, "\(lines)")
+                XCTAssertTrue(lines.contains { $0.contains(normalized(language.t("Enable developer options"))) }, "\(lines)")
                 for title in [
                     "Enable custom benchmark configuration", "Allow adding virtual disks (Beta)",
                     "Show build number", "Automatically download and install updates"
                 ] {
-                    XCTAssertEqual(lines.contains { $0.contains(language.t(title)) }, enabled, "\(lines)")
+                    XCTAssertEqual(lines.contains { $0.contains(normalized(language.t(title))) }, enabled, "\(lines)")
                 }
                 XCTAssertFalse(preferences.enablesCustomBenchmarkConfiguration)
                 XCTAssertFalse(preferences.enablesVirtualDisks)
