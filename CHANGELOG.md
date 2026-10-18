@@ -8,6 +8,24 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V2.10.5 - 2026-10-18
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.10.5) | [Release Notes / 发布说明](docs/releases/v2.10.5.md)
+
+### 中文
+
+- 测速新增“停止”，完成当前一轮并计算结果后跳过后续测试与循环；精简自定义项目组界面。
+- 虚拟硬盘（Beta）支持自动健康度、更多设备类型和内置系统盘模拟，改进分区布局、容量单位与默认编号名称。
+- 首次启动默认中文，“预故障”更名为“错误”，网络与虚拟硬盘使用专用图标。
+- 开发者选项新增默认关闭的自动下载并安装更新。
+
+### English
+
+- Adds Stop to finish the active benchmark pass, calculate results, and skip remaining tests and loops; simplifies custom test groups.
+- Expands virtual disks (Beta) with automatic health, more media types, built-in system-disk simulation, clearer partition fields, selectable capacity units, and numbered names.
+- Defaults first launch to Simplified Chinese, renames Pre-Fail to Error, and distinguishes network and virtual drives with dedicated icons.
+- Adds optional automatic update downloads and installation under Developer Options, off by default.
+
 ## V2.10.4 - 2026-10-17
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.10.4) | [Release Notes / 发布说明](docs/releases/v2.10.4.md)
