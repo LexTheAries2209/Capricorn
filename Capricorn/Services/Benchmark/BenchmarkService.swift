@@ -7,15 +7,43 @@ enum BenchmarkEvent: Sendable {
     case result(BenchmarkResult)
 }
 
+final class BenchmarkStopRequest: Sendable {
+    static let waitingMessage = "Stopping after the current pass. Completed passes will be saved."
+    static let completedMessage = "Benchmark stopped. Completed passes were saved; remaining tests were skipped."
+    private let requested = LockedState(false)
+
+    var isRequested: Bool { requested.snapshot() }
+
+    func request() {
+        requested.withLock { $0 = true }
+    }
+}
+
 protocol BenchmarkRunning: Sendable {
+    func run(
+        profile: BenchmarkProfile,
+        drive: DriveDevice,
+        volumePath: String,
+        stopRequest: BenchmarkStopRequest,
+        progress: @escaping @Sendable (BenchmarkProgress) -> Void,
+        result: @escaping @Sendable (BenchmarkResult) -> Void
+    ) async throws -> [BenchmarkResult]
+    func cancel()
+}
+
+extension BenchmarkRunning {
     func run(
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         result: @escaping @Sendable (BenchmarkResult) -> Void
-    ) async throws -> [BenchmarkResult]
-    func cancel()
+    ) async throws -> [BenchmarkResult] {
+        try await run(
+            profile: profile, drive: drive, volumePath: volumePath,
+            stopRequest: BenchmarkStopRequest(), progress: progress, result: result
+        )
+    }
 }
 
 enum BenchmarkError: Error, LocalizedError {
@@ -201,14 +229,15 @@ final class BenchmarkRunnerRouter: BenchmarkRunning, @unchecked Sendable {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
+        stopRequest: BenchmarkStopRequest,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
         switch profile.engine {
         case .synchronous:
-            return try await synchronousRunner.run(profile: profile, drive: drive, volumePath: volumePath, progress: progress, result: result)
+            return try await synchronousRunner.run(profile: profile, drive: drive, volumePath: volumePath, stopRequest: stopRequest, progress: progress, result: result)
         case .asyncQueue:
-            return try await asyncRunner.run(profile: profile, drive: drive, volumePath: volumePath, progress: progress, result: result)
+            return try await asyncRunner.run(profile: profile, drive: drive, volumePath: volumePath, stopRequest: stopRequest, progress: progress, result: result)
         }
     }
 
@@ -305,6 +334,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private let temporaryRunLeaseDirectoryURL: URL?
     private let lock = NSLock()
     private var cancelled = false
+    private var stopRequest = BenchmarkStopRequest()
     private let benchmarkFilePrefix = "Capricorn-"
 
     init(
@@ -331,10 +361,11 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
+        stopRequest: BenchmarkStopRequest,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
-        setCancelled(false)
+        beginRun(stopRequest: stopRequest)
 
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -407,6 +438,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
         for (index, test) in profile.tests.enumerated() {
             try checkCancelled()
+            if isStopRequested() { break }
             notify(progress, BenchmarkProgress(
                 currentTestLabel: test.label,
                 completed: completedSteps,
@@ -426,8 +458,11 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 totalSteps: totalSteps,
                 progress: progress
             )
-            results.append(completedResult)
-            notify(result, completedResult)
+            if let completedResult {
+                results.append(completedResult)
+                notify(result, completedResult)
+            }
+            if isStopRequested() { break }
 
             if index < profile.tests.count - 1 {
                 try checkCancelled()
@@ -441,7 +476,11 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             }
         }
 
-        notify(progress, BenchmarkProgress(currentTestLabel: "Complete", completed: totalSteps, total: totalSteps, message: "Benchmark complete"))
+        notify(progress, BenchmarkProgress(
+            currentTestLabel: isStopRequested() ? "Stopped" : "Complete",
+            completed: completedSteps, total: totalSteps,
+            message: isStopRequested() ? BenchmarkStopRequest.completedMessage : "Benchmark complete"
+        ))
         return results
     }
 
@@ -464,9 +503,10 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         }
 
         do {
-            while true {
+            while !isStopRequested() {
                 for (index, test) in orderedTests.enumerated() {
                     try checkCancelled()
+                    if isStopRequested() { break }
                     let displayLabel = loopProgressLabel(loopIndex: loopIndex, test: test)
                     notify(progress, BenchmarkProgress(
                         currentTestLabel: displayLabel,
@@ -510,6 +550,11 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             ))
             return orderedTests.compactMap { latestResultsByTestID[$0.id] }
         }
+        notify(progress, BenchmarkProgress(
+            currentTestLabel: "Stopped", completed: latestResultsByTestID.count, total: totalSteps,
+            message: BenchmarkStopRequest.completedMessage
+        ))
+        return orderedTests.compactMap { latestResultsByTestID[$0.id] }
     }
 
     private func loopProgressLabel(loopIndex: Int, test: BenchmarkTest) -> String {
@@ -731,7 +776,8 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         completedSteps: inout Int,
         totalSteps: Int,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void
-    ) throws -> BenchmarkResult {
+    ) throws -> BenchmarkResult? {
+        if isStopRequested() { return nil }
         if test.operation == .read {
             return try runMeasuredReadTest(
                 profile: profile,
@@ -751,6 +797,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
         for runIndex in 0...measuredRuns {
             try checkCancelled()
+            if isStopRequested() { break }
             let isWarmup = runIndex == 0
             let passMessage = passStatusMessage(for: test, runIndex: runIndex, measuredRuns: measuredRuns)
             let testFile = benchmarkFileURL(in: volumeURL, runID: runID, test: test, runIndex: runIndex)
@@ -830,6 +877,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 message: passMessage
             ))
 
+            if isStopRequested() { break }
             if runIndex < measuredRuns {
                 try checkCancelled()
                 notify(progress, BenchmarkProgress(
@@ -842,6 +890,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             }
         }
 
+        guard !measurements.isEmpty else { return nil }
         let average = BenchmarkMeasurementReducer.summarize(measurements, usesTrimmedAverage: profile.usesTrimmedAverage)
         return BenchmarkResult(
             driveID: drive.id,
@@ -872,7 +921,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         completedSteps: inout Int,
         totalSteps: Int,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void
-    ) throws -> BenchmarkResult {
+    ) throws -> BenchmarkResult? {
         var measurements: [BenchmarkRunMeasurement] = []
         let testFile = benchmarkFileURL(in: volumeURL, runID: runID, test: test, runIndex: 0)
         let preparedStep = completedSteps
@@ -913,6 +962,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
             for runIndex in 0...measuredRuns {
                 try checkCancelled()
+                if isStopRequested() { break }
                 let isWarmup = runIndex == 0
                 let passMessage = passStatusMessage(for: test, runIndex: runIndex, measuredRuns: measuredRuns)
                 let phaseCompletedSteps = completedSteps
@@ -945,6 +995,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                     message: passMessage
                 ))
 
+                if isStopRequested() { break }
                 if runIndex < measuredRuns {
                     try checkCancelled()
                     notify(progress, BenchmarkProgress(
@@ -957,6 +1008,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 }
             }
 
+            guard !measurements.isEmpty else { return nil }
             let average = BenchmarkMeasurementReducer.summarize(measurements, usesTrimmedAverage: profile.usesTrimmedAverage)
             return BenchmarkResult(
                 driveID: drive.id,
@@ -1357,13 +1409,13 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
     private func waitBetweenOperations() throws {
         guard operationIntervalSeconds > 0 else { return }
-        try operationSleeper(operationIntervalSeconds) { self.isCancelled() }
+        try waitAtPassBoundary(seconds: operationIntervalSeconds)
         try checkCancelled()
     }
 
     private func waitBetweenPasses() throws {
         guard passIntervalSeconds > 0 else { return }
-        try operationSleeper(passIntervalSeconds) { self.isCancelled() }
+        try waitAtPassBoundary(seconds: passIntervalSeconds)
         try checkCancelled()
     }
 
@@ -1381,6 +1433,29 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         if isCancelled() {
             throw BenchmarkError.cancelled
         }
+    }
+
+    private func waitAtPassBoundary(seconds: TimeInterval) throws {
+        if isStopRequested() { return }
+        do {
+            try operationSleeper(seconds) { self.isCancelled() || self.isStopRequested() }
+        } catch BenchmarkError.cancelled where isStopRequested() && !isCancelled() {
+            // A graceful stop wakes interval waits without cancelling in-flight I/O.
+        }
+    }
+
+    private func beginRun(stopRequest: BenchmarkStopRequest) {
+        lock.lock()
+        cancelled = false
+        self.stopRequest = stopRequest
+        lock.unlock()
+    }
+
+    private func isStopRequested() -> Bool {
+        lock.lock()
+        let request = stopRequest
+        lock.unlock()
+        return request.isRequested
     }
 
     private func isCancelled() -> Bool {
@@ -1417,6 +1492,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
     private let temporaryRunLeaseDirectoryURL: URL?
     private let lock = NSLock()
     private var cancelled = false
+    private var stopRequest = BenchmarkStopRequest()
     private let benchmarkFilePrefix = "Capricorn-"
 
     init(
@@ -1443,10 +1519,11 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
+        stopRequest: BenchmarkStopRequest,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
-        setCancelled(false)
+        beginRun(stopRequest: stopRequest)
 
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -1520,6 +1597,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
         for (index, test) in orderedTests.enumerated() {
             try checkCancelled()
+            if isStopRequested() { break }
             notify(progress, BenchmarkProgress(
                 currentTestLabel: test.label,
                 completed: completedSteps,
@@ -1539,8 +1617,11 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 totalSteps: totalSteps,
                 progress: progress
             )
-            results.append(completedResult)
-            notify(result, completedResult)
+            if let completedResult {
+                results.append(completedResult)
+                notify(result, completedResult)
+            }
+            if isStopRequested() { break }
 
             if index < orderedTests.count - 1 {
                 try checkCancelled()
@@ -1554,7 +1635,11 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             }
         }
 
-        notify(progress, BenchmarkProgress(currentTestLabel: "Complete", completed: totalSteps, total: totalSteps, message: "Benchmark complete"))
+        notify(progress, BenchmarkProgress(
+            currentTestLabel: isStopRequested() ? "Stopped" : "Complete",
+            completed: completedSteps, total: totalSteps,
+            message: isStopRequested() ? BenchmarkStopRequest.completedMessage : "Benchmark complete"
+        ))
         return results
     }
 
@@ -1577,9 +1662,10 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         }
 
         do {
-            while true {
+            while !isStopRequested() {
                 for (index, test) in orderedTests.enumerated() {
                     try checkCancelled()
+                    if isStopRequested() { break }
                     let displayLabel = loopProgressLabel(loopIndex: loopIndex, test: test)
                     notify(progress, BenchmarkProgress(
                         currentTestLabel: displayLabel,
@@ -1623,6 +1709,11 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             ))
             return orderedTests.compactMap { latestResultsByTestID[$0.id] }
         }
+        notify(progress, BenchmarkProgress(
+            currentTestLabel: "Stopped", completed: latestResultsByTestID.count, total: totalSteps,
+            message: BenchmarkStopRequest.completedMessage
+        ))
+        return orderedTests.compactMap { latestResultsByTestID[$0.id] }
     }
 
     private func orderedTestsByProfileRows(_ tests: [BenchmarkTest]) -> [BenchmarkTest] {
@@ -1717,7 +1808,8 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         completedSteps: inout Int,
         totalSteps: Int,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void
-    ) throws -> BenchmarkResult {
+    ) throws -> BenchmarkResult? {
+        if isStopRequested() { return nil }
         if test.operation == .read {
             return try runMeasuredReadTest(
                 profile: profile,
@@ -1737,6 +1829,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
         for runIndex in 0...measuredRuns {
             try checkCancelled()
+            if isStopRequested() { break }
             let isWarmup = runIndex == 0
             let passMessage = passStatusMessage(for: test, runIndex: runIndex, measuredRuns: measuredRuns)
             notify(progress, BenchmarkProgress(
@@ -1814,6 +1907,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 message: passMessage
             ))
 
+            if isStopRequested() { break }
             if runIndex < measuredRuns {
                 try checkCancelled()
                 notify(progress, BenchmarkProgress(
@@ -1826,6 +1920,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             }
         }
 
+        guard !measurements.isEmpty else { return nil }
         let average = BenchmarkMeasurementReducer.summarize(measurements, usesTrimmedAverage: profile.usesTrimmedAverage)
         return BenchmarkResult(
             driveID: drive.id,
@@ -1854,7 +1949,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         completedSteps: inout Int,
         totalSteps: Int,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void
-    ) throws -> BenchmarkResult {
+    ) throws -> BenchmarkResult? {
         var measurements: [BenchmarkRunMeasurement] = []
         let testFile = benchmarkFileURL(in: volumeURL, runID: runID, test: test, runIndex: 0)
         let preparedStep = completedSteps
@@ -1895,6 +1990,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
             for runIndex in 0...measuredRuns {
                 try checkCancelled()
+                if isStopRequested() { break }
                 let isWarmup = runIndex == 0
                 let passMessage = passStatusMessage(for: test, runIndex: runIndex, measuredRuns: measuredRuns)
                 let phaseCompletedSteps = completedSteps
@@ -1927,6 +2023,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                     message: passMessage
                 ))
 
+                if isStopRequested() { break }
                 if runIndex < measuredRuns {
                     try checkCancelled()
                     notify(progress, BenchmarkProgress(
@@ -1939,6 +2036,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 }
             }
 
+            guard !measurements.isEmpty else { return nil }
             let average = BenchmarkMeasurementReducer.summarize(measurements, usesTrimmedAverage: profile.usesTrimmedAverage)
             return BenchmarkResult(
                 driveID: drive.id,
@@ -2466,13 +2564,13 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
 
     private func waitBetweenOperations() throws {
         guard operationIntervalSeconds > 0 else { return }
-        try operationSleeper(operationIntervalSeconds) { self.isCancelled() }
+        try waitAtPassBoundary(seconds: operationIntervalSeconds)
         try checkCancelled()
     }
 
     private func waitBetweenPasses() throws {
         guard passIntervalSeconds > 0 else { return }
-        try operationSleeper(passIntervalSeconds) { self.isCancelled() }
+        try waitAtPassBoundary(seconds: passIntervalSeconds)
         try checkCancelled()
     }
 
@@ -2494,6 +2592,29 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         if isCancelled() {
             throw BenchmarkError.cancelled
         }
+    }
+
+    private func waitAtPassBoundary(seconds: TimeInterval) throws {
+        if isStopRequested() { return }
+        do {
+            try operationSleeper(seconds) { self.isCancelled() || self.isStopRequested() }
+        } catch BenchmarkError.cancelled where isStopRequested() && !isCancelled() {
+            // A graceful stop wakes interval waits without cancelling in-flight I/O.
+        }
+    }
+
+    private func beginRun(stopRequest: BenchmarkStopRequest) {
+        lock.lock()
+        cancelled = false
+        self.stopRequest = stopRequest
+        lock.unlock()
+    }
+
+    private func isStopRequested() -> Bool {
+        lock.lock()
+        let request = stopRequest
+        lock.unlock()
+        return request.isRequested
     }
 
     private func setCancelled(_ value: Bool) {

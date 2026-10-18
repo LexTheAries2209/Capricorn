@@ -2416,6 +2416,7 @@ private final class PreviewBenchmarkRunner: BenchmarkRunning {
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
+        stopRequest: BenchmarkStopRequest,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {

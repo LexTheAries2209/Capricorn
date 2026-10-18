@@ -8331,6 +8331,7 @@ private final class LateCallbackBenchmarkRunner: BenchmarkRunning, @unchecked Se
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
+        stopRequest: BenchmarkStopRequest,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
@@ -8399,6 +8400,7 @@ private final class ImmediateBenchmarkRunner: BenchmarkRunning, @unchecked Senda
         profile: BenchmarkProfile,
         drive: DriveDevice,
         volumePath: String,
+        stopRequest: BenchmarkStopRequest,
         progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         result: @escaping @Sendable (BenchmarkResult) -> Void
     ) async throws -> [BenchmarkResult] {
