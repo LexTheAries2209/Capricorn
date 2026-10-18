@@ -347,7 +347,7 @@ struct ContentView: View {
                         Button {
                             virtualDiskEditor = VirtualDiskEditor(driveID: nil, configuration: nil)
                         } label: {
-                            Label(language.t("Add virtual disk"), systemImage: "plus")
+                            Label(language.t("Add virtual disk (Beta)"), systemImage: "plus")
                         }
                         .buttonStyle(.borderless)
                         .controlSize(.small)
@@ -358,7 +358,7 @@ struct ContentView: View {
                             modifiers: AppCommandShortcut.addVirtualDisk.modifiers
                         )
                         .disabled(isDriveSelectionLocked || virtualDiskEditor != nil)
-                        .help(language.t("Add virtual disk"))
+                        .help(language.t("Add virtual disk (Beta)"))
                     }
 
                     Spacer(minLength: 8)

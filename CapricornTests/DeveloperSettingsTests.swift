@@ -64,7 +64,7 @@ final class DeveloperSettingsTests: XCTestCase {
                     $0.topCandidates(1).first?.string.replacingOccurrences(of: "虛", with: "虚")
                 }
                 XCTAssertEqual(
-                    lines.contains { $0.contains(language.t("Add virtual disk")) },
+                    lines.contains { $0.contains(language.t("Add virtual disk (Beta)")) },
                     developer && virtualDisks,
                     "\(language): \(lines)"
                 )
@@ -128,7 +128,7 @@ final class DeveloperSettingsTests: XCTestCase {
                 }
                 XCTAssertTrue(lines.contains { $0.contains(language.t("Enable developer options")) }, "\(lines)")
                 for title in [
-                    "Enable custom benchmark configuration", "Allow adding virtual disks",
+                    "Enable custom benchmark configuration", "Allow adding virtual disks (Beta)",
                     "Show build number", "Automatically download and install updates"
                 ] {
                     XCTAssertEqual(lines.contains { $0.contains(language.t(title)) }, enabled, "\(lines)")
