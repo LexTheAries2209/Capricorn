@@ -70,7 +70,7 @@ final class DeveloperSettingsTests: XCTestCase {
                     $0.topCandidates(1).first.map { normalized($0.string) }
                 }
                 XCTAssertEqual(
-                    lines.contains { $0.contains(normalized(language.t("Add virtual disk (Beta)"))) },
+                    lines.joined().contains(normalized(language.t("Add virtual disk (Beta)"))),
                     developer && virtualDisks,
                     "\(language): \(lines)"
                 )

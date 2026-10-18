@@ -148,10 +148,11 @@ final class BenchmarkControlsTests: XCTestCase {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["zh-Hans", "en-US"]
+        let titles = ["Benchmark Controls", "Target Location", "Improve Small-Block Test Efficiency"]
+        request.customWords = titles.map { language.t($0) }
         try VNImageRequestHandler(cgImage: image).perform([request])
         let observations = request.results ?? []
         let lines = observations.compactMap { $0.topCandidates(1).first?.string }
-        let titles = ["Benchmark Controls", "Target Location", "Improve Small-Block Test Efficiency"]
         let headings = try titles.map { title in
             try XCTUnwrap(observations.first {
                 $0.topCandidates(1).first?.string.contains(language.t(title)) == true
