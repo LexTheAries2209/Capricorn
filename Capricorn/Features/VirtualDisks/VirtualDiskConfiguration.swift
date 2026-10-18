@@ -75,6 +75,7 @@ struct VirtualDiskPartition: Identifiable, Sendable {
     var capacity = "1"
     var unit: VirtualDiskCapacityUnit = .tb
     var usedCapacity = "0"
+    var usedCapacityUnit: VirtualDiskCapacityUnit = .tb
     var format: VirtualDiskFormat = .apfs
 }
 
@@ -124,7 +125,7 @@ struct VirtualDiskConfiguration: Sendable {
         for partition in partitions {
             guard !partition.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   let size = partition.unit.byteCount(partition.capacity),
-                  let used = partition.unit.byteCount(partition.usedCapacity, allowsZero: true),
+                  let used = partition.usedCapacityUnit.byteCount(partition.usedCapacity, allowsZero: true),
                   used <= size else {
                 return "Each partition needs a name, a positive capacity, and used space within its capacity."
             }
@@ -170,7 +171,7 @@ struct VirtualDiskConfiguration: Sendable {
                 isSystem: interface == .builtIn && index == 0,
                 fileSystemType: partition.format == .unformatted ? nil : partition.format.rawValue,
                 totalCapacityBytes: size,
-                availableCapacityBytes: size - partition.unit.byteCount(partition.usedCapacity, allowsZero: true)!,
+                availableCapacityBytes: size - partition.usedCapacityUnit.byteCount(partition.usedCapacity, allowsZero: true)!,
                 topologyKind: .logicalVolume
             )
         }

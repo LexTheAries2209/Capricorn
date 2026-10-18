@@ -4,6 +4,47 @@ import XCTest
 @testable import Capricorn
 
 final class VirtualDiskTests: XCTestCase {
+    func testUsedCapacityUsesIndependentUnitsAndProducesCorrectAvailableSpace() throws {
+        let cases: [(capacity: String, unit: VirtualDiskCapacityUnit, used: String, usedUnit: VirtualDiskCapacityUnit, bytes: Int64)] = [
+            ("1", .tb, "250", .gb, 250_000_000_000),
+            ("1", .gb, "250", .mb, 250_000_000),
+            ("500", .mb, "0.25", .gb, 250_000_000),
+            ("1000", .gb, "0.5", .tb, 500_000_000_000),
+            ("1", .gb, "1000", .mb, 1_000_000_000)
+        ]
+        for item in cases {
+            var config = VirtualDiskConfiguration()
+            config.partitions[0].capacity = item.capacity
+            config.partitions[0].unit = item.unit
+            config.partitions[0].usedCapacity = item.used
+            config.partitions[0].usedCapacityUnit = item.usedUnit
+            XCTAssertNil(config.validationMessage)
+            let (drive, _) = try config.makeDisk()
+            let size = try XCTUnwrap(item.unit.byteCount(item.capacity))
+            XCTAssertEqual(drive.capacityUsage?.usedBytes, item.bytes)
+            XCTAssertEqual(drive.volumes[0].availableCapacityBytes, size - item.bytes)
+            XCTAssertEqual(config.unallocatedBytes, 1_000_000_000_000 - size)
+        }
+    }
+
+    func testUsedCapacityValidationComparesBytesAcrossUnits() throws {
+        var config = VirtualDiskConfiguration()
+        config.partitions[0].capacity = "1"
+        config.partitions[0].unit = .gb
+        config.partitions[0].usedCapacityUnit = .mb
+        for invalid in ["1000.001", "-1", "NaN", "inf", "", "1e100"] {
+            config.partitions[0].usedCapacity = invalid
+            XCTAssertNotNil(config.validationMessage, invalid)
+            XCTAssertThrowsError(try config.makeDisk(), invalid)
+        }
+        for unit in VirtualDiskCapacityUnit.allCases {
+            config.partitions[0].usedCapacity = "0"
+            config.partitions[0].usedCapacityUnit = unit
+            XCTAssertNil(config.validationMessage)
+            XCTAssertEqual(try config.makeDisk().drive.capacityUsage?.usedBytes, 0)
+        }
+    }
+
     func testDefaultNamesUseFirstAvailableNumberAcrossLanguages() {
         let chinese = AppLanguage.simplifiedChinese
         XCTAssertEqual(VirtualDiskConfiguration.defaults(language: chinese).name, "虚拟硬盘01")
@@ -172,6 +213,7 @@ final class VirtualDiskTests: XCTestCase {
         config.partitions[0].capacity = "600"
         config.partitions[0].unit = .gb
         config.partitions[0].usedCapacity = "250"
+        config.partitions[0].usedCapacityUnit = .gb
         config.temperature = "42.5"
         config.powerOnHours = "123"
         let (drive, snapshot) = try config.makeDisk()
@@ -253,6 +295,7 @@ final class VirtualDiskTests: XCTestCase {
         edited.partitions[0].capacity = "512"
         edited.partitions[0].unit = .gb
         edited.partitions[0].usedCapacity = "123"
+        edited.partitions[0].usedCapacityUnit = .gb
         edited.partitions[0].format = .exfat
         var extra = VirtualDiskPartition()
         extra.name = "Raw"
@@ -298,6 +341,7 @@ final class VirtualDiskTests: XCTestCase {
         XCTAssertEqual(saved.unit, .gb)
         XCTAssertEqual(saved.partitions.map(\.id), edited.partitions.map(\.id))
         XCTAssertEqual(saved.partitions[1].unit, .mb)
+        XCTAssertEqual(saved.partitions[0].usedCapacityUnit, .gb)
         XCTAssertEqual(model.drives[1], second)
         XCTAssertEqual(model.simulatedDiskConfiguration(for: second.id)?.name, original.name)
 

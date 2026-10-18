@@ -83,16 +83,16 @@ struct VirtualDiskConfigurationSheet: View {
                                     }
                                 }
                                 .labelsHidden()
-                                .frame(width: 110)
+                                .fixedSize(horizontal: true, vertical: false)
                             }
                             LabeledContent(language.t("Capacity")) {
                                 VirtualDiskCapacityInput(value: $partition.capacity, unit: $partition.unit)
                             }
-                            LabeledContent("\(language.t("Used Capacity")) (\(partition.unit.rawValue))") {
-                                TextField(language.t("Used Capacity"), text: $partition.usedCapacity)
-                                    .labelsHidden()
-                                    .multilineTextAlignment(.trailing)
-                                    .frame(width: 90)
+                            LabeledContent(language.t("Used Capacity")) {
+                                VirtualDiskCapacityInput(
+                                    value: $partition.usedCapacity, unit: $partition.usedCapacityUnit,
+                                    title: language.t("Used Capacity")
+                                )
                             }
                         }
                         .padding(.vertical, 4)
@@ -188,10 +188,11 @@ struct VirtualDiskConfigurationSheet: View {
 private struct VirtualDiskCapacityInput: View {
     @Binding var value: String
     @Binding var unit: VirtualDiskCapacityUnit
+    var title = "Capacity"
 
     var body: some View {
         HStack(spacing: 6) {
-            TextField("Capacity", text: $value)
+            TextField(title, text: $value)
                 .labelsHidden()
                 .multilineTextAlignment(.trailing)
                 .frame(width: 90)
