@@ -20,7 +20,7 @@ Effective from V2.10.2, released on 2026-10-17.
 
 历史上没有记录全部本地编译次数，因此采用这 41 次可验证的发布构建作为一次性的迁移基线，下一发布构建预留为 **`0042`**。基线序号 `0041` 不代表历史 `v2.10.1` 当时写入了这个值：它实际使用 Version `2.10`、Build `1`。已发布的安装包、标签和历史发布说明保持原样。
 
-已发布的 V2.10.2 使用完整版本 `2.10.2`、Build `0042`，复用迁移时预留的编号。V2.10.3 使用 Build `0043`，V2.10.4 使用 `0044`，V2.10.5 使用 `0045`；2026-10-19 发布的 V2.11.0 使用 Build `0046`，实际发布状态见构建号分配记录；下一次新的发布构建为 `0047`。
+已发布的 V2.10.2 使用完整版本 `2.10.2`、Build `0042`，复用迁移时预留的编号。V2.10.3 使用 Build `0043`，V2.10.4 使用 `0044`，V2.10.5 使用 `0045`；2026-10-19 发布的 V2.11.0 使用 Build `0046`，V2.11.1 使用 Build `0047`，实际发布状态见构建号分配记录；下一次新的发布构建为 `0048`。
 
 原开发编号 `1000` 没有公开发布，不作为累计次数或后续编号的基线。若本地装有该开发构建，应手动替换为新构建，不能期待 Sparkle 将 `0042` 判定为比 `1000` 更新。
 
@@ -46,7 +46,7 @@ gh api --paginate --slurp repos/LexTheAries2209/Capricorn/releases \
 
 `MARKETING_VERSION` / `CFBundleShortVersionString` contains the complete public version, such as `2.11.0`. `CURRENT_PROJECT_VERSION` / `CFBundleVersion` is an independent, globally increasing release-build sequence formatted as four decimal digits: `0030` is followed by `0031`. Build numbers are compared numerically and are never appended to the public version or reset for a new marketing version. The App, appcast `sparkle:version`, and release notes must agree, including leading zeros.
 
-The October 17, 2026 audit found **41 published stable GitHub Releases**, from `v1.0.2` through `v2.10.1`, matching 41 changelog entries and 41 combined release-note files at that time. This verified release history provides the migration baseline; the complete count of past local compilations is unavailable. **V2.10.2 uses Build `0042`, V2.10.3 uses `0043`, V2.10.4 uses `0044`, V2.10.5 uses `0045`, V2.11.0 was published on October 19, 2026 with `0046`, and the next new release build is `0047`.** The ledger records publication status. Debug builds, tests, and repeated validation of the same candidate do not automatically allocate another number.
+The October 17, 2026 audit found **41 published stable GitHub Releases**, from `v1.0.2` through `v2.10.1`, matching 41 changelog entries and 41 combined release-note files at that time. This verified release history provides the migration baseline; the complete count of past local compilations is unavailable. **V2.10.2 uses Build `0042`, V2.10.3 uses `0043`, V2.10.4 uses `0044`, V2.10.5 uses `0045`, V2.11.0 uses `0046`, V2.11.1 was published on October 19, 2026 with `0047`, and the next new release build is `0048`.** The ledger records publication status. Debug builds, tests, and repeated validation of the same candidate do not automatically allocate another number.
 
 Historical ordinal 41 is not a claim that `v2.10.1` shipped with Build `0041`; its actual metadata was Version `2.10`, Build `1`. Existing releases and historical metadata are preserved. The allocation ledger records the actual publication status of Version `2.10.2`, Build `0042`. The unpublished development value `1000` is excluded from the release baseline; installations using it need manual replacement.
 
