@@ -74,8 +74,9 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
             developerOptionsEnabled = scenario.hasPrefix("developer-auto") && scenario != "developer-auto-disabled"
             automaticUpdatesEnabled = scenario.hasPrefix("developer-auto")
             let usesLaunchCheck = [
-                "manual-only", "launch-checks", "launch-disabled", "launch-conflict", "launch-timeout",
-                "developer-auto", "developer-auto-disabled", "developer-auto-conflict"
+                "manual-only", "launch-checks", "launch-disabled", "launch-conflict",
+                "launch-refresh-during-check", "launch-timeout",
+                "developer-auto", "developer-auto-disabled", "developer-auto-conflict", "developer-auto-download-conflict"
             ].contains(scenario)
             let defaults = UserDefaults.standard
             if scenario == "launch-checks" {
@@ -92,7 +93,7 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                 defaults.set(scenario == "manual-only", forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads)
             }
             if ["conflict", "launch-conflict", "developer-auto-conflict"].contains(scenario) {
-                conflicts = [.benchmark]
+                conflicts = scenario == "launch-conflict" ? [.refresh] : [.benchmark]
             }
             let safety = AppUpdateSafetyGate(
                 conflicts: { [weak self] in self?.conflicts ?? [.diskCommand] },
@@ -121,6 +122,12 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                 launchCheckStartedAt = ProcessInfo.processInfo.systemUptime
                 owner.applicationDidLaunch()
                 owner.applicationDidLaunch() // Repeated scene tasks must not duplicate a check.
+                if scenario == "launch-refresh-during-check" {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                        self?.conflicts = [.refresh]
+                        owner.conflictsDidChange()
+                    }
+                }
                 if scenario == "launch-disabled" {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                         self?.finish(["result": "disabled", "enabledBeforeLaunch": enabledBeforeLaunch, "started": owner.isStarted])
@@ -129,11 +136,25 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                 timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
                     MainActor.assumeIsolated {
                         guard let self, let owner = self.owner else { return }
-                        if ["manual-only", "developer-auto-disabled"].contains(self.scenario),
+                        if self.scenario == "developer-auto-download-conflict", owner.state == .downloading {
+                            self.conflicts = [.refresh]
+                            owner.conflictsDidChange()
+                            return
+                        }
+                        if ["manual-only", "developer-auto-disabled", "launch-conflict",
+                            "launch-refresh-during-check", "developer-auto-conflict"].contains(self.scenario),
                            case .available = owner.state,
                            owner.canCheckForUpdates {
                             let now = ProcessInfo.processInfo.systemUptime
-                            if self.availableSince == nil { self.availableSince = now }
+                            if self.availableSince == nil {
+                                self.availableSince = now
+                                if self.scenario == "developer-auto-conflict" {
+                                    // Completing tasks must not silently retry the deferred download.
+                                    self.conflicts = []
+                                    owner.conflictsDidChange()
+                                    owner.applicationDidLaunch()
+                                }
+                            }
                             if now - self.availableSince! >= 2 {
                                 self.finish([
                                     "result": "manual-required", "build": build,
@@ -165,7 +186,6 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             } else {
-                guard owner.authorizeUpdate() else { return }
                 let standard = AutomatedFixtureUserDriver(
                     fail: { [weak self] error in
                         self?.finish(["result": "unexpected", "detail": error])

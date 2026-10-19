@@ -109,7 +109,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     func applicationDidLaunch() {
         guard !hasHandledApplicationLaunch else { return }
         hasHandledApplicationLaunch = true
-        guard allowsStartup, automaticallyChecksForUpdates, authorizeUpdate() else { return }
+        guard allowsStartup, automaticallyChecksForUpdates else { return }
         start()
         guard let updater, isStarted, updater.canCheckForUpdates else { return }
         let checkID = UUID()
@@ -126,7 +126,6 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     }
 
     func checkNow() {
-        guard authorizeUpdate() else { return }
         if let resume = postponedRelaunch {
             guard authorizeUpdate(installing: true) else { return }
             postponedRelaunch = nil
@@ -157,11 +156,22 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
             try safety.check()
             if case .blocked = state { state = .idle }
         } catch {
-            guard userDriver?.cancelDownload != nil || updater?.sessionInProgress == true || hasPendingInstallation else { return }
+            // Metadata checks and release-note windows can coexist with disk tasks.
+            guard userDriver?.cancelDownload != nil || hasPendingInstallation else { return }
             userDriver?.cancelActiveDownload()
-            userDriver?.cancelActiveCheck()
             if let blocked = error as? AppUpdateBlockedError, state == .blocked(blocked.conflicts) { return }
             reportBlocked(error)
+        }
+    }
+
+    func canBeginAutomaticUpdate() -> Bool {
+        // A background check may discover a version while busy without interrupting the user.
+        // Keep the available version and require a new explicit attempt after tasks finish.
+        do {
+            try safety.check()
+            return true
+        } catch {
+            return false
         }
     }
 
@@ -397,14 +407,9 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         lastCheckedAt = updater.lastUpdateCheckDate
     }
 
-    // Launch checks and user-initiated updates share the same task guards.
+    // Version discovery does not terminate the app; guard download and installation separately.
     func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
-        guard authorizeUpdate() else { throw blockedNSError() }
         state = .checking
-    }
-
-    func updater(_ updater: SPUUpdater, shouldProceedWithUpdate updateItem: SUAppcastItem, updateCheck: SPUUpdateCheck) throws {
-        guard authorizeUpdate() else { throw blockedNSError() }
     }
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
@@ -470,11 +475,5 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
 
     func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState) {
         if !handleShowingUpdate { self.state = .available(update.displayVersionString) }
-    }
-
-    private func blockedNSError() -> NSError {
-        NSError(domain: "lex.Capricorn.UpdateBlocked", code: 1, userInfo: [
-            NSLocalizedDescriptionKey: language().t("Update blocked")
-        ])
     }
 }

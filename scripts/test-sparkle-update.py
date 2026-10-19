@@ -28,16 +28,17 @@ def main():
     parser.add_argument("--sparkle-root", required=True, type=pathlib.Path)
     parser.add_argument("--scenario", choices=[
         "update", "manual-only", "cancel-install", "quit-before-install",
-        "developer-auto", "developer-auto-disabled", "developer-auto-conflict",
+        "developer-auto", "developer-auto-disabled", "developer-auto-conflict", "developer-auto-download-conflict",
         "developer-auto-off-during-download", "developer-auto-ready-conflict",
         "conflict", "archive-signature", "feed-signature", "missing-feed",
-        "launch-checks", "launch-disabled", "launch-conflict", "launch-timeout"
+        "launch-checks", "launch-disabled", "launch-conflict", "launch-refresh-during-check", "launch-timeout"
     ], default="update")
     parser.add_argument("--archive-delay", type=float, default=0,
                         help="Pause a fixture ZIP response after its first byte to exercise slow downloads.")
     options = parser.parse_args()
     repo = pathlib.Path(__file__).resolve().parents[1]
     tools = options.sparkle_root.resolve()
+    frameworks = tools if (tools / "Sparkle.framework").is_dir() else tools / "Sparkle.xcframework/macos-arm64_x86_64"
     fixtures = pathlib.Path.home() / "Library/Caches/CapricornUpdateFixtures"
     fixtures.mkdir(parents=True, exist_ok=True)
     root = pathlib.Path(tempfile.mkdtemp(prefix=f"sparkle-{options.scenario}-", dir=fixtures))
@@ -49,7 +50,7 @@ def main():
     executable = root / "CapricornUpdateFixture"
     sources = repo / "Capricorn/Services/Updates"
     run("xcrun", "swiftc", "-swift-version", "6", "-target", "arm64-apple-macos14.0",
-        "-F", str(tools), "-framework", "Sparkle", "-framework", "SwiftData",
+        "-F", str(frameworks), "-framework", "Sparkle", "-framework", "SwiftData",
         "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
         str(repo / "script/fixtures/SparkleUpdateFixture.swift"),
         *(str(sources / name) for name in [
@@ -64,6 +65,8 @@ def main():
     class RecordingHandler(http.server.SimpleHTTPRequestHandler):
         def do_GET(self):
             requests.append(self.path)
+            if options.scenario == "launch-refresh-during-check" and self.path == "/appcast.xml":
+                time.sleep(1)
             if options.scenario == "launch-timeout" and self.path == "/appcast.xml":
                 if requests.count("/appcast.xml") == 1:
                     data = (feed_dir / "appcast.xml").read_bytes()
@@ -111,7 +114,7 @@ def main():
             (contents / "MacOS").mkdir(parents=True)
             (contents / "Frameworks").mkdir()
             shutil.copy2(executable, contents / "MacOS/CapricornUpdateFixture")
-            shutil.copytree(tools / "Sparkle.framework", contents / "Frameworks/Sparkle.framework", symlinks=True)
+            shutil.copytree(frameworks / "Sparkle.framework", contents / "Frameworks/Sparkle.framework", symlinks=True)
             info = {
                 "CFBundleIdentifier": "lex.Capricorn.UpdateFixture",
                 "CFBundleName": "Capricorn Update Fixture",
@@ -208,7 +211,8 @@ def main():
         if options.scenario in ("update", "developer-auto"):
             assert result["result"] == "updated", result
             assert result["historyRetained"] and result["preferencesRetained"], result
-        elif options.scenario in ("manual-only", "developer-auto-disabled"):
+        elif options.scenario in ("manual-only", "developer-auto-disabled", "launch-conflict",
+                                  "launch-refresh-during-check", "developer-auto-conflict"):
             assert result["result"] == "manual-required" and result["build"] == "0041", result
             assert result["legacyDownloadsDisabled"] and not result["preparedInstallation"], result
             assert not any(path.endswith(".zip") for path in requests), requests
@@ -237,12 +241,20 @@ def main():
             assert requests.count("/appcast.xml") == 2, requests
             assert result["build"] == "0041", result
             assert result["requestCancelled"], result
+        elif options.scenario == "developer-auto-download-conflict":
+            assert result["result"] == "blocked" and result["build"] == "0041", result
+            assert "Refresh Disks" in result["detail"], result
+            assert any(path.endswith(".zip") for path in requests), requests
+            time.sleep(1)
+            with (installed / "Contents/Info.plist").open("rb") as stream:
+                assert plistlib.load(stream)["CFBundleVersion"] == "0041"
         else:
             assert result["result"] == "blocked" and result["build"] == "0041", result
-            if options.scenario in ("conflict", "launch-conflict", "developer-auto-conflict", "developer-auto-ready-conflict"):
+            if options.scenario in ("conflict", "developer-auto-ready-conflict"):
                 assert "Benchmark" in result["detail"], result
                 if options.scenario != "developer-auto-ready-conflict":
-                    assert not requests, requests
+                    assert requests.count("/appcast.xml") == 1, requests
+                    assert not any(path.endswith(".zip") for path in requests), requests
             elif options.scenario == "missing-feed":
                 assert result["detail"] == "Unable to download updates. Check your network or Releases.", result
                 assert "could not be reached" not in result["detail"], result

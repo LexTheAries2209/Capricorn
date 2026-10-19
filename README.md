@@ -39,7 +39,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 - 保存、查看和管理 SMART、测速及实时活动历史。
 - 提供装载、卸载、推出、重命名、Finder 定位和占用程序查看等磁盘操作。
 - 在开发者选项中创建、编辑和推出模拟虚拟硬盘，可配置硬盘信息、分区和概览指标；模拟设备仅在当前会话中存在。
-- 支持启动时检查和手动更新；开发者选项可开启默认关闭的自动下载并安装更新，有冲突任务时提示并阻止更新。
+- 支持启动时检查和手动更新，检查版本可与磁盘任务并行；开发者自动下载并安装默认关闭，发现新版时若有冲突则静默保留提示，手动下载及安装仍受任务保护。
 - 支持简体中文和英文界面，首次启动默认简体中文。
 
 ### 外接设备和 SMART 说明
@@ -99,7 +99,7 @@ On first launch, if macOS Gatekeeper shows an internet-download warning, right-c
 - Saves, reviews, and manages SMART, benchmark, and live-activity history.
 - Provides mount, unmount, eject, rename, Finder reveal, and open-file inspection actions.
 - Creates, edits, and ejects simulated virtual disks under Developer Options, with configurable identity, partitions, and overview metrics; simulated devices exist only for the current session.
-- Supports update checks on launch and manual updates, with automatic downloads and installation available under Developer Options and off by default; conflicting tasks block updates with a warning.
+- Supports launch and manual version checks alongside disk tasks. Developer automatic downloads and installation are off by default; discovery while busy quietly retains the available version, while manual downloads and installation remain guarded.
 - Provides Simplified Chinese and English UI text, with Simplified Chinese on first launch.
 
 ### External Devices And SMART Notes

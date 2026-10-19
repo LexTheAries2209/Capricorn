@@ -73,12 +73,13 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
             reply(.skip)
             return
         }
-        guard owner?.authorizeUpdate() == true else {
-            reply(.dismiss)
-            return
-        }
         if owner?.allowsAutomaticUpdateInstallation == true,
            !appcastItem.isInformationOnlyUpdate, !appcastItem.isMajorUpgrade {
+            guard owner?.canBeginAutomaticUpdate() == true else {
+                owner?.transition(to: .available(appcastItem.displayVersionString))
+                reply(.dismiss)
+                return
+            }
             isAutomaticUpdate = true
             reply(.install)
             return
@@ -123,6 +124,11 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     }
 
     func showDownloadInitiated(cancellation: @escaping () -> Void) {
+        // Tasks may start after the download choice but before Sparkle starts its downloader.
+        guard owner?.authorizeUpdate() == true else {
+            cancellation()
+            return
+        }
         expectedLength = 0
         receivedLength = 0
         cancelDownload = cancellation

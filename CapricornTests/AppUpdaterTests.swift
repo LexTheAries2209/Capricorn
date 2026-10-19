@@ -142,23 +142,22 @@ final class AppUpdaterTests: XCTestCase {
         }
     }
 
-    func testLaunchCheckWithConflictWarnsOnlyOnceAndDoesNotRetryWhenTasksFinish() throws {
+    func testLaunchCheckWithConflictDoesNotPresentTaskWarning() throws {
         let suite = "CapricornTests.updateLaunchConflict.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(true, forKey: AppUpdater.PreferenceKey.checksOnLaunch)
-        var conflicts: [AppUpdateConflict] = [.benchmark]
-        var alerts = 0
+        var alerts: [String] = []
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { conflicts }), language: { .english },
-            allowsStartup: true, defaults: defaults, presentAlert: { _, _ in alerts += 1 }
+            safety: AppUpdateSafetyGate(conflicts: { [.refresh] }), language: { .english },
+            // An invalid host proves launch proceeds to configuration without making a network request.
+            hostBundle: Bundle(for: NSObject.self), allowsStartup: true, defaults: defaults,
+            presentAlert: { title, _ in alerts.append(title) }
         )
         updater.applicationDidLaunch()
         updater.applicationDidLaunch()
-        XCTAssertEqual(alerts, 1)
-        XCTAssertEqual(updater.state, .blocked([.benchmark]))
-        conflicts = []
-        updater.applicationDidLaunch()
+        XCTAssertTrue(alerts.isEmpty)
+        XCTAssertEqual(updater.state, .failed(.configuration))
         XCTAssertFalse(updater.isStarted)
     }
 
@@ -169,14 +168,15 @@ final class AppUpdaterTests: XCTestCase {
         var alerts = 0
         let updater = AppUpdater(
             safety: AppUpdateSafetyGate(conflicts: { [.workload] }), language: { .english },
-            allowsStartup: true, defaults: defaults, presentAlert: { _, _ in alerts += 1 }
+            hostBundle: Bundle(for: NSObject.self), allowsStartup: true, defaults: defaults,
+            presentAlert: { _, _ in alerts += 1 }
         )
         updater.applicationDidLaunch()
         XCTAssertFalse(updater.isStarted)
         XCTAssertEqual(alerts, 0)
         updater.checkNow()
         XCTAssertEqual(alerts, 1)
-        XCTAssertEqual(updater.state, .blocked([.workload]))
+        XCTAssertEqual(updater.state, .failed(.configuration))
     }
 
     func testResetAllSettingsClearsLaunchCheckAndDownloadChoices() throws {
@@ -212,7 +212,7 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertEqual(local.feedURL.host, "127.0.0.1")
     }
 
-    func testManualCheckPresentsLocalizedConflictBeforeStartingUpdater() {
+    func testManualCheckDoesNotPresentTaskConflictBeforeStartingUpdater() {
         var alerts: [String] = []
         let updater = AppUpdater(
             safety: AppUpdateSafetyGate(conflicts: { [.benchmark, .selfTest] }),
@@ -221,10 +221,89 @@ final class AppUpdaterTests: XCTestCase {
         )
         updater.checkNow()
         XCTAssertFalse(updater.isStarted)
-        XCTAssertEqual(updater.state, .blocked([.benchmark, .selfTest]))
+        XCTAssertEqual(updater.state, .failed(.configuration))
+        XCTAssertEqual(alerts.count, 1)
+        XCTAssertFalse(alerts[0].contains("更新已阻止"))
+        XCTAssertFalse(alerts[0].contains("SMART 自检"))
+    }
+
+    func testCheckDelegateAllowsEveryDiskConflictWithoutReservingOrSaving() throws {
+        var alerts = 0
+        var saves = 0
+        let gate = AppUpdateSafetyGate(
+            conflicts: { AppUpdateConflict.allCases.filter { $0 != .installation } },
+            save: { saves += 1 }
+        )
+        let updater = AppUpdater(
+            safety: gate, language: { .english }, allowsStartup: false,
+            presentAlert: { _, _ in alerts += 1 }
+        )
+        let standard = RecordingUpdateUserDriver()
+        let sparkler = SPUUpdater(
+            hostBundle: .main, applicationBundle: .main, userDriver: standard, delegate: nil
+        )
+        try updater.updater(sparkler, mayPerform: .updates)
+        updater.conflictsDidChange()
+        XCTAssertEqual(updater.state, .checking)
+        XCTAssertEqual(alerts, 0)
+        XCTAssertEqual(saves, 0)
+        XCTAssertFalse(gate.isReserved)
+    }
+
+    func testAutomaticDownloadConflictStaysAvailableWithoutWarningOrRetry() {
+        var conflicts: [AppUpdateConflict] = [.refresh, .benchmark]
+        var alerts = 0
+        let gate = AppUpdateSafetyGate(conflicts: { conflicts })
+        let updater = AppUpdater(
+            safety: gate, language: { .english }, allowsStartup: false,
+            presentAlert: { _, _ in alerts += 1 }
+        )
+        updater.transition(to: .available("9.9"))
+        XCTAssertFalse(updater.canBeginAutomaticUpdate())
+        XCTAssertEqual(updater.state, .available("9.9"))
+        XCTAssertEqual(alerts, 0)
+        conflicts = []
+        updater.conflictsDidChange()
+        XCTAssertEqual(updater.state, .available("9.9"))
+        XCTAssertFalse(updater.isStarted)
+        XCTAssertFalse(gate.isReserved)
+        XCTAssertTrue(updater.canBeginAutomaticUpdate())
+    }
+
+    func testManualDownloadStillPresentsLocalizedTaskConflict() {
+        var alerts: [String] = []
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { [.refresh, .firstAid] }),
+            language: { .simplifiedChinese }, allowsStartup: false,
+            presentAlert: { title, body in alerts.append(title + body) }
+        )
+        XCTAssertFalse(updater.authorizeUpdate())
+        XCTAssertEqual(updater.state, .blocked([.refresh, .firstAid]))
         XCTAssertEqual(alerts.count, 1)
         XCTAssertTrue(alerts[0].contains("更新已阻止"))
-        XCTAssertTrue(alerts[0].contains("SMART 自检"))
+        XCTAssertTrue(alerts[0].contains("刷新硬盘"))
+        XCTAssertFalse(updater.safety.isReserved)
+    }
+
+    func testDownloadStartRechecksTasksThatStartedAfterConfirmation() {
+        var conflicts: [AppUpdateConflict] = []
+        var alerts = 0
+        let updater = AppUpdater(
+            safety: AppUpdateSafetyGate(conflicts: { conflicts }),
+            language: { .english }, allowsStartup: false,
+            presentAlert: { _, _ in alerts += 1 }
+        )
+        let standard = RecordingUpdateUserDriver()
+        let driver = GuardedUpdateUserDriver(standard: standard, owner: updater)
+        XCTAssertTrue(updater.authorizeUpdate())
+        conflicts = [.refresh]
+        var cancellations = 0
+        driver.showDownloadInitiated { cancellations += 1 }
+        XCTAssertEqual(cancellations, 1)
+        XCTAssertEqual(alerts, 1)
+        XCTAssertEqual(updater.state, .blocked([.refresh]))
+        XCTAssertEqual(standard.downloadWindows, 0)
+        XCTAssertNil(driver.cancelDownload)
     }
 
     func testOrdinaryQuitCancelsPreparedUpdateAndWaitsWithoutReserving() {
@@ -535,6 +614,7 @@ private final class RecordingUpdateUserDriver: NSObject, SPUUserDriver {
     var readyReply: ((SPUUserUpdateChoice) -> Void)?
     var checkingWindows = 0
     var resultWindows = 0
+    var downloadWindows = 0
     func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) {}
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) { checkingWindows += 1 }
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {}
@@ -542,7 +622,7 @@ private final class RecordingUpdateUserDriver: NSObject, SPUUserDriver {
     func showUpdateReleaseNotesFailedToDownloadWithError(_ error: Error) {}
     func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) { resultWindows += 1 }
     func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {}
-    func showDownloadInitiated(cancellation: @escaping () -> Void) {}
+    func showDownloadInitiated(cancellation: @escaping () -> Void) { downloadWindows += 1 }
     func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) {}
     func showDownloadDidReceiveData(ofLength length: UInt64) {}
     func showDownloadDidStartExtractingUpdate() {}
