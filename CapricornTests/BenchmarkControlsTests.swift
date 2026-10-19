@@ -269,9 +269,12 @@ final class BenchmarkControlsTests: XCTestCase {
         try VNImageRequestHandler(cgImage: image).perform([request])
         let observations = request.results ?? []
         let lines = observations.compactMap { $0.topCandidates(1).first?.string }
+        // Vision can read the lowercase i as l in this heading.
         let headings = try titles.map { title in
             try XCTUnwrap(observations.first {
-                $0.topCandidates(1).first?.string.contains(language.t(title)) == true
+                $0.topCandidates(1).first?.string
+                    .replacingOccurrences(of: "Efficlency", with: "Efficiency")
+                    .contains(language.t(title)) == true
             }, "Missing \(title): \(lines)")
         }
         XCTAssertLessThan(headings[0].boundingBox.midX, headings[1].boundingBox.midX)
