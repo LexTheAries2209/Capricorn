@@ -1453,7 +1453,9 @@ final class AppModel {
                 switch event {
                 case let .progress(progress):
                     if self.liveActivitySession.workloadState == .stopping && progress.phase != .cleaningUp { continue }
-                    self.liveActivityWorkloadProgress = progress
+                    self.liveActivityWorkloadProgress = self.liveActivitySession.workloadState == .stopping
+                        ? progress.preservingStopContext(from: self.liveActivityWorkloadProgress)
+                        : progress
                 }
             }
         }
@@ -1513,6 +1515,13 @@ final class AppModel {
                     guard self.activeLiveActivityWorkloadRunID == runID else { return }
                     let error = error as NSError
                     self.liveActivityWorkloadError = error.localizedDescription
+                    if var failed = self.liveActivityWorkloadProgress {
+                        failed.phase = .failed
+                        failed.message = "Workload failed"
+                        failed.stopRequestedAt = nil
+                        failed.stopPhase = nil
+                        self.liveActivityWorkloadProgress = failed
+                    }
                     self.isLiveActivityWorkloadRunning = false
                     self.liveActivityWorkloadTask = nil
                     self.liveActivityWorkloadEventTask = nil
@@ -1527,16 +1536,7 @@ final class AppModel {
         guard liveActivitySession.workloadState == .running else { return }
         liveActivitySession.workloadState = .stopping
         CapricornLog.workload.info("Live workload cancellation requested")
-        liveActivityWorkloadProgress = liveActivityWorkloadProgress.map {
-            DiskActivityWorkloadProgress(
-                operation: $0.operation,
-                phase: .stopped,
-                loopIndex: $0.loopIndex,
-                completedBytes: $0.completedBytes,
-                totalBytes: $0.totalBytes,
-                message: "Stopping workload"
-            )
-        }
+        liveActivityWorkloadProgress = liveActivityWorkloadProgress?.requestingStop(at: Date())
         liveActivityWorkloadRunner.cancel()
         liveActivityWorkloadTask?.cancel()
     }

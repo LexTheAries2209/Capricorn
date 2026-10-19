@@ -55,6 +55,7 @@ enum DiskActivityWorkloadPhase: String, Codable, Sendable {
     case flushing
     case cleaningUp
     case complete
+    case stopping
     case stopped
     case failed
 }
@@ -68,14 +69,46 @@ struct DiskActivityWorkloadProgress: Equatable, Sendable {
     var message: String
     var queueStatus: AIOTransferStatus? = nil
     var failedPhaseMessage: String? = nil
+    var stopRequestedAt: Date? = nil
+    var stopPhase: DiskActivityWorkloadPhase? = nil
 
     var hasMeasurableByteProgress: Bool {
-        ![.starting, .sizingFile, .cleaningUp].contains(phase)
+        ![.starting, .sizingFile, .cleaningUp, .stopping].contains(phase)
+    }
+
+    func requestingStop(at date: Date) -> Self {
+        var progress = self
+        progress.stopRequestedAt = stopRequestedAt ?? date
+        progress.stopPhase = stopPhase ?? phase
+        progress.phase = .stopping
+        progress.message = "Stopping workload"
+        return progress
+    }
+
+    func preservingStopContext(from previous: Self?) -> Self {
+        var progress = self
+        progress.stopRequestedAt = previous?.stopRequestedAt
+        progress.stopPhase = previous?.stopPhase
+        return progress
     }
 
     var fraction: Double {
         guard totalBytes > 0 else { return 0 }
         return min(1, max(0, Double(completedBytes) / Double(totalBytes)))
+    }
+}
+
+struct DiskActivityWorkloadQueueSummary {
+    private var paths: [Bool: AIOTransferStatus] = [:]
+
+    mutating func update(_ status: AIOTransferStatus, writing: Bool) -> AIOTransferStatus {
+        paths[writing] = status
+        var summary = status
+        // Mixed reads and writes share one reporter; keep both paths in the pending count.
+        summary.active = paths.values.reduce(0) { $0 + $1.active }
+        summary.draining = paths.values.contains { $0.draining }
+        summary.finished = paths.values.allSatisfy { $0.finished }
+        return summary
     }
 }
 
@@ -484,7 +517,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
             fill: { buffer, count in memset(buffer, 0, count) },
             completed: { bytes, _ in reporter.add(Int64(bytes)) },
             statusChanged: { status in
-                reporter.update(status)
+                reporter.update(status, writing: shouldWrite)
                 if status.finished {
                     CapricornLog.workload.info("AIO workload \(status.detail, privacy: .public)")
                 }
@@ -581,6 +614,7 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
         private var completedBytes: Int64 = 0
         private var lastReportNanoseconds = DispatchTime.now().uptimeNanoseconds
         private var queueStatus: AIOTransferStatus?
+        private var queueSummary = DiskActivityWorkloadQueueSummary()
 
         init(totalBytes: Int64, minimumIntervalNanoseconds: UInt64 = 250_000_000, onReport: @escaping @Sendable (Int64, AIOTransferStatus?) -> Void) {
             self.totalBytes = max(0, totalBytes)
@@ -610,16 +644,17 @@ final class NativeDiskActivityWorkloadRunner: DiskActivityWorkloadRunning, @unch
             }
         }
 
-        func update(_ status: AIOTransferStatus) {
+        func update(_ status: AIOTransferStatus, writing: Bool) {
             lock.lock()
             defer { lock.unlock() }
-            if queueStatus?.draining == true && !status.draining { return }
-            let changedPhase = status.draining && queueStatus?.draining != true
-            queueStatus = status
+            let summary = queueSummary.update(status, writing: writing)
+            let changedPhase = summary.draining && queueStatus?.draining != true
+            let changedPending = summary.draining && queueStatus?.active != summary.active
+            queueStatus = summary
             let now = DispatchTime.now().uptimeNanoseconds
-            if changedPhase || status.finished || now - lastReportNanoseconds >= minimumIntervalNanoseconds {
+            if changedPhase || changedPending || summary.finished || now - lastReportNanoseconds >= minimumIntervalNanoseconds {
                 lastReportNanoseconds = now
-                onReport(completedBytes, status)
+                onReport(completedBytes, summary)
             }
         }
 

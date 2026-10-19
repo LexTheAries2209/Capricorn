@@ -343,9 +343,19 @@ struct DiskActivityView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        if let queueStatus = progress.queueStatus {
-                            Text(language.aioQueueDescription(queueStatus))
-                                .font(.caption.monospacedDigit())
+                        if let stopRequestedAt = progress.stopRequestedAt {
+                            TimelineView(.periodic(from: stopRequestedAt, by: 1)) { context in
+                                Text(language.activityWorkloadStopElapsed(progress, now: context.date))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let pending = language.activityWorkloadPendingIO(progress) {
+                                Text(pending)
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text(language.activityWorkloadStopExplanation(progress))
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
