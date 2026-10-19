@@ -329,11 +329,13 @@ struct DiskActivityView: View {
 
                 if isShowingCurrentSession, let progress = viewModel.liveActivityWorkloadProgress {
                     VStack(alignment: .leading, spacing: 6) {
-                        if progress.hasMeasurableByteProgress {
-                            ProgressView(value: progress.fraction)
-                        } else {
-                            ProgressView()
-                                .progressViewStyle(.linear)
+                        if progress.phase != .stopped {
+                            if progress.hasMeasurableByteProgress {
+                                ProgressView(value: progress.fraction)
+                            } else {
+                                ProgressView()
+                                    .progressViewStyle(.linear)
+                            }
                         }
                         Text(language.activityWorkloadProgressText(progress))
                             .font(.caption)

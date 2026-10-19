@@ -4,6 +4,9 @@ import SwiftUI
 
 extension AppLanguage {
     func activityWorkloadProgressText(_ progress: DiskActivityWorkloadProgress) -> String {
+        if progress.phase == .stopped {
+            return statusMessage("Workload stopped")
+        }
         var parts = [
             "\(t("Loop")) \(progress.loopIndex)",
             statusMessage(progress.message)

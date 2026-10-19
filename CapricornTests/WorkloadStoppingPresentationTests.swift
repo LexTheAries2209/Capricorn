@@ -99,6 +99,9 @@ final class WorkloadStoppingPresentationTests: XCTestCase {
         XCTAssertTrue(finished)
         XCTAssertEqual(model.liveActivityWorkloadProgress?.phase, .stopped)
         XCTAssertNil(model.liveActivityWorkloadProgress?.stopRequestedAt)
+        let stoppedProgress = try XCTUnwrap(model.liveActivityWorkloadProgress)
+        XCTAssertEqual(AppLanguage.simplifiedChinese.activityWorkloadProgressText(stoppedProgress), "负载已停止")
+        XCTAssertEqual(AppLanguage.english.activityWorkloadProgressText(stoppedProgress), "Workload stopped")
         model.stopLiveActivityMonitoring()
     }
 
