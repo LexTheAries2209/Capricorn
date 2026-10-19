@@ -16,7 +16,7 @@ struct DiskActivityView: View {
     @AppStorage("diskActivityWorkloadTargetsByDrive") private var workloadTargetPreferencesJSON = ""
     @AppStorage("diskActivityWorkloadTargetFolder") private var legacyWorkloadTargetFolderPath = ""
     @AppStorage("diskActivityWorkloadOperation") private var workloadOperationRaw = DiskActivityWorkloadOperation.write.rawValue
-    @AppStorage("diskActivityWorkloadFileSize") private var workloadFileSizeRaw = DiskActivityWorkloadFileSize.gib32.rawValue
+    @AppStorage(DiskActivityWorkloadSizePreferences.defaultsKey) private var workloadSizePreferencesJSON = ""
     @AppStorage("diskActivityWorkloadLoopEnabled") private var workloadLoopEnabled = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
@@ -64,7 +64,22 @@ struct DiskActivityView: View {
     }
 
     private var workloadFileSizeOption: DiskActivityWorkloadFileSize {
-        DiskActivityWorkloadFileSize(rawValue: workloadFileSizeRaw) ?? .gib32
+        DiskActivityWorkloadSizePreferences.decode(workloadSizePreferencesJSON).availableSelection(
+            for: drive,
+            operation: workloadOperation,
+            availableCapacity: workloadTargetFolderIsUsable ? workloadTargetAvailableCapacity : nil
+        )
+    }
+
+    private var workloadFileSizeBinding: Binding<DiskActivityWorkloadFileSize> {
+        Binding(
+            get: { workloadFileSizeOption },
+            set: { selection in
+                var preferences = DiskActivityWorkloadSizePreferences.decode(workloadSizePreferencesJSON)
+                preferences.setSelection(selection, for: drive)
+                workloadSizePreferencesJSON = preferences.encoded()
+            }
+        )
     }
 
     private var workloadTargetFolderURL: URL? {
@@ -141,18 +156,15 @@ struct DiskActivityView: View {
         }
         .onAppear {
             prepareWorkloadTarget()
-            adjustWorkloadFileSizeForTarget()
         }
         .onChange(of: workloadTargetFolderPath) { _, _ in
             workloadTargetSelectionError = nil
-            adjustWorkloadFileSizeForTarget()
         }
         .onChange(of: drive.id) { _, _ in
             saveMessage = nil
             workloadTargetSelectionError = nil
             workloadStartRequest = nil
             prepareWorkloadTarget()
-            adjustWorkloadFileSizeForTarget()
         }
         .sheet(item: $workloadStartRequest) { request in
             BenchmarkConfirmationSheet(
@@ -180,7 +192,6 @@ struct DiskActivityView: View {
                 viewModel.liveActivityWorkloadError = nil
             }
             refreshWorkloadTargetSnapshot()
-            adjustWorkloadFileSizeForTarget()
         }
     }
 
@@ -423,10 +434,10 @@ struct DiskActivityView: View {
             Text(language.t("Large File Size"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            Picker("", selection: $workloadFileSizeRaw) {
+            Picker("", selection: workloadFileSizeBinding) {
                 ForEach(DiskActivityWorkloadFileSize.allCases) { option in
                     Text(workloadFileSizeTitle(option))
-                        .tag(option.rawValue)
+                        .tag(option)
                         .disabled(!isWorkloadFileSizeSelectable(option))
                 }
             }
@@ -640,7 +651,6 @@ struct DiskActivityView: View {
             viewModel.liveActivityWorkloadError = nil
         }
         refreshWorkloadTargetSnapshot()
-        adjustWorkloadFileSizeForTarget()
     }
 
     private func prepareWorkloadTarget() {
@@ -750,17 +760,6 @@ struct DiskActivityView: View {
             drive: drive,
             interval: request.interval
         )
-    }
-
-    private func adjustWorkloadFileSizeForTarget() {
-        guard workloadTargetFolderIsUsable else { return }
-        guard !isWorkloadFileSizeSelectable(workloadFileSizeOption) else { return }
-        if let fallback = DiskActivityWorkloadStorageValidator.largestAvailableFileSizeOption(
-            operation: workloadOperation,
-            availableCapacity: workloadTargetAvailableCapacity
-        ) {
-            workloadFileSizeRaw = fallback.rawValue
-        }
     }
 
     private var metricGrid: some View {
