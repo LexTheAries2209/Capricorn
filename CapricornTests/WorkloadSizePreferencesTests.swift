@@ -8,6 +8,12 @@ final class WorkloadSizePreferencesTests: XCTestCase {
             totalBytes: DiskActivityWorkloadFileSize.gib128.fixedBytes!, message: "Sizing workload file"
         )
         XCTAssertFalse(progress.hasMeasurableByteProgress)
+        XCTAssertTrue(AppLanguage.simplifiedChinese.activityWorkloadProgressText(progress).contains("目标大小"))
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t("Target size"), "目标大小")
+        XCTAssertEqual(
+            AppLanguage.simplifiedChinese.t("Preparing the temporary file before transfer. Disk activity may occur, but byte progress is unavailable during this step."),
+            "正在准备临时文件；此阶段可能产生磁盘读写，暂不提供已完成字节进度。"
+        )
         for language in AppLanguage.allCases {
             let text = language.activityWorkloadProgressText(progress)
             XCTAssertFalse(text.contains(" / "))
