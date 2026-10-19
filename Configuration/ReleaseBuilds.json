@@ -41,6 +41,12 @@
       "status": "published",
       "version": "2.10.5",
       "tag": "v2.10.5"
+    },
+    {
+      "build": "0046",
+      "status": "reserved",
+      "version": "2.11.0",
+      "tag": "v2.11.0"
     }
   ]
 }

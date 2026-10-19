@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for disk inspection, SMART health checks, sto
 
 Capricorn 是一个本地 macOS 工具，用于磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.10.5`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.11.0`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v2.10.5.md](docs/releases/v2.10.5.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v2.11.0.md](docs/releases/v2.11.0.md)
 
 Complete release log / 完整更新记录：[CHANGELOG.md](CHANGELOG.md)
 
@@ -24,7 +24,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 
 ### 下载和安装
 
-前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.10.5-macOS.zip`，解压后将 `Capricorn.app` 放到 `Applications` 或其他本地工具目录。V2.10.1 及更早版本需手动安装一次，之后可使用应用内更新。
+前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.11.0-macOS.zip`，解压后将 `Capricorn.app` 放到 `Applications` 或其他本地工具目录。V2.10.1 及更早版本需手动安装一次，之后可使用应用内更新。
 
 首次打开时，如果 macOS Gatekeeper 显示互联网下载提示，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
@@ -50,7 +50,7 @@ Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，�
 
 ### 测速和实时活动
 
-测速默认提供默认、快速、SSD、HDD 四种配置；自定义仍需同时开启设置中的“开启开发者选项”和“开启测速中的自定义配置”。异步测速的 T 对应独立工作线程，Q 对应每线程目标队列深度；所有配置限制 Q × T ≤ 16，并共享系统 AIO 额度。快速配置仅测顺序 1 MiB Q1T1 与随机 4 KiB Q1T1：分别传输 128 MiB、1 MiB，预热后测量 1 轮，不额外等待。它用于检查基本读写表现，不代替完整介质或数据完整性检查。
+测速提供默认、快速、SSD、HDD 四种配置；开启开发者选项及自定义测速开关后，可编辑测试项目和联动的 Q/T 参数，Q × T 不超过 16。快速配置通过两个代表性项目检查基本读写表现，不代替完整介质检查。大文件负载按硬盘记忆上次选择的大小，默认 128 GiB。
 
 测速只在用户选择的文件夹中创建临时测试文件。写入、混合和大文件负载可能对存储设备产生压力，请确认目标位置并保留重要数据备份。
 
@@ -64,7 +64,7 @@ Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，�
 
 ### 构建和测试
 
-自 V2.10.2 起采用“完整版本号 + 独立四位构建号”，本版为版本 `2.10.5`、Build `0045`。构建号根据发布构建记录全局递增，不再拼成版本号的第三段。详见[版本规则](docs/versioning.md)。
+自 V2.10.2 起采用“完整版本号 + 独立四位构建号”，本版为版本 `2.11.0`、Build `0046`。构建号根据发布构建记录全局递增，不再拼成版本号的第三段。详见[版本规则](docs/versioning.md)。
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build
@@ -84,7 +84,7 @@ Capricorn is for macOS users who need to inspect drive status, review external d
 
 ### Download And Install
 
-Download `Capricorn-v2.10.5-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn.app` to `Applications` or another local tools folder. V2.10.1 and earlier require one manual installation before in-app updates are available.
+Download `Capricorn-v2.11.0-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn.app` to `Applications` or another local tools folder. V2.10.1 and earlier require one manual installation before in-app updates are available.
 
 On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
@@ -110,7 +110,7 @@ Capricorn bundles smartmontools 7.5. It does not automatically install or remove
 
 ### Benchmark And Live Activity
 
-Default, Quick, SSD, and HDD benchmark profiles are available by default. Custom still requires both Developer Options and Enable custom benchmark configuration in Settings. Async benchmarks use T independent worker threads with a target queue depth of Q per worker. Every configuration keeps Q × T ≤ 16 and shares the system AIO allowance. Quick tests sequential 1 MiB Q1T1 and random 4 KiB Q1T1, transferring 128 MiB and 1 MiB respectively, with one measured pass after warm-up and no added pauses. It checks basic read/write behavior and does not replace a complete media or data-integrity check.
+Default, Quick, SSD, and HDD profiles are available. Enable both Developer Options and custom benchmarks to edit test groups and linked Q/T settings, with Q × T limited to 16. Quick uses two representative groups to check basic read/write behavior and does not replace a complete media check. Large-file workloads remember the last size for each drive and default to 128 GiB.
 
 Benchmarks create temporary files only inside the folder selected by the user. Write, mixed, and large-file workloads can stress storage devices; verify the target and keep important backups.
 
@@ -124,7 +124,7 @@ Network volumes can be benchmarked as mounted folders, but they do not provide a
 
 ### Build And Test
 
-Starting with V2.10.2, the complete version and four-digit build are separate: this release is Version `2.10.5`, Build `0045`. Build increases globally with release-build allocations and is no longer the third version component. See the [version rules](docs/versioning.md).
+Starting with V2.10.2, the complete version and four-digit build are separate: this release is Version `2.11.0`, Build `0046`. Build increases globally with release-build allocations and is no longer the third version component. See the [version rules](docs/versioning.md).
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build

@@ -8,6 +8,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V2.11.0 - 2026-10-19
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.11.0) | [Release Notes / 发布说明](docs/releases/v2.11.0.md)
+
+### 中文
+
+- 测速配置更新为默认、快速、SSD、HDD 和开发者自定义；异步测速采用真实工作线程，自定义 Q/T 联动且乘积不超过 16。
+- 改善测速与大文件负载的异步读写稳定性，停止时安全等待已提交的 I/O 完成。
+- 大文件负载默认 128 GiB，并按硬盘记忆大小；准备与停止等待说明更清晰，停止后仅显示已停止。
+
+### English
+
+- Adds Default, Quick, SSD, HDD, and developer Custom profiles, with real asynchronous worker threads and linked Q/T choices capped at a product of 16.
+- Improves asynchronous I/O reliability in benchmarks and large-file workloads, safely waiting for submitted I/O when stopping.
+- Defaults large-file workloads to 128 GiB and remembers the size per drive, with clearer preparation and stop-wait messages and a simple stopped status.
+
 ## V2.10.5 - 2026-10-18
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.10.5) | [Release Notes / 发布说明](docs/releases/v2.10.5.md)
