@@ -50,7 +50,7 @@ Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，�
 
 ### 测速和实时活动
 
-测速提供默认、快速、SSD、HDD、自定义五种配置，自定义可直接选择。异步测速的 T 对应独立工作线程，Q 对应每线程目标队列深度；所有配置限制 Q × T ≤ 16，并共享系统 AIO 额度。快速配置仅测顺序 1 MiB Q1T1 与随机 4 KiB Q1T1：分别传输 128 MiB、1 MiB，预热后测量 1 轮，不额外等待。它用于检查基本读写表现，不代替完整介质或数据完整性检查。
+测速默认提供默认、快速、SSD、HDD 四种配置；自定义仍需同时开启设置中的“开启开发者选项”和“开启测速中的自定义配置”。异步测速的 T 对应独立工作线程，Q 对应每线程目标队列深度；所有配置限制 Q × T ≤ 16，并共享系统 AIO 额度。快速配置仅测顺序 1 MiB Q1T1 与随机 4 KiB Q1T1：分别传输 128 MiB、1 MiB，预热后测量 1 轮，不额外等待。它用于检查基本读写表现，不代替完整介质或数据完整性检查。
 
 测速只在用户选择的文件夹中创建临时测试文件。写入、混合和大文件负载可能对存储设备产生压力，请确认目标位置并保留重要数据备份。
 
@@ -110,7 +110,7 @@ Capricorn bundles smartmontools 7.5. It does not automatically install or remove
 
 ### Benchmark And Live Activity
 
-Benchmark profiles are Default, Quick, SSD, HDD, and Custom; Custom is directly available. Async benchmarks use T independent worker threads with a target queue depth of Q per worker. Every configuration keeps Q × T ≤ 16 and shares the system AIO allowance. Quick tests sequential 1 MiB Q1T1 and random 4 KiB Q1T1, transferring 128 MiB and 1 MiB respectively, with one measured pass after warm-up and no added pauses. It checks basic read/write behavior and does not replace a complete media or data-integrity check.
+Default, Quick, SSD, and HDD benchmark profiles are available by default. Custom still requires both Developer Options and Enable custom benchmark configuration in Settings. Async benchmarks use T independent worker threads with a target queue depth of Q per worker. Every configuration keeps Q × T ≤ 16 and shares the system AIO allowance. Quick tests sequential 1 MiB Q1T1 and random 4 KiB Q1T1, transferring 128 MiB and 1 MiB respectively, with one measured pass after warm-up and no added pauses. It checks basic read/write behavior and does not replace a complete media or data-integrity check.
 
 Benchmarks create temporary files only inside the folder selected by the user. Write, mixed, and large-file workloads can stress storage devices; verify the target and keep important backups.
 

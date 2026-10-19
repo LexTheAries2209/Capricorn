@@ -33,6 +33,7 @@ private enum BenchmarkControlLayout {
 struct BenchmarkView: View {
     let drive: DriveDevice
     var viewModel: AppModel
+    let allowsCustomBenchmarkConfiguration: Bool
     let saveResults: ([BenchmarkResult], [DiskActivitySample]) -> Void
     @Environment(\.appLanguage) private var language
 
@@ -65,7 +66,9 @@ struct BenchmarkView: View {
     private let progressContentLeadingInset: CGFloat = 6
 
     private var availableProfiles: [BenchmarkProfile] {
-        BenchmarkProfile.presets
+        BenchmarkProfile.presets.filter {
+            allowsCustomBenchmarkConfiguration || $0.id != BenchmarkProfile.custom.id
+        }
     }
 
     // Resolve the selection immediately when settings change, before onChange runs.
@@ -368,6 +371,17 @@ struct BenchmarkView: View {
             adjustSelectedFileSizeForTarget()
         }
         .onChange(of: customExecutionModeRaw) { _, _ in
+            adjustSelectedFileSizeForTarget()
+        }
+        .onChange(of: allowsCustomBenchmarkConfiguration) { _, isAllowed in
+            guard !isAllowed, requestedProfileID == BenchmarkProfile.custom.id else { return }
+            requestedProfileID = BenchmarkProfile.default.id
+            switch benchmarkNotice {
+            case .confirmFullTest, .confirmSingleTest:
+                benchmarkNotice = nil
+            default:
+                break
+            }
             adjustSelectedFileSizeForTarget()
         }
         .onChange(of: customRowsJSON) { _, _ in
@@ -975,6 +989,10 @@ struct BenchmarkView: View {
                 targetMismatch: targetFolderDriveMismatch,
                 confirmTitle: language.t(request == nil ? "Run Benchmark" : "Run Single Test"),
                 onConfirm: {
+                    guard runProfile.baseProfileID != BenchmarkProfile.custom.id || allowsCustomBenchmarkConfiguration else {
+                        benchmarkNotice = nil
+                        return
+                    }
                     if let request {
                         let started = viewModel.startBenchmark(
                             profile: request.profile,

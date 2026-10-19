@@ -18,7 +18,7 @@ final class BenchmarkControlsTests: XCTestCase {
     }
 
     @MainActor
-    func testCustomProfileRemainsAvailableWhenDeveloperSettingsChange() async throws {
+    func testCustomProfileTracksDeveloperSettingsAndRetainsLinkedQueueControls() async throws {
         let suiteName = "CapricornTests.benchmarkDeveloperOptions.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -41,9 +41,9 @@ final class BenchmarkControlsTests: XCTestCase {
         window.makeKeyAndOrderFront(nil)
         defer { window.orderOut(nil) }
 
-        try await assertProfileChoices(in: hostingView, includesCustom: true)
+        try await assertProfileChoices(in: hostingView, includesCustom: false)
         preferences.enablesDeveloperOptions = true
-        try await assertProfileChoices(in: hostingView, includesCustom: true)
+        try await assertProfileChoices(in: hostingView, includesCustom: false)
         preferences.enablesCustomBenchmarkConfiguration = true
         try await assertProfileChoices(in: hostingView, includesCustom: true)
 
@@ -57,8 +57,8 @@ final class BenchmarkControlsTests: XCTestCase {
         XCTAssertTrue(customSelected)
 
         preferences.enablesCustomBenchmarkConfiguration = false
-        try await assertProfileChoices(in: hostingView, includesCustom: true)
-        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Custom")
+        try await assertProfileChoices(in: hostingView, includesCustom: false)
+        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Default")
         XCTAssertEqual(defaults.string(forKey: "benchmarkCustomRowsJSON"), savedRows)
 
         preferences.enablesCustomBenchmarkConfiguration = true
@@ -69,8 +69,8 @@ final class BenchmarkControlsTests: XCTestCase {
         restoredPicker.sendAction(restoredPicker.action, to: restoredPicker.target)
         model.isBenchmarking = true
         preferences.enablesDeveloperOptions = false
-        try await assertProfileChoices(in: hostingView, includesCustom: true)
-        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Custom")
+        try await assertProfileChoices(in: hostingView, includesCustom: false)
+        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Default")
         XCTAssertTrue(model.isBenchmarking, "Changing developer settings must not stop the active run.")
         XCTAssertEqual(defaults.string(forKey: "benchmarkCustomRowsJSON"), savedRows)
         XCTAssertEqual(
@@ -80,7 +80,10 @@ final class BenchmarkControlsTests: XCTestCase {
         model.isBenchmarking = false
         preferences.enablesDeveloperOptions = true
         try await assertProfileChoices(in: hostingView, includesCustom: true)
-        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Custom")
+        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Default")
+        let customPicker = try XCTUnwrap(profilePicker(in: hostingView))
+        customPicker.selectItem(withTitle: "Custom")
+        customPicker.menu?.performActionForItem(at: customPicker.indexOfSelectedItem)
 
         let fullOptions = ["1", "2", "4", "8", "16"]
         let controlsReady = await AsyncTestWaiter.wait {
@@ -157,7 +160,8 @@ final class BenchmarkControlsTests: XCTestCase {
             defaults.set(true, forKey: "benchmarkUsesTrimmedAverage")
             defaults.set(true, forKey: "benchmarkUsesSmallBlockEfficiency")
             let root = BenchmarkView(
-                drive: CapricornTests.fixtureDrive(mountedAt: "/"), viewModel: AppModel(), saveResults: { _, _ in }
+                drive: CapricornTests.fixtureDrive(mountedAt: "/"), viewModel: AppModel(),
+                allowsCustomBenchmarkConfiguration: false, saveResults: { _, _ in }
             )
             .defaultAppStorage(defaults)
             .environment(\.appLanguage, language)
@@ -223,6 +227,7 @@ final class BenchmarkControlsTests: XCTestCase {
         let root = BenchmarkView(
             drive: CapricornTests.fixtureDrive(mountedAt: "/"),
             viewModel: model,
+            allowsCustomBenchmarkConfiguration: false,
             saveResults: { _, _ in }
         )
         .defaultAppStorage(defaults)
@@ -298,6 +303,7 @@ private struct DeveloperBenchmarkTestView: View {
         BenchmarkView(
             drive: CapricornTests.fixtureDrive(mountedAt: "/"),
             viewModel: model,
+            allowsCustomBenchmarkConfiguration: preferences.allowsCustomBenchmarkConfiguration,
             saveResults: { _, _ in }
         )
         .environment(\.appLanguage, AppLanguage.english)
