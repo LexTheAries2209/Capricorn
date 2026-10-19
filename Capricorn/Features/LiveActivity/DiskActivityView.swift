@@ -329,10 +329,20 @@ struct DiskActivityView: View {
 
                 if isShowingCurrentSession, let progress = viewModel.liveActivityWorkloadProgress {
                     VStack(alignment: .leading, spacing: 6) {
-                        ProgressView(value: progress.fraction)
-                        Text(workloadProgressText(progress))
+                        if progress.hasMeasurableByteProgress {
+                            ProgressView(value: progress.fraction)
+                        } else {
+                            ProgressView()
+                                .progressViewStyle(.linear)
+                        }
+                        Text(language.activityWorkloadProgressText(progress))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if progress.phase == .sizingFile {
+                            Text(language.t("Preparing the temporary file before transfer. Disk activity may occur, but byte progress is unavailable during this step."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         if let queueStatus = progress.queueStatus {
                             Text(language.aioQueueDescription(queueStatus))
                                 .font(.caption.monospacedDigit())
@@ -598,20 +608,6 @@ struct DiskActivityView: View {
             operation: workloadOperation,
             availableCapacity: workloadTargetAvailableCapacity
         )
-    }
-
-    private func workloadProgressText(_ progress: DiskActivityWorkloadProgress) -> String {
-        var parts = [
-            "\(language.t("Loop")) \(progress.loopIndex)",
-            language.statusMessage(progress.message)
-        ]
-        if let failedPhase = progress.failedPhaseMessage {
-            parts.append("\(language.t("Failed phase")): \(language.statusMessage(failedPhase))")
-        }
-        if progress.totalBytes > 0 {
-            parts.append("\(formatBenchmarkFileSize(progress.completedBytes)) / \(formatBenchmarkFileSize(progress.totalBytes))")
-        }
-        return parts.joined(separator: " · ")
     }
 
     private func chooseWorkloadTargetFolder() {

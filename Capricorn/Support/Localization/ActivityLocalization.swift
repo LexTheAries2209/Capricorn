@@ -3,6 +3,24 @@ import Foundation
 import SwiftUI
 
 extension AppLanguage {
+    func activityWorkloadProgressText(_ progress: DiskActivityWorkloadProgress) -> String {
+        var parts = [
+            "\(t("Loop")) \(progress.loopIndex)",
+            statusMessage(progress.message)
+        ]
+        if let failedPhase = progress.failedPhaseMessage {
+            parts.append("\(t("Failed phase")): \(statusMessage(failedPhase))")
+        }
+        if progress.totalBytes > 0 {
+            if progress.hasMeasurableByteProgress {
+                parts.append("\(formatBenchmarkFileSize(progress.completedBytes)) / \(formatBenchmarkFileSize(progress.totalBytes))")
+            } else {
+                parts.append("\(t("Target size")): \(formatBenchmarkFileSize(progress.totalBytes))")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
     func aioQueueDescription(_ status: AIOTransferStatus) -> String {
         switch self {
         case .english:

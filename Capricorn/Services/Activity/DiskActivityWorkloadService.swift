@@ -69,6 +69,10 @@ struct DiskActivityWorkloadProgress: Equatable, Sendable {
     var queueStatus: AIOTransferStatus? = nil
     var failedPhaseMessage: String? = nil
 
+    var hasMeasurableByteProgress: Bool {
+        ![.starting, .sizingFile, .cleaningUp].contains(phase)
+    }
+
     var fraction: Double {
         guard totalBytes > 0 else { return 0 }
         return min(1, max(0, Double(completedBytes) / Double(totalBytes)))

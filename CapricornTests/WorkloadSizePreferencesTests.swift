@@ -2,6 +2,25 @@ import XCTest
 @testable import Capricorn
 
 final class WorkloadSizePreferencesTests: XCTestCase {
+    func testSizingHasNoByteCounterAndTransferRestoresMeasuredProgress() {
+        var progress = DiskActivityWorkloadProgress(
+            operation: .mixed, phase: .sizingFile, loopIndex: 1, completedBytes: 0,
+            totalBytes: DiskActivityWorkloadFileSize.gib128.fixedBytes!, message: "Sizing workload file"
+        )
+        XCTAssertFalse(progress.hasMeasurableByteProgress)
+        for language in AppLanguage.allCases {
+            let text = language.activityWorkloadProgressText(progress)
+            XCTAssertFalse(text.contains(" / "))
+            XCTAssertTrue(text.contains(language.t("Target size")))
+            XCTAssertTrue(text.contains("128"))
+        }
+        progress.phase = .writing
+        progress.message = "Writing workload file"
+        progress.completedBytes = 1024 * 1024
+        XCTAssertTrue(progress.hasMeasurableByteProgress)
+        XCTAssertTrue(AppLanguage.simplifiedChinese.activityWorkloadProgressText(progress).contains(" / "))
+    }
+
     func testNewDrivesDefaultTo128GiBAndChoicesPersistIndependently() throws {
         var first = CapricornTests.fixtureDrive()
         first.serialNumber = "WORKLOAD-FIRST"
