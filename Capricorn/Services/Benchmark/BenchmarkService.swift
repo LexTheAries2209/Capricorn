@@ -1022,9 +1022,6 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         displayLabel: String? = nil
     ) throws -> BenchmarkRunMeasurement {
-        let requestDepth = max(1, test.queueDepth * max(1, test.threads))
-        let blockSize = max(512, test.blockSizeBytes)
-        let fileSize = max(Int64(blockSize), test.testSizeBytes)
         let progressReporter = byteProgressReporter(
             test: test,
             displayLabel: displayLabel,
@@ -1033,39 +1030,36 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             message: message,
             progress: progress
         )
-        var nextSequentialOffset: Int64 = 0
-        var totalBytes: Int64 = 0
-        var totalOperations: Int64 = 0
-        var minLatencyMicros = Double.greatestFiniteMagnitude
-        var lastQueueReport: UInt64 = 0
+        let measurements = LockedState((bytes: Int64(0), operations: Int64(0), latency: Double.greatestFiniteMagnitude))
+        let lastQueueReport = LockedState<UInt64>(0)
 
         progressReporter.set(0, force: true)
         let started = DispatchTime.now().uptimeNanoseconds
-        try aioTransfer.run(
-            descriptor: fd, bytes: test.testSizeBytes, blockSize: blockSize, depth: requestDepth,
-            checkCancelled: checkCancelled,
-            operation: { _, count in
-                AIOTransferOperation(
-                    offset: self.offsetFor(test: test, fileSize: fileSize, count: count, nextSequentialOffset: &nextSequentialOffset),
-                    write: self.shouldWrite(test: test)
-                )
-            },
+        try AIOBenchmarkTransfer(transfer: aioTransfer).run(
+            descriptor: fd, test: test,
+            checkCancelled: { try self.checkCancelled() },
             fill: { buffer, count in self.fill(buffer, count: count, pattern: test.dataPattern) },
             completed: { transferred, latency in
-                totalBytes += Int64(transferred)
-                totalOperations += 1
-                minLatencyMicros = min(minLatencyMicros, latency)
+                measurements.withLock {
+                    $0.bytes += Int64(transferred)
+                    $0.operations += 1
+                    $0.latency = min($0.latency, latency)
+                }
                 progressReporter.add(Int64(transferred))
             },
             statusChanged: { status in
                 let now = DispatchTime.now().uptimeNanoseconds
-                if status.draining || status.finished || now - lastQueueReport >= 250_000_000 {
-                    lastQueueReport = now
+                let shouldReport = lastQueueReport.withLock { previous in
+                    guard status.draining || status.finished || now - previous >= 250_000_000 else { return false }
+                    previous = now
+                    return true
+                }
+                if shouldReport {
                     self.notify(progress, BenchmarkProgress(
                         currentTestLabel: displayLabel ?? test.label,
                         completed: completedSteps, total: totalSteps,
                         message: status.draining ? "Waiting for pending benchmark I/O to finish" : message,
-                        phaseCompletedBytes: totalBytes, phaseTotalBytes: test.testSizeBytes,
+                        phaseCompletedBytes: measurements.snapshot().bytes, phaseTotalBytes: test.testSizeBytes,
                         queueStatus: status
                     ))
                 }
@@ -1075,6 +1069,9 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             }
         )
 
+        let totalBytes = measurements.snapshot().bytes
+        let totalOperations = measurements.snapshot().operations
+        let minLatencyMicros = measurements.snapshot().latency
         progressReporter.finish()
         let transferFinished = DispatchTime.now().uptimeNanoseconds
         var durableFinished = transferFinished
