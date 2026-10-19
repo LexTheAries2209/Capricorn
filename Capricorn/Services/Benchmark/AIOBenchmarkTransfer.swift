@@ -23,7 +23,8 @@ final class AIOBenchmarkTransfer: Sendable {
         statusChanged: @escaping @Sendable (AIOTransferStatus) -> Void
     ) throws {
         guard test.queueDepth > 0, test.threads > 0,
-              test.threads <= 16, test.queueDepth <= 16 / test.threads else {
+              test.threads <= BenchmarkConcurrency.maximumRequests,
+              test.queueDepth <= BenchmarkConcurrency.maximumRequests / test.threads else {
             throw BenchmarkError.ioFailed("Benchmark queue depth × thread count must not exceed 16.")
         }
         let state = LockedState(State(statuses: Array(repeating: nil, count: test.threads)))

@@ -5263,7 +5263,7 @@ final class CapricornTests: XCTestCase {
         ]
 
         let encoded = BenchmarkCustomRow.encodeList(rows)
-        XCTAssertEqual(BenchmarkCustomRow.decodeList(from: encoded), rows)
+        XCTAssertEqual(BenchmarkCustomRow.decodeList(from: encoded), BenchmarkCustomRow.sanitized(rows))
         XCTAssertEqual(BenchmarkCustomRow.decodeList(from: "not-json"), BenchmarkCustomRow.defaultRows)
     }
 
@@ -5333,7 +5333,7 @@ final class CapricornTests: XCTestCase {
     func testBenchmarkExperimentalProfilesAreHiddenFromPresets() {
         let presetIDs = BenchmarkProfile.presets.map(\.baseProfileID)
 
-        XCTAssertEqual(presetIDs, ["default", "peak-nvme", "real-world", "demo", "custom"])
+        XCTAssertEqual(presetIDs, ["default", "quick", "ssd", "hdd", "custom"])
         XCTAssertFalse(presetIDs.contains("test"))
         XCTAssertFalse(presetIDs.contains("loop"))
         XCTAssertFalse(presetIDs.contains("loop-extreme"))
@@ -5341,10 +5341,10 @@ final class CapricornTests: XCTestCase {
 
     func testBenchmarkPresetDefaultEnginesAreExplicitPerProfile() {
         XCTAssertEqual(BenchmarkProfile.default.engine, .asyncQueue)
-        XCTAssertEqual(BenchmarkProfile.peakNVMe.engine, .asyncQueue)
-        XCTAssertEqual(BenchmarkProfile.realWorld.engine, .synchronous)
-        XCTAssertEqual(BenchmarkProfile.demoLight.engine, .synchronous)
-        XCTAssertEqual(BenchmarkProfile.custom.engine, .synchronous)
+        XCTAssertEqual(BenchmarkProfile.ssd.engine, .asyncQueue)
+        XCTAssertEqual(BenchmarkProfile.hdd.engine, .asyncQueue)
+        XCTAssertEqual(BenchmarkProfile.quick.engine, .asyncQueue)
+        XCTAssertEqual(BenchmarkProfile.custom.engine, .asyncQueue)
     }
 
     func testBenchmarkProfileApplyingEngineChangesResultFingerprint() {
@@ -5579,8 +5579,8 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(BenchmarkProfile.fileSizeOptions.first, BenchmarkProfile.defaultTestSize)
         XCTAssertTrue(BenchmarkProfile.fileSizeOptions.contains(BenchmarkProfile.defaultTestSize))
         XCTAssertTrue(BenchmarkProfile.fileSizeOptions.allSatisfy { $0 >= BenchmarkProfile.defaultTestSize })
-        XCTAssertTrue(BenchmarkProfile.presets.allSatisfy { $0.testFileSizeBytes >= BenchmarkProfile.defaultTestSize })
-        XCTAssertTrue(BenchmarkProfile.presets.flatMap(\.tests).allSatisfy { $0.testSizeBytes >= BenchmarkProfile.defaultTestSize })
+        XCTAssertTrue(BenchmarkProfile.presets.filter { $0.id != "quick" }.allSatisfy { $0.testFileSizeBytes >= BenchmarkProfile.defaultTestSize })
+        XCTAssertTrue(BenchmarkProfile.presets.filter { $0.id != "quick" }.flatMap(\.tests).allSatisfy { $0.testSizeBytes >= BenchmarkProfile.defaultTestSize })
     }
 
     func testBenchmarkProfileConfigurationClampsSubGigabyteFileSize() {

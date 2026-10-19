@@ -1897,6 +1897,21 @@ struct BenchmarkTest: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+enum BenchmarkConcurrency {
+    static let maximumRequests = 16
+    static let options = [1, 2, 4, 8, 16]
+
+    static func threadOptions(queueDepth: Int) -> [Int] {
+        options.filter { $0 <= maximumRequests / max(1, queueDepth) }
+    }
+
+    static func sanitized(queueDepth: Int, threads: Int) -> (queueDepth: Int, threads: Int) {
+        let depth = options.last(where: { $0 <= queueDepth }) ?? 1
+        let threadCount = threadOptions(queueDepth: depth).last(where: { $0 <= threads }) ?? 1
+        return (depth, threadCount)
+    }
+}
+
 struct BenchmarkCustomRow: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var accessPattern: BenchmarkAccessPattern
@@ -1916,8 +1931,22 @@ struct BenchmarkCustomRow: Identifiable, Codable, Hashable, Sendable {
         16_777_216,
         134_217_728
     ]
-    static let queueDepthOptions = [1, 2, 4, 8, 16, 32]
-    static let threadOptions = [1, 2, 4, 8, 16]
+    static let queueDepthOptions = BenchmarkConcurrency.options
+    static let threadOptions = BenchmarkConcurrency.options
+
+    var availableThreadOptions: [Int] {
+        BenchmarkConcurrency.threadOptions(queueDepth: queueDepth)
+    }
+
+    mutating func selectQueueDepth(_ depth: Int) {
+        let selection = BenchmarkConcurrency.sanitized(queueDepth: depth, threads: threads)
+        queueDepth = selection.queueDepth
+        threads = selection.threads
+    }
+
+    mutating func selectThreads(_ count: Int) {
+        threads = BenchmarkConcurrency.sanitized(queueDepth: queueDepth, threads: count).threads
+    }
 
     static let defaultRows = [
         BenchmarkCustomRow(id: "custom-default-seq", accessPattern: .sequential, blockSizeBytes: 1_048_576, queueDepth: 1, threads: 1, includeMixed: true),
@@ -1941,12 +1970,13 @@ struct BenchmarkCustomRow: Identifiable, Codable, Hashable, Sendable {
     static func sanitized(_ rows: [BenchmarkCustomRow]) -> [BenchmarkCustomRow] {
         let candidates = rows.isEmpty ? defaultRows : rows
         return Array(candidates.prefix(maxRows)).enumerated().map { index, row in
-            BenchmarkCustomRow(
+            let concurrency = BenchmarkConcurrency.sanitized(queueDepth: row.queueDepth, threads: row.threads)
+            return BenchmarkCustomRow(
                 id: row.id.isEmpty ? "custom-row-\(index)" : row.id,
                 accessPattern: row.accessPattern,
                 blockSizeBytes: blockSizeOptions.contains(row.blockSizeBytes) ? row.blockSizeBytes : 1_048_576,
-                queueDepth: queueDepthOptions.contains(row.queueDepth) ? row.queueDepth : 1,
-                threads: threadOptions.contains(row.threads) ? row.threads : 1,
+                queueDepth: concurrency.queueDepth,
+                threads: concurrency.threads,
                 includeMixed: row.includeMixed
             )
         }
@@ -1981,6 +2011,8 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
     var tests: [BenchmarkTest]
 
     static let defaultTestSize: Int64 = 1_073_741_824
+    static let quickTestSize: Int64 = 128 * 1_024 * 1_024
+    static let quickRandomTestSize: Int64 = 1_024 * 1_024
     static let defaultRuns = 3
     static let defaultDataPattern = BenchmarkDataPattern.random
     static let defaultUsesTrimmedAverage = false
@@ -2003,7 +2035,7 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
     }
 
     static var presets: [BenchmarkProfile] {
-        [.default, .peakNVMe, .realWorld, .demoLight, .custom]
+        [.default, .quick, .ssd, .hdd, .custom]
     }
 
     static var `default`: BenchmarkProfile {
@@ -2016,8 +2048,46 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
             rows: [
                 (.sequential, 1_048_576, 8, 1),
                 (.sequential, 1_048_576, 1, 1),
-                (.random, 4_096, 32, 1),
+                (.random, 4_096, 4, 1),
                 (.random, 4_096, 1, 1)
+            ],
+            engine: .asyncQueue
+        )
+    }
+
+    static var quick: BenchmarkProfile {
+        var profile = makeProfile(
+            id: "quick", name: "Quick", testSize: quickTestSize, runs: 1, duration: 1,
+            rows: [(.sequential, 1_048_576, 1, 1), (.random, 4_096, 1, 1)],
+            engine: .asyncQueue
+        )
+        for index in profile.tests.indices where profile.tests[index].accessPattern == .random {
+            profile.tests[index].testSizeBytes = quickRandomTestSize
+        }
+        return profile
+    }
+
+    static var ssd: BenchmarkProfile {
+        makeProfile(
+            id: "ssd", name: "SSD", testSize: defaultTestSize, runs: defaultRuns, duration: 5,
+            rows: [
+                (.sequential, 1_048_576, 8, 2),
+                (.sequential, 1_048_576, 1, 1),
+                (.random, 4_096, 4, 4),
+                (.random, 4_096, 1, 1)
+            ],
+            engine: .asyncQueue
+        )
+    }
+
+    static var hdd: BenchmarkProfile {
+        makeProfile(
+            id: "hdd", name: "HDD", testSize: defaultTestSize, runs: defaultRuns, duration: 5,
+            rows: [
+                (.sequential, 1_048_576, 1, 1),
+                (.sequential, 1_048_576, 4, 1),
+                (.random, 4_096, 1, 1),
+                (.random, 4_096, 4, 1)
             ],
             engine: .asyncQueue
         )
@@ -2082,13 +2152,14 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
                 (.sequential, 1_048_576, 1, 1),
                 (.random, 4_096, 4, 1)
             ],
-            includeMixed: true
+            includeMixed: true,
+            engine: .asyncQueue
         )
     }
 
     static func custom(
         rows: [BenchmarkCustomRow],
-        engine: BenchmarkEngine = .synchronous,
+        engine: BenchmarkEngine = .asyncQueue,
         executionMode: BenchmarkExecutionMode = .finite
     ) -> BenchmarkProfile {
         makeCustomProfile(
@@ -2236,15 +2307,16 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
     ) -> BenchmarkProfile {
         var tests: [BenchmarkTest] = []
         for (index, row) in rows.enumerated() {
-            let base = "\(row.0.title)\(formatBytes(row.1).replacingOccurrences(of: " ", with: "")) Q\(row.2)T\(row.3)"
+            let concurrency = BenchmarkConcurrency.sanitized(queueDepth: row.2, threads: row.3)
+            let base = "\(row.0.title)\(formatBytes(row.1).replacingOccurrences(of: " ", with: "")) Q\(concurrency.queueDepth)T\(concurrency.threads)"
             tests.append(BenchmarkTest(
                 id: "\(id)-read-\(index)",
                 label: base,
                 accessPattern: row.0,
                 operation: .read,
                 blockSizeBytes: row.1,
-                queueDepth: row.2,
-                threads: row.3,
+                queueDepth: concurrency.queueDepth,
+                threads: concurrency.threads,
                 durationSeconds: duration,
                 testSizeBytes: testSize,
                 dataPattern: .random,
@@ -2256,8 +2328,8 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
                 accessPattern: row.0,
                 operation: .write,
                 blockSizeBytes: row.1,
-                queueDepth: row.2,
-                threads: row.3,
+                queueDepth: concurrency.queueDepth,
+                threads: concurrency.threads,
                 durationSeconds: duration,
                 testSizeBytes: testSize,
                 dataPattern: .random,
@@ -2270,8 +2342,8 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
                     accessPattern: row.0,
                     operation: .mixed,
                     blockSizeBytes: row.1,
-                    queueDepth: row.2,
-                    threads: row.3,
+                    queueDepth: concurrency.queueDepth,
+                    threads: concurrency.threads,
                     durationSeconds: duration,
                     testSizeBytes: testSize,
                     dataPattern: .random,
@@ -2307,13 +2379,14 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
         operationSelection: BenchmarkOperationSelection = .readWrite
     ) -> BenchmarkProfile {
         let isLooping = executionMode == .loopUntilCancelled
-        let safeRuns = isLooping ? 1 : min(max(requestedRuns, Self.runCountOptions.first ?? 1), Self.runCountOptions.last ?? 9)
-        let safeFileSizeBytes = max(Self.fileSizeOptions.first ?? Self.defaultTestSize, requestedFileSizeBytes)
-        let safeUsesTrimmedAverage = isLooping ? false : usesTrimmedAverage
+        let isQuick = baseProfileID == "quick"
+        let safeRuns = isLooping || isQuick ? 1 : min(max(requestedRuns, Self.runCountOptions.first ?? 1), Self.runCountOptions.last ?? 9)
+        let safeFileSizeBytes = isQuick ? Self.quickTestSize : max(Self.fileSizeOptions.first ?? Self.defaultTestSize, requestedFileSizeBytes)
+        let safeUsesTrimmedAverage = isLooping || isQuick ? false : usesTrimmedAverage
         let safeSmallBlockFileSizePercent = Self.smallBlockFileSizePercentOptions.contains(requestedSmallBlockFileSizePercent)
             ? requestedSmallBlockFileSizePercent
             : Self.defaultSmallBlockFileSizePercent
-        let appliesSmallBlockEfficiency = usesSmallBlockEfficiency
+        let appliesSmallBlockEfficiency = !isQuick && usesSmallBlockEfficiency
             && tests.contains { Self.smallBlockEfficiencyBlockSizes.contains($0.blockSizeBytes) }
         let fingerprint: String
         let rowFingerprint = id
@@ -2325,17 +2398,17 @@ struct BenchmarkProfile: Identifiable, Codable, Hashable, Sendable {
         let operationFingerprint = operationSelection == .readWrite ? nil : "ops-\(operationSelection.rawValue)"
         if isLooping {
             let loopFingerprint = "loop-s\(safeFileSizeBytes)-\(dataPattern.rawValue)"
-            fingerprint = [rowFingerprint, loopFingerprint, engineFingerprint, smallBlockFingerprint, operationFingerprint].compactMap { $0 }.joined(separator: "-")
+            fingerprint = [rowFingerprint, loopFingerprint, engineFingerprint, smallBlockFingerprint, operationFingerprint, "workers-v2"].compactMap { $0 }.joined(separator: "-")
         } else {
             let averageMode = safeUsesTrimmedAverage ? "trim" : "plain"
             let runFingerprint = "r\(safeRuns)-s\(safeFileSizeBytes)-\(dataPattern.rawValue)-\(averageMode)"
-            fingerprint = [rowFingerprint, runFingerprint, engineFingerprint, smallBlockFingerprint, operationFingerprint].compactMap { $0 }.joined(separator: "-")
+            fingerprint = [rowFingerprint, runFingerprint, engineFingerprint, smallBlockFingerprint, operationFingerprint, "workers-v2"].compactMap { $0 }.joined(separator: "-")
         }
         let configuredTests = tests.filter { operationSelection.includes($0.operation) }.map { test in
             var configuredTest = test
             let baseTestID = test.id.components(separatedBy: "@").first ?? test.id
             configuredTest.id = "\(baseTestID)@\(fingerprint)"
-            configuredTest.testSizeBytes = Self.effectiveTestSize(
+            configuredTest.testSizeBytes = isQuick ? (test.accessPattern == .random ? Self.quickRandomTestSize : Self.quickTestSize) : Self.effectiveTestSize(
                 fileSizeBytes: safeFileSizeBytes,
                 blockSizeBytes: test.blockSizeBytes,
                 usesSmallBlockEfficiency: appliesSmallBlockEfficiency,
