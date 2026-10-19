@@ -18,7 +18,7 @@ final class BenchmarkControlsTests: XCTestCase {
     }
 
     @MainActor
-    func testCustomProfileTracksDeveloperSettingsWithoutLosingRows() async throws {
+    func testCustomProfileRemainsAvailableWhenDeveloperSettingsChange() async throws {
         let suiteName = "CapricornTests.benchmarkDeveloperOptions.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -41,14 +41,15 @@ final class BenchmarkControlsTests: XCTestCase {
         window.makeKeyAndOrderFront(nil)
         defer { window.orderOut(nil) }
 
-        try await assertProfileChoices(in: hostingView, includesCustom: false)
+        try await assertProfileChoices(in: hostingView, includesCustom: true)
         preferences.enablesDeveloperOptions = true
-        try await assertProfileChoices(in: hostingView, includesCustom: false)
+        try await assertProfileChoices(in: hostingView, includesCustom: true)
         preferences.enablesCustomBenchmarkConfiguration = true
         try await assertProfileChoices(in: hostingView, includesCustom: true)
 
         let picker = try XCTUnwrap(profilePicker(in: hostingView))
         picker.selectItem(withTitle: "Custom")
+        picker.menu?.performActionForItem(at: picker.indexOfSelectedItem)
         picker.sendAction(picker.action, to: picker.target)
         let customSelected = await AsyncTestWaiter.wait {
             self.profilePicker(in: hostingView)?.titleOfSelectedItem == "Custom"
@@ -56,19 +57,20 @@ final class BenchmarkControlsTests: XCTestCase {
         XCTAssertTrue(customSelected)
 
         preferences.enablesCustomBenchmarkConfiguration = false
-        try await assertProfileChoices(in: hostingView, includesCustom: false)
-        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Default")
+        try await assertProfileChoices(in: hostingView, includesCustom: true)
+        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Custom")
         XCTAssertEqual(defaults.string(forKey: "benchmarkCustomRowsJSON"), savedRows)
 
         preferences.enablesCustomBenchmarkConfiguration = true
         try await assertProfileChoices(in: hostingView, includesCustom: true)
         let restoredPicker = try XCTUnwrap(profilePicker(in: hostingView))
         restoredPicker.selectItem(withTitle: "Custom")
+        restoredPicker.menu?.performActionForItem(at: restoredPicker.indexOfSelectedItem)
         restoredPicker.sendAction(restoredPicker.action, to: restoredPicker.target)
         model.isBenchmarking = true
         preferences.enablesDeveloperOptions = false
-        try await assertProfileChoices(in: hostingView, includesCustom: false)
-        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Default")
+        try await assertProfileChoices(in: hostingView, includesCustom: true)
+        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Custom")
         XCTAssertTrue(model.isBenchmarking, "Changing developer settings must not stop the active run.")
         XCTAssertEqual(defaults.string(forKey: "benchmarkCustomRowsJSON"), savedRows)
         XCTAssertEqual(
@@ -78,12 +80,52 @@ final class BenchmarkControlsTests: XCTestCase {
         model.isBenchmarking = false
         preferences.enablesDeveloperOptions = true
         try await assertProfileChoices(in: hostingView, includesCustom: true)
-        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Default")
+        XCTAssertEqual(profilePicker(in: hostingView)?.titleOfSelectedItem, "Custom")
+
+        let fullOptions = ["1", "2", "4", "8", "16"]
+        let controlsReady = await AsyncTestWaiter.wait {
+            self.popUpButtons(in: hostingView).contains { $0.itemTitles == fullOptions }
+        }
+        XCTAssertTrue(controlsReady, "Menus: \(popUpButtons(in: hostingView).map(\.itemTitles))")
+        let queuePicker = try XCTUnwrap(popUpButtons(in: hostingView).first { $0.itemTitles == fullOptions })
+        queuePicker.selectItem(withTitle: "16")
+        queuePicker.menu?.performActionForItem(at: queuePicker.indexOfSelectedItem)
+        queuePicker.sendAction(queuePicker.action, to: queuePicker.target)
+        let clampedToOne = await AsyncTestWaiter.wait {
+            let row = BenchmarkCustomRow.decodeList(from: defaults.string(forKey: "benchmarkCustomRowsJSON") ?? "")[0]
+            return row.queueDepth == 16 && row.threads == 1
+                && self.popUpButtons(in: hostingView).contains { $0.itemTitles == ["1"] }
+        }
+        XCTAssertTrue(clampedToOne)
+        queuePicker.selectItem(withTitle: "1")
+        queuePicker.menu?.performActionForItem(at: queuePicker.indexOfSelectedItem)
+        queuePicker.sendAction(queuePicker.action, to: queuePicker.target)
+        let expanded = await AsyncTestWaiter.wait {
+            self.popUpButtons(in: hostingView).filter { $0.itemTitles == fullOptions }.count == 2
+        }
+        XCTAssertTrue(expanded)
+        let threadPicker = try XCTUnwrap(popUpButtons(in: hostingView).last { $0.itemTitles == fullOptions })
+        threadPicker.selectItem(withTitle: "16")
+        threadPicker.menu?.performActionForItem(at: threadPicker.indexOfSelectedItem)
+        threadPicker.sendAction(threadPicker.action, to: threadPicker.target)
+        let selectedSixteen = await AsyncTestWaiter.wait {
+            BenchmarkCustomRow.decodeList(from: defaults.string(forKey: "benchmarkCustomRowsJSON") ?? "")[0].threads == 16
+        }
+        XCTAssertTrue(selectedSixteen)
+        queuePicker.selectItem(withTitle: "8")
+        queuePicker.menu?.performActionForItem(at: queuePicker.indexOfSelectedItem)
+        queuePicker.sendAction(queuePicker.action, to: queuePicker.target)
+        let clampedToTwo = await AsyncTestWaiter.wait {
+            let row = BenchmarkCustomRow.decodeList(from: defaults.string(forKey: "benchmarkCustomRowsJSON") ?? "")[0]
+            return row.queueDepth == 8 && row.threads == 2
+                && self.popUpButtons(in: hostingView).contains { $0.itemTitles == ["1", "2"] && $0.titleOfSelectedItem == "2" }
+        }
+        XCTAssertTrue(clampedToTwo)
     }
 
     @MainActor
     private func assertProfileChoices(in view: NSView, includesCustom: Bool) async throws {
-        let expected = ["Default", "Peak / NVMe", "RealWorld", "Demo / Light"] + (includesCustom ? ["Custom"] : [])
+        let expected = ["Default", "Quick", "SSD", "HDD"] + (includesCustom ? ["Custom"] : [])
         let updated = await AsyncTestWaiter.wait {
             self.profilePicker(in: view)?.itemTitles == expected
         }
@@ -96,6 +138,75 @@ final class BenchmarkControlsTests: XCTestCase {
             return picker
         }
         return view.subviews.lazy.compactMap { self.profilePicker(in: $0) }.first
+    }
+
+    @MainActor
+    private func popUpButtons(in view: NSView) -> [NSPopUpButton] {
+        if let picker = view as? NSPopUpButton { return [picker] }
+        return view.subviews.flatMap { popUpButtons(in: $0) }
+    }
+
+    @MainActor
+    func testQuickControlsShowEffectiveValuesAndKeepSavedSettingsInBothLanguages() async throws {
+        for language in AppLanguage.allCases {
+            let suiteName = "CapricornTests.quickControls.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            defaults.set(7, forKey: "benchmarkRunCount")
+            defaults.set(4 * 1_024 * 1_024 * 1_024, forKey: "benchmarkFileSizeBytes")
+            defaults.set(true, forKey: "benchmarkUsesTrimmedAverage")
+            defaults.set(true, forKey: "benchmarkUsesSmallBlockEfficiency")
+            let root = BenchmarkView(
+                drive: CapricornTests.fixtureDrive(mountedAt: "/"), viewModel: AppModel(), saveResults: { _, _ in }
+            )
+            .defaultAppStorage(defaults)
+            .environment(\.appLanguage, language)
+            .padding(12)
+            let hostingView = NSHostingView(rootView: root)
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 1_280, height: 820),
+                styleMask: [.titled], backing: .buffered, defer: false
+            )
+            window.contentView = hostingView
+            window.appearance = NSAppearance(named: .aqua)
+            window.makeKeyAndOrderFront(nil)
+            defer { window.orderOut(nil) }
+            let ready = await AsyncTestWaiter.wait {
+                self.popUpButtons(in: hostingView).contains { $0.itemTitles.contains(language.profileName(.quick)) }
+            }
+            XCTAssertTrue(ready)
+            let picker = try XCTUnwrap(popUpButtons(in: hostingView).first { $0.itemTitles.contains(language.profileName(.quick)) })
+            picker.selectItem(withTitle: language.profileName(.quick))
+            picker.menu?.performActionForItem(at: picker.indexOfSelectedItem)
+            let quickShown = await AsyncTestWaiter.wait {
+                self.popUpButtons(in: hostingView).contains { $0.itemTitles == ["128 MiB"] && !$0.isEnabled }
+                    && self.popUpButtons(in: hostingView).contains {
+                        $0.itemTitles == (1...9).map(String.init) && $0.titleOfSelectedItem == "1" && !$0.isEnabled
+                    }
+            }
+            XCTAssertTrue(quickShown)
+            hostingView.layoutSubtreeIfNeeded()
+            if let image = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) {
+                hostingView.cacheDisplay(in: hostingView.bounds, to: image)
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent("Capricorn-Quick-\(language.rawValue)-\(UUID().uuidString).png")
+                try image.representation(using: .png, properties: [:])?.write(to: url, options: .withoutOverwriting)
+                let attachment = XCTAttachment(contentsOfFile: url)
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                print("Quick profile screenshot: \(url.path)")
+            }
+            picker.selectItem(withTitle: language.profileName(.default))
+            picker.menu?.performActionForItem(at: picker.indexOfSelectedItem)
+            let restored = await AsyncTestWaiter.wait {
+                self.popUpButtons(in: hostingView).contains { $0.titleOfSelectedItem == "4 GiB" }
+                    && self.popUpButtons(in: hostingView).contains { $0.titleOfSelectedItem == "7" }
+            }
+            XCTAssertTrue(restored)
+            XCTAssertEqual(defaults.integer(forKey: "benchmarkRunCount"), 7)
+            XCTAssertEqual(defaults.integer(forKey: "benchmarkFileSizeBytes"), 4 * 1_024 * 1_024 * 1_024)
+            XCTAssertTrue(defaults.bool(forKey: "benchmarkUsesTrimmedAverage"))
+            XCTAssertTrue(defaults.bool(forKey: "benchmarkUsesSmallBlockEfficiency"))
+        }
     }
 
     @MainActor
@@ -112,7 +223,6 @@ final class BenchmarkControlsTests: XCTestCase {
         let root = BenchmarkView(
             drive: CapricornTests.fixtureDrive(mountedAt: "/"),
             viewModel: model,
-            allowsCustomBenchmarkConfiguration: false,
             saveResults: { _, _ in }
         )
         .defaultAppStorage(defaults)
@@ -188,7 +298,6 @@ private struct DeveloperBenchmarkTestView: View {
         BenchmarkView(
             drive: CapricornTests.fixtureDrive(mountedAt: "/"),
             viewModel: model,
-            allowsCustomBenchmarkConfiguration: preferences.allowsCustomBenchmarkConfiguration,
             saveResults: { _, _ in }
         )
         .environment(\.appLanguage, AppLanguage.english)

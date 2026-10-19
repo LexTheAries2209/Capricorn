@@ -33,7 +33,6 @@ private enum BenchmarkControlLayout {
 struct BenchmarkView: View {
     let drive: DriveDevice
     var viewModel: AppModel
-    let allowsCustomBenchmarkConfiguration: Bool
     let saveResults: ([BenchmarkResult], [DiskActivitySample]) -> Void
     @Environment(\.appLanguage) private var language
 
@@ -51,10 +50,10 @@ struct BenchmarkView: View {
     @AppStorage("benchmarkSmallBlockFileSizePercent") private var storedSmallBlockFileSizePercent = BenchmarkProfile.defaultSmallBlockFileSizePercent
     @AppStorage("benchmarkCustomRowsJSON") private var customRowsJSON = ""
     @AppStorage("benchmarkDefaultEngine") private var defaultEngineRaw = BenchmarkProfile.default.engine.rawValue
-    @AppStorage("benchmarkPeakNVMeEngine") private var peakNVMeEngineRaw = BenchmarkProfile.peakNVMe.engine.rawValue
-    @AppStorage("benchmarkRealWorldEngine") private var realWorldEngineRaw = BenchmarkProfile.realWorld.engine.rawValue
-    @AppStorage("benchmarkDemoEngine") private var demoEngineRaw = BenchmarkProfile.demoLight.engine.rawValue
-    @AppStorage("benchmarkCustomEngine") private var customEngineRaw = BenchmarkEngine.synchronous.rawValue
+    @AppStorage("benchmarkSSDEngine") private var ssdEngineRaw = BenchmarkProfile.ssd.engine.rawValue
+    @AppStorage("benchmarkHDDEngine") private var hddEngineRaw = BenchmarkProfile.hdd.engine.rawValue
+    @AppStorage("benchmarkQuickEngine") private var quickEngineRaw = BenchmarkProfile.quick.engine.rawValue
+    @AppStorage("benchmarkCustomEngine") private var customEngineRaw = BenchmarkProfile.custom.engine.rawValue
     @AppStorage("benchmarkCustomExecutionMode") private var customExecutionModeRaw = BenchmarkExecutionMode.finite.rawValue
     @AppStorage(AppPreferences.Key.opensBenchmarkProgressWindowAutomatically)
     private var opensBenchmarkProgressWindowAutomatically = AppPreferences.Defaults.opensBenchmarkProgressWindowAutomatically
@@ -66,9 +65,7 @@ struct BenchmarkView: View {
     private let progressContentLeadingInset: CGFloat = 6
 
     private var availableProfiles: [BenchmarkProfile] {
-        BenchmarkProfile.presets.filter {
-            allowsCustomBenchmarkConfiguration || $0.id != BenchmarkProfile.custom.id
-        }
+        BenchmarkProfile.presets
     }
 
     // Resolve the selection immediately when settings change, before onChange runs.
@@ -102,7 +99,7 @@ struct BenchmarkView: View {
             fileSizeBytes: selectedBenchmarkFileSizeBytes,
             dataPattern: selectedDataPattern,
             usesTrimmedAverage: usesTrimmedAverage,
-            usesSmallBlockEfficiency: usesSmallBlockEfficiency,
+            usesSmallBlockEfficiency: !selectedProfileIsQuick && usesSmallBlockEfficiency,
             smallBlockFileSizePercent: selectedSmallBlockFileSizePercent,
             operationSelection: selectedOperationSelection
         )
@@ -116,8 +113,12 @@ struct BenchmarkView: View {
         selectedProfileID == BenchmarkProfile.custom.id
     }
 
+    private var selectedProfileIsQuick: Bool {
+        selectedProfileID == BenchmarkProfile.quick.id
+    }
+
     private var selectedBenchmarkFileSizeBytes: Int64 {
-        Int64(selectedFileSizeBytes)
+        selectedProfileIsQuick ? BenchmarkProfile.quickTestSize : Int64(selectedFileSizeBytes)
     }
 
     private var selectedOperationSelection: BenchmarkOperationSelection {
@@ -207,7 +208,7 @@ struct BenchmarkView: View {
             fileSizeBytes: profile.testFileSizeBytes,
             dataPattern: selectedDataPattern,
             usesTrimmedAverage: profile.usesTrimmedAverage,
-            usesSmallBlockEfficiency: usesSmallBlockEfficiency,
+            usesSmallBlockEfficiency: !selectedProfileIsQuick && usesSmallBlockEfficiency,
             smallBlockFileSizePercent: selectedSmallBlockFileSizePercent,
             operationSelection: selectedOperationSelection
         )
@@ -219,12 +220,12 @@ struct BenchmarkView: View {
         switch profileID {
         case BenchmarkProfile.default.id:
             rawValue = defaultEngineRaw
-        case BenchmarkProfile.peakNVMe.id:
-            rawValue = peakNVMeEngineRaw
-        case BenchmarkProfile.realWorld.id:
-            rawValue = realWorldEngineRaw
-        case BenchmarkProfile.demoLight.id:
-            rawValue = demoEngineRaw
+        case BenchmarkProfile.ssd.id:
+            rawValue = ssdEngineRaw
+        case BenchmarkProfile.hdd.id:
+            rawValue = hddEngineRaw
+        case BenchmarkProfile.quick.id:
+            rawValue = quickEngineRaw
         case BenchmarkProfile.custom.id:
             rawValue = customEngineRaw
         default:
@@ -237,12 +238,12 @@ struct BenchmarkView: View {
         switch profileID {
         case BenchmarkProfile.default.id:
             defaultEngineRaw = engine.rawValue
-        case BenchmarkProfile.peakNVMe.id:
-            peakNVMeEngineRaw = engine.rawValue
-        case BenchmarkProfile.realWorld.id:
-            realWorldEngineRaw = engine.rawValue
-        case BenchmarkProfile.demoLight.id:
-            demoEngineRaw = engine.rawValue
+        case BenchmarkProfile.ssd.id:
+            ssdEngineRaw = engine.rawValue
+        case BenchmarkProfile.hdd.id:
+            hddEngineRaw = engine.rawValue
+        case BenchmarkProfile.quick.id:
+            quickEngineRaw = engine.rawValue
         case BenchmarkProfile.custom.id:
             customEngineRaw = engine.rawValue
         default:
@@ -367,18 +368,6 @@ struct BenchmarkView: View {
             adjustSelectedFileSizeForTarget()
         }
         .onChange(of: customExecutionModeRaw) { _, _ in
-            adjustSelectedFileSizeForTarget()
-        }
-        .onChange(of: allowsCustomBenchmarkConfiguration) { _, isAllowed in
-            guard !isAllowed, requestedProfileID == BenchmarkProfile.custom.id else { return }
-            requestedProfileID = BenchmarkProfile.default.id
-            // Discard pending custom requests while allowing an active run to finish.
-            switch benchmarkNotice {
-            case .confirmFullTest, .confirmSingleTest:
-                benchmarkNotice = nil
-            default:
-                break
-            }
             adjustSelectedFileSizeForTarget()
         }
         .onChange(of: customRowsJSON) { _, _ in
@@ -533,17 +522,17 @@ struct BenchmarkView: View {
                 .disabled(viewModel.isBenchmarking)
                 .accessibilityIdentifier("benchmarkProfilePicker")
 
-                Picker("", selection: $selectedRunCount) {
+                Picker("", selection: selectedProfileIsQuick ? .constant(1) : $selectedRunCount) {
                     ForEach(BenchmarkProfile.runCountOptions, id: \.self) { count in
                         Text("\(count)").tag(count)
                     }
                 }
                 .labelsHidden()
                 .frame(width: BenchmarkControlLayout.runCountWidth, alignment: .leading)
-                .disabled(viewModel.isBenchmarking || selectedProfileIsLooping)
+                .disabled(viewModel.isBenchmarking || selectedProfileIsLooping || selectedProfileIsQuick)
 
-                Picker("", selection: $selectedFileSizeBytes) {
-                    ForEach(BenchmarkProfile.fileSizeOptions, id: \.self) { size in
+                Picker("", selection: selectedProfileIsQuick ? .constant(Int(BenchmarkProfile.quickTestSize)) : $selectedFileSizeBytes) {
+                    ForEach(selectedProfileIsQuick ? [BenchmarkProfile.quickTestSize] : BenchmarkProfile.fileSizeOptions, id: \.self) { size in
                         Text(formatBenchmarkFileSize(size))
                             .tag(Int(size))
                             .disabled(!isFileSizeSelectable(size))
@@ -551,7 +540,7 @@ struct BenchmarkView: View {
                 }
                 .labelsHidden()
                 .frame(width: BenchmarkControlLayout.fileSizeWidth, alignment: .leading)
-                .disabled(viewModel.isBenchmarking)
+                .disabled(viewModel.isBenchmarking || selectedProfileIsQuick)
 
                 Picker("", selection: $selectedOperationSelectionRaw) {
                     Text(language.benchmarkOperationSelectionTitle(.readOnly)).tag(BenchmarkOperationSelection.readOnly.rawValue)
@@ -583,7 +572,7 @@ struct BenchmarkView: View {
                 .frame(minWidth: BenchmarkControlLayout.dataPatternWidth, alignment: .leading)
                 .disabled(viewModel.isBenchmarking)
 
-                Picker("", selection: $usesTrimmedAverage) {
+                Picker("", selection: selectedProfileIsQuick ? .constant(false) : $usesTrimmedAverage) {
                     Text(language.t("Off")).tag(false)
                     Text(language.t("On")).tag(true)
                 }
@@ -591,7 +580,7 @@ struct BenchmarkView: View {
                 .pickerStyle(.segmented)
                 .frame(minWidth: BenchmarkControlLayout.trimmedAverageWidth, alignment: .leading)
                 .help(language.t("Run two extra measured passes, discard fastest and slowest, then average the rest."))
-                .disabled(viewModel.isBenchmarking || selectedProfileIsLooping)
+                .disabled(viewModel.isBenchmarking || selectedProfileIsLooping || selectedProfileIsQuick)
             }
         }
         .controlSize(.regular)
@@ -646,7 +635,7 @@ struct BenchmarkView: View {
     }
 
     private var smallBlockEfficiencyControls: some View {
-        Picker(language.t("Improve Small-Block Test Efficiency"), selection: smallBlockEfficiencyBinding) {
+        Picker(language.t("Improve Small-Block Test Efficiency"), selection: selectedProfileIsQuick ? .constant(nil) : smallBlockEfficiencyBinding) {
             Text(language.t("Off")).tag(nil as Int?)
             ForEach(BenchmarkProfile.smallBlockFileSizePercentOptions, id: \.self) { percent in
                 Text("\(percent)%").tag(Optional(percent))
@@ -655,7 +644,7 @@ struct BenchmarkView: View {
         .labelsHidden()
         .pickerStyle(.menu)
         .frame(width: 100, alignment: .leading)
-        .disabled(viewModel.isBenchmarking)
+        .disabled(viewModel.isBenchmarking || selectedProfileIsQuick)
         .help(language.t("Use the selected test-size percentage for 4 KiB, 16 KiB, and 64 KiB items."))
     }
 
@@ -978,7 +967,7 @@ struct BenchmarkView: View {
                     fileSizeBytes: runProfile.testFileSizeBytes,
                     dataPattern: selectedDataPattern,
                     usesTrimmedAverage: runProfile.usesTrimmedAverage,
-                    usesSmallBlockEfficiency: usesSmallBlockEfficiency,
+                    usesSmallBlockEfficiency: !selectedProfileIsQuick && usesSmallBlockEfficiency,
                     smallBlockFileSizePercent: selectedSmallBlockFileSizePercent,
                     operationSelection: selectedOperationSelection
                 ),
@@ -986,10 +975,6 @@ struct BenchmarkView: View {
                 targetMismatch: targetFolderDriveMismatch,
                 confirmTitle: language.t(request == nil ? "Run Benchmark" : "Run Single Test"),
                 onConfirm: {
-                    guard runProfile.baseProfileID != BenchmarkProfile.custom.id || allowsCustomBenchmarkConfiguration else {
-                        benchmarkNotice = nil
-                        return
-                    }
                     if let request {
                         let started = viewModel.startBenchmark(
                             profile: request.profile,
@@ -1067,7 +1052,7 @@ struct BenchmarkView: View {
             fileSizeBytes: fileSizeBytes,
             dataPattern: selectedDataPattern,
             usesTrimmedAverage: usesTrimmedAverage,
-            usesSmallBlockEfficiency: usesSmallBlockEfficiency,
+            usesSmallBlockEfficiency: !selectedProfileIsQuick && usesSmallBlockEfficiency,
             smallBlockFileSizePercent: selectedSmallBlockFileSizePercent,
             operationSelection: selectedOperationSelection
         )
@@ -1075,6 +1060,7 @@ struct BenchmarkView: View {
     }
 
     private func adjustSelectedFileSizeForTarget() {
+        guard !selectedProfileIsQuick else { return }
         if let minimumSize = BenchmarkProfile.fileSizeOptions.first, Int64(selectedFileSizeBytes) < minimumSize {
             selectedFileSizeBytes = Int(minimumSize)
         }
@@ -1180,21 +1166,23 @@ private struct CustomBenchmarkRowsEditor: View {
                         .labelsHidden()
                         .frame(width: blockSizeColumnWidth, alignment: .leading)
 
-                        Picker("", selection: $rows[index].queueDepth) {
+                        Picker("", selection: queueDepthBinding(at: index)) {
                             ForEach(BenchmarkCustomRow.queueDepthOptions, id: \.self) { depth in
                                 Text("\(depth)").tag(depth)
                             }
                         }
                         .labelsHidden()
                         .frame(width: queueColumnWidth, alignment: .leading)
+                        .accessibilityIdentifier("benchmarkCustomQ\(index)")
 
-                        Picker("", selection: $rows[index].threads) {
-                            ForEach(BenchmarkCustomRow.threadOptions, id: \.self) { threadCount in
+                        Picker("", selection: threadsBinding(at: index)) {
+                            ForEach(rows[index].availableThreadOptions, id: \.self) { threadCount in
                                 Text("\(threadCount)").tag(threadCount)
                             }
                         }
                         .labelsHidden()
                         .frame(width: threadColumnWidth, alignment: .leading)
+                        .accessibilityIdentifier("benchmarkCustomT\(index)")
 
                         Picker("", selection: $rows[index].includeMixed) {
                             Text(language.t("Off")).tag(false)
@@ -1234,6 +1222,26 @@ private struct CustomBenchmarkRowsEditor: View {
     private func addRow() {
         guard rows.count < BenchmarkCustomRow.maxRows else { return }
         rows.append(BenchmarkCustomRow.newRow(index: rows.count))
+    }
+
+    private func queueDepthBinding(at index: Int) -> Binding<Int> {
+        Binding {
+            rows[index].queueDepth
+        } set: { depth in
+            var updated = rows
+            updated[index].selectQueueDepth(depth)
+            rows = updated
+        }
+    }
+
+    private func threadsBinding(at index: Int) -> Binding<Int> {
+        Binding {
+            rows[index].threads
+        } set: { count in
+            var updated = rows
+            updated[index].selectThreads(count)
+            rows = updated
+        }
     }
 
     private func removeRow(at index: Int) {

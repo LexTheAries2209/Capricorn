@@ -34,6 +34,9 @@ extension AppLanguage {
         case .simplifiedChinese:
             return switch profile.baseProfileID {
             case "default": "默认"
+            case "quick": "快速"
+            case "ssd": "SSD"
+            case "hdd": "HDD"
             case "peak-nvme": "峰值 / NVMe"
             case "real-world": "真实场景"
             case "demo": "演示 / 轻量"
@@ -100,13 +103,17 @@ extension AppLanguage {
         let fileSizeDescription: String
         switch self {
         case .english:
-            if usesSmallBlockEfficiency {
+            if profile.baseProfileID == "quick" {
+                fileSizeDescription = "Quick test: 128 MiB for sequential transfers and 1 MiB for random 4 KiB transfers. Runs once after warm-up, without pauses between tests. This checks basic read/write behavior, not the health of every sector."
+            } else if usesSmallBlockEfficiency {
                 fileSizeDescription = "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) base temporary file. 4 KiB, 16 KiB, and 64 KiB items transfer \(smallBlockPercent)% of that size; other items transfer the full file size."
             } else {
                 fileSizeDescription = "Test size: \(formatBenchmarkFileSize(fileSizeBytes)) complete temporary file. Reads and writes transfer the full file size; elapsed time comes from the actual transfer."
             }
         case .simplifiedChinese:
-            if usesSmallBlockEfficiency {
+            if profile.baseProfileID == "quick" {
+                fileSizeDescription = "快速测试：顺序项目传输 128 MiB，随机 4 KiB 项目传输 1 MiB。预热后正式测量 1 轮，项目之间不额外等待。用于检查基本读写表现，不代表已检查所有扇区或排除全部硬件故障。"
+            } else if usesSmallBlockEfficiency {
                 fileSizeDescription = "测试文件大小：以 \(formatBenchmarkFileSize(fileSizeBytes)) 临时文件为基准；4 KiB、16 KiB 和 64 KiB 项目实际传输其 \(smallBlockPercent)%，其他项目仍传输完整文件大小。"
             } else {
                 fileSizeDescription = "测试文件大小：使用完整的 \(formatBenchmarkFileSize(fileSizeBytes)) 临时文件。读取和写入都会传输完整文件大小，耗时由真实传输决定。"
@@ -144,7 +151,7 @@ extension AppLanguage {
             if profile.engine == .asyncQueue, profile.baseProfileID == "test" {
                 testTerms = "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. The Test profile compares Q1 and Q8 across T1/T2/T4 using POSIX AIO; write cells show durable speed after fsync, with transfer speed and fsync time underneath."
             } else if profile.engine == .asyncQueue {
-                testTerms = "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count."
+                testTerms = "Test labels: SEQ is sequential access, RND is random access, Q is the queue depth per worker thread, and T is the number of independent worker threads. Q × T cannot exceed 16; all workers share the system AIO allowance."
             } else {
                 testTerms = "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Each row runs read first, then write, before moving to the next row."
             }
@@ -164,7 +171,7 @@ extension AppLanguage {
             if profile.engine == .asyncQueue, profile.baseProfileID == "test" {
                 testTerms = "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。测试配置使用 POSIX AIO，对比 Q1 与 Q8 在 T1/T2/T4 下的表现；写入主数值为 fsync 后落盘速度，单元格下方显示传输速度和刷盘耗时。"
             } else if profile.engine == .asyncQueue {
-                testTerms = "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。"
+                testTerms = "测试项标记：SEQ 是顺序读写，RND 是随机读写，Q 是每个工作线程的队列深度，T 是独立工作线程数。Q × T 不超过 16；所有线程共享系统 AIO 额度。"
             } else {
                 testTerms = "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。每一行先读取、再写入，然后进入下一行。"
             }
@@ -237,6 +244,12 @@ extension AppLanguage {
         switch profile.baseProfileID {
         case "default":
             return "Default: balanced general-purpose disk performance test for most SSDs, HDDs, and external drives."
+        case "quick":
+            return "Quick: two representative groups, sequential 1 MiB Q1T1 and random 4 KiB Q1T1, for a short basic read/write check."
+        case "ssd":
+            return "SSD: compare low-concurrency response with sequential Q8T2 and random Q4T4 throughput, up to 16 outstanding requests."
+        case "hdd":
+            return "HDD: use one worker and compare Q1 with Q4 for sequential and random access, without adding competing worker streams."
         case "peak-nvme":
             return "Peak / NVMe: use for high-performance NVMe or Thunderbolt storage when you want controller peak throughput."
         case "real-world":
@@ -260,6 +273,12 @@ extension AppLanguage {
         switch profile.baseProfileID {
         case "default":
             return "默认：均衡、通用的硬盘性能测试，适合大多数 SSD、HDD 和外接盘。"
+        case "quick":
+            return "快速：仅测试顺序 1 MiB Q1T1 和随机 4 KiB Q1T1 两组代表性项目，用较小传输量快速检查基本读写表现。"
+        case "ssd":
+            return "SSD：对比低并发响应与顺序 Q8T2、随机 Q4T4 吞吐能力，最多保持 16 个在途请求。"
+        case "hdd":
+            return "HDD：使用单个工作线程，对比顺序、随机访问在 Q1 和 Q4 下的表现，避免额外增加相互竞争的访问流。"
         case "peak-nvme":
             return "峰值 / NVMe：适合高性能 NVMe 或雷电存储，用来看控制器峰值吞吐。"
         case "real-world":
@@ -285,7 +304,7 @@ extension AppLanguage {
             return "Test labels: SEQ is continuous large-block access, RND is scattered small-block access, Q is queue depth, and T is thread count. Custom Loop repeats the editable read/write groups\(engineText) until you stop it manually."
         }
         if profile.baseProfileID == "loop-extreme" {
-            return "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. Extreme Loop runs SEQ1M Q8T1, SEQ4M Q8T4, and SEQ1M Q32T4 read/write, then repeats without waiting."
+            return "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. Extreme Loop runs SEQ1M Q8T1, SEQ4M Q8T2, and SEQ1M Q16T1 read/write, then repeats without waiting."
         }
         return "Test labels: SEQ is continuous large-block access, Q is queue depth, and T is thread count. Loop runs SEQ1M Q1T1 read/write, then SEQ1M Q8T1 read/write, and repeats without waiting."
     }
@@ -296,7 +315,7 @@ extension AppLanguage {
             return "测试项标记：SEQ 是连续大块读写，RND 是分散小块随机读写，Q 是队列深度，T 是线程数。自定义循环会重复执行可编辑读写项目组\(engineText)，直到手动停止。"
         }
         if profile.baseProfileID == "loop-extreme" {
-            return "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。极限循环会依次执行 SEQ1M Q8T1、SEQ4M Q8T4、SEQ1M Q32T4 读取/写入，并且无间隔重复。"
+            return "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。极限循环会依次执行 SEQ1M Q8T1、SEQ4M Q8T2、SEQ1M Q16T1 读取/写入，并且无间隔重复。"
         }
         return "测试项标记：SEQ 是连续大块读写，Q 是队列深度，T 是线程数。循环会依次执行 SEQ1M Q1T1 读取/写入、SEQ1M Q8T1 读取/写入，并且无间隔重复。"
     }

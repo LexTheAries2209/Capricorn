@@ -82,19 +82,24 @@ final class AIOBenchmarkTransferTests: XCTestCase {
 
     func testNativeMultithreadedWritePreservesNonzeroData() throws {
         let budget = AIOBudget(limits: .current())
-        try withDescriptor { descriptor in
-            let bytes: Int64 = 4096 * 128 + 137
-            try AIOFilePreparation.resize(descriptor, bytes: bytes)
-            try AIOBenchmarkTransfer(transfer: AIOTransfer(budget: budget)).run(
-                descriptor: descriptor, test: test(depth: 4, threads: 4, bytes: bytes),
-                checkCancelled: {}, fill: { memset($0, 0x69, $1) },
-                completed: { _, _ in }, statusChanged: { _ in }
-            )
-            XCTAssertEqual(fsync(descriptor), 0)
-            var data = [UInt8](repeating: 0, count: Int(bytes))
-            let readCount = data.withUnsafeMutableBytes { pread(descriptor, $0.baseAddress, $0.count, 0) }
-            XCTAssertEqual(readCount, Int(bytes))
-            XCTAssertTrue(data.allSatisfy { $0 == 0x69 })
+        for cached in [true, false] {
+            for (depth, threads) in [(16, 1), (8, 2), (4, 4), (2, 8), (1, 16)] {
+                try withDescriptor { descriptor in
+                    let bytes: Int64 = 4096 * 1024 + 137
+                    try AIOFilePreparation.resize(descriptor, bytes: bytes)
+                    XCTAssertEqual(fcntl(descriptor, F_NOCACHE, cached ? 0 : 1), 0)
+                    try AIOBenchmarkTransfer(transfer: AIOTransfer(budget: budget)).run(
+                        descriptor: descriptor, test: test(depth: depth, threads: threads, bytes: bytes),
+                        checkCancelled: {}, fill: { memset($0, 0x69, $1) },
+                        completed: { _, _ in }, statusChanged: { _ in }
+                    )
+                    XCTAssertEqual(fsync(descriptor), 0)
+                    var data = [UInt8](repeating: 0, count: Int(bytes))
+                    let readCount = data.withUnsafeMutableBytes { pread(descriptor, $0.baseAddress, $0.count, 0) }
+                    XCTAssertEqual(readCount, Int(bytes))
+                    XCTAssertTrue(data.allSatisfy { $0 == 0x69 }, "Q\(depth)T\(threads), cached \(cached)")
+                }
+            }
         }
         XCTAssertEqual(budget.occupancy, 0)
     }
@@ -108,13 +113,24 @@ final class AIOBenchmarkTransferTests: XCTestCase {
     }
 
     private func withDescriptor(_ body: (Int32) throws -> Void) throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("Capricorn-RealThreads-\(UUID().uuidString)")
+        var parent = FileManager.default.temporaryDirectory
+        if let path = ProcessInfo.processInfo.environment["CAPRICORN_REAL_THREAD_TEST_ROOT"] {
+            let candidate = URL(fileURLWithPath: path, isDirectory: true)
+            let marker = try String(contentsOf: candidate.appendingPathComponent("CAPRICORN_TEST_ARTIFACTS.txt"), encoding: .utf8)
+            guard candidate.path.hasPrefix("/Volumes/40G4T_NTFS_E/Capricorn-RealThreads-"),
+                  marker.contains("Capricorn real-thread acceptance") else {
+                throw BenchmarkError.ioFailed("Refused unmarked external acceptance target")
+            }
+            parent = candidate
+        }
+        let root = parent.appendingPathComponent("Capricorn-RealThreads-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
         try Data("Capricorn real-thread acceptance data; retained for later cleanup.\n".utf8)
             .write(to: root.appendingPathComponent("CAPRICORN_TEST_ARTIFACTS.txt"), options: .withoutOverwriting)
         let descriptor = open(root.appendingPathComponent("owned-data.bin").path, O_CREAT | O_EXCL | O_RDWR | O_NOFOLLOW, 0o600)
         guard descriptor >= 0 else { throw BenchmarkError.ioFailed("Cannot create owned test file") }
         defer { close(descriptor) }
+        print("Retained real-thread acceptance data: \(root.path)")
         try body(descriptor)
     }
 }

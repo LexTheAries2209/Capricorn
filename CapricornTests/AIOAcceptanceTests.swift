@@ -220,6 +220,41 @@ final class AIOAcceptanceTests: XCTestCase {
     private func configuration(_ root: URL, operation: DiskActivityWorkloadOperation, bytes: Int64) -> DiskActivityWorkloadConfiguration {
         .init(targetFolderURL: root, operation: operation, fileSizeOption: .gib32, fileSizeBytes: bytes, loopEnabled: false)
     }
+
+    func testQuickProfileCompletesBothEnginesWithoutArtificialPauses() async throws {
+        for engine in BenchmarkEngine.allCases {
+            let root = try folder("quick-\(engine.rawValue)")
+            let manager = try AIOPreservingFileManager(root: root)
+            let updates = LockedState<[BenchmarkProgress]>([])
+            let runner: any BenchmarkRunning
+            if engine == .asyncQueue {
+                runner = AsyncQueueBenchmarkRunner(
+                    fileManager: manager, operationSleeper: { _, _ in XCTFail("Quick must skip artificial pauses") },
+                    temporaryRunLeaseDirectoryURL: root.appendingPathComponent("leases")
+                )
+            } else {
+                runner = NativeBenchmarkRunner(
+                    fileManager: manager, operationSleeper: { _, _ in XCTFail("Quick must skip artificial pauses") },
+                    temporaryRunLeaseDirectoryURL: root.appendingPathComponent("leases")
+                )
+            }
+            let profile = BenchmarkProfile.quick.applying(engine: engine).configured(
+                runs: 9, fileSizeBytes: 64 * 1_024 * 1_024 * 1_024, dataPattern: .random,
+                usesTrimmedAverage: true, usesSmallBlockEfficiency: true
+            )
+            let measurements = try await runner.run(
+                profile: profile, drive: CapricornTests.fixtureDrive(mountedAt: root.path),
+                volumePath: root.path, progress: { update in updates.withLock { $0.append(update) } },
+                result: { _ in }
+            )
+            XCTAssertEqual(measurements.count, 4)
+            XCTAssertEqual(measurements.map(\.bytesTransferred).sorted(), [
+                BenchmarkProfile.quickRandomTestSize, BenchmarkProfile.quickRandomTestSize,
+                BenchmarkProfile.quickTestSize, BenchmarkProfile.quickTestSize
+            ])
+            XCTAssertFalse(updates.snapshot().contains { $0.message.hasPrefix("Waiting between") })
+        }
+    }
 }
 
 private final class AIOPreservingFileManager: FileManager, @unchecked Sendable {

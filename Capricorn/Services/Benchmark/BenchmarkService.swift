@@ -265,38 +265,24 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         }
 
         func add(_ bytes: Int64) {
-            let reportBytes: Int64?
             lock.lock()
+            defer { lock.unlock() }
             completedBytes = min(totalBytes, max(0, completedBytes + bytes))
             let now = DispatchTime.now().uptimeNanoseconds
             if completedBytes >= totalBytes || now - lastReportNanoseconds >= minimumIntervalNanoseconds {
                 lastReportNanoseconds = now
-                reportBytes = completedBytes
-            } else {
-                reportBytes = nil
-            }
-            lock.unlock()
-
-            if let reportBytes {
-                onReport(reportBytes)
+                onReport(completedBytes)
             }
         }
 
         func set(_ bytes: Int64, force: Bool = false) {
-            let reportBytes: Int64?
             lock.lock()
+            defer { lock.unlock() }
             completedBytes = min(totalBytes, max(0, bytes))
             let now = DispatchTime.now().uptimeNanoseconds
             if force || completedBytes >= totalBytes || now - lastReportNanoseconds >= minimumIntervalNanoseconds {
                 lastReportNanoseconds = now
-                reportBytes = completedBytes
-            } else {
-                reportBytes = nil
-            }
-            lock.unlock()
-
-            if let reportBytes {
-                onReport(reportBytes)
+                onReport(completedBytes)
             }
         }
 
@@ -448,7 +434,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             }
             if isStopRequested() { break }
 
-            if index < profile.tests.count - 1 {
+            if index < profile.tests.count - 1, profile.baseProfileID != "quick" {
                 try checkCancelled()
                 notify(progress, BenchmarkProgress(
                     currentTestLabel: test.label,
@@ -862,7 +848,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             ))
 
             if isStopRequested() { break }
-            if runIndex < measuredRuns {
+            if runIndex < measuredRuns, profile.baseProfileID != "quick" {
                 try checkCancelled()
                 notify(progress, BenchmarkProgress(
                     currentTestLabel: test.label,
@@ -980,7 +966,7 @@ final class AsyncQueueBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 ))
 
                 if isStopRequested() { break }
-                if runIndex < measuredRuns {
+                if runIndex < measuredRuns, profile.baseProfileID != "quick" {
                     try checkCancelled()
                     notify(progress, BenchmarkProgress(
                         currentTestLabel: test.label,
@@ -1499,7 +1485,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             }
             if isStopRequested() { break }
 
-            if index < orderedTests.count - 1 {
+            if index < orderedTests.count - 1, profile.baseProfileID != "quick" {
                 try checkCancelled()
                 notify(progress, BenchmarkProgress(
                     currentTestLabel: test.label,
@@ -1784,7 +1770,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
             ))
 
             if isStopRequested() { break }
-            if runIndex < measuredRuns {
+            if runIndex < measuredRuns, profile.baseProfileID != "quick" {
                 try checkCancelled()
                 notify(progress, BenchmarkProgress(
                     currentTestLabel: test.label,
@@ -1900,7 +1886,7 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 ))
 
                 if isStopRequested() { break }
-                if runIndex < measuredRuns {
+                if runIndex < measuredRuns, profile.baseProfileID != "quick" {
                     try checkCancelled()
                     notify(progress, BenchmarkProgress(
                         currentTestLabel: test.label,
@@ -2250,6 +2236,11 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         progress: @escaping @Sendable (BenchmarkProgress) -> Void,
         displayLabel: String? = nil
     ) throws -> BenchmarkRunMeasurement {
+        guard test.queueDepth > 0, test.threads > 0,
+              test.threads <= BenchmarkConcurrency.maximumRequests,
+              test.queueDepth <= BenchmarkConcurrency.maximumRequests / test.threads else {
+            throw BenchmarkError.ioFailed("Benchmark queue depth × thread count must not exceed 16.")
+        }
         let threadCount = max(1, test.threads)
         let queueDepth = max(1, test.queueDepth)
         let blockSize = max(512, test.blockSizeBytes)
@@ -2265,7 +2256,10 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
         )
         progressReporter.set(0, force: true)
         let started = DispatchTime.now().uptimeNanoseconds
-        DispatchQueue.concurrentPerform(iterations: threadCount) { _ in
+        let workers = DispatchGroup()
+        let gate = NSCondition()
+        let ready = LockedState(0)
+        let performWorker: @Sendable () -> Void = { [self] in
             let buffer = UnsafeMutableRawPointer.allocate(byteCount: blockSize, alignment: 4_096)
             defer { buffer.deallocate() }
 
@@ -2338,6 +2332,21 @@ final class NativeBenchmarkRunner: BenchmarkRunning, @unchecked Sendable {
                 state.minLatencyMicros = min(state.minLatencyMicros, localMinLatency)
             }
         }
+        for workerIndex in 0..<threadCount {
+            workers.enter()
+            let worker = Thread {
+                defer { workers.leave() }
+                gate.lock()
+                ready.withLock { $0 += 1 }
+                if ready.snapshot() == threadCount { gate.broadcast() }
+                while ready.snapshot() < threadCount { gate.wait() }
+                gate.unlock()
+                performWorker()
+            }
+            worker.name = "Capricorn.Sync.worker.\(workerIndex)"
+            worker.start()
+        }
+        workers.wait()
 
         let aggregateResult = aggregate.snapshot()
         if let firstError = aggregateResult.firstError { throw firstError }
