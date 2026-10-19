@@ -8,6 +8,20 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V2.11.1 - 2026-10-19
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.11.1) | [Release Notes / 发布说明](docs/releases/v2.11.1.md)
+
+### 中文
+
+- 更新检查可与硬盘刷新、测速等任务同时进行，不再因这些任务弹出阻止提示。
+- 开发者自动更新发现新版时若任务忙碌，会静默保留新版提示；下载、安装及重启继续保护正在进行的任务。
+
+### English
+
+- Allows update checks alongside disk refreshes, benchmarks, and other tasks without conflict warnings.
+- Quietly retains the available version when developer automatic updates find a release while busy, with ongoing tasks still protected during downloads, installation, and relaunch.
+
 ## V2.11.0 - 2026-10-19
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.11.0) | [Release Notes / 发布说明](docs/releases/v2.11.0.md)
