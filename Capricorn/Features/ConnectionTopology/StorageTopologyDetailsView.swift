@@ -36,11 +36,6 @@ struct StorageTopologyDetailsView: View {
                 Text(language.t("Physical storage topology is unavailable for this source."))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Divider()
-            Text(language.t("Connection link rate is not the disk's measured transfer speed."))
-                .font(.caption).foregroundStyle(.secondary)
-            Text(language.t("Physical port positions are shown only for verified Mac models."))
-                .font(.caption).foregroundStyle(.secondary)
         }
         .textSelection(.enabled)
         .accessibilityIdentifier("topologyDriveDetails")

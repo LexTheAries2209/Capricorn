@@ -37,9 +37,6 @@ struct MacBookPortModelView: View {
                                   y: point.y + (number == 1 ? -10 : number == 2 ? 8 : 0))
                 }
             }
-            Text("1 \(language.t("Left rear"))  ·  2 \(language.t("Left front"))  ·  3 \(language.t("Right side"))")
-                .font(.system(size: 9)).foregroundStyle(.secondary)
-                .frame(width: 330).position(x: 170, y: 274)
         }
         .frame(width: 340, height: 280)
         .accessibilityElement(children: .ignore)

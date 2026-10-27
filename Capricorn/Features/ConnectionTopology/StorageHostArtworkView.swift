@@ -23,9 +23,6 @@ struct StorageHostArtworkView: View {
             Text(model.productName ?? StorageHostArtwork.contentType(for: model.identifier)?.localizedDescription ?? model.identifier)
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(2).multilineTextAlignment(.center)
-            Text("\(language.t("This Mac")) · \(model.identifier)")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(selected ? Color.accentColor : .secondary)
         }
         .frame(width: 340, height: 260, alignment: .top)
         .frame(height: 280, alignment: .top)
