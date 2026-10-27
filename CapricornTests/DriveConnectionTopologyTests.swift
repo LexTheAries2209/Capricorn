@@ -101,7 +101,7 @@ final class DriveConnectionTopologyTests: XCTestCase {
         XCTAssertFalse(graph.pathNodeIDs(to: "disk8").contains(second.id))
         XCTAssertTrue(graph.path(for: "disk99").isEmpty)
         let diagram = StorageTopologyDiagram(graph: graph)
-        XCTAssertEqual(diagram.graph.nodes.map(\.id), graph.nodes.map(\.id))
+        XCTAssertEqual(diagram.graph.nodes.map(\.id), graph.nodes.filter { $0.kind != .usbPort }.map(\.id))
     }
 
     func testSystemDiskIsHiddenAndSelectingItHighlightsOnlyTheComputer() {
@@ -115,7 +115,7 @@ final class DriveConnectionTopologyTests: XCTestCase {
         let diagram = StorageTopologyDiagram(graph: source, systemDriveIDs: ["disk0"])
         XCTAssertFalse(diagram.graph.nodes.contains { $0.id == "disk:disk0" || $0.id == "internal-controller" })
         XCTAssertEqual(diagram.selectedNodeIDs(for: "disk0"), ["computer"])
-        XCTAssertEqual(diagram.selectedNodeIDs(for: "disk8"), ["computer", "usb-port", "disk:disk8"])
+        XCTAssertEqual(diagram.selectedNodeIDs(for: "disk8"), ["computer", "disk:disk8"])
         XCTAssertEqual(source.path(for: "disk0").count, 3, "Inspector retains the system disk's actual data.")
     }
 

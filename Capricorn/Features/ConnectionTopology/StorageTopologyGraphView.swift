@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import SwiftUI
 
-/// Driver wrappers stay in the inspector; the diagram retains ports, hubs,
+/// Driver wrappers and USB port wrappers stay in the inspector; the diagram retains hubs,
 /// identified bridge chips and disks, preserving shared registry identities.
 struct StorageTopologyDiagram {
     let graph: DriveConnectionTopologyGraph
@@ -27,8 +27,7 @@ struct StorageTopologyDiagram {
                 segment.append(node)
                 let isHostThunderboltPort = node.kind == .thunderboltPort && !hasHostThunderboltPort
                 if node.kind == .thunderboltPort { hasHostThunderboltPort = true }
-                let keepPort = node.kind == .usbPort && (hostPort == nil || node.hostPort != hostPort)
-                let keep = [.computer, .disk, .usbHub].contains(node.kind) || keepPort
+                let keep = [.computer, .disk, .usbHub].contains(node.kind)
                     || (isHostThunderboltPort && hostPort == nil)
                     || (node.kind == .pcieBridge && node.chipDescription != nil)
                     || (!hasPort && hostPort == nil
