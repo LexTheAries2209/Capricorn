@@ -9,7 +9,7 @@ struct StorageTopologyRadialLayout {
     static func nodeSize(_ node: DriveConnectionTopologyNode, host: StorageHostModel? = nil) -> CGSize {
         switch node.kind {
         case .computer: host != nil
-            ? CGSize(width: 340, height: 280) : CGSize(width: 130, height: 98)
+            ? StorageHostArtworkGeometry.size : CGSize(width: 130, height: 98)
         case .disk: CGSize(width: 214, height: 140)
         default: CGSize(width: 184, height: 108)
         }

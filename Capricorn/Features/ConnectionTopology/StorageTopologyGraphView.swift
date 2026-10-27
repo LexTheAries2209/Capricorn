@@ -127,12 +127,12 @@ struct StorageTopologyGraphView: View {
             Canvas { context, _ in
                 for edge in diagram.graph.edges {
                     guard var start = layout.positions[edge.fromID], let end = layout.positions[edge.toID] else { continue }
-                    if edge.fromID == "computer", diagram.graph.hostModel?.hasVerifiedPortLayout == true {
+                    if edge.fromID == "computer", let model = diagram.graph.hostModel, model.hasVerifiedPortLayout {
                         let anchor = diagram.hostPortsByEdgeID[edge.id]
-                            .flatMap(MacBookPortModelView.anchor)
-                            ?? CGPoint(x: 170, y: 258)
-                        start.x += anchor.x - 170
-                        start.y += anchor.y - 140
+                            .flatMap { StorageHostArtworkGeometry.anchor($0, model: model) }
+                            ?? StorageHostArtworkGeometry.unresolvedAnchor
+                        start.x += anchor.x - StorageHostArtworkGeometry.size.width / 2
+                        start.y += anchor.y - StorageHostArtworkGeometry.size.height / 2
                     }
                     let selected = selectedEdges.contains(edge.id)
                     var path = Path()

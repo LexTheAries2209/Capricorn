@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "macbook-pro-14-top.png",
+      "idiom" : "mac"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

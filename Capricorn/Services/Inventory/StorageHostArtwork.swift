@@ -2,8 +2,8 @@
 import AppKit
 import UniformTypeIdentifiers
 
-/// Resolve Apple's device-model tag through the system type database. Artwork
-/// stays in macOS; no Apple image files are bundled or downloaded by Capricorn.
+/// Prefer a bundled official keyboard view for verified MacBook chassis, then
+/// resolve other Mac families through the system's device-model type database.
 @MainActor
 final class StorageHostArtwork {
     static let shared = StorageHostArtwork()
@@ -22,6 +22,11 @@ final class StorageHostArtwork {
 
     func image(for identifier: String) -> NSImage? {
         if let image = images[identifier] { return image }
+        if let view = StorageHostTopView(identifier: identifier),
+           let image = NSImage(named: view.assetName) {
+            images[identifier] = image
+            return image
+        }
         guard !missing.contains(identifier), let type = Self.contentType(for: identifier) else {
             missing.insert(identifier)
             return nil

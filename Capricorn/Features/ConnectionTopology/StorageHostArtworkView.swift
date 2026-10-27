@@ -19,13 +19,14 @@ struct StorageHostArtworkView: View {
                         .foregroundStyle(selected ? Color.accentColor : .secondary)
                 }
             }
-            .frame(width: 320, height: 205)
+            .frame(width: StorageHostArtworkGeometry.imageFrame.width,
+                   height: StorageHostArtworkGeometry.imageFrame.height)
             Text(model.productName ?? StorageHostArtwork.contentType(for: model.identifier)?.localizedDescription ?? model.identifier)
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(2).multilineTextAlignment(.center)
         }
-        .frame(width: 340, height: 260, alignment: .top)
-        .frame(height: 280, alignment: .top)
+        .frame(width: StorageHostArtworkGeometry.size.width,
+               height: StorageHostArtworkGeometry.size.height, alignment: .top)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(model.productName ?? model.identifier) · \(language.t("This Mac"))")
     }
