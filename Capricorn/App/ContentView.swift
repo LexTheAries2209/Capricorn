@@ -22,6 +22,7 @@ struct ContentView: View {
     @State private var sidebarViewportWidth: CGFloat = 300
     @State private var sidebarAvailableRowWidth: CGFloat = 272
     @State private var sidebarAutoFitIsActive = false
+    @State private var connectionTopologyGraph: DriveConnectionTopologyGraph?
     @AppStorage(AppPreferences.Key.opensSmartSelfTestProgressWindowAutomatically)
     private var opensSmartSelfTestProgressWindowAutomatically = AppPreferences.Defaults.opensSmartSelfTestProgressWindowAutomatically
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
@@ -82,6 +83,8 @@ struct ContentView: View {
                 }
                 DriveDetailView(
                     drive: drive,
+                    drives: viewModel.drives,
+                    connectionTopologyGraph: connectionTopologyGraph,
                     snapshot: driveSnapshot,
                     viewModel: viewModel,
                     smartHistory: driveSmartHistory,
@@ -123,6 +126,9 @@ struct ContentView: View {
                 },
                 onNext: {
                     viewModel.selectNextFeatureTab()
+                },
+                onOpenTopology: {
+                    viewModel.selectTopologyFeatureTab()
                 }
             )
             .frame(width: 0, height: 0)
@@ -145,6 +151,19 @@ struct ContentView: View {
         .task(id: preferences.automaticRefreshInterval) {
             guard ApplicationRuntime.allowsAutomaticStartupTasks else { return }
             await viewModel.runAutomaticRefresh(every: preferences.automaticRefreshInterval)
+        }
+        .task(id: viewModel.driveInventoryRevision) {
+            guard ApplicationRuntime.allowsAutomaticStartupTasks else {
+                connectionTopologyGraph = .assemble(paths: [:])
+                return
+            }
+            let drives = viewModel.drives
+            let reader = IOKitDriveConnectionTopologyReader()
+            let graph = await Task.detached(priority: .utility) {
+                reader.readGraph(drives: drives)
+            }.value
+            guard !Task.isCancelled else { return }
+            connectionTopologyGraph = graph
         }
         .onChange(of: viewModel.drives.map(\.id)) {
             if let driveID = virtualDiskEditor?.driveID,
@@ -1332,6 +1351,8 @@ struct DriveSidebarRow: View {
 
 private struct DriveDetailView: View {
     let drive: DriveDevice
+    let drives: [DriveDevice]
+    let connectionTopologyGraph: DriveConnectionTopologyGraph?
     let snapshot: SmartSnapshot?
     var viewModel: AppModel
     let smartHistory: [SmartHistoryRecord]
@@ -1351,7 +1372,7 @@ private struct DriveDetailView: View {
 
     var body: some View {
         @Bindable var viewModel = viewModel
-        if drive.isVirtual {
+        if drive.isVirtual && viewModel.selectedFeatureTab != .topology {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text(language.t("Overview"))
@@ -1433,7 +1454,12 @@ private struct DriveDetailView: View {
             )
             .tabItem { Label(language.t("History"), systemImage: "clock.arrow.circlepath") }
             .tag(DriveFeatureTab.history)
-            DiskConnectionTopologyView(drive: drive)
+            DiskConnectionTopologyView(
+                drives: drives,
+                selectedDrive: drive,
+                graph: connectionTopologyGraph,
+                selectDrive: viewModel.selectDriveFromSidebar
+            )
                 .tabItem { Label(language.t("Topology"), systemImage: "point.3.connected.trianglepath.dotted") }
                 .tag(DriveFeatureTab.topology)
         }

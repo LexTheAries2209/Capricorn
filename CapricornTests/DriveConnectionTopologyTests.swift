@@ -32,11 +32,11 @@ final class DriveConnectionTopologyTests: XCTestCase {
 
         XCTAssertTrue(topology.hasResolvedController)
         XCTAssertEqual(topology.nodes.map(\.kind), [
-            .computer, .pcieTunnel, .pcieBridge, .pcieDevice, .nvmeController, .disk
+            .computer, .pcieBridge, .pcieDevice, .nvmeController, .disk
         ])
-        XCTAssertEqual(topology.nodes[3].hardwareName, "pci1e4b,1602")
-        XCTAssertEqual(topology.nodes[3].pcieLink?.detailLabel, "16.0 GT/s · x4")
-        XCTAssertNil(topology.nodes[2].hardwareName)
+        XCTAssertEqual(topology.nodes[2].hardwareName, "pci1e4b,1602")
+        XCTAssertEqual(topology.nodes[2].pcieLink?.detailLabel, "16.0 GT/s · x4")
+        XCTAssertNil(topology.nodes[1].hardwareName)
     }
 
     func testUSBRegistryEntriesProduceHostToDevicePathWithoutPCIeRate() throws {
@@ -82,6 +82,146 @@ final class DriveConnectionTopologyTests: XCTestCase {
         )
 
         XCTAssertNil(topology)
+    }
+
+    func testSharedHardwareMergesByRegistryIdentityAndKeepsEveryDisk() throws {
+        let host = node("computer", .computer)
+        let port = node("registry:port1", .usbPort)
+        let hub = node("registry:hub1", .usbHub)
+        let first = node("disk:disk8", .disk, bsdName: "disk8")
+        let second = node("disk:disk9", .disk, bsdName: "disk9")
+        let graph = DriveConnectionTopologyGraph.assemble(paths: [
+            "disk8": .init(nodes: [host, port, hub, first], hasResolvedController: true),
+            "disk9": .init(nodes: [host, port, hub, second], hasResolvedController: true)
+        ])
+        XCTAssertEqual(graph.nodes.count, 5)
+        XCTAssertEqual(graph.edges.count, 4)
+        XCTAssertEqual(graph.edges.first { $0.fromID == host.id }?.driveBSDNames, ["disk8", "disk9"])
+        XCTAssertEqual(graph.path(for: "disk9").map(\.id), [host.id, port.id, hub.id, second.id])
+        XCTAssertFalse(graph.pathNodeIDs(to: "disk8").contains(second.id))
+        XCTAssertTrue(graph.path(for: "disk99").isEmpty)
+        let diagram = StorageTopologyDiagram(graph: graph)
+        XCTAssertEqual(diagram.graph.nodes.map(\.id), graph.nodes.map(\.id))
+    }
+
+    func testIdenticalHardwareNamesAtDifferentPortsStaySeparate() {
+        let host = node("computer", .computer)
+        let firstHub = node("registry:1", .usbHub)
+        let secondHub = node("registry:2", .usbHub)
+        let graph = DriveConnectionTopologyGraph.assemble(paths: [
+            "disk8": .init(nodes: [host, firstHub, node("disk:disk8", .disk, bsdName: "disk8")], hasResolvedController: true),
+            "disk9": .init(nodes: [host, secondHub, node("disk:disk9", .disk, bsdName: "disk9")], hasResolvedController: true)
+        ])
+        XCTAssertEqual(graph.nodes.filter { $0.kind == .usbHub }.count, 2)
+        XCTAssertEqual(graph.path(for: "disk9")[1].id, secondHub.id)
+    }
+
+    func testSupplementalThunderboltPathPreservesRealPortAndBridgeChip() throws {
+        let topology = try XCTUnwrap(DriveConnectionTopologyResolver.resolve(
+            drive: Self.drive(),
+            registryEntriesFromDiskToHost: [
+                .init(className: "IOMedia", entryName: "Media", bsdName: "disk8", pcieLinkStatus: nil, isPCIeTunnelled: false),
+                .init(registryID: "endpoint", className: "IOPCIDevice", entryName: "NVMe", bsdName: nil,
+                      pcieLinkStatus: 4 | (4 << 4), isPCIeTunnelled: true, chipDescription: "PCI 1234:5678"),
+                .init(registryID: "bridge", className: "IOPCIDevice", entryName: "pci-bridge", bsdName: nil,
+                      pcieLinkStatus: 1 | (16 << 4), isPCIeTunnelled: true,
+                      thunderboltPath: "IOService:/test", chipDescription: "PCI ABCD:1234",
+                      ignoresPCIeLinkStatus: true)
+            ],
+            thunderboltEntriesFromPortToHost: [
+                .init(registryID: "port", className: "IOThunderboltPort", entryName: "IOThunderboltPort@1",
+                      bsdName: nil, pcieLinkStatus: nil, isPCIeTunnelled: false,
+                      portNumber: 1, portDescription: "Thunderbolt Port", linkRateDescription: "40 Gb/s"),
+                .init(registryID: "controller", className: "IOThunderboltControllerType5", entryName: "Controller",
+                      bsdName: nil, pcieLinkStatus: nil, isPCIeTunnelled: false)
+            ]
+        ))
+        XCTAssertEqual(topology.nodes.map(\.kind), [.computer, .thunderboltController, .thunderboltPort, .pcieBridge, .pcieDevice, .disk])
+        XCTAssertEqual(topology.nodes[2].linkRateDescription, "40 Gb/s")
+        XCTAssertEqual(topology.nodes[3].chipDescription, "PCI ABCD:1234")
+        XCTAssertNil(topology.nodes[3].pcieLink)
+        XCTAssertEqual(topology.nodes[4].pcieLink?.laneCount, 4)
+    }
+
+    func testRateParserRejectsUnknownCodesAndKeepsUSBLinkRate() {
+        XCTAssertEqual(IOKitDriveConnectionTopologyReader.linkRateDescription(
+            currentLinkSpeed: 4, usbSpeedCode: nil, usbLinkSpeed: nil), "40 Gb/s")
+        XCTAssertNil(IOKitDriveConnectionTopologyReader.linkRateDescription(
+            currentLinkSpeed: 7, usbSpeedCode: 7, usbLinkSpeed: nil))
+        XCTAssertEqual(IOKitDriveConnectionTopologyReader.linkRateDescription(
+            currentLinkSpeed: nil, usbSpeedCode: 4, usbLinkSpeed: nil), "USB · 10 Gb/s")
+        XCTAssertNil(IOKitDriveConnectionTopologyReader.linkRateDescription(
+            currentLinkSpeed: nil, usbSpeedCode: nil, usbLinkSpeed: 10))
+    }
+
+    func testAppleDriverWrappersAreNotReportedAsAdditionalChips() throws {
+        var drive = Self.drive()
+        drive.protocolName = "Apple Fabric"
+        let topology = try XCTUnwrap(DriveConnectionTopologyResolver.resolve(
+            drive: drive,
+            registryEntriesFromDiskToHost: [
+                .init(className: "IOMedia", entryName: "Media", bsdName: "disk8", pcieLinkStatus: nil, isPCIeTunnelled: false),
+                .init(className: "AppleANS3NVMeController", entryName: "AppleANS3NVMeController",
+                      bsdName: nil, pcieLinkStatus: nil, isPCIeTunnelled: false),
+                .init(className: "RTBuddy", entryName: "RTBuddy(ANS2)", bsdName: nil, pcieLinkStatus: nil, isPCIeTunnelled: false),
+                .init(className: "IOService", entryName: "iop-ans-nub", bsdName: nil, pcieLinkStatus: nil, isPCIeTunnelled: false)
+            ]
+        ))
+        XCTAssertEqual(topology.nodes.map(\.kind), [.computer, .nvmeController, .disk])
+        XCTAssertNil(topology.nodes[1].chipDescription)
+    }
+
+    func testDiagramKeepsHostPortAndChipWhileInspectorKeepsBothThunderboltEnds() {
+        let host = node("computer", .computer)
+        let hostPort = node("registry:host-port", .thunderboltPort)
+        let devicePort = node("registry:device-port", .thunderboltPort)
+        var bridge = node("registry:bridge", .pcieBridge)
+        bridge.chipDescription = "PCI 1234:5678"
+        let disk = node("disk:disk8", .disk, bsdName: "disk8")
+        let graph = DriveConnectionTopologyGraph.assemble(paths: [
+            "disk8": .init(nodes: [host, hostPort, devicePort, bridge, disk], hasResolvedController: true)
+        ])
+        let diagram = StorageTopologyDiagram(graph: graph)
+        XCTAssertEqual(diagram.graph.nodes.map(\.id), [host.id, hostPort.id, bridge.id, disk.id])
+        XCTAssertEqual(graph.path(for: "disk8").map(\.id), [host.id, hostPort.id, devicePort.id, bridge.id, disk.id])
+        XCTAssertEqual(diagram.hardwareSegments[bridge.id]?.map(\.id), [devicePort.id, bridge.id])
+    }
+
+    func testRadialDiagramHasStablePositionsAcrossDiskSelectionAndNoNodeOverlap() {
+        let host = node("computer", .computer)
+        var paths: [String: DriveConnectionTopologyPath] = [:]
+        for index in 0..<12 {
+            let name = "disk\(index)"
+            let port = node("port:\(index)", .usbPort)
+            paths[name] = .init(nodes: [host, port, node("disk:\(name)", .disk, bsdName: name)],
+                                hasResolvedController: true)
+        }
+        let graph = DriveConnectionTopologyGraph.assemble(paths: paths)
+        let layout = StorageTopologyRadialLayout(graph: graph)
+        XCTAssertEqual(layout.positions.count, graph.nodes.count)
+        for (index, first) in graph.nodes.enumerated() {
+            let firstRect = rect(first, layout: layout)
+            XCTAssertTrue(CGRect(origin: .zero, size: layout.size).contains(firstRect))
+            for second in graph.nodes.dropFirst(index + 1) {
+                XCTAssertFalse(firstRect.intersects(rect(second, layout: layout)), "\(first.id) overlaps \(second.id)")
+            }
+        }
+        let before = layout.positions
+        _ = graph.pathNodeIDs(to: "disk1")
+        _ = graph.pathNodeIDs(to: "disk11")
+        XCTAssertEqual(before, StorageTopologyRadialLayout(graph: graph).positions)
+    }
+
+    private func rect(_ node: DriveConnectionTopologyNode, layout: StorageTopologyRadialLayout) -> CGRect {
+        let center = layout.positions[node.id] ?? .zero
+        let size = StorageTopologyRadialLayout.nodeSize(node)
+        return CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2,
+                      width: size.width, height: size.height)
+    }
+
+    private func node(_ id: String, _ kind: DriveConnectionTopologyNode.Kind, bsdName: String? = nil) -> DriveConnectionTopologyNode {
+        .init(id: id, kind: kind, hardwareName: "Hardware", portDescription: nil,
+              linkRateDescription: nil, bsdName: bsdName, pcieLink: nil, isPCIeTunnelled: false)
     }
 
     private static func drive() -> DriveDevice {

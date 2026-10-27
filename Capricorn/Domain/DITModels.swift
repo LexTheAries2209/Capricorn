@@ -1055,6 +1055,7 @@ enum AppSettingsKeyRouter {
 
 enum AppFeatureTabKeyRouter {
     static let tabKeyCode: UInt16 = 48
+    static let topologyKeyCode: UInt16 = 46
 
     static func matches(
         keyCode: UInt16? = nil,
@@ -1064,6 +1065,17 @@ enum AppFeatureTabKeyRouter {
         let isTabKey = charactersIgnoringModifiers == String(AppCommandShortcut.featureTabCharacter)
             || keyCode == tabKeyCode
         return isTabKey && !hasModifiers
+    }
+
+    static func matchesTopology(
+        keyCode: UInt16? = nil,
+        charactersIgnoringModifiers: String?,
+        hasModifiers: Bool,
+        isEditingText: Bool
+    ) -> Bool {
+        guard !hasModifiers, !isEditingText else { return false }
+        return keyCode == topologyKeyCode
+            || charactersIgnoringModifiers?.lowercased() == "m"
     }
 }
 

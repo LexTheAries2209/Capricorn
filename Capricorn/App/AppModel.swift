@@ -52,7 +52,10 @@ final class AppModel {
         var drive: DriveDevice
     }
 
-    var drives: [DriveDevice] = []
+    var drives: [DriveDevice] = [] {
+        didSet { driveInventoryRevision &+= 1 }
+    }
+    private(set) var driveInventoryRevision: UInt = 0
     var snapshots: [String: SmartSnapshot] = [:]
     private var simulatedDisks: [SimulatedDisk] = []
     var selectedDriveID: String?
@@ -518,6 +521,10 @@ final class AppModel {
     func selectPreviousFeatureTab() {
         guard selectedDrive?.isVirtual != true else { return }
         selectedFeatureTab = DriveFeatureTab.previous(before: selectedFeatureTab)
+    }
+
+    func selectTopologyFeatureTab() {
+        selectedFeatureTab = .topology
     }
 
     @discardableResult

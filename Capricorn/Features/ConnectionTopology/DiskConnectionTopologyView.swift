@@ -2,45 +2,39 @@
 import SwiftUI
 
 struct DiskConnectionTopologyView: View {
-    let drive: DriveDevice
+    let drives: [DriveDevice]
+    let selectedDrive: DriveDevice
+    let graph: DriveConnectionTopologyGraph?
+    let selectDrive: (String) -> Void
 
     @Environment(\.appLanguage) private var language
-    @State private var topology: DriveConnectionTopology?
-    @State private var isLoading = false
-    private let reader = IOKitDriveConnectionTopologyReader()
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 pageHeader
 
-                if drive.isNetwork || drive.isVirtual {
+                if let graph, !graph.nodes.isEmpty {
+                    StorageTopologyGraphView(
+                        graph: graph,
+                        selectedDriveID: selectedDrive.bsdName,
+                        selectDrive: selectDrive
+                    )
+                    connectionDetails(graph)
+                } else if graph == nil {
+                    ProgressView(language.t("Reading hardware path"))
+                        .frame(maxWidth: .infinity, minHeight: 420)
+                } else {
                     ContentUnavailableView(
                         language.t("Connection Topology"),
                         systemImage: "point.3.connected.trianglepath.dotted",
-                        description: Text(language.t("Physical storage topology is unavailable for this source."))
+                        description: Text(language.t("No physical storage paths are currently available."))
                     )
-                    .frame(maxWidth: .infinity, minHeight: 220)
-                } else if isLoading && topology == nil {
-                    ProgressView(language.t("Reading hardware path"))
-                        .frame(maxWidth: .infinity, minHeight: 220)
-                } else if let topology, topology.hasResolvedController {
-                    hardwarePathPanel(topology)
-                    connectionDetails(topology)
-                } else {
-                    ContentUnavailableView(
-                        language.t("Hardware path unavailable"),
-                        systemImage: "point.3.connected.trianglepath.dotted",
-                        description: Text(language.t("Could not inspect the hardware path."))
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 220)
+                    .frame(maxWidth: .infinity, minHeight: 420)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 12)
-        }
-        .task(id: drive.bsdName) {
-            await loadTopology()
         }
     }
 
@@ -49,81 +43,31 @@ struct DiskConnectionTopologyView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(language.t("Connection Topology"))
                     .font(.title2.bold())
-                Text("\(drive.displayName) · \(drive.bsdName) · \(drive.protocolName)")
+                Text(language.t("All storage devices on this Mac"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
             Spacer(minLength: 12)
-            Button {
-                Task { await loadTopology() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.bordered)
-            .help(language.t("Refresh Topology"))
-            .accessibilityLabel(language.t("Refresh Topology"))
-            .disabled(isLoading || drive.isNetwork || drive.isVirtual)
+            Label("\(drives.filter { !$0.isVirtual && !$0.isNetwork }.count)", systemImage: "externaldrive")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
         }
     }
 
-    private func hardwarePathPanel(_ topology: DriveConnectionTopology) -> some View {
-        InfoPanel(title: language.t("Hardware Path"), symbol: "point.3.connected.trianglepath.dotted") {
-            VStack(spacing: 0) {
-                ForEach(Array(topology.nodes.enumerated()), id: \.offset) { index, node in
-                    topologyNode(node)
-                    if index < topology.nodes.count - 1 {
-                        Rectangle()
-                            .fill(.separator)
-                            .frame(width: 1, height: 18)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.leading, 17)
-                    }
-                }
-            }
-        }
-    }
-
-    private func topologyNode(_ node: DriveConnectionTopologyNode) -> some View {
-        HStack(alignment: .center, spacing: 11) {
-            Image(systemName: node.kind.symbolName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(node.kind == .disk ? Color.accentColor : Color.secondary)
-                .frame(width: 34, height: 34)
-                .background(.quaternary, in: Circle())
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(language.t(node.kind.titleKey))
-                    .font(.body.weight(node.kind == .disk ? .semibold : .medium))
-                if let hardwareName = node.hardwareName {
-                    Text(hardwareName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .textSelection(.enabled)
-                }
-            }
-            Spacer(minLength: 10)
-            if let link = node.pcieLink {
-                Text("PCIe Gen \(link.generation) · \(link.detailLabel)")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
-    }
-
-    private func connectionDetails(_ topology: DriveConnectionTopology) -> some View {
-        InfoPanel(title: language.t("Link Characteristics"), symbol: "speedometer") {
+    private func connectionDetails(_ graph: DriveConnectionTopologyGraph) -> some View {
+        let drive = selectedDrive
+        let selectedPath = graph.path(for: drive.bsdName)
+        return InfoPanel(title: language.t("Selected drive details"), symbol: "externaldrive") {
+            LabeledContent(language.t("Device"), value: "\(drive.displayName) · \(drive.bsdName)")
+            LabeledContent(language.t("Capacity"), value: formatByteCount(drive.sizeBytes))
             LabeledContent(language.t("Host Transport")) {
                 Text(drive.connectionInfo?.detailLabel(effectiveLabel: language.t("Effective")) ?? drive.protocolName)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.trailing)
             }
 
-            let pcieLinks = topology.nodes.compactMap(\.pcieLink)
+            let pcieLinks = selectedPath.compactMap(\.pcieLink)
             if pcieLinks.isEmpty {
                 LabeledContent(language.t("Negotiated PCIe Link"), value: language.t("Not reported by the controller."))
                     .foregroundStyle(.secondary)
@@ -136,36 +80,50 @@ struct DiskConnectionTopologyView: View {
                 }
             }
 
+            ForEach(selectedPath.filter { $0.kind != .computer && $0.kind != .disk }) { node in
+                LabeledContent(language.t(node.kind.titleKey)) {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(node.hardwareName ?? language.t("Chip model not reported"))
+                        if let chip = node.chipDescription {
+                            Text(chip).monospaced()
+                        }
+                        if let port = node.portDescription {
+                            Text(port)
+                        }
+                        if let rate = node.linkRateDescription {
+                            Text(rate)
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                }
+            }
+            if selectedPath.isEmpty {
+                Text(language.t("Physical storage topology is unavailable for this source."))
+                    .foregroundStyle(.secondary)
+            }
             Text(language.t("Connection link rate is not the disk's measured transfer speed."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(language.t("Port identifiers are reported by macOS; physical position and chip model may not be available."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
-
-    @MainActor
-    private func loadTopology() async {
-        guard !drive.isNetwork, !drive.isVirtual else {
-            topology = nil
-            return
-        }
-        isLoading = true
-        defer { isLoading = false }
-        let drive = drive
-        let reader = reader
-        let result = await Task.detached(priority: .utility) {
-            reader.read(for: drive)
-        }.value
-        guard !Task.isCancelled else { return }
-        topology = result
-    }
 }
 
-private extension DriveConnectionTopologyNode.Kind {
+extension DriveConnectionTopologyNode.Kind {
     var titleKey: String {
         switch self {
         case .computer: "This Mac"
+        case .thunderboltController: "Thunderbolt Controller"
+        case .thunderboltSwitch: "Thunderbolt Switch"
+        case .thunderboltPort: "Thunderbolt Port"
+        case .thunderboltAdapter: "Thunderbolt Adapter"
         case .thunderboltTransport: "Thunderbolt Transport"
         case .pcieTunnel: "PCIe Tunnel"
+        case .usbPort: "USB Port"
         case .usbHostController: "USB Host Controller"
         case .usbHub: "USB Hub"
         case .usbDevice: "USB Device"
@@ -182,8 +140,11 @@ private extension DriveConnectionTopologyNode.Kind {
     var symbolName: String {
         switch self {
         case .computer: "laptopcomputer"
+        case .thunderboltController, .thunderboltSwitch, .thunderboltAdapter: "cpu"
+        case .thunderboltPort: "bolt.horizontal"
         case .thunderboltTransport: "bolt.horizontal"
         case .pcieTunnel: "point.3.connected.trianglepath.dotted"
+        case .usbPort: "cable.connector.horizontal"
         case .usbHostController, .usbDevice, .storageBridge: "cable.connector.horizontal"
         case .usbHub, .pcieBridge: "point.3.connected.trianglepath.dotted"
         case .pcieDevice, .nvmeController, .sataController, .storageController: "memorychip"
