@@ -6,12 +6,14 @@ import SwiftUI
 struct StorageTopologyDiagram {
     let graph: DriveConnectionTopologyGraph
     let hardwareSegments: [String: [DriveConnectionTopologyNode]]
+    let systemDriveIDs: Set<String>
 
-    init(graph source: DriveConnectionTopologyGraph) {
+    init(graph source: DriveConnectionTopologyGraph, systemDriveIDs: Set<String> = []) {
+        self.systemDriveIDs = systemDriveIDs
         var paths: [String: DriveConnectionTopologyPath] = [:]
         var segments: [String: [DriveConnectionTopologyNode]] = [:]
         for disk in source.nodes where disk.kind == .disk {
-            guard let bsdName = disk.bsdName else { continue }
+            guard let bsdName = disk.bsdName, !systemDriveIDs.contains(bsdName) else { continue }
             let path = source.path(for: bsdName)
             let hasPort = path.contains { [.usbPort, .thunderboltPort].contains($0.kind) }
             var visible: [DriveConnectionTopologyNode] = []
@@ -32,8 +34,18 @@ struct StorageTopologyDiagram {
             }
             paths[bsdName] = .init(nodes: visible, hasResolvedController: visible.count > 2)
         }
-        graph = .assemble(paths: paths)
+        let assembled = DriveConnectionTopologyGraph.assemble(paths: paths)
+        // The host remains visible even when its built-in system disk is the only disk.
+        if assembled.nodes.isEmpty, let host = source.nodes.first(where: { $0.kind == .computer }) {
+            graph = .init(nodes: [host], edges: [])
+        } else {
+            graph = assembled
+        }
         hardwareSegments = segments
+    }
+
+    func selectedNodeIDs(for driveID: String) -> Set<String> {
+        systemDriveIDs.contains(driveID) ? ["computer"] : graph.pathNodeIDs(to: driveID)
     }
 }
 
@@ -95,15 +107,16 @@ struct StorageTopologyRadialLayout {
 struct StorageTopologyGraphView: View {
     let graph: DriveConnectionTopologyGraph
     let selectedDriveID: String
+    var systemDriveIDs: Set<String> = []
     let selectDrive: (String) -> Void
 
     @Environment(\.appLanguage) private var language
     @State private var zoom: CGFloat = 1
 
     var body: some View {
-        let diagram = StorageTopologyDiagram(graph: graph)
+        let diagram = StorageTopologyDiagram(graph: graph, systemDriveIDs: systemDriveIDs)
         let layout = StorageTopologyRadialLayout(graph: diagram.graph)
-        let selectedNodes = diagram.graph.pathNodeIDs(to: selectedDriveID)
+        let selectedNodes = diagram.selectedNodeIDs(for: selectedDriveID)
         let selectedEdges = diagram.graph.pathEdges(for: selectedDriveID)
         VStack(spacing: 0) {
             HStack {

@@ -18,9 +18,10 @@ struct DiskConnectionTopologyView: View {
                     StorageTopologyGraphView(
                         graph: graph,
                         selectedDriveID: selectedDrive.bsdName,
+                        systemDriveIDs: Set(drives.filter(\.isSystemDisk).map(\.bsdName)),
                         selectDrive: selectDrive
                     )
-                    connectionDetails(graph)
+                    StorageTopologyDetailsView(drive: selectedDrive, graph: graph)
                 } else if graph == nil {
                     ProgressView(language.t("Reading hardware path"))
                         .frame(maxWidth: .infinity, minHeight: 420)
@@ -43,74 +44,18 @@ struct DiskConnectionTopologyView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(language.t("Connection Topology"))
                     .font(.title2.bold())
-                Text(language.t("All storage devices on this Mac"))
+                Text(language.t("Storage connections on this Mac"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
             Spacer(minLength: 12)
-            Label("\(drives.filter { !$0.isVirtual && !$0.isNetwork }.count)", systemImage: "externaldrive")
+            Label("\(drives.filter { !$0.isVirtual && !$0.isNetwork && !$0.isSystemDisk }.count)", systemImage: "externaldrive")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
     }
 
-    private func connectionDetails(_ graph: DriveConnectionTopologyGraph) -> some View {
-        let drive = selectedDrive
-        let selectedPath = graph.path(for: drive.bsdName)
-        return InfoPanel(title: language.t("Selected drive details"), symbol: "externaldrive") {
-            LabeledContent(language.t("Device"), value: "\(drive.displayName) · \(drive.bsdName)")
-            LabeledContent(language.t("Capacity"), value: formatByteCount(drive.sizeBytes))
-            LabeledContent(language.t("Host Transport")) {
-                Text(drive.connectionInfo?.detailLabel(effectiveLabel: language.t("Effective")) ?? drive.protocolName)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
-            }
-
-            let pcieLinks = selectedPath.compactMap(\.pcieLink)
-            if pcieLinks.isEmpty {
-                LabeledContent(language.t("Negotiated PCIe Link"), value: language.t("Not reported by the controller."))
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(Array(pcieLinks.enumerated()), id: \.offset) { index, link in
-                    LabeledContent(
-                        "\(language.t("Negotiated PCIe Link")) \(index + 1)",
-                        value: "PCIe Gen \(link.generation) · \(link.detailLabel)"
-                    )
-                }
-            }
-
-            ForEach(selectedPath.filter { $0.kind != .computer && $0.kind != .disk }) { node in
-                LabeledContent(language.t(node.kind.titleKey)) {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(node.hardwareName ?? language.t("Chip model not reported"))
-                        if let chip = node.chipDescription {
-                            Text(chip).monospaced()
-                        }
-                        if let port = node.portDescription {
-                            Text(port)
-                        }
-                        if let rate = node.linkRateDescription {
-                            Text(rate)
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                }
-            }
-            if selectedPath.isEmpty {
-                Text(language.t("Physical storage topology is unavailable for this source."))
-                    .foregroundStyle(.secondary)
-            }
-            Text(language.t("Connection link rate is not the disk's measured transfer speed."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(language.t("Port identifiers are reported by macOS; physical position and chip model may not be available."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
 }
 
 extension DriveConnectionTopologyNode.Kind {

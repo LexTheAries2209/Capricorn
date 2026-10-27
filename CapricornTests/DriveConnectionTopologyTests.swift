@@ -104,6 +104,32 @@ final class DriveConnectionTopologyTests: XCTestCase {
         XCTAssertEqual(diagram.graph.nodes.map(\.id), graph.nodes.map(\.id))
     }
 
+    func testSystemDiskIsHiddenAndSelectingItHighlightsOnlyTheComputer() {
+        let host = node("computer", .computer)
+        let source = DriveConnectionTopologyGraph.assemble(paths: [
+            "disk0": .init(nodes: [host, node("internal-controller", .nvmeController),
+                                  node("disk:disk0", .disk, bsdName: "disk0")], hasResolvedController: true),
+            "disk8": .init(nodes: [host, node("usb-port", .usbPort),
+                                  node("disk:disk8", .disk, bsdName: "disk8")], hasResolvedController: true)
+        ])
+        let diagram = StorageTopologyDiagram(graph: source, systemDriveIDs: ["disk0"])
+        XCTAssertFalse(diagram.graph.nodes.contains { $0.id == "disk:disk0" || $0.id == "internal-controller" })
+        XCTAssertEqual(diagram.selectedNodeIDs(for: "disk0"), ["computer"])
+        XCTAssertEqual(diagram.selectedNodeIDs(for: "disk8"), ["computer", "usb-port", "disk:disk8"])
+        XCTAssertEqual(source.path(for: "disk0").count, 3, "Inspector retains the system disk's actual data.")
+    }
+
+    func testOnlySystemDiskLeavesASelectableComputerInTheDiagram() {
+        let source = DriveConnectionTopologyGraph.assemble(paths: [
+            "disk0": .init(nodes: [node("computer", .computer), node("disk:disk0", .disk, bsdName: "disk0")],
+                           hasResolvedController: false)
+        ])
+        let diagram = StorageTopologyDiagram(graph: source, systemDriveIDs: ["disk0"])
+        XCTAssertEqual(diagram.graph.nodes.map(\.id), ["computer"])
+        XCTAssertTrue(diagram.graph.edges.isEmpty)
+        XCTAssertEqual(StorageTopologyRadialLayout(graph: diagram.graph).positions.count, 1)
+    }
+
     func testIdenticalHardwareNamesAtDifferentPortsStaySeparate() {
         let host = node("computer", .computer)
         let firstHub = node("registry:1", .usbHub)

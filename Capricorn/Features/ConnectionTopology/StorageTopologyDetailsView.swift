@@ -1,0 +1,97 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import SwiftUI
+
+struct StorageTopologyDetailsView: View {
+    let drive: DriveDevice
+    let graph: DriveConnectionTopologyGraph
+    @Environment(\.appLanguage) private var language
+
+    var body: some View {
+        let path = graph.path(for: drive.bsdName)
+        let hardware = path.filter { $0.kind != .computer && $0.kind != .disk }
+        let pcieLinks = path.compactMap(\.pcieLink)
+        InfoPanel(title: language.t("Selected drive details"),
+                  symbol: drive.isSystemDisk ? "laptopcomputer" : "externaldrive") {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), alignment: .topLeading)],
+                      alignment: .leading, spacing: 16) {
+                summaryField("Device", value: "\(drive.displayName) · \(drive.bsdName)")
+                summaryField("Capacity", value: formatByteCount(drive.sizeBytes))
+                summaryField("Host Transport", value: drive.connectionInfo?.detailLabel(effectiveLabel: language.t("Effective"))
+                             ?? drive.protocolName)
+                summaryField("Negotiated PCIe Link", value: pcieLinks.isEmpty
+                             ? language.t("Not reported")
+                             : pcieLinks.map { "PCIe Gen \($0.generation) · \($0.detailLabel)" }.joined(separator: "\n"))
+            }
+            .padding(.vertical, 4)
+
+            if !hardware.isEmpty {
+                Divider()
+                ViewThatFits(in: .horizontal) {
+                    hardwareTable(hardware).frame(minWidth: 700)
+                    compactHardware(hardware)
+                }
+            } else if path.isEmpty {
+                Text(language.t("Physical storage topology is unavailable for this source."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Divider()
+            Text(language.t("Connection link rate is not the disk's measured transfer speed."))
+                .font(.caption).foregroundStyle(.secondary)
+            Text(language.t("Port identifiers are reported by macOS; physical position and chip model may not be available."))
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .textSelection(.enabled)
+        .accessibilityIdentifier("topologyDriveDetails")
+    }
+
+    private func summaryField(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(language.t(title)).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func hardwareTable(_ hardware: [DriveConnectionTopologyNode]) -> some View {
+        Grid(alignment: .topLeading, horizontalSpacing: 18, verticalSpacing: 10) {
+            GridRow {
+                tableText(language.t("Component"), minimum: 115).bold()
+                tableText(language.t("Hardware"), minimum: 180).bold()
+                tableText(language.t("Chip / ID"), minimum: 130).bold()
+                tableText(language.t("Port / Link"), minimum: 170).bold()
+            }
+            .foregroundStyle(.secondary)
+            ForEach(hardware) { node in
+                Divider().gridCellColumns(4)
+                GridRow {
+                    tableText(language.t(node.kind.titleKey), minimum: 115)
+                    tableText(node.hardwareName ?? language.t("Not reported"), minimum: 180)
+                    tableText(node.chipDescription ?? language.t("Not reported"), minimum: 130).monospaced()
+                    tableText([node.portDescription, node.linkRateDescription].compactMap { $0 }.joined(separator: "\n"),
+                              minimum: 170)
+                }
+            }
+        }
+        .font(.caption)
+    }
+
+    private func tableText(_ text: String, minimum: CGFloat) -> some View {
+        Text(text)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(minWidth: minimum, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func compactHardware(_ hardware: [DriveConnectionTopologyNode]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(hardware) { node in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(language.t(node.kind.titleKey)).font(.caption.bold())
+                    Text([node.hardwareName, node.chipDescription, node.portDescription, node.linkRateDescription]
+                        .compactMap { $0 }.joined(separator: " · "))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+}
