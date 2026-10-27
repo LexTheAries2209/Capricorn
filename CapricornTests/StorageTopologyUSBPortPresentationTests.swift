@@ -74,13 +74,46 @@ final class StorageTopologyUSBPortPresentationTests: XCTestCase {
         XCTAssertTrue(StorageTopologyDiagram.isGenericUSBHub(genericHub.hardwareName))
     }
 
+    func testTunnelledGenericUSBHubIsKeptBeforeDockHubChain() {
+        let host = node("computer", .computer)
+        let tunnelHub = node("intel-usb3-tunnel", .usbHub, name: "USB3.0 Hub",
+                             chip: "USB 8087:0B40", rate: "10 Gb/s", usbTunnelled: true)
+        let dockHub = node("ts4-hub", .usbHub, name: "TS4 USB3.2 Gen2 HUB")
+        let nestedHub = node("ts4-downstream-hub", .usbHub, name: "TS4 USB3.2 Gen2 HUB")
+        let source = DriveConnectionTopologyGraph.assemble(paths: [
+            "disk8": .init(nodes: [host, node("host-port", .usbPort), tunnelHub,
+                                   node("disk:disk8", .disk, bsd: "disk8")], hasResolvedController: true),
+            "disk9": .init(nodes: [host, node("host-port", .usbPort), tunnelHub, dockHub,
+                                   node("dock-port", .usbPort), nestedHub,
+                                   node("downstream-port", .usbPort), node("disk:disk9", .disk, bsd: "disk9")],
+                           hasResolvedController: true)
+        ])
+
+        let diagram = StorageTopologyDiagram(graph: source)
+
+        XCTAssertEqual(diagram.graph.path(for: "disk8").map(\.id),
+                       ["computer", tunnelHub.id, "disk:disk8"])
+        XCTAssertEqual(diagram.graph.path(for: "disk9").map(\.id),
+                       ["computer", tunnelHub.id, dockHub.id, nestedHub.id, "disk:disk9"])
+        XCTAssertEqual(diagram.graph.nodes.filter { $0.id == tunnelHub.id }.count, 1)
+        XCTAssertEqual(diagram.graph.edges.first { $0.id == "computer->\(tunnelHub.id)" }?.driveBSDNames,
+                       ["disk8", "disk9"])
+        XCTAssertEqual(diagram.graph.edges.first { $0.id == "\(tunnelHub.id)->disk:disk8" }?.driveBSDNames,
+                       ["disk8"])
+        XCTAssertFalse(diagram.graph.nodes.contains { $0.kind == .usbPort })
+        XCTAssertEqual(diagram.graph.nodes.first { $0.id == tunnelHub.id }?.chipDescription, "USB 8087:0B40")
+        XCTAssertEqual(diagram.graph.nodes.first { $0.id == tunnelHub.id }?.linkRateDescription, "10 Gb/s")
+    }
+
     private func node(_ id: String, _ kind: DriveConnectionTopologyNode.Kind, bsd: String? = nil) -> DriveConnectionTopologyNode {
         node(id, kind, name: id, bsd: bsd)
     }
 
     private func node(_ id: String, _ kind: DriveConnectionTopologyNode.Kind,
-                      name: String?, bsd: String? = nil) -> DriveConnectionTopologyNode {
-        .init(id: id, kind: kind, hardwareName: name, portDescription: nil, linkRateDescription: nil,
-              bsdName: bsd, pcieLink: nil, isPCIeTunnelled: false)
+                      name: String?, bsd: String? = nil, chip: String? = nil, rate: String? = nil,
+                      usbTunnelled: Bool = false) -> DriveConnectionTopologyNode {
+        .init(id: id, kind: kind, hardwareName: name, portDescription: nil, linkRateDescription: rate,
+              bsdName: bsd, pcieLink: nil, isPCIeTunnelled: false, chipDescription: chip,
+              isUSBTunnelled: usbTunnelled)
     }
 }

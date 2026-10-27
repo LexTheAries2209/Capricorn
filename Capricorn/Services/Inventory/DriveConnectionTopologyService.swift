@@ -45,6 +45,7 @@ struct DriveConnectionTopologyNode: Equatable, Sendable, Identifiable {
     let isPCIeTunnelled: Bool
     var chipDescription: String? = nil
     var hostPort: StorageHostPort? = nil
+    var isUSBTunnelled: Bool = false
 }
 
 struct DriveConnectionTopologyPath: Equatable, Sendable {
@@ -140,6 +141,7 @@ struct DriveConnectionRegistryEntry: Equatable, Sendable {
     var chipDescription: String? = nil
     var ignoresPCIeLinkStatus: Bool = false
     var hostPort: StorageHostPort? = nil
+    var isUSBTunnelled: Bool = false
 }
 
 enum USBHubPresentation {
@@ -260,8 +262,8 @@ enum DriveConnectionTopologyResolver {
                 return .usbHostController
             }
             if text.contains("hub") || isGenericUSBHubName(entry) {
-                // USBPort subclasses describe controllers/sockets, not displayable hubs.
-                return isNamedUSBDock(entry) ? .usbHub : .usbPort
+                // Retain product-named hubs and OS-marked USB tunnel hubs only.
+                return isNamedUSBDock(entry) || entry.isUSBTunnelled ? .usbHub : .usbPort
             }
             if className.contains("usbhostdevice") {
                 return .usbDevice
@@ -312,7 +314,8 @@ enum DriveConnectionTopologyResolver {
             pcieLink: link,
             isPCIeTunnelled: entry.isPCIeTunnelled,
             chipDescription: entry.chipDescription,
-            hostPort: entry.hostPort
+            hostPort: entry.hostPort,
+            isUSBTunnelled: entry.isUSBTunnelled
         )
     }
 
@@ -344,7 +347,8 @@ enum DriveConnectionTopologyResolver {
             pcieLink: node.pcieLink,
             isPCIeTunnelled: node.isPCIeTunnelled,
             chipDescription: node.chipDescription,
-            hostPort: node.hostPort
+            hostPort: node.hostPort,
+            isUSBTunnelled: node.isUSBTunnelled
         )
         return updatedNodes
     }
@@ -473,6 +477,7 @@ struct IOKitDriveConnectionTopologyReader: Sendable {
 
         let pcieStatus = (copyProperty(entry, key: "IOPCIExpressLinkStatus") as? NSNumber)?.uint64Value
         let tunnelled = (copyProperty(entry, key: "IOPCITunnelled") as? NSNumber)?.boolValue ?? false
+        let usbTunnelled = (copyProperty(entry, key: "UsbTunnel") as? NSNumber)?.boolValue ?? false
         let modelName = copyProperty(entry, key: "Model Number") as? String
         let chipsetName = copyProperty(entry, key: "Chipset Name") as? String
         let productName = copyProperty(entry, key: "USB Product Name") as? String
@@ -515,7 +520,8 @@ struct IOKitDriveConnectionTopologyReader: Sendable {
             thunderboltPath: thunderboltPath,
             chipDescription: chipDescription(entry: entry, chipsetName: chipsetName),
             ignoresPCIeLinkStatus: copyProperty(entry, key: "pci-ignore-linkstatus") != nil,
-            hostPort: IOKitStorageHostReader().readPort(for: entry)
+            hostPort: IOKitStorageHostReader().readPort(for: entry),
+            isUSBTunnelled: usbTunnelled
         )
     }
 

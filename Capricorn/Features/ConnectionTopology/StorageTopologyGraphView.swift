@@ -27,9 +27,9 @@ struct StorageTopologyDiagram {
                 segment.append(node)
                 let isHostThunderboltPort = node.kind == .thunderboltPort && !hasHostThunderboltPort
                 if node.kind == .thunderboltPort { hasHostThunderboltPort = true }
-                let isNamedUSBHub = node.kind == .usbHub
-                    && node.hardwareName.map { !Self.isGenericUSBHub($0) } == true
-                let keep = [.computer, .disk].contains(node.kind) || isNamedUSBHub
+                let keepUSBHub = node.kind == .usbHub
+                    && (node.isUSBTunnelled || node.hardwareName.map { !Self.isGenericUSBHub($0) } == true)
+                let keep = [.computer, .disk].contains(node.kind) || keepUSBHub
                     || (isHostThunderboltPort && hostPort == nil)
                     || (node.kind == .pcieBridge && node.chipDescription != nil)
                     || (!hasPort && hostPort == nil

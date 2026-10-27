@@ -159,6 +159,26 @@ final class DriveConnectionTopologyTests: XCTestCase {
         }
     }
 
+    func testUSBTunnelHubIsARealIntermediateHub() throws {
+        let path = try XCTUnwrap(DriveConnectionTopologyResolver.resolve(
+            drive: Self.drive(),
+            registryEntriesFromDiskToHost: [
+                .init(className: "IOMedia", entryName: "Media", bsdName: "disk8",
+                      pcieLinkStatus: nil, isPCIeTunnelled: false),
+                .init(className: "IOUSBHostDevice", entryName: "USB3.0 Hub",
+                      bsdName: nil, pcieLinkStatus: nil, isPCIeTunnelled: false,
+                      hardwareDescription: "USB3.0 Hub", linkRateDescription: "10 Gb/s",
+                      chipDescription: "USB 8087:0B40", isUSBTunnelled: true)
+            ]
+        ))
+
+        XCTAssertEqual(path.nodes.map(\.kind), [.computer, .usbHub, .disk])
+        XCTAssertEqual(path.nodes[1].hardwareName, "USB3.0 Hub")
+        XCTAssertTrue(path.nodes[1].isUSBTunnelled)
+        XCTAssertEqual(path.nodes[1].linkRateDescription, "10 Gb/s")
+        XCTAssertEqual(path.nodes[1].chipDescription, "USB 8087:0B40")
+    }
+
     func testSupplementalThunderboltPathPreservesRealPortAndBridgeChip() throws {
         let topology = try XCTUnwrap(DriveConnectionTopologyResolver.resolve(
             drive: Self.drive(),
