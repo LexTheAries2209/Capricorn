@@ -1116,6 +1116,7 @@ enum DriveFeatureTab: String, CaseIterable, Identifiable {
     case benchmark
     case liveActivity
     case history
+    case topology
 
     var id: String { rawValue }
 

@@ -1433,6 +1433,9 @@ private struct DriveDetailView: View {
             )
             .tabItem { Label(language.t("History"), systemImage: "clock.arrow.circlepath") }
             .tag(DriveFeatureTab.history)
+            DiskConnectionTopologyView(drive: drive)
+                .tabItem { Label(language.t("Topology"), systemImage: "point.3.connected.trianglepath.dotted") }
+                .tag(DriveFeatureTab.topology)
         }
         .padding(18)
         }

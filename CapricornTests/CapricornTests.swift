@@ -2267,14 +2267,16 @@ final class CapricornTests: XCTestCase {
         XCTAssertEqual(AppLanguage.simplifiedChinese.t("CSV export failed:"), "CSV 导出失败：")
     }
 
-    func testDriveFeatureTabsCycleThroughFiveModules() {
-        XCTAssertEqual(DriveFeatureTab.allCases, [.overview, .smart, .benchmark, .liveActivity, .history])
+    func testDriveFeatureTabsCycleThroughSixModules() {
+        XCTAssertEqual(DriveFeatureTab.allCases, [.overview, .smart, .benchmark, .liveActivity, .history, .topology])
         XCTAssertEqual(DriveFeatureTab.next(after: .overview), .smart)
         XCTAssertEqual(DriveFeatureTab.next(after: .smart), .benchmark)
         XCTAssertEqual(DriveFeatureTab.next(after: .benchmark), .liveActivity)
         XCTAssertEqual(DriveFeatureTab.next(after: .liveActivity), .history)
-        XCTAssertEqual(DriveFeatureTab.next(after: .history), .overview)
-        XCTAssertEqual(DriveFeatureTab.previous(before: .overview), .history)
+        XCTAssertEqual(DriveFeatureTab.next(after: .history), .topology)
+        XCTAssertEqual(DriveFeatureTab.next(after: .topology), .overview)
+        XCTAssertEqual(DriveFeatureTab.previous(before: .overview), .topology)
+        XCTAssertEqual(DriveFeatureTab.previous(before: .topology), .history)
         XCTAssertEqual(DriveFeatureTab.previous(before: .history), .liveActivity)
     }
 
@@ -2309,7 +2311,7 @@ final class CapricornTests: XCTestCase {
         model.selectPreviousFeatureTab()
         XCTAssertEqual(model.selectedFeatureTab, .overview)
         model.selectPreviousFeatureTab()
-        XCTAssertEqual(model.selectedFeatureTab, .history)
+        XCTAssertEqual(model.selectedFeatureTab, .topology)
     }
 
     func testDrivePageHeaderTextMatchesOverviewSubtitle() {
