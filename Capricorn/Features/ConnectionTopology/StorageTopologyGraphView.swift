@@ -52,7 +52,7 @@ struct StorageTopologyRadialLayout {
     init(graph: DriveConnectionTopologyGraph) {
         let disks = graph.nodes.filter { $0.kind == .disk }
         let count = max(disks.count, 1)
-        let spacing = max(225.0, Double(count) * 270 / (2 * .pi))
+        let spacing = max(250.0, Double(count) * 270 / (2 * .pi))
         let children = Dictionary(grouping: graph.edges, by: \.fromID)
         var positions: [String: CGPoint] = ["computer": .zero]
         var leafIndex = 0

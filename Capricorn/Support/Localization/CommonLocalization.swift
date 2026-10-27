@@ -276,6 +276,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Interface Display": "界面显示",
         "Keyboard Shortcuts": "快捷键",
         "Switch feature pages in order": "按顺序切换功能页面",
+        "Open connection topology": "打开连接拓扑",
         "Settings": "设置",
         "Updates": "更新",
         "Software Update": "软件更新",

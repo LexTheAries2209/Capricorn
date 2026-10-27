@@ -212,6 +212,28 @@ final class DriveConnectionTopologyTests: XCTestCase {
         XCTAssertEqual(before, StorageTopologyRadialLayout(graph: graph).positions)
     }
 
+    func testThreeBranchesOfDifferentDepthsDoNotOverlap() {
+        let host = node("computer", .computer)
+        let graph = DriveConnectionTopologyGraph.assemble(paths: [
+            "disk0": .init(nodes: [host, node("disk:disk0", .disk, bsdName: "disk0")], hasResolvedController: false),
+            "disk6": .init(nodes: [
+                host, node("registry:port1", .thunderboltPort), node("registry:bridge", .pcieBridge),
+                node("disk:disk6", .disk, bsdName: "disk6")
+            ], hasResolvedController: true),
+            "disk13": .init(nodes: [
+                host, node("registry:usb1", .usbHostController), node("registry:usb2", .usbHostController),
+                node("disk:disk13", .disk, bsdName: "disk13")
+            ], hasResolvedController: true)
+        ])
+        let layout = StorageTopologyRadialLayout(graph: graph)
+        for (index, first) in graph.nodes.enumerated() {
+            for second in graph.nodes.dropFirst(index + 1) {
+                XCTAssertFalse(rect(first, layout: layout).intersects(rect(second, layout: layout)),
+                               "\(first.id) overlaps \(second.id)")
+            }
+        }
+    }
+
     private func rect(_ node: DriveConnectionTopologyNode, layout: StorageTopologyRadialLayout) -> CGRect {
         let center = layout.positions[node.id] ?? .zero
         let size = StorageTopologyRadialLayout.nodeSize(node)

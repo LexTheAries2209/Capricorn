@@ -519,6 +519,7 @@ struct CapricornSettingsView: View {
                 shortcutRow(language.t("Refresh disks and SMART data"), keys: "⌘R")
                 shortcutRow(language.t("Save SMART Snapshot CSV"), keys: "⌘S")
                 shortcutRow(language.t("Switch feature pages in order"), keys: "Tab")
+                shortcutRow(language.t("Open connection topology"), keys: "M")
             }
 
             Section(language.t("History Database")) {
