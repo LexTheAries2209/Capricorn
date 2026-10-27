@@ -7,15 +7,19 @@ struct StorageTopologyDiagram {
     let graph: DriveConnectionTopologyGraph
     let hardwareSegments: [String: [DriveConnectionTopologyNode]]
     let systemDriveIDs: Set<String>
+    let hostPortsByEdgeID: [String: StorageHostPort]
 
     init(graph source: DriveConnectionTopologyGraph, systemDriveIDs: Set<String> = []) {
         self.systemDriveIDs = systemDriveIDs
         var paths: [String: DriveConnectionTopologyPath] = [:]
         var segments: [String: [DriveConnectionTopologyNode]] = [:]
+        var portsByEdgeID: [String: StorageHostPort] = [:]
         for disk in source.nodes where disk.kind == .disk {
             guard let bsdName = disk.bsdName, !systemDriveIDs.contains(bsdName) else { continue }
             let path = source.path(for: bsdName)
             let hasPort = path.contains { [.usbPort, .thunderboltPort].contains($0.kind) }
+            let hostPort = path.compactMap(\.hostPort).first
+                .flatMap { source.hostModel?.position(for: $0) == nil ? nil : $0 }
             var visible: [DriveConnectionTopologyNode] = []
             var segment: [DriveConnectionTopologyNode] = []
             var hasHostThunderboltPort = false
@@ -23,9 +27,12 @@ struct StorageTopologyDiagram {
                 segment.append(node)
                 let isHostThunderboltPort = node.kind == .thunderboltPort && !hasHostThunderboltPort
                 if node.kind == .thunderboltPort { hasHostThunderboltPort = true }
-                let keep = [.computer, .disk, .usbPort, .usbHub].contains(node.kind) || isHostThunderboltPort
+                let keepPort = node.kind == .usbPort && (hostPort == nil || node.hostPort != hostPort)
+                let keep = [.computer, .disk, .usbHub].contains(node.kind) || keepPort
+                    || (isHostThunderboltPort && hostPort == nil)
                     || (node.kind == .pcieBridge && node.chipDescription != nil)
-                    || (!hasPort && [.usbHostController, .storageController, .sataController, .nvmeController].contains(node.kind))
+                    || (!hasPort && hostPort == nil
+                        && [.usbHostController, .storageController, .sataController, .nvmeController].contains(node.kind))
                 if keep {
                     visible.append(node)
                     segments[node.id] = segment
@@ -33,74 +40,23 @@ struct StorageTopologyDiagram {
                 }
             }
             paths[bsdName] = .init(nodes: visible, hasResolvedController: visible.count > 2)
+            if let hostPort, visible.count > 1 {
+                portsByEdgeID["computer->\(visible[1].id)"] = hostPort
+            }
         }
         let assembled = DriveConnectionTopologyGraph.assemble(paths: paths)
         // The host remains visible even when its built-in system disk is the only disk.
         if assembled.nodes.isEmpty, let host = source.nodes.first(where: { $0.kind == .computer }) {
-            graph = .init(nodes: [host], edges: [])
+            graph = .init(nodes: [host], edges: [], hostModel: source.hostModel)
         } else {
-            graph = assembled
+            graph = .init(nodes: assembled.nodes, edges: assembled.edges, hostModel: source.hostModel)
         }
         hardwareSegments = segments
+        hostPortsByEdgeID = portsByEdgeID
     }
 
     func selectedNodeIDs(for driveID: String) -> Set<String> {
         systemDriveIDs.contains(driveID) ? ["computer"] : graph.pathNodeIDs(to: driveID)
-    }
-}
-
-struct StorageTopologyRadialLayout {
-    let positions: [String: CGPoint]
-    let size: CGSize
-
-    static func nodeSize(_ node: DriveConnectionTopologyNode) -> CGSize {
-        switch node.kind {
-        case .computer: CGSize(width: 130, height: 98)
-        case .disk: CGSize(width: 214, height: 140)
-        default: CGSize(width: 184, height: 108)
-        }
-    }
-
-    init(graph: DriveConnectionTopologyGraph) {
-        let disks = graph.nodes.filter { $0.kind == .disk }
-        let count = max(disks.count, 1)
-        let spacing = max(250.0, Double(count) * 270 / (2 * .pi))
-        let children = Dictionary(grouping: graph.edges, by: \.fromID)
-        var positions: [String: CGPoint] = ["computer": .zero]
-        var leafIndex = 0
-        var visited: Set<String> = []
-
-        @discardableResult
-        func place(_ id: String, depth: Int) -> [Int] {
-            guard visited.insert(id).inserted else { return [] }
-            let next = (children[id] ?? []).sorted { $0.toID < $1.toID }
-            var indices = next.flatMap { place($0.toID, depth: depth + 1) }
-            if next.isEmpty {
-                indices = [leafIndex]
-                leafIndex += 1
-            }
-            if id != "computer", let first = indices.min(), let last = indices.max() {
-                let startAngle = count >= 3 ? -Double.pi / 2 : 0
-                let angle = startAngle + (Double(first + last) / 2) * 2 * .pi / Double(count)
-                let radius = spacing * Double(depth)
-                positions[id] = CGPoint(x: cos(angle) * radius, y: sin(angle) * radius * 0.62)
-            }
-            return indices
-        }
-        place("computer", depth: 0)
-
-        let bounds = graph.nodes.reduce(CGRect.null) { rect, node in
-            let center = positions[node.id] ?? .zero
-            let size = Self.nodeSize(node)
-            return rect.union(CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2,
-                                     width: size.width, height: size.height))
-        }
-        let inset: CGFloat = 32
-        self.positions = positions.mapValues {
-            CGPoint(x: $0.x - bounds.minX + inset, y: $0.y - bounds.minY + inset)
-        }
-        self.size = bounds.isNull ? CGSize(width: 300, height: 200)
-            : CGSize(width: bounds.width + inset * 2, height: bounds.height + inset * 2)
     }
 }
 
@@ -115,7 +71,7 @@ struct StorageTopologyGraphView: View {
 
     var body: some View {
         let diagram = StorageTopologyDiagram(graph: graph, systemDriveIDs: systemDriveIDs)
-        let layout = StorageTopologyRadialLayout(graph: diagram.graph)
+        let layout = StorageTopologyRadialLayout(graph: diagram.graph, hostPortsByEdgeID: diagram.hostPortsByEdgeID)
         let selectedNodes = diagram.selectedNodeIDs(for: selectedDriveID)
         let selectedEdges = diagram.graph.pathEdges(for: selectedDriveID)
         VStack(spacing: 0) {
@@ -154,7 +110,7 @@ struct StorageTopologyGraphView: View {
                         .frame(minWidth: geometry.size.width, minHeight: geometry.size.height)
                 }
             }
-            .frame(height: 560)
+            .frame(height: diagram.graph.hostModel?.hasVerifiedPortLayout == true ? 460 : 560)
         }
         .background(.quaternary.opacity(0.18), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor).opacity(0.5)))
@@ -170,13 +126,22 @@ struct StorageTopologyGraphView: View {
         ZStack(alignment: .topLeading) {
             Canvas { context, _ in
                 for edge in diagram.graph.edges {
-                    guard let start = layout.positions[edge.fromID], let end = layout.positions[edge.toID] else { continue }
+                    guard var start = layout.positions[edge.fromID], let end = layout.positions[edge.toID] else { continue }
+                    if edge.fromID == "computer", diagram.graph.hostModel?.hasVerifiedPortLayout == true {
+                        let anchor = diagram.hostPortsByEdgeID[edge.id]
+                            .flatMap(MacBookPortModelView.anchor)
+                            ?? CGPoint(x: 170, y: 258)
+                        start.x += anchor.x - 170
+                        start.y += anchor.y - 140
+                    }
                     let selected = selectedEdges.contains(edge.id)
                     var path = Path()
                     path.move(to: start)
                     path.addLine(to: end)
                     let unresolved = edge.fromID == "computer"
-                        && diagram.graph.nodes.first { $0.id == edge.toID }?.kind == .disk
+                        && (diagram.graph.hostModel?.hasVerifiedPortLayout == true
+                            ? diagram.hostPortsByEdgeID[edge.id] == nil
+                            : diagram.graph.nodes.first { $0.id == edge.toID }?.kind == .disk)
                     context.stroke(path, with: .color(selected ? .accentColor : .secondary.opacity(0.35)),
                                    style: StrokeStyle(lineWidth: selected ? 2.5 : 1.5,
                                                       dash: unresolved ? [5, 5] : []))
@@ -184,10 +149,24 @@ struct StorageTopologyGraphView: View {
             }
             ForEach(diagram.graph.nodes) { node in
                 let selected = selectedNodes.contains(node.id)
-                let size = StorageTopologyRadialLayout.nodeSize(node)
+                let size = StorageTopologyRadialLayout.nodeSize(node, host: diagram.graph.hostModel)
                 let segment = diagram.hardwareSegments[node.id] ?? [node]
                 Group {
-                    if let bsdName = node.bsdName {
+                    if node.kind == .computer, let model = diagram.graph.hostModel, model.hasVerifiedPortLayout {
+                        Button {
+                            if let id = systemDriveIDs.contains(selectedDriveID) ? selectedDriveID : systemDriveIDs.sorted().first {
+                                selectDrive(id)
+                            }
+                        } label: {
+                            MacBookPortModelView(
+                                model: model, selected: selected,
+                                connectedPorts: Set(diagram.hostPortsByEdgeID.values),
+                                selectedPorts: Set(diagram.hostPortsByEdgeID.filter { selectedEdges.contains($0.key) }.map(\.value))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("topologyHostComputer")
+                    } else if let bsdName = node.bsdName {
                         Button { selectDrive(bsdName) } label: {
                             nodeContent(node, segment: segment, selected: selected)
                         }

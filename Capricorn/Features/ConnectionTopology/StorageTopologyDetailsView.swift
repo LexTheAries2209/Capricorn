@@ -12,12 +12,14 @@ struct StorageTopologyDetailsView: View {
         let pcieLinks = path.compactMap(\.pcieLink)
         InfoPanel(title: language.t("Selected drive details"),
                   symbol: drive.isSystemDisk ? "laptopcomputer" : "externaldrive") {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), alignment: .topLeading)],
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), alignment: .topLeading)],
                       alignment: .leading, spacing: 16) {
                 summaryField("Device", value: "\(drive.displayName) · \(drive.bsdName)")
                 summaryField("Capacity", value: formatByteCount(drive.sizeBytes))
+                summaryField("Protocol", value: drive.protocolName)
                 summaryField("Host Transport", value: drive.connectionInfo?.detailLabel(effectiveLabel: language.t("Effective"))
                              ?? drive.protocolName)
+                summaryField("Mac Port", value: hostPortDescription(path))
                 summaryField("Negotiated PCIe Link", value: pcieLinks.isEmpty
                              ? language.t("Not reported")
                              : pcieLinks.map { "PCIe Gen \($0.generation) · \($0.detailLabel)" }.joined(separator: "\n"))
@@ -37,7 +39,7 @@ struct StorageTopologyDetailsView: View {
             Divider()
             Text(language.t("Connection link rate is not the disk's measured transfer speed."))
                 .font(.caption).foregroundStyle(.secondary)
-            Text(language.t("Port identifiers are reported by macOS; physical position and chip model may not be available."))
+            Text(language.t("Physical port positions are shown only for verified Mac models."))
                 .font(.caption).foregroundStyle(.secondary)
         }
         .textSelection(.enabled)
@@ -50,6 +52,14 @@ struct StorageTopologyDetailsView: View {
             Text(value).font(.subheadline).fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func hostPortDescription(_ path: [DriveConnectionTopologyNode]) -> String {
+        if drive.isSystemDisk { return language.t("Built into this Mac") }
+        guard let port = path.compactMap(\.hostPort).first else { return language.t("Not reported") }
+        let socket = "USB-C \(port.number)"
+        guard let position = graph.hostModel?.position(for: port) else { return socket }
+        return "\(language.t(position.titleKey)) · \(socket)"
     }
 
     private func hardwareTable(_ hardware: [DriveConnectionTopologyNode]) -> some View {

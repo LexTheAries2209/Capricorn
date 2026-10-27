@@ -44,6 +44,7 @@ struct DriveConnectionTopologyNode: Equatable, Sendable, Identifiable {
     let pcieLink: DrivePCIeLink?
     let isPCIeTunnelled: Bool
     var chipDescription: String? = nil
+    var hostPort: StorageHostPort? = nil
 }
 
 struct DriveConnectionTopologyPath: Equatable, Sendable {
@@ -62,6 +63,7 @@ struct DriveConnectionTopologyEdge: Equatable, Sendable, Identifiable {
 struct DriveConnectionTopologyGraph: Equatable, Sendable {
     let nodes: [DriveConnectionTopologyNode]
     let edges: [DriveConnectionTopologyEdge]
+    var hostModel: StorageHostModel? = nil
 
     static func assemble(paths: [String: DriveConnectionTopologyPath]) -> DriveConnectionTopologyGraph {
         var nodesByID: [String: DriveConnectionTopologyNode] = [:]
@@ -137,6 +139,7 @@ struct DriveConnectionRegistryEntry: Equatable, Sendable {
     var thunderboltPath: String? = nil
     var chipDescription: String? = nil
     var ignoresPCIeLinkStatus: Bool = false
+    var hostPort: StorageHostPort? = nil
 }
 
 enum DriveConnectionTopologyResolver {
@@ -240,7 +243,8 @@ enum DriveConnectionTopologyResolver {
             return .nvmeController
         }
         if text.contains("usb") {
-            if className.contains("usbhostport") || className.contains("usbport")
+            if (entry.hostPort != nil && entry.entryName.localizedCaseInsensitiveContains("port"))
+                || className.contains("usbhostport") || className.contains("usbport")
                 || className.contains("xhciport") || className.contains("hubport") {
                 return .usbPort
             }
@@ -298,7 +302,8 @@ enum DriveConnectionTopologyResolver {
             bsdName: kind == .disk ? drive.bsdName : nil,
             pcieLink: link,
             isPCIeTunnelled: entry.isPCIeTunnelled,
-            chipDescription: entry.chipDescription
+            chipDescription: entry.chipDescription,
+            hostPort: entry.hostPort
         )
     }
 
@@ -329,7 +334,8 @@ enum DriveConnectionTopologyResolver {
             bsdName: node.bsdName,
             pcieLink: node.pcieLink,
             isPCIeTunnelled: node.isPCIeTunnelled,
-            chipDescription: node.chipDescription
+            chipDescription: node.chipDescription,
+            hostPort: node.hostPort
         )
         return updatedNodes
     }
@@ -392,7 +398,9 @@ struct IOKitDriveConnectionTopologyReader: Sendable {
                 hasResolvedController: false
             )
         }
-        return .assemble(paths: paths)
+        var graph = DriveConnectionTopologyGraph.assemble(paths: paths)
+        graph.hostModel = IOKitStorageHostReader().readModel()
+        return graph
     }
 
     func read(for drive: DriveDevice) -> DriveConnectionTopologyPath? {
@@ -483,7 +491,8 @@ struct IOKitDriveConnectionTopologyReader: Sendable {
             ),
             thunderboltPath: thunderboltPath,
             chipDescription: chipDescription(entry: entry, chipsetName: chipsetName),
-            ignoresPCIeLinkStatus: copyProperty(entry, key: "pci-ignore-linkstatus") != nil
+            ignoresPCIeLinkStatus: copyProperty(entry, key: "pci-ignore-linkstatus") != nil,
+            hostPort: IOKitStorageHostReader().readPort(for: entry)
         )
     }
 
