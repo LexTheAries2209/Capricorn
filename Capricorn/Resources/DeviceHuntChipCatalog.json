@@ -1,0 +1,245 @@
+{
+  "schemaVersion": 1,
+  "source": "DeviceHunt",
+  "snapshotDate": "2026-10-28",
+  "records": [
+    {
+      "id": "PCI 1B21:0612",
+      "manufacturer": "ASMedia",
+      "category": "SATA Controller",
+      "name": "ASM1061/ASM1062 Serial ATA Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1B21/device/0612"
+    },
+    {
+      "id": "PCI 1B21:1166",
+      "manufacturer": "ASMedia",
+      "category": "SATA Controller",
+      "name": "ASM1166 Serial ATA Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1B21/device/1166"
+    },
+    {
+      "id": "PCI 1B21:1182",
+      "manufacturer": "ASMedia",
+      "category": "PCIe Switch",
+      "name": "ASM1182e 2-Port PCIe x1 Gen2 Packet Switch",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1B21/device/1182"
+    },
+    {
+      "id": "PCI 1B21:1142",
+      "manufacturer": "ASMedia",
+      "category": "USB 3.0 Host Controller",
+      "name": "ASM1042A USB 3.0 Host Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1B21/device/1142"
+    },
+    {
+      "id": "PCI 1B21:2142",
+      "manufacturer": "ASMedia",
+      "category": "USB 3.1 Host Controller",
+      "name": "ASM2142/ASM3142 USB 3.1 Host Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1B21/device/2142"
+    },
+    {
+      "id": "PCI 1B21:3241",
+      "manufacturer": "ASMedia",
+      "category": "USB 3.2 Host Controller",
+      "name": "ASM3241 USB 3.2 Gen 2 Host Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1B21/device/3241"
+    },
+    {
+      "id": "PCI 1B21:3242",
+      "manufacturer": "ASMedia",
+      "category": "USB 3.2 Host Controller",
+      "name": "ASM3242 USB 3.2 Host Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1B21/device/3242"
+    },
+    {
+      "id": "PCI 1B21:2425",
+      "manufacturer": "ASMedia",
+      "category": "USB4 / Thunderbolt Host Router",
+      "name": "ASM4242 USB 4 / Thunderbolt 3 Host Router",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1B21/device/2425"
+    },
+    {
+      "id": "PCI 1B21:2426",
+      "manufacturer": "ASMedia",
+      "category": "USB 3.2 Host Controller",
+      "name": "ASM4242 USB 3.2 xHCI Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1B21/device/2426"
+    },
+    {
+      "id": "PCI 8086:1E31",
+      "manufacturer": "Intel",
+      "category": "USB Host Controller",
+      "name": "7 Series/C210 Series Chipset Family USB xHCI Host Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/1E31"
+    },
+    {
+      "id": "PCI 8086:8C31",
+      "manufacturer": "Intel",
+      "category": "USB Host Controller",
+      "name": "8 Series/C220 Series Chipset Family USB xHCI",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/8C31"
+    },
+    {
+      "id": "PCI 8086:9D2F",
+      "manufacturer": "Intel",
+      "category": "USB Host Controller",
+      "name": "Sunrise Point-LP USB 3.0 xHCI Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/9D2F"
+    },
+    {
+      "id": "PCI 8086:A12F",
+      "manufacturer": "Intel",
+      "category": "USB Host Controller",
+      "name": "100/C230 Series Chipset Family USB 3.0 xHCI Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/A12F"
+    },
+    {
+      "id": "PCI 8086:9DED",
+      "manufacturer": "Intel",
+      "category": "USB Host Controller",
+      "name": "Cannon Point-LP USB 3.1 xHCI Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/9DED"
+    },
+    {
+      "id": "PCI 8086:A36D",
+      "manufacturer": "Intel",
+      "category": "USB Host Controller",
+      "name": "300/C240 Series Chipset Family USB 3.1 xHCI",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/A36D"
+    },
+    {
+      "id": "PCI 8086:7AE0",
+      "manufacturer": "Intel",
+      "category": "USB Host Controller",
+      "name": "600 Series Chipset Family USB 3.2 Gen 2x2 xHCI Host Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/7AE0"
+    },
+    {
+      "id": "PCI 8086:7A60",
+      "manufacturer": "Intel",
+      "category": "USB Host Controller",
+      "name": "700 Series Chipset Family USB 3.2 Gen 2x2 xHCI Host Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/7A60"
+    },
+    {
+      "id": "PCI 8086:2822",
+      "manufacturer": "Intel",
+      "category": "SATA Controller",
+      "name": "SATA Controller (RAID 0/1/5/10, Desktop RST)",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/2822"
+    },
+    {
+      "id": "PCI 8086:A282",
+      "manufacturer": "Intel",
+      "category": "SATA Controller",
+      "name": "200 Series/Z370 Chipset Family SATA Controller (AHCI)",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/A282"
+    },
+    {
+      "id": "PCI 144D:A808",
+      "manufacturer": "Samsung",
+      "category": "NVMe Controller",
+      "name": "NVMe SSD Controller SM981/PM981/PM983",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/144D/device/A808"
+    },
+    {
+      "id": "PCI 144D:A80A",
+      "manufacturer": "Samsung",
+      "category": "NVMe Controller",
+      "name": "NVMe SSD Controller PM9A1/PM9A3/980 PRO",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/144D/device/A80A"
+    },
+    {
+      "id": "PCI 144D:A804",
+      "manufacturer": "Samsung",
+      "category": "NVMe Controller",
+      "name": "NVMe SSD Controller SM961/PM961/SM963",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/144D/device/A804"
+    },
+    {
+      "id": "PCI 126F:2263",
+      "manufacturer": "Silicon Motion",
+      "category": "NVMe Controller",
+      "name": "SM2263EN/SM2263XT NVMe SSD Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/126F/device/2263"
+    },
+    {
+      "id": "PCI 1106:3483",
+      "manufacturer": "VIA Technologies",
+      "category": "USB 3.0 Host Controller",
+      "name": "VL805/806 xHCI USB 3.0 Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1106/device/3483"
+    },
+    {
+      "id": "PCI 1106:3432",
+      "manufacturer": "VIA Technologies",
+      "category": "USB 3.0 Host Controller",
+      "name": "VL800/801 xHCI USB 3.0 Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1106/device/3432"
+    },
+    {
+      "id": "USB 152D:0583",
+      "manufacturer": "JMicron",
+      "category": "NVMe-to-USB Bridge",
+      "name": "JMS583 Gen 2 to PCIe Gen3x2 Bridge",
+      "sourceURL": "https://devicehunt.com/view/type/usb/vendor/152D/device/0583"
+    },
+    {
+      "id": "USB 152D:0578",
+      "manufacturer": "JMicron",
+      "category": "SATA-to-USB Bridge",
+      "name": "JMS578 SATA 6Gb/s",
+      "sourceURL": "https://devicehunt.com/view/type/usb/vendor/152D/device/0578"
+    },
+    {
+      "id": "USB 152D:0567",
+      "manufacturer": "JMicron",
+      "category": "SATA-to-USB Bridge",
+      "name": "JMS567 SATA 6Gb/s Bridge",
+      "sourceURL": "https://devicehunt.com/view/type/usb/vendor/152D/device/0567"
+    },
+    {
+      "id": "USB 0BDA:9210",
+      "manufacturer": "Realtek",
+      "category": "NVMe-to-USB Bridge",
+      "name": "RTL9210 M.2 NVMe Adapter",
+      "sourceURL": "https://devicehunt.com/view/type/usb/vendor/0BDA/device/9210"
+    },
+    {
+      "id": "USB 174C:55AA",
+      "manufacturer": "ASMedia",
+      "category": "SATA-to-USB Bridge",
+      "name": "ASM1051E SATA 6Gb/s bridge, ASM1053E SATA 6Gb/s bridge, ASM1153 SATA 3Gb/s bridge, ASM1153E SATA 6Gb/s bridge",
+      "sourceURL": "https://devicehunt.com/view/type/usb/vendor/174C/device/55AA"
+    },
+    {
+      "id": "USB 174C:3074",
+      "manufacturer": "ASMedia",
+      "category": "USB Hub Controller",
+      "name": "ASM1074 SuperSpeed Hub",
+      "sourceURL": "https://devicehunt.com/view/type/usb/vendor/174C/device/3074"
+    },
+    {
+      "id": "USB 174C:2074",
+      "manufacturer": "ASMedia",
+      "category": "USB Hub Controller",
+      "name": "ASM1074 High-Speed Hub",
+      "sourceURL": "https://devicehunt.com/view/type/usb/vendor/174C/device/2074"
+    },
+    {
+      "id": "USB 2109:0812",
+      "manufacturer": "VIA Labs",
+      "category": "USB Hub Controller",
+      "name": "VL812 Hub",
+      "sourceURL": "https://devicehunt.com/view/type/usb/vendor/2109/device/0812"
+    },
+    {
+      "id": "USB 05E3:0620",
+      "manufacturer": "Genesys Logic",
+      "category": "USB Hub Controller",
+      "name": "GL3523 Hub",
+      "sourceURL": "https://devicehunt.com/view/type/usb/vendor/05E3/device/0620"
+    }
+  ]
+}

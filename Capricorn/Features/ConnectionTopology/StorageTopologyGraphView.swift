@@ -68,6 +68,7 @@ struct StorageTopologyDiagram {
 struct StorageTopologyGraphView: View {
     let graph: DriveConnectionTopologyGraph
     let selectedDriveID: String
+    var resolvedChipRecords: [String: DeviceHuntChipCatalog.Record] = [:]
     var systemDriveIDs: Set<String> = []
     let selectDrive: (String) -> Void
 
@@ -231,7 +232,11 @@ struct StorageTopologyGraphView: View {
     ) -> some View {
         let isHost = node.kind == .computer
         let rate = node.linkRateDescription ?? segment.reversed().compactMap(\.linkRateDescription).first
-        let chips = Array(Set(segment.compactMap(\.chipDescription))).sorted()
+        let chips = Array(Set(segment.compactMap { node -> String? in
+            guard let chipDescription = node.chipDescription else { return nil }
+            let identifier = DeviceChipIdentifier(description: chipDescription)
+            return identifier.flatMap { resolvedChipRecords[$0.displayValue]?.name } ?? chipDescription
+        })).sorted()
         return VStack(spacing: 5) {
             Image(systemName: node.kind.symbolName)
                 .font(.system(size: isHost ? 25 : 20))
@@ -251,7 +256,7 @@ struct StorageTopologyGraphView: View {
                     .foregroundStyle(selected ? Color.accentColor : .secondary)
             }
             if !chips.isEmpty {
-                Text(chips.joined(separator: " · ")).font(.system(size: 10, design: .monospaced))
+                Text(chips.joined(separator: " · ")).font(.system(size: 10))
                     .foregroundStyle(.secondary).lineLimit(2).multilineTextAlignment(.center)
             } else if node.kind == .disk && segment.count == 1 {
                 Text(language.t("Chip model not reported")).font(.system(size: 10)).foregroundStyle(.secondary)

@@ -9,6 +9,16 @@ struct DiskConnectionTopologyView: View {
 
     @Environment(\.appLanguage) private var language
 
+    private var resolvedChipRecords: [String: DeviceHuntChipCatalog.Record] {
+        guard let graph else { return [:] }
+        let externalDriveIDs = Set(drives.filter {
+            !$0.isSystemDisk && !$0.isVirtual && !$0.isNetwork
+        }.map(\.bsdName))
+        let descriptions = externalDriveIDs.flatMap { graph.path(for: $0) }
+            .compactMap(\.chipDescription)
+        return DeviceHuntChipCatalog.bundled.resolve(chipDescriptions: descriptions)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -18,10 +28,19 @@ struct DiskConnectionTopologyView: View {
                     StorageTopologyGraphView(
                         graph: graph,
                         selectedDriveID: selectedDrive.bsdName,
+                        resolvedChipRecords: resolvedChipRecords,
                         systemDriveIDs: Set(drives.filter(\.isSystemDisk).map(\.bsdName)),
                         selectDrive: selectDrive
                     )
-                    StorageTopologyDetailsView(drive: selectedDrive, graph: graph)
+                    StorageTopologyDetailsView(
+                        drive: selectedDrive,
+                        graph: graph,
+                        resolvedChipRecords: resolvedChipRecords
+                    )
+                    Label(language.t("Chip names use the bundled DeviceHunt catalog. Unknown IDs remain visible."),
+                          systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 } else if graph == nil {
                     ProgressView(language.t("Reading hardware path"))
                         .frame(maxWidth: .infinity, minHeight: 420)

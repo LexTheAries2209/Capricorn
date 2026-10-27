@@ -4,6 +4,7 @@ import SwiftUI
 struct StorageTopologyDetailsView: View {
     let drive: DriveDevice
     let graph: DriveConnectionTopologyGraph
+    var resolvedChipRecords: [String: DeviceHuntChipCatalog.Record] = [:]
     @Environment(\.appLanguage) private var language
 
     var body: some View {
@@ -71,7 +72,7 @@ struct StorageTopologyDetailsView: View {
                 GridRow {
                     tableText(language.t(node.kind.titleKey), minimum: 115)
                     tableText(node.hardwareName ?? language.t("Not reported"), minimum: 180)
-                    tableText(node.chipDescription ?? language.t("Not reported"), minimum: 130).monospaced()
+                    chipCell(node)
                     tableText([node.portDescription, node.linkRateDescription].compactMap { $0 }.joined(separator: "\n"),
                               minimum: 170)
                 }
@@ -91,12 +92,41 @@ struct StorageTopologyDetailsView: View {
             ForEach(hardware) { node in
                 VStack(alignment: .leading, spacing: 3) {
                     Text(language.t(node.kind.titleKey)).font(.caption.bold())
-                    Text([node.hardwareName, node.chipDescription, node.portDescription, node.linkRateDescription]
+                    Text([node.hardwareName, node.portDescription, node.linkRateDescription]
                         .compactMap { $0 }.joined(separator: " · "))
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if node.chipDescription != nil {
+                        chipCell(node)
+                    }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func chipCell(_ node: DriveConnectionTopologyNode) -> some View {
+        if let description = node.chipDescription,
+           let identifier = DeviceChipIdentifier(description: description) {
+            if let record = resolvedChipRecords[identifier.displayValue] {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(record.name)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("\(record.manufacturer) · \(language.t(record.category))")
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(description)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(minWidth: 130, maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(description)
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(minWidth: 130, maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            tableText(node.chipDescription ?? language.t("Not reported"), minimum: 130)
         }
     }
 }
