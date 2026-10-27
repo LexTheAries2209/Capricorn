@@ -152,17 +152,21 @@ struct StorageTopologyGraphView: View {
                 let size = StorageTopologyRadialLayout.nodeSize(node, host: diagram.graph.hostModel)
                 let segment = diagram.hardwareSegments[node.id] ?? [node]
                 Group {
-                    if node.kind == .computer, let model = diagram.graph.hostModel, model.hasVerifiedPortLayout {
+                    if node.kind == .computer, let model = diagram.graph.hostModel {
                         Button {
                             if let id = systemDriveIDs.contains(selectedDriveID) ? selectedDriveID : systemDriveIDs.sorted().first {
                                 selectDrive(id)
                             }
                         } label: {
-                            MacBookPortModelView(
-                                model: model, selected: selected,
-                                connectedPorts: Set(diagram.hostPortsByEdgeID.values),
-                                selectedPorts: Set(diagram.hostPortsByEdgeID.filter { selectedEdges.contains($0.key) }.map(\.value))
-                            )
+                            if model.hasVerifiedPortLayout {
+                                MacBookPortModelView(
+                                    model: model, selected: selected,
+                                    connectedPorts: Set(diagram.hostPortsByEdgeID.values),
+                                    selectedPorts: Set(diagram.hostPortsByEdgeID.filter { selectedEdges.contains($0.key) }.map(\.value))
+                                )
+                            } else {
+                                StorageHostArtworkView(model: model, selected: selected)
+                            }
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("topologyHostComputer")

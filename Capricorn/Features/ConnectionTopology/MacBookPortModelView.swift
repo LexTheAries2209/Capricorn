@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import SwiftUI
 
-/// A top-oriented schematic. Socket numbers come from IOPort; positions are
-/// enabled only for the board layouts verified by StorageHostModel.
+/// Use the official system artwork, with numbered socket hotspots overlaid
+/// on its chassis. These are a connection diagram, not additional image assets.
 struct MacBookPortModelView: View {
     let model: StorageHostModel
     let selected: Bool
@@ -12,53 +12,29 @@ struct MacBookPortModelView: View {
 
     static func anchor(_ port: StorageHostPort) -> CGPoint? {
         switch port.number {
-        case 1: CGPoint(x: 38, y: 167)
-        case 2: CGPoint(x: 38, y: 198)
-        case 3: CGPoint(x: 302, y: 181)
+        case 1: CGPoint(x: 32, y: 183)
+        case 2: CGPoint(x: 14, y: 197)
+        case 3: CGPoint(x: 324, y: 190)
         default: nil
         }
     }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.accentColor : .secondary, lineWidth: 2))
-                .frame(width: 224, height: 128).position(x: 170, y: 74)
-            VStack(spacing: 6) {
-                Image(systemName: "apple.logo").font(.title2)
-                Text("MacBook Pro").font(.subheadline.bold())
-                Text(model.identifier).font(.caption.monospaced()).foregroundStyle(.secondary)
-                Text(language.t("This Mac")).font(.caption).foregroundStyle(.secondary)
-            }
-            .frame(width: 216, height: 120).position(x: 170, y: 74)
-            RoundedRectangle(cornerRadius: 8)
-                .fill(.secondary.opacity(0.13))
-                .overlay(RoundedRectangle(cornerRadius: 8)
-                    .stroke(selected ? Color.accentColor : .secondary, lineWidth: selected ? 2 : 1))
-                .frame(width: 264, height: 118).position(x: 170, y: 199)
-            Canvas { context, _ in
-                for row in 0..<4 {
-                    for column in 0..<12 {
-                        let rect = CGRect(x: CGFloat(78 + column * 15), y: CGFloat(151 + row * 12), width: 12, height: 8)
-                        context.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(.secondary.opacity(0.5)))
-                    }
-                }
-                let trackpad = Path(roundedRect: CGRect(x: 132, y: 210, width: 76, height: 34), cornerRadius: 4)
-                context.stroke(trackpad, with: .color(.secondary.opacity(0.5)), lineWidth: 1)
-            }
+            StorageHostArtworkView(model: model, selected: selected)
             ForEach(1...3, id: \.self) { number in
                 let port = StorageHostPort(number: number)
                 if let point = Self.anchor(port) {
                     let active = selectedPorts.contains(port)
-                    Capsule()
+                    Circle()
                         .fill(active ? Color.accentColor : connectedPorts.contains(port) ? .primary : .secondary.opacity(0.4))
-                        .frame(width: 6, height: 15)
+                        .frame(width: 6, height: 6)
                         .position(point)
                     Text("\(number)")
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundStyle(active ? Color.accentColor : .secondary)
-                        .position(x: number == 3 ? 319 : 21, y: point.y)
+                        .position(x: number == 3 ? 334 : point.x - 10,
+                                  y: point.y + (number == 1 ? -10 : number == 2 ? 8 : 0))
                 }
             }
             Text("1 \(language.t("Left rear"))  ·  2 \(language.t("Left front"))  ·  3 \(language.t("Right side"))")
@@ -67,6 +43,6 @@ struct MacBookPortModelView: View {
         }
         .frame(width: 340, height: 280)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("MacBook Pro · \(model.identifier) · \(language.t("This Mac"))")
+        .accessibilityLabel("\(model.productName ?? "MacBook Pro") · \(model.identifier) · \(language.t("This Mac"))")
     }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
 import IOKit
+import Darwin
 
 struct StorageHostPort: Equatable, Hashable, Sendable {
     let number: Int
@@ -26,6 +27,7 @@ enum StorageHostPortPosition: String, Sendable {
 struct StorageHostModel: Equatable, Sendable {
     let identifier: String
     let board: String
+    var productName: String? = nil
 
     var hasVerifiedPortLayout: Bool {
         // Asahi's board descriptions explicitly label typec0/1/2 as left back,
@@ -50,11 +52,23 @@ struct StorageHostModel: Equatable, Sendable {
 struct IOKitStorageHostReader: Sendable {
     func readModel() -> StorageHostModel? {
         let entry = IORegistryEntryFromPath(kIOMainPortDefault, "IODeviceTree:/")
-        guard entry != 0 else { return nil }
-        defer { IOObjectRelease(entry) }
-        guard let identifier = string(property(entry, "model")),
-              let board = string(property(entry, "target-type")) else { return nil }
-        return .init(identifier: identifier, board: board)
+        defer { if entry != 0 { IOObjectRelease(entry) } }
+        let treeModel = entry == 0 ? nil : string(property(entry, "model"))
+        let isMacModel = treeModel?.hasPrefix("Mac") == true || treeModel?.hasPrefix("iMac") == true
+        guard let identifier = isMacModel ? treeModel : hardwareIdentifier() else { return nil }
+        let board = entry == 0 ? "" : string(property(entry, "target-type")) ?? ""
+        let product = IORegistryEntryFromPath(kIOMainPortDefault, "IODeviceTree:/product")
+        defer { if product != 0 { IOObjectRelease(product) } }
+        let name = product == 0 ? nil : string(property(product, "product-name"))
+        return .init(identifier: identifier, board: board, productName: name)
+    }
+
+    private func hardwareIdentifier() -> String? {
+        var length = 0
+        guard sysctlbyname("hw.model", nil, &length, nil, 0) == 0, length > 1 else { return nil }
+        var buffer = [CChar](repeating: 0, count: length)
+        guard sysctlbyname("hw.model", &buffer, &length, nil, 0) == 0 else { return nil }
+        return String(cString: buffer)
     }
 
     func readPort(for entry: io_registry_entry_t) -> StorageHostPort? {

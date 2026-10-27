@@ -8,7 +8,7 @@ struct StorageTopologyRadialLayout {
 
     static func nodeSize(_ node: DriveConnectionTopologyNode, host: StorageHostModel? = nil) -> CGSize {
         switch node.kind {
-        case .computer: host?.hasVerifiedPortLayout == true
+        case .computer: host != nil
             ? CGSize(width: 340, height: 280) : CGSize(width: 130, height: 98)
         case .disk: CGSize(width: 214, height: 140)
         default: CGSize(width: 184, height: 108)
@@ -35,7 +35,7 @@ struct StorageTopologyRadialLayout {
 
     private static func radialPositions(graph: DriveConnectionTopologyGraph) -> [String: CGPoint] {
         let count = max(graph.nodes.filter { $0.kind == .disk }.count, 1)
-        let spacing = max(250.0, Double(count) * 270 / (2 * .pi))
+        let spacing = max(graph.hostModel == nil ? 250.0 : 360.0, Double(count) * 270 / (2 * .pi))
         let children = Dictionary(grouping: graph.edges, by: \.fromID)
         var positions: [String: CGPoint] = ["computer": .zero]
         var leafIndex = 0

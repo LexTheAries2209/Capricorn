@@ -51,8 +51,10 @@ final class StorageHostPortTests: XCTestCase {
         let center = layout.positions["computer"]!
         XCTAssertLessThan(layout.positions["disk:disk8"]!.x, center.x)
         XCTAssertGreaterThan(layout.positions["bridge"]!.x, center.x)
-        XCTAssertEqual(MacBookPortModelView.anchor(.init(number: 1))?.x, 38)
-        XCTAssertEqual(MacBookPortModelView.anchor(.init(number: 3))?.x, 302)
+        XCTAssertLessThan(MacBookPortModelView.anchor(.init(number: 1))!.x, 170)
+        XCTAssertGreaterThan(MacBookPortModelView.anchor(.init(number: 3))!.x, 170)
+        XCTAssertLessThan(MacBookPortModelView.anchor(.init(number: 1))!.y,
+                          MacBookPortModelView.anchor(.init(number: 2))!.y)
     }
 
     func testPhysicalDiagramKeepsUnmappedConnectionsAwayFromSocketWires() {
