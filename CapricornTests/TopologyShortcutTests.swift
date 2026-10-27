@@ -22,6 +22,54 @@ final class TopologyShortcutTests: XCTestCase {
             keyCode: 46, charactersIgnoringModifiers: "m", hasModifiers: true, isEditingText: false))
     }
 
+    func testZShortcutMatchesPhysicalKeyAndProtectsTextAndUndo() {
+        XCTAssertTrue(AppFeatureTabKeyRouter.matchesTopologyReset(
+            keyCode: 6, charactersIgnoringModifiers: nil, hasModifiers: false, isEditingText: false))
+        XCTAssertTrue(AppFeatureTabKeyRouter.matchesTopologyReset(
+            charactersIgnoringModifiers: "Z", hasModifiers: false, isEditingText: false))
+        XCTAssertFalse(AppFeatureTabKeyRouter.matchesTopologyReset(
+            charactersIgnoringModifiers: "z", hasModifiers: false, isEditingText: true))
+        XCTAssertFalse(AppFeatureTabKeyRouter.matchesTopologyReset(
+            keyCode: 6, charactersIgnoringModifiers: "z", hasModifiers: true, isEditingText: false))
+        XCTAssertFalse(AppFeatureTabKeyRouter.matchesTopologyReset(
+            charactersIgnoringModifiers: "x", hasModifiers: false, isEditingText: false))
+    }
+
+    @MainActor
+    func testNativeZMonitorConsumesOnlyWhenTopologyHandlesReset() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        var topologyIsActive = false
+        var resets = 0
+        let monitor = FeatureTabKeyMonitor.Coordinator(onOpenSettings: {}, onNext: {}, onOpenTopology: {},
+                                                       onResetTopology: {
+            guard topologyIsActive else { return false }
+            resets += 1
+            return true
+        })
+        defer { monitor.invalidate() }
+        monitor.window = window
+        let event = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, characters: "z",
+            charactersIgnoringModifiers: "z", isARepeat: false, keyCode: 6))
+        XCTAssertNotNil(monitor.handle(event))
+        topologyIsActive = true
+        XCTAssertNil(monitor.handle(event))
+        XCTAssertEqual(resets, 1)
+
+        let editor = NSTextView(frame: window.contentView!.bounds)
+        window.contentView = editor
+        XCTAssertTrue(window.makeFirstResponder(editor))
+        XCTAssertNotNil(monitor.handle(event))
+        XCTAssertEqual(resets, 1)
+        monitor.window = nil
+        XCTAssertNotNil(monitor.handle(event))
+        XCTAssertEqual(resets, 1)
+    }
+
     @MainActor
     func testNativeMonitorConsumesMOnlyInItsWindowOutsideTextEditing() throws {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),

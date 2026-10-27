@@ -23,6 +23,7 @@ struct ContentView: View {
     @State private var sidebarAvailableRowWidth: CGFloat = 272
     @State private var sidebarAutoFitIsActive = false
     @State private var connectionTopologyGraph: DriveConnectionTopologyGraph?
+    @State private var topologyResetRevision = 0
     @AppStorage(AppPreferences.Key.opensSmartSelfTestProgressWindowAutomatically)
     private var opensSmartSelfTestProgressWindowAutomatically = AppPreferences.Defaults.opensSmartSelfTestProgressWindowAutomatically
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
@@ -119,6 +120,7 @@ struct ContentView: View {
         .navigationTitle("Capricorn")
         .environment(\.appLanguage, language)
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
+        .environment(\.topologyResetRevision, topologyResetRevision)
         .background {
             FeatureTabKeyMonitor(
                 onOpenSettings: {
@@ -129,6 +131,11 @@ struct ContentView: View {
                 },
                 onOpenTopology: {
                     viewModel.selectTopologyFeatureTab()
+                },
+                onResetTopology: {
+                    guard viewModel.selectedFeatureTab == .topology else { return false }
+                    topologyResetRevision += 1
+                    return true
                 }
             )
             .frame(width: 0, height: 0)

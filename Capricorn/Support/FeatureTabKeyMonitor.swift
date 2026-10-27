@@ -6,12 +6,14 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
     var onOpenSettings: () -> Void
     var onNext: () -> Void
     var onOpenTopology: () -> Void
+    var onResetTopology: () -> Bool = { false }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             onOpenSettings: onOpenSettings,
             onNext: onNext,
-            onOpenTopology: onOpenTopology
+            onOpenTopology: onOpenTopology,
+            onResetTopology: onResetTopology
         )
     }
 
@@ -25,6 +27,7 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
         context.coordinator.onNext = onNext
         context.coordinator.onOpenTopology = onOpenTopology
         context.coordinator.onOpenSettings = onOpenSettings
+        context.coordinator.onResetTopology = onResetTopology
         context.coordinator.window = nsView.window
     }
 
@@ -36,17 +39,20 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
         var onOpenSettings: () -> Void
         var onNext: () -> Void
         var onOpenTopology: () -> Void
+        var onResetTopology: () -> Bool
         weak var window: NSWindow?
         private var monitor: Any?
 
         init(
             onOpenSettings: @escaping () -> Void,
             onNext: @escaping () -> Void,
-            onOpenTopology: @escaping () -> Void
+            onOpenTopology: @escaping () -> Void,
+            onResetTopology: @escaping () -> Bool = { false }
         ) {
             self.onOpenSettings = onOpenSettings
             self.onNext = onNext
             self.onOpenTopology = onOpenTopology
+            self.onResetTopology = onResetTopology
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self else { return event }
                 return self.handle(event)
@@ -87,6 +93,15 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
                 isEditingText: isEditingText
             ) {
                 onOpenTopology()
+                return nil
+            }
+
+            if AppFeatureTabKeyRouter.matchesTopologyReset(
+                keyCode: event.keyCode,
+                charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                hasModifiers: !relevantModifiers.isEmpty,
+                isEditingText: isEditingText
+            ), onResetTopology() {
                 return nil
             }
 

@@ -142,6 +142,23 @@ final class DriveConnectionTopologyTests: XCTestCase {
         XCTAssertEqual(graph.path(for: "disk9")[1].id, secondHub.id)
     }
 
+    func testGenericUSBHubNamesArePortsRatherThanTopologyHubs() {
+        for name in ["USB3.0 Hub", "USB Hub", "USB 集线器"] {
+            let path = try! XCTUnwrap(DriveConnectionTopologyResolver.resolve(
+                drive: Self.drive(),
+                registryEntriesFromDiskToHost: [
+                    .init(className: "IOMedia", entryName: "Media", bsdName: "disk8",
+                          pcieLinkStatus: nil, isPCIeTunnelled: false),
+                    .init(className: "IOUSBHostDevice", entryName: name,
+                          bsdName: nil, pcieLinkStatus: nil, isPCIeTunnelled: false),
+                    .init(className: "IOUSBHostDevice", entryName: "TS4 USB3.2 Gen2 HUB",
+                          bsdName: nil, pcieLinkStatus: nil, isPCIeTunnelled: false)
+                ]
+            ))
+            XCTAssertEqual(path.nodes.map(\.kind), [.computer, .usbHub, .usbPort, .disk], name)
+        }
+    }
+
     func testSupplementalThunderboltPathPreservesRealPortAndBridgeChip() throws {
         let topology = try XCTUnwrap(DriveConnectionTopologyResolver.resolve(
             drive: Self.drive(),

@@ -51,8 +51,36 @@ final class StorageTopologyUSBPortPresentationTests: XCTestCase {
         XCTAssertEqual(diagram.selectedNodeIDs(for: "disk9"), ["computer", "shared-hub", "disk:disk9"])
     }
 
+    func testGenericUSBHubWrappersFoldIntoDirectBranchWithoutLosingDetails() {
+        let port = node("port", .usbPort)
+        let genericHub = node("generic-usb-hub", .usbHub, name: "USB3.0 Hub")
+        let dock = node("dock", .usbHub, name: "TS4 USB3.2 Gen2 HUB")
+        let disk = node("disk:disk8", .disk, bsd: "disk8")
+        let source = DriveConnectionTopologyGraph.assemble(paths: [
+            "disk8": .init(nodes: [node("computer", .computer), port, genericHub, dock,
+                                   node("dock-port", .usbPort), disk], hasResolvedController: true)
+        ])
+        let diagram = StorageTopologyDiagram(graph: source)
+        XCTAssertEqual(diagram.graph.path(for: "disk8").map(\.id), ["computer", dock.id, disk.id])
+        XCTAssertTrue(diagram.hardwareSegments[dock.id]?.contains(genericHub) == true)
+        XCTAssertTrue(diagram.hardwareSegments[dock.id]?.contains(port) == true)
+        XCTAssertTrue(diagram.hardwareSegments[disk.id]?.contains(node("dock-port", .usbPort)) == true)
+        XCTAssertTrue(source.path(for: "disk8").contains(genericHub))
+        XCTAssertTrue(source.path(for: "disk8").contains { $0.id == "dock-port" })
+        for name in ["USB3.0 Hub", "USB Hub", "USB 集线器", "xhci hub", "Hub Device"] {
+            XCTAssertTrue(USBHubPresentation.isGeneric(name), name)
+        }
+        XCTAssertFalse(USBHubPresentation.isGeneric("TS4 USB3.2 Gen2 HUB"))
+        XCTAssertTrue(StorageTopologyDiagram.isGenericUSBHub(genericHub.hardwareName))
+    }
+
     private func node(_ id: String, _ kind: DriveConnectionTopologyNode.Kind, bsd: String? = nil) -> DriveConnectionTopologyNode {
-        .init(id: id, kind: kind, hardwareName: nil, portDescription: nil, linkRateDescription: nil,
+        node(id, kind, name: id, bsd: bsd)
+    }
+
+    private func node(_ id: String, _ kind: DriveConnectionTopologyNode.Kind,
+                      name: String?, bsd: String? = nil) -> DriveConnectionTopologyNode {
+        .init(id: id, kind: kind, hardwareName: name, portDescription: nil, linkRateDescription: nil,
               bsdName: bsd, pcieLink: nil, isPCIeTunnelled: false)
     }
 }

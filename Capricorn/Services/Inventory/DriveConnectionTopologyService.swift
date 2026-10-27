@@ -142,6 +142,14 @@ struct DriveConnectionRegistryEntry: Equatable, Sendable {
     var hostPort: StorageHostPort? = nil
 }
 
+enum USBHubPresentation {
+    static func isGeneric(_ hardwareName: String?) -> Bool {
+        guard let hardwareName else { return false }
+        let normalized = hardwareName.lowercased().filter { $0.isLetter }
+        return ["hub", "hubdevice", "usbhub", "usb3hub", "usb30hub", "xhcihub", "usb集线器"].contains(normalized)
+    }
+}
+
 enum DriveConnectionTopologyResolver {
     static func resolve(
         drive: DriveDevice,
@@ -251,8 +259,9 @@ enum DriveConnectionTopologyResolver {
             if text.contains("xhci") || text.contains("hostcontroller") {
                 return .usbHostController
             }
-            if text.contains("hub") {
-                return .usbHub
+            if text.contains("hub") || isGenericUSBHubName(entry) {
+                // USBPort subclasses describe controllers/sockets, not displayable hubs.
+                return isNamedUSBDock(entry) ? .usbHub : .usbPort
             }
             if className.contains("usbhostdevice") {
                 return .usbDevice
@@ -352,6 +361,20 @@ enum DriveConnectionTopologyResolver {
         ]
         let registryStem = candidate.components(separatedBy: "@")[0]
         return genericRegistryNames.contains(candidate.lowercased()) || registryStem == entry.className ? nil : candidate
+    }
+
+    private static func isNamedUSBDock(_ entry: DriveConnectionRegistryEntry) -> Bool {
+        guard let candidate = nonempty(entry.hardwareDescription)
+                ?? (entry.entryName == entry.className ? nil : nonempty(entry.entryName)) else { return false }
+        return !isGenericUSBHubName(entry)
+    }
+
+    private static func isGenericUSBHubName(_ entry: DriveConnectionRegistryEntry) -> Bool {
+        let candidate = nonempty(entry.hardwareDescription)
+            ?? (entry.entryName == entry.className ? nil : nonempty(entry.entryName))
+        guard let candidate else { return false }
+        let normalized = candidate.lowercased().filter { $0.isLetter }
+        return USBHubPresentation.isGeneric(candidate)
     }
 
     private static func nonempty(_ value: String?) -> String? {

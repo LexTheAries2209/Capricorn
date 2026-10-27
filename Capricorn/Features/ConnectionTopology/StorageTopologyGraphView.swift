@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import SwiftUI
 
-/// Driver wrappers and USB port wrappers stay in the inspector; the diagram retains hubs,
+/// Driver wrappers, USB ports, and generic USB hubs stay in the inspector; the diagram retains named docks,
 /// identified bridge chips and disks, preserving shared registry identities.
 struct StorageTopologyDiagram {
     let graph: DriveConnectionTopologyGraph
@@ -27,7 +27,9 @@ struct StorageTopologyDiagram {
                 segment.append(node)
                 let isHostThunderboltPort = node.kind == .thunderboltPort && !hasHostThunderboltPort
                 if node.kind == .thunderboltPort { hasHostThunderboltPort = true }
-                let keep = [.computer, .disk, .usbHub].contains(node.kind)
+                let isNamedUSBHub = node.kind == .usbHub
+                    && node.hardwareName.map { !Self.isGenericUSBHub($0) } == true
+                let keep = [.computer, .disk].contains(node.kind) || isNamedUSBHub
                     || (isHostThunderboltPort && hostPort == nil)
                     || (node.kind == .pcieBridge && node.chipDescription != nil)
                     || (!hasPort && hostPort == nil
@@ -57,6 +59,10 @@ struct StorageTopologyDiagram {
     func selectedNodeIDs(for driveID: String) -> Set<String> {
         systemDriveIDs.contains(driveID) ? ["computer"] : graph.pathNodeIDs(to: driveID)
     }
+
+    static func isGenericUSBHub(_ hardwareName: String?) -> Bool {
+        USBHubPresentation.isGeneric(hardwareName)
+    }
 }
 
 struct StorageTopologyGraphView: View {
@@ -66,11 +72,16 @@ struct StorageTopologyGraphView: View {
     let selectDrive: (String) -> Void
 
     @Environment(\.appLanguage) private var language
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.topologyResetRevision) private var resetRevision
     @State private var zoom: CGFloat = 1
+    @State private var viewportCommand = TopologyViewportCommand()
+    @State private var nodePlacement = TopologyNodePlacement()
 
     var body: some View {
         let diagram = StorageTopologyDiagram(graph: graph, systemDriveIDs: systemDriveIDs)
-        let layout = StorageTopologyRadialLayout(graph: diagram.graph, hostPortsByEdgeID: diagram.hostPortsByEdgeID)
+        let baseLayout = StorageTopologyRadialLayout(graph: diagram.graph, hostPortsByEdgeID: diagram.hostPortsByEdgeID)
+        let layout = nodePlacement.layout(from: baseLayout)
         let selectedNodes = diagram.selectedNodeIDs(for: selectedDriveID)
         let selectedEdges = diagram.graph.pathEdges(for: selectedDriveID)
         VStack(spacing: 0) {
@@ -78,42 +89,64 @@ struct StorageTopologyGraphView: View {
                 Label(language.t("Hardware Path"), systemImage: "point.3.connected.trianglepath.dotted")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Button { zoom = max(0.6, zoom - 0.2) } label: {
+                Button { viewportCommand.request(.zoomOut) } label: {
                     Image(systemName: "minus.magnifyingglass")
                 }
                 .help(language.t("Zoom Out"))
-                .disabled(zoom <= 0.6)
-                Button { zoom = 1 } label: {
+                .disabled(zoom <= TopologyZoomLimits.minimum + 0.001)
+                Button { resetViewport() } label: {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                 }
-                .help(language.t("Fit Topology"))
-                Button { zoom = min(3, zoom + 0.2) } label: {
+                .help("\(language.t("Rearrange and fit topology")) (Z)")
+                Button { viewportCommand.request(.zoomIn) } label: {
                     Image(systemName: "plus.magnifyingglass")
                 }
                 .help(language.t("Zoom In"))
-                .disabled(zoom >= 3)
+                .disabled(zoom >= TopologyZoomLimits.maximum - 0.001)
             }
             .buttonStyle(.borderless)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             Divider()
-            GeometryReader { geometry in
-                let fit = min(1, (geometry.size.width - 24) / layout.size.width,
-                              (geometry.size.height - 24) / layout.size.height)
-                let scale = fit * zoom
-                ScrollView([.horizontal, .vertical]) {
-                    drawing(diagram, layout: layout, selectedNodes: selectedNodes, selectedEdges: selectedEdges)
-                        .scaleEffect(scale, anchor: .topLeading)
-                        .frame(width: layout.size.width * scale, height: layout.size.height * scale,
-                               alignment: .topLeading)
-                        .frame(minWidth: geometry.size.width, minHeight: geometry.size.height)
-                }
+            TopologyMagnifyingScrollView(
+                documentSize: layout.size,
+                fittingRect: CGRect(x: TopologyNodePlacement.margin, y: TopologyNodePlacement.margin,
+                                    width: baseLayout.size.width, height: baseLayout.size.height),
+                command: viewportCommand,
+                onZoomChanged: { zoom = $0 },
+                nodeRegions: diagram.graph.nodes.compactMap { node in
+                    guard let position = layout.positions[node.id] else { return nil }
+                    let size = StorageTopologyRadialLayout.nodeSize(node, host: diagram.graph.hostModel)
+                    return TopologyNodeHitRegion(id: node.id,
+                        frame: CGRect(x: position.x - size.width / 2, y: position.y - size.height / 2,
+                                      width: size.width, height: size.height))
+                },
+                onNodeDrag: { id, translation in
+                    guard let base = baseLayout.positions[id],
+                          let node = diagram.graph.nodes.first(where: { $0.id == id }) else { return }
+                    nodePlacement.drag(id, translation: translation, basePosition: base,
+                                       nodeSize: StorageTopologyRadialLayout.nodeSize(node, host: diagram.graph.hostModel),
+                                       documentSize: layout.size)
+                },
+                onNodeDragEnded: { nodePlacement.endDrag() }
+            ) {
+                drawing(diagram, layout: layout, selectedNodes: selectedNodes, selectedEdges: selectedEdges)
+                    .environment(\.appLanguage, language)
+                    .environment(\.colorScheme, colorScheme)
+                    .environment(\.locale, Locale(identifier: language.localeIdentifier))
             }
             .frame(height: diagram.graph.hostModel?.hasVerifiedPortLayout == true ? 460 : 560)
         }
         .background(.quaternary.opacity(0.18), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor).opacity(0.5)))
         .accessibilityIdentifier("storageTopologyGraph")
+        .onChange(of: resetRevision) { resetViewport() }
+        .onChange(of: diagram.graph.nodes.map(\.id)) { resetViewport() }
+    }
+
+    private func resetViewport() {
+        nodePlacement.reset()
+        viewportCommand.request(.fit)
     }
 
     private func drawing(
@@ -123,27 +156,17 @@ struct StorageTopologyGraphView: View {
         selectedEdges: Set<String>
     ) -> some View {
         ZStack(alignment: .topLeading) {
-            Canvas { context, _ in
-                for edge in diagram.graph.edges {
-                    guard var start = layout.positions[edge.fromID], let end = layout.positions[edge.toID] else { continue }
-                    if edge.fromID == "computer", let model = diagram.graph.hostModel, model.hasVerifiedPortLayout {
-                        let anchor = diagram.hostPortsByEdgeID[edge.id]
-                            .flatMap { StorageHostArtworkGeometry.anchor($0, model: model) }
-                            ?? StorageHostArtworkGeometry.unresolvedAnchor
-                        start.x += anchor.x - StorageHostArtworkGeometry.size.width / 2
-                        start.y += anchor.y - StorageHostArtworkGeometry.size.height / 2
-                    }
+            // Small independent paths avoid allocating one GPU canvas as wide
+            // as every hub in a long USB chain plus the dragging workspace.
+            ForEach(diagram.graph.edges) { edge in
+                if let origin = layout.positions[edge.fromID], let end = layout.positions[edge.toID] {
+                    let start = connectionOrigin(origin, edge: edge, diagram: diagram)
                     let selected = selectedEdges.contains(edge.id)
-                    var path = Path()
-                    path.move(to: start)
-                    path.addLine(to: end)
                     let unresolved = edge.fromID == "computer"
                         && (diagram.graph.hostModel?.hasVerifiedPortLayout == true
                             ? diagram.hostPortsByEdgeID[edge.id] == nil
                             : diagram.graph.nodes.first { $0.id == edge.toID }?.kind == .disk)
-                    context.stroke(path, with: .color(selected ? .accentColor : .secondary.opacity(0.35)),
-                                   style: StrokeStyle(lineWidth: selected ? 2.5 : 1.5,
-                                                      dash: unresolved ? [5, 5] : []))
+                    TopologyConnectionLine(start: start, end: end, selected: selected, unresolved: unresolved)
                 }
             }
             ForEach(diagram.graph.nodes) { node in
@@ -180,11 +203,25 @@ struct StorageTopologyGraphView: View {
                     }
                 }
                 .frame(width: size.width, height: size.height)
+                .contentShape(Rectangle())
                 .help(segment.map { $0.hardwareName ?? language.t($0.kind.titleKey) }.joined(separator: " → "))
                 .position(layout.positions[node.id] ?? .zero)
             }
         }
         .frame(width: layout.size.width, height: layout.size.height)
+    }
+
+    private func connectionOrigin(
+        _ origin: CGPoint, edge: DriveConnectionTopologyEdge, diagram: StorageTopologyDiagram
+    ) -> CGPoint {
+        guard edge.fromID == "computer", let model = diagram.graph.hostModel, model.hasVerifiedPortLayout else {
+            return origin
+        }
+        let anchor = diagram.hostPortsByEdgeID[edge.id]
+            .flatMap { StorageHostArtworkGeometry.anchor($0, model: model) }
+            ?? StorageHostArtworkGeometry.unresolvedAnchor
+        return CGPoint(x: origin.x + anchor.x - StorageHostArtworkGeometry.size.width / 2,
+                       y: origin.y + anchor.y - StorageHostArtworkGeometry.size.height / 2)
     }
 
     private func nodeContent(

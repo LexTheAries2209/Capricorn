@@ -6,6 +6,11 @@ struct StorageTopologyRadialLayout {
     let positions: [String: CGPoint]
     let size: CGSize
 
+    init(positions: [String: CGPoint], size: CGSize) {
+        self.positions = positions
+        self.size = size
+    }
+
     static func nodeSize(_ node: DriveConnectionTopologyNode, host: StorageHostModel? = nil) -> CGSize {
         switch node.kind {
         case .computer: host != nil

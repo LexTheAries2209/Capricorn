@@ -522,6 +522,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Zoom Out": "缩小",
         "Zoom In": "放大",
         "Fit Topology": "适应拓扑大小",
+        "Rearrange and fit topology": "重新排列拓扑并自适应显示",
         "Hardware Path": "硬件连接路径",
         "Link Characteristics": "链路参数",
         "Physical Disk": "物理硬盘",
