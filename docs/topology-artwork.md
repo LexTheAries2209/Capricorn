@@ -28,6 +28,6 @@ row centers are Y=336/376 for 14-inch and Y=324/364 for 16-inch. Socket position
 are projections onto the chassis edge, not visible holes in the top view.
 
 `StorageHostArtworkGeometry` owns the aspect-fit transform used by the
-numbered markers and connection-line origins. The actual built-in socket
+socket dots and connection-line origins. The actual built-in socket
 number is still read from IOKit, and physical side mapping remains restricted
 to verified boards.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import SwiftUI
 
-/// Use official artwork, with numbered socket hotspots overlaid
+/// Use official artwork, with socket dots overlaid
 /// on its chassis. These are a connection diagram, not additional image assets.
 struct MacBookPortModelView: View {
     let model: StorageHostModel
@@ -21,11 +21,6 @@ struct MacBookPortModelView: View {
                         .fill(active ? Color.accentColor : connectedPorts.contains(port) ? .primary : .secondary.opacity(0.4))
                         .frame(width: 6, height: 6)
                         .position(point)
-                    Text("\(number)")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(active ? Color.accentColor : .secondary)
-                        .position(x: point.x + (number == 3 ? 12 : -12),
-                                  y: point.y + (number == 1 ? -10 : number == 2 ? 8 : 0))
                 }
             }
         }
