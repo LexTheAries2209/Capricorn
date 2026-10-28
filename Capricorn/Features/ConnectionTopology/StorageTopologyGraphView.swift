@@ -205,7 +205,7 @@ struct StorageTopologyGraphView: View {
                 }
                 .frame(width: size.width, height: size.height)
                 .contentShape(Rectangle())
-                .help(segment.map { $0.hardwareName ?? language.t($0.kind.titleKey) }.joined(separator: " → "))
+                .help(segment.map { $0.presentationName ?? language.t($0.kind.titleKey) }.joined(separator: " → "))
                 .position(layout.positions[node.id] ?? .zero)
             }
         }
@@ -241,7 +241,7 @@ struct StorageTopologyGraphView: View {
             Image(systemName: node.kind.symbolName)
                 .font(.system(size: isHost ? 25 : 20))
                 .foregroundStyle(selected || isHost ? Color.accentColor : .secondary)
-            Text(isHost ? language.t("This Mac") : node.hardwareName ?? language.t(node.kind.titleKey))
+            Text(isHost ? language.t("This Mac") : node.presentationName ?? language.t(node.kind.titleKey))
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)

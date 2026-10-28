@@ -179,6 +179,32 @@ final class DriveConnectionTopologyTests: XCTestCase {
         XCTAssertEqual(path.nodes[1].chipDescription, "USB 8087:0B40")
     }
 
+    func testPCIeBridgeGenericNameIsPresentedAsPCIHyphenBridge() {
+        let bridge = DriveConnectionTopologyNode(
+            id: "bridge",
+            kind: .pcieBridge,
+            hardwareName: "pci-bridge",
+            portDescription: nil,
+            linkRateDescription: nil,
+            bsdName: nil,
+            pcieLink: nil,
+            isPCIeTunnelled: false
+        )
+        let namedBridge = DriveConnectionTopologyNode(
+            id: "named-bridge",
+            kind: .pcieBridge,
+            hardwareName: "ASM2464PD PCIe Bridge",
+            portDescription: nil,
+            linkRateDescription: nil,
+            bsdName: nil,
+            pcieLink: nil,
+            isPCIeTunnelled: false
+        )
+
+        XCTAssertEqual(bridge.presentationName, "PCI-Bridge")
+        XCTAssertEqual(namedBridge.presentationName, "ASM2464PD PCIe Bridge")
+    }
+
     func testSupplementalThunderboltPathPreservesRealPortAndBridgeChip() throws {
         let topology = try XCTUnwrap(DriveConnectionTopologyResolver.resolve(
             drive: Self.drive(),

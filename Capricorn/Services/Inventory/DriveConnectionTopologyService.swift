@@ -46,6 +46,15 @@ struct DriveConnectionTopologyNode: Equatable, Sendable, Identifiable {
     var chipDescription: String? = nil
     var hostPort: StorageHostPort? = nil
     var isUSBTunnelled: Bool = false
+
+    var presentationName: String? {
+        guard kind == .pcieBridge,
+              hardwareName?.trimmingCharacters(in: .whitespacesAndNewlines)
+                .localizedCaseInsensitiveCompare("pci-bridge") == .orderedSame else {
+            return hardwareName
+        }
+        return "PCI-Bridge"
+    }
 }
 
 struct DriveConnectionTopologyPath: Equatable, Sendable {

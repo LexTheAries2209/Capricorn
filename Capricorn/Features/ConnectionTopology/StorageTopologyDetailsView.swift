@@ -71,7 +71,7 @@ struct StorageTopologyDetailsView: View {
                 Divider().gridCellColumns(4)
                 GridRow {
                     tableText(language.t(node.kind.titleKey), minimum: 115)
-                    tableText(node.hardwareName ?? language.t("Not reported"), minimum: 180)
+                    tableText(node.presentationName ?? language.t("Not reported"), minimum: 180)
                     chipCell(node)
                     tableText([node.portDescription, node.linkRateDescription].compactMap { $0 }.joined(separator: "\n"),
                               minimum: 170)
@@ -92,7 +92,7 @@ struct StorageTopologyDetailsView: View {
             ForEach(hardware) { node in
                 VStack(alignment: .leading, spacing: 3) {
                     Text(language.t(node.kind.titleKey)).font(.caption.bold())
-                    Text([node.hardwareName, node.portDescription, node.linkRateDescription]
+                    Text([node.presentationName, node.portDescription, node.linkRateDescription]
                         .compactMap { $0 }.joined(separator: " · "))
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
