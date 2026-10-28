@@ -84,8 +84,225 @@
       "id": "PCI 8086:0B26",
       "manufacturer": "Intel",
       "category": "Thunderbolt 4 Bridge",
-      "name": "JHL8440",
+      "name": "JHL8440 (Goshen Ridge) Thunderbolt Controller",
+      "shortName": "JHL8440",
       "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/0B26"
+    },
+    {
+      "id": "PCI 8086:15C0",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 Bridge",
+      "name": "JHL6240 Thunderbolt 3 Bridge (Low Power) [Alpine Ridge LP 2016]",
+      "shortName": "JHL6240",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15C0"
+    },
+    {
+      "id": "PCI 8086:15BF",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 NHI",
+      "name": "JHL6240 Thunderbolt 3 NHI (Low Power) [Alpine Ridge LP 2016]",
+      "shortName": "JHL6240",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15BF"
+    },
+    {
+      "id": "PCI 8086:15C1",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 USB Controller",
+      "name": "JHL6240 Thunderbolt 3 USB 3.1 Controller (Low Power) [Alpine Ridge LP 2016]",
+      "shortName": "JHL6240",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15C1"
+    },
+    {
+      "id": "PCI 8086:15DA",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 Bridge",
+      "name": "JHL6340 Thunderbolt 3 Bridge (C step) [Alpine Ridge 2C 2016]",
+      "shortName": "JHL6340",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15DA"
+    },
+    {
+      "id": "PCI 8086:15D9",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 NHI",
+      "name": "JHL6340 Thunderbolt 3 NHI (C step) [Alpine Ridge 2C 2016]",
+      "shortName": "JHL6340",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15D9"
+    },
+    {
+      "id": "PCI 8086:15DB",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 USB Controller",
+      "name": "JHL6340 Thunderbolt 3 USB 3.1 Controller (C step) [Alpine Ridge 2C 2016]",
+      "shortName": "JHL6340",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15DB"
+    },
+    {
+      "id": "PCI 8086:15D3",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 Bridge",
+      "name": "JHL6540 Thunderbolt 3 Bridge (C step) [Alpine Ridge 4C 2016]",
+      "shortName": "JHL6540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15D3"
+    },
+    {
+      "id": "PCI 8086:15D2",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 NHI",
+      "name": "JHL6540 Thunderbolt 3 NHI (C step) [Alpine Ridge 4C 2016]",
+      "shortName": "JHL6540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15D2"
+    },
+    {
+      "id": "PCI 8086:15D4",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 USB Controller",
+      "name": "JHL6540 Thunderbolt 3 USB Controller (C step) [Alpine Ridge 4C 2016]",
+      "shortName": "JHL6540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15D4"
+    },
+    {
+      "id": "PCI 8086:15EF",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 Bridge",
+      "name": "JHL7440 Thunderbolt 3 Bridge [Titan Ridge DD 2018]",
+      "shortName": "JHL7440",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15EF"
+    },
+    {
+      "id": "PCI 8086:15F0",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 USB Controller",
+      "name": "JHL7440 Thunderbolt 3 USB Controller [Titan Ridge DD 2018]",
+      "shortName": "JHL7440",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15F0"
+    },
+    {
+      "id": "PCI 8086:15E7",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 Bridge",
+      "name": "JHL7540 Thunderbolt 3 Bridge [Titan Ridge 2C 2018]",
+      "shortName": "JHL7540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15E7"
+    },
+    {
+      "id": "PCI 8086:15EA",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 Bridge",
+      "name": "JHL7540 Thunderbolt 3 Bridge [Titan Ridge 4C 2018]",
+      "shortName": "JHL7540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15EA"
+    },
+    {
+      "id": "PCI 8086:15E8",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 NHI",
+      "name": "JHL7540 Thunderbolt 3 NHI [Titan Ridge 2C 2018]",
+      "shortName": "JHL7540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15E8"
+    },
+    {
+      "id": "PCI 8086:15EB",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 NHI",
+      "name": "JHL7540 Thunderbolt 3 NHI [Titan Ridge 4C 2018]",
+      "shortName": "JHL7540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15EB"
+    },
+    {
+      "id": "PCI 8086:15E9",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 USB Controller",
+      "name": "JHL7540 Thunderbolt 3 USB Controller [Titan Ridge 2C 2018]",
+      "shortName": "JHL7540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15E9"
+    },
+    {
+      "id": "PCI 8086:15EC",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 3 USB Controller",
+      "name": "JHL7540 Thunderbolt 3 USB Controller [Titan Ridge 4C 2018]",
+      "shortName": "JHL7540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/15EC"
+    },
+    {
+      "id": "PCI 8086:57A4",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 4 Bridge",
+      "name": "JHL9440 Thunderbolt 4 Bridge [Barlow Ridge Hub 40G 2023]",
+      "shortName": "JHL9440",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/57A4"
+    },
+    {
+      "id": "PCI 8086:57A5",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 4 USB Controller",
+      "name": "JHL9440 Thunderbolt 4 USB Controller [Barlow Ridge Hub 40G 2023]",
+      "shortName": "JHL9440",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/57A5"
+    },
+    {
+      "id": "PCI 8086:5786",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 5 Bridge",
+      "name": "JHL9480 Thunderbolt 5 80/120G Bridge [Barlow Ridge Hub 80G 2023]",
+      "shortName": "JHL9480",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/5786"
+    },
+    {
+      "id": "PCI 8086:5787",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 5 USB Controller",
+      "name": "JHL9480 Thunderbolt 5 80/120G USB Controller [Barlow Ridge Hub 80G 2023]",
+      "shortName": "JHL9480",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/5787"
+    },
+    {
+      "id": "PCI 8086:5783",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 4 Bridge",
+      "name": "JHL9540 Thunderbolt 4 Bridge [Barlow Ridge Host 40G 2023]",
+      "shortName": "JHL9540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/5783"
+    },
+    {
+      "id": "PCI 8086:5784",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 4 NHI",
+      "name": "JHL9540 Thunderbolt 4 NHI [Barlow Ridge Host 40G 2023]",
+      "shortName": "JHL9540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/5784"
+    },
+    {
+      "id": "PCI 8086:5785",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 4 USB Controller",
+      "name": "JHL9540 Thunderbolt 4 USB Controller [Barlow Ridge Host 40G 2023]",
+      "shortName": "JHL9540",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/5785"
+    },
+    {
+      "id": "PCI 8086:5780",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 5 Bridge",
+      "name": "JHL9580 Thunderbolt 5 80/120G Bridge [Barlow Ridge Host 80G 2023]",
+      "shortName": "JHL9580",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/5780"
+    },
+    {
+      "id": "PCI 8086:5781",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 5 NHI",
+      "name": "JHL9580 Thunderbolt 5 80/120G NHI [Barlow Ridge Host 80G 2023]",
+      "shortName": "JHL9580",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/5781"
+    },
+    {
+      "id": "PCI 8086:5782",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 5 USB Controller",
+      "name": "JHL9580 Thunderbolt 5 80/120G USB Controller [Barlow Ridge Host 80G 2023]",
+      "shortName": "JHL9580",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/5782"
     },
     {
       "id": "PCI 8086:8C31",

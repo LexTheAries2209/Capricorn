@@ -54,8 +54,38 @@ final class DeviceHuntChipCatalogTests: XCTestCase {
         let record = DeviceHuntChipCatalog.bundled.resolve(chipDescriptions: ["PCI 8086:0B26"])["PCI 8086:0B26"]
 
         XCTAssertEqual(record?.manufacturer, "Intel")
-        XCTAssertEqual(record?.name, "JHL8440")
+        XCTAssertEqual(record?.name, "JHL8440 (Goshen Ridge) Thunderbolt Controller")
+        XCTAssertEqual(record?.topologyName, "JHL8440")
         XCTAssertEqual(record?.category, "Thunderbolt 4 Bridge")
+    }
+
+    func testCatalogResolvesJHLThunderboltGenerationMappings() {
+        let descriptions = [
+            "PCI 8086:15C0", "PCI 8086:15BF", "PCI 8086:15C1",
+            "PCI 8086:15DA", "PCI 8086:15D9", "PCI 8086:15DB",
+            "PCI 8086:15D3", "PCI 8086:15D2", "PCI 8086:15D4",
+            "PCI 8086:15EF", "PCI 8086:15F0",
+            "PCI 8086:15E7", "PCI 8086:15EA", "PCI 8086:15E8", "PCI 8086:15EB",
+            "PCI 8086:15E9", "PCI 8086:15EC",
+            "PCI 8086:57A4", "PCI 8086:57A5",
+            "PCI 8086:5786", "PCI 8086:5787",
+            "PCI 8086:5783", "PCI 8086:5784", "PCI 8086:5785",
+            "PCI 8086:5780", "PCI 8086:5781", "PCI 8086:5782"
+        ]
+        let matches = DeviceHuntChipCatalog.bundled.resolve(chipDescriptions: descriptions)
+
+        XCTAssertEqual(matches.count, descriptions.count)
+        XCTAssertEqual(matches["PCI 8086:15C0"]?.topologyName, "JHL6240")
+        XCTAssertEqual(matches["PCI 8086:15DA"]?.topologyName, "JHL6340")
+        XCTAssertEqual(matches["PCI 8086:15D3"]?.topologyName, "JHL6540")
+        XCTAssertEqual(matches["PCI 8086:15EF"]?.topologyName, "JHL7440")
+        XCTAssertEqual(matches["PCI 8086:15E7"]?.topologyName, "JHL7540")
+        XCTAssertEqual(matches["PCI 8086:57A4"]?.topologyName, "JHL9440")
+        XCTAssertEqual(matches["PCI 8086:5786"]?.topologyName, "JHL9480")
+        XCTAssertEqual(matches["PCI 8086:5783"]?.topologyName, "JHL9540")
+        XCTAssertEqual(matches["PCI 8086:5780"]?.topologyName, "JHL9580")
+        XCTAssertEqual(matches["PCI 8086:15BF"]?.category, "Thunderbolt 3 NHI")
+        XCTAssertEqual(matches["PCI 8086:5782"]?.category, "Thunderbolt 5 USB Controller")
     }
 
     func testCatalogResolvesCommonUSB4AndNVMeControllersOffline() {

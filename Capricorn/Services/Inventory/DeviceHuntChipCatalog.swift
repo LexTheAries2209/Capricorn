@@ -54,7 +54,12 @@ struct DeviceHuntChipCatalog: Sendable {
         let manufacturer: String
         let category: String
         let name: String
+        let shortName: String?
         let sourceURL: String
+
+        var topologyName: String {
+            shortName ?? name
+        }
 
         var identifier: DeviceChipIdentifier? {
             DeviceChipIdentifier(description: id)
@@ -117,6 +122,7 @@ struct DeviceHuntChipCatalog: Sendable {
                 throw CatalogError.invalidIdentifier(record.id)
             }
             guard !record.manufacturer.isEmpty, !record.category.isEmpty, !record.name.isEmpty,
+                  record.shortName?.isEmpty != true,
                   let sourceURL = URLComponents(string: record.sourceURL),
                   sourceURL.scheme == "https", sourceURL.host == "devicehunt.com" else {
                 throw CatalogError.invalidRecord(record.id)
