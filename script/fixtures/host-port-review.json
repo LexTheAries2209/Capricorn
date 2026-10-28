@@ -1,0 +1,140 @@
+[
+  {
+    "id": "mba",
+    "title": "MBA · M2 · 13.6-inch (2022)",
+    "subtitle": "左侧两个雷雳 / USB 4 接口 · 40 Gb/s",
+    "note": "候选顶视投影：按官方侧视图的接口深度投影到机身左缘；未绑定系统端口编号。",
+    "source": "https://support.apple.com/en-us/111867",
+    "panels": [
+      {
+        "title": "顶视端点",
+        "asset": "mba-top.png",
+        "url": "https://help.apple.com/assets/6245F680C5F7A066DA6C7DEC/6245F687C5F7A066DA6C7E12/en_US/a4f917e3d4bc73a815a96a35aa780e1a.png",
+        "height": 320,
+        "projection": {"chassis": [71, 14, 676, 478], "sideRange": [1, 931], "socketX": [183, 247]},
+        "markers": []
+      },
+      {
+        "title": "Apple 官方左侧视图",
+        "asset": "mba-left.png",
+        "url": "https://cdsassets.apple.com/live/SZLF0YNV/images/sp/111867_sp869-portimage-1.png",
+        "height": 112,
+        "markers": [{"x": 183, "y": 84, "kind": "thunderbolt"}, {"x": 247, "y": 84, "kind": "thunderbolt"}]
+      }
+    ]
+  },
+  {
+    "id": "mbp13",
+    "title": "MBP 13 · M1 (2020)",
+    "subtitle": "左侧两个雷雳 / USB 4 接口 · 40 Gb/s",
+    "note": "此图仅对应双端口 M1 模具，不代表四端口 Intel 机型；顶视位置为侧视深度投影。",
+    "source": "https://support.apple.com/guide/macbook-pro/take-a-tour-apd2182293a1/2020/mac/11",
+    "panels": [
+      {
+        "title": "顶视端点",
+        "asset": "mbp13-top.png",
+        "url": "https://help.apple.com/assets/5F46CA8B094622AD463B4A64/5F46CA9D094622AD463B4A8A/en_US/493d29928047a5a29b7422d77029cb6f.png",
+        "height": 320,
+        "projection": {"chassis": [80, 17, 658, 457], "sideRange": [1, 930], "socketX": [148, 213]},
+        "markers": []
+      },
+      {
+        "title": "Apple 官方左侧视图",
+        "asset": "mbp13-left.png",
+        "url": "https://help.apple.com/assets/5F46CA8B094622AD463B4A64/5F46CA9D094622AD463B4A8A/en_US/5573f2679ba9eb329d49411a9d3c66bf.png",
+        "height": 112,
+        "markers": [{"x": 148, "y": 35, "kind": "thunderbolt"}, {"x": 213, "y": 35, "kind": "thunderbolt"}]
+      }
+    ]
+  },
+  {
+    "id": "mini",
+    "title": "Mac mini · M2 (2023)",
+    "subtitle": "背面：两个雷雳 4 · 40 Gb/s；两个 USB-A · 5 Gb/s",
+    "note": "从背面正视接口，左右方向与面向电脑正面时相反；此图不代表四雷雳口的 M2 Pro。",
+    "source": "https://support.apple.com/en-us/111837",
+    "panels": [
+      {
+        "title": "背视端点",
+        "asset": "mini.png",
+        "url": "https://cdsassets.apple.com/live/7WUAS350/images/mac-mini/mac-mini-2023-m2.png",
+        "crop": [620, 0, 580, 200],
+        "height": 310,
+        "markers": [
+          {"x": 856, "y": 136, "kind": "thunderbolt"},
+          {"x": 900, "y": 136, "kind": "thunderbolt"},
+          {"x": 1059, "y": 136, "kind": "usbA"},
+          {"x": 1112, "y": 136, "kind": "usbA"}
+        ]
+      },
+      {
+        "title": "Apple 官方正 / 背视对照",
+        "asset": "mini.png",
+        "height": 120,
+        "markers": []
+      }
+    ]
+  },
+  {
+    "id": "studio",
+    "title": "Mac Studio · M2 Max (2023)",
+    "subtitle": "背面四雷雳 4、两 USB-A；正面两 USB-C",
+    "note": "正面 USB-C 在 M2 Max 上是 10 Gb/s USB；M2 Ultra 同位置为雷雳 4，此图不混用。",
+    "source": "https://support.apple.com/en-us/111835",
+    "panels": [
+      {
+        "title": "背视端点",
+        "asset": "studio-back.png",
+        "url": "https://cdsassets.apple.com/live/SZLF0YNV/images/sp/111835_sp894-portimage-2-en.png",
+        "crop": [0, 0, 906, 444],
+        "height": 235,
+        "markers": [
+          {"x": 142, "y": 331, "kind": "thunderbolt"},
+          {"x": 186, "y": 331, "kind": "thunderbolt"},
+          {"x": 230, "y": 331, "kind": "thunderbolt"},
+          {"x": 274, "y": 331, "kind": "thunderbolt"},
+          {"x": 548, "y": 331, "kind": "usbA"},
+          {"x": 605, "y": 331, "kind": "usbA"}
+        ]
+      },
+      {
+        "title": "正视端点",
+        "asset": "studio-front.png",
+        "url": "https://cdsassets.apple.com/live/SZLF0YNV/images/sp/111835_sp894-portimage-1-en.png",
+        "crop": [0, 0, 906, 444],
+        "height": 235,
+        "markers": [{"x": 149, "y": 331, "kind": "usbC"}, {"x": 217, "y": 331, "kind": "usbC"}]
+      }
+    ]
+  },
+  {
+    "id": "mbp14",
+    "title": "MBP 14 · M2 Pro / Max (2023)",
+    "subtitle": "左侧两个、右侧一个雷雳 4 · 40 Gb/s",
+    "note": "顶视图直接复用 Capricorn 现有坐标：左右后侧对齐数字行，左前侧对齐 QWER 行。",
+    "source": "https://support.apple.com/en-us/111340",
+    "panels": [
+      {
+        "title": "当前应用顶视端点",
+        "asset": "mbp14-top.png",
+        "productionModel": "Mac14,9",
+        "height": 300,
+        "markers": []
+      },
+      {
+        "title": "Apple 官方左侧视图",
+        "asset": "mbp14-left.png",
+        "url": "https://cdsassets.apple.com/live/SZLF0YNV/images/sp/111340_sp889-portimage-1-en.png",
+        "height": 76,
+        "markers": [{"x": 204, "y": 87, "kind": "thunderbolt"}, {"x": 260, "y": 87, "kind": "thunderbolt"}]
+      },
+      {
+        "title": "Apple 官方右侧视图",
+        "asset": "mbp14-right.png",
+        "url": "https://cdsassets.apple.com/live/SZLF0YNV/images/sp/111340_sp889-portimage-2-en.png",
+        "height": 76,
+        "markers": [{"x": 727, "y": 87, "kind": "thunderbolt"}]
+      }
+    ]
+  }
+]
