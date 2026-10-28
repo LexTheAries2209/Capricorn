@@ -1057,8 +1057,8 @@ enum AppFeatureTabKeyRouter {
     static let tabKeyCode: UInt16 = 48
     static let topologyKeyCode: UInt16 = 46
     static let topologyResetKeyCode: UInt16 = 6
-    static let topologyPlusKeyCode: UInt16 = 24
-    static let keypadPlusKeyCode: UInt16 = 69
+    static let topologyEqualsKeyCode: UInt16 = 24
+    static let keypadEqualsKeyCode: UInt16 = 81
     static let topologyMinusKeyCode: UInt16 = 27
     static let keypadMinusKeyCode: UInt16 = 78
 
@@ -1101,10 +1101,10 @@ enum AppFeatureTabKeyRouter {
         hasDisqualifyingModifiers: Bool,
         isEditingText: Bool
     ) -> Bool {
-        guard !hasDisqualifyingModifiers, !isEditingText else { return false }
-        return keyCode == keypadPlusKeyCode
-            || (keyCode == topologyPlusKeyCode && hasShift)
-            || charactersIgnoringModifiers == "+"
+        guard !hasShift, !hasDisqualifyingModifiers, !isEditingText else { return false }
+        return keyCode == keypadEqualsKeyCode
+            || keyCode == topologyEqualsKeyCode
+            || charactersIgnoringModifiers == "="
     }
 
     static func matchesTopologyZoomOut(

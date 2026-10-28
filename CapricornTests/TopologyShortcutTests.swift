@@ -35,7 +35,7 @@ final class TopologyShortcutTests: XCTestCase {
             charactersIgnoringModifiers: "x", hasModifiers: false, isEditingText: false))
     }
 
-    func testTopologyZoomShortcutsMatchMinusPlusAndKeypadKeys() {
+    func testTopologyZoomShortcutsMatchMinusEqualsAndKeypadKeys() {
         XCTAssertTrue(AppFeatureTabKeyRouter.matchesTopologyZoomOut(
             keyCode: 27, charactersIgnoringModifiers: "-", hasShift: false,
             hasDisqualifyingModifiers: false, isEditingText: false))
@@ -43,10 +43,19 @@ final class TopologyShortcutTests: XCTestCase {
             keyCode: 78, charactersIgnoringModifiers: nil, hasShift: false,
             hasDisqualifyingModifiers: false, isEditingText: false))
         XCTAssertTrue(AppFeatureTabKeyRouter.matchesTopologyZoomIn(
-            keyCode: 24, charactersIgnoringModifiers: "=", hasShift: true,
+            keyCode: 24, charactersIgnoringModifiers: "=", hasShift: false,
             hasDisqualifyingModifiers: false, isEditingText: false))
         XCTAssertTrue(AppFeatureTabKeyRouter.matchesTopologyZoomIn(
-            keyCode: 69, charactersIgnoringModifiers: nil, hasShift: false,
+            keyCode: 81, charactersIgnoringModifiers: nil, hasShift: false,
+            hasDisqualifyingModifiers: false, isEditingText: false))
+        XCTAssertTrue(AppFeatureTabKeyRouter.matchesTopologyZoomIn(
+            charactersIgnoringModifiers: "=", hasShift: false,
+            hasDisqualifyingModifiers: false, isEditingText: false))
+        XCTAssertFalse(AppFeatureTabKeyRouter.matchesTopologyZoomIn(
+            keyCode: 24, charactersIgnoringModifiers: "=", hasShift: true,
+            hasDisqualifyingModifiers: false, isEditingText: false))
+        XCTAssertFalse(AppFeatureTabKeyRouter.matchesTopologyZoomIn(
+            keyCode: 69, charactersIgnoringModifiers: "+", hasShift: false,
             hasDisqualifyingModifiers: false, isEditingText: false))
     }
 
@@ -58,10 +67,10 @@ final class TopologyShortcutTests: XCTestCase {
             charactersIgnoringModifiers: "-", hasShift: true,
             hasDisqualifyingModifiers: false, isEditingText: false))
         XCTAssertFalse(AppFeatureTabKeyRouter.matchesTopologyZoomIn(
-            keyCode: 24, charactersIgnoringModifiers: "=", hasShift: true,
+            keyCode: 24, charactersIgnoringModifiers: "=", hasShift: false,
             hasDisqualifyingModifiers: true, isEditingText: false))
         XCTAssertFalse(AppFeatureTabKeyRouter.matchesTopologyZoomIn(
-            keyCode: 24, charactersIgnoringModifiers: "=", hasShift: true,
+            keyCode: 24, charactersIgnoringModifiers: "=", hasShift: false,
             hasDisqualifyingModifiers: false, isEditingText: true))
     }
 
@@ -101,7 +110,7 @@ final class TopologyShortcutTests: XCTestCase {
     }
 
     @MainActor
-    func testNativeZoomMonitorConsumesPlusAndMinusOnlyOnTopologyPage() throws {
+    func testNativeZoomMonitorConsumesEqualsAndMinusOnlyOnTopologyPage() throws {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -130,19 +139,19 @@ final class TopologyShortcutTests: XCTestCase {
             with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
             windowNumber: window.windowNumber, context: nil, characters: "-",
             charactersIgnoringModifiers: "-", isARepeat: false, keyCode: 27))
-        let plus = try XCTUnwrap(NSEvent.keyEvent(
-            with: .keyDown, location: .zero, modifierFlags: .shift, timestamp: 0,
-            windowNumber: window.windowNumber, context: nil, characters: "+",
+        let equals = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, characters: "=",
             charactersIgnoringModifiers: "=", isARepeat: false, keyCode: 24))
 
         XCTAssertNotNil(monitor.handle(minus))
-        XCTAssertNotNil(monitor.handle(plus))
+        XCTAssertNotNil(monitor.handle(equals))
         XCTAssertEqual(zoomIns, 0)
         XCTAssertEqual(zoomOuts, 0)
 
         topologyIsActive = true
         XCTAssertNil(monitor.handle(minus))
-        XCTAssertNil(monitor.handle(plus))
+        XCTAssertNil(monitor.handle(equals))
         XCTAssertEqual(zoomIns, 1)
         XCTAssertEqual(zoomOuts, 1)
 
@@ -150,7 +159,7 @@ final class TopologyShortcutTests: XCTestCase {
         window.contentView = editor
         XCTAssertTrue(window.makeFirstResponder(editor))
         XCTAssertNotNil(monitor.handle(minus))
-        XCTAssertNotNil(monitor.handle(plus))
+        XCTAssertNotNil(monitor.handle(equals))
         XCTAssertEqual(zoomIns, 1)
         XCTAssertEqual(zoomOuts, 1)
     }

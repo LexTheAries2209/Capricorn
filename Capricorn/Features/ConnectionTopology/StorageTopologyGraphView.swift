@@ -117,7 +117,7 @@ struct StorageTopologyGraphView: View {
                 Button { viewportCommand.request(.zoomIn) } label: {
                     Image(systemName: "plus.magnifyingglass")
                 }
-                .help("\(language.t("Zoom In")) (+)")
+                .help("\(language.t("Zoom In")) (=)")
                 .disabled(zoom >= TopologyZoomLimits.maximum - 0.001)
             }
             .buttonStyle(.borderless)

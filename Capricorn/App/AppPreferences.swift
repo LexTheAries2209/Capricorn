@@ -522,7 +522,7 @@ struct CapricornSettingsView: View {
                 shortcutRow(language.t("Open connection topology"), keys: "M")
                 shortcutRow(language.t("Zoom out topology"), keys: "-")
                 shortcutRow(language.t("Rearrange and fit topology"), keys: "Z")
-                shortcutRow(language.t("Zoom in topology"), keys: "+")
+                shortcutRow(language.t("Zoom in topology"), keys: "=")
             }
 
             Section(language.t("History Database")) {
