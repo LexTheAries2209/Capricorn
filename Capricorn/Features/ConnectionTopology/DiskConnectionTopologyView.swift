@@ -35,12 +35,9 @@ struct DiskConnectionTopologyView: View {
                     StorageTopologyDetailsView(
                         drive: selectedDrive,
                         graph: graph,
+                        systemDriveIDs: Set(drives.filter(\.isSystemDisk).map(\.bsdName)),
                         resolvedChipRecords: resolvedChipRecords
                     )
-                    Label(language.t("Chip names use the bundled DeviceHunt catalog. Unknown IDs remain visible."),
-                          systemImage: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 } else if graph == nil {
                     ProgressView(language.t("Reading hardware path"))
                         .frame(maxWidth: .infinity, minHeight: 420)

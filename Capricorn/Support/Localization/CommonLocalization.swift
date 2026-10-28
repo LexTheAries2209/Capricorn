@@ -497,8 +497,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Connection Topology": "连接拓扑",
         "All storage devices on this Mac": "本机所有存储设备",
         "Storage connections on this Mac": "本机存储连接",
-        "Chip names use the bundled DeviceHunt catalog. Unknown IDs remain visible.":
-            "芯片名称来自随软件更新的 DeviceHunt 本地目录；未收录 ID 保留原始代号。映射名称可能对应芯片系列，而非具体硅片版本。",
         "PCIe Switch": "PCIe 交换芯片",
         "USB 3.0 Host Controller": "USB 3.0 主机控制器",
         "USB 3.1 Host Controller": "USB 3.1 主机控制器",
