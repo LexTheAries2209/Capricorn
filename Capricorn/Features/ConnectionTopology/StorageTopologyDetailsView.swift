@@ -9,7 +9,8 @@ struct StorageTopologyDetailsView: View {
 
     var body: some View {
         let path = graph.path(for: drive.bsdName)
-        let hardware = path.filter { $0.kind != .computer && $0.kind != .disk }
+        let hardware = StorageTopologyDiagram.uniquePCIeBridgeChips(in: path)
+            .filter { $0.kind != .computer && $0.kind != .disk }
         let pcieLinks = path.compactMap(\.pcieLink)
         InfoPanel(title: language.t("Selected drive details"),
                   symbol: drive.isSystemDisk ? "laptopcomputer" : "externaldrive") {

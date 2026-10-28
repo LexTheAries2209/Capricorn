@@ -54,8 +54,31 @@ final class DeviceHuntChipCatalogTests: XCTestCase {
         let record = DeviceHuntChipCatalog.bundled.resolve(chipDescriptions: ["PCI 8086:0B26"])["PCI 8086:0B26"]
 
         XCTAssertEqual(record?.manufacturer, "Intel")
-        XCTAssertEqual(record?.name, "JHL8440 (Goshen Ridge) Thunderbolt 4 Controller")
+        XCTAssertEqual(record?.name, "JHL8440")
         XCTAssertEqual(record?.category, "Thunderbolt 4 Bridge")
+    }
+
+    func testCatalogResolvesCommonUSB4AndNVMeControllersOffline() {
+        let matches = DeviceHuntChipCatalog.bundled.resolve(chipDescriptions: [
+            "PCI 1B21:2463",
+            "PCI 1E4B:1202",
+            "PCI 1E4B:1602",
+            "PCI 1987:5012",
+            "PCI 1987:5016",
+            "PCI 1987:5018",
+            "PCI 126F:2264",
+            "PCI 126F:2267"
+        ])
+
+        XCTAssertEqual(matches["PCI 1B21:2463"]?.name, "ASM2464PD")
+        XCTAssertEqual(matches["PCI 1B21:2463"]?.manufacturer, "ASMedia")
+        XCTAssertEqual(matches["PCI 1E4B:1202"]?.name, "MAXIO MAP1202")
+        XCTAssertEqual(matches["PCI 1E4B:1602"]?.name, "MAXIO MAP1602")
+        XCTAssertEqual(matches["PCI 1987:5012"]?.name, "Phison PS5012-E12")
+        XCTAssertEqual(matches["PCI 1987:5016"]?.name, "Phison PS5016-E16")
+        XCTAssertEqual(matches["PCI 1987:5018"]?.name, "Phison PS5018-E18")
+        XCTAssertEqual(matches["PCI 126F:2264"]?.name, "Silicon Motion SM2264")
+        XCTAssertEqual(matches["PCI 126F:2267"]?.name, "Silicon Motion SM2267/SM2267XT")
     }
 
     func testResolvesPCIStorageAndUSBBridgeChipNamesLocally() {

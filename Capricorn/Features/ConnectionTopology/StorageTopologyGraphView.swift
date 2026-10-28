@@ -17,13 +17,14 @@ struct StorageTopologyDiagram {
         for disk in source.nodes where disk.kind == .disk {
             guard let bsdName = disk.bsdName, !systemDriveIDs.contains(bsdName) else { continue }
             let path = source.path(for: bsdName)
+            let presentationPath = Self.uniquePCIeBridgeChips(in: path)
             let hasPort = path.contains { [.usbPort, .thunderboltPort].contains($0.kind) }
             let hostPort = path.compactMap(\.hostPort).first
                 .flatMap { source.hostModel?.position(for: $0) == nil ? nil : $0 }
             var visible: [DriveConnectionTopologyNode] = []
             var segment: [DriveConnectionTopologyNode] = []
             var hasHostThunderboltPort = false
-            for node in path {
+            for node in presentationPath {
                 segment.append(node)
                 let isHostThunderboltPort = node.kind == .thunderboltPort && !hasHostThunderboltPort
                 if node.kind == .thunderboltPort { hasHostThunderboltPort = true }
@@ -58,6 +59,18 @@ struct StorageTopologyDiagram {
 
     func selectedNodeIDs(for driveID: String) -> Set<String> {
         systemDriveIDs.contains(driveID) ? ["computer"] : graph.pathNodeIDs(to: driveID)
+    }
+
+    // IOKit can expose one tunneled chip as repeated nested PCI bridge nodes.
+    static func uniquePCIeBridgeChips(
+        in nodes: [DriveConnectionTopologyNode]
+    ) -> [DriveConnectionTopologyNode] {
+        var seenChipIDs: Set<String> = []
+        return nodes.filter { node in
+            guard node.kind == .pcieBridge else { return true }
+            guard let chipDescription = node.chipDescription else { return false }
+            return seenChipIDs.insert(chipDescription.uppercased()).inserted
+        }
     }
 
     static func isGenericUSBHub(_ hardwareName: String?) -> Bool {

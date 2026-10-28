@@ -105,6 +105,32 @@ final class StorageTopologyUSBPortPresentationTests: XCTestCase {
         XCTAssertEqual(diagram.graph.nodes.first { $0.id == tunnelHub.id }?.linkRateDescription, "10 Gb/s")
     }
 
+    func testRepeatedPCIeBridgeChipIsShownOnceButRawRegistryPathIsRetained() {
+        let host = node("computer", .computer)
+        let jhl8440 = node("jhl8440", .pcieBridge, name: "PCI-Bridge", chip: "PCI 8086:0B26")
+        let asmUpstream = node("asm-upstream", .pcieBridge, name: "PCI-Bridge", chip: "PCI 1B21:2463")
+        let upstreamWrapper = node("upstream-wrapper", .pcieBridge, name: "IOPP")
+        let asmDownstream = node("asm-downstream", .pcieBridge, name: "PCI-Bridge", chip: "PCI 1B21:2463")
+        let downstreamWrapper = node("downstream-wrapper", .pcieBridge, name: "IOPP")
+        let maxio = node("maxio", .pcieDevice, name: "MAP1602", chip: "PCI 1E4B:1602")
+        let disk = node("disk:disk8", .disk, bsd: "disk8")
+        let source = DriveConnectionTopologyGraph.assemble(paths: [
+            "disk8": .init(nodes: [host, jhl8440, asmUpstream, upstreamWrapper, asmDownstream,
+                                   downstreamWrapper, maxio, disk],
+                           hasResolvedController: true)
+        ])
+
+        let diagram = StorageTopologyDiagram(graph: source)
+        let detailsHardware = StorageTopologyDiagram.uniquePCIeBridgeChips(in: source.path(for: "disk8"))
+            .filter { $0.kind == .pcieBridge }
+
+        XCTAssertEqual(diagram.graph.path(for: "disk8").map(\.id),
+                       ["computer", jhl8440.id, asmUpstream.id, disk.id])
+        XCTAssertEqual(detailsHardware.map(\.id), [jhl8440.id, asmUpstream.id])
+        XCTAssertEqual(source.path(for: "disk8").filter { $0.kind == .pcieBridge }.count, 5)
+        XCTAssertEqual(diagram.hardwareSegments[disk.id]?.map(\.id), [maxio.id, disk.id])
+    }
+
     private func node(_ id: String, _ kind: DriveConnectionTopologyNode.Kind, bsd: String? = nil) -> DriveConnectionTopologyNode {
         node(id, kind, name: id, bsd: bsd)
     }

@@ -67,6 +67,13 @@
       "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1B21/device/2426"
     },
     {
+      "id": "PCI 1B21:2463",
+      "manufacturer": "ASMedia",
+      "category": "USB4 / PCIe Bridge",
+      "name": "ASM2464PD",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1B21/device/2463"
+    },
+    {
       "id": "PCI 8086:1E31",
       "manufacturer": "Intel",
       "category": "USB Host Controller",
@@ -77,7 +84,7 @@
       "id": "PCI 8086:0B26",
       "manufacturer": "Intel",
       "category": "Thunderbolt 4 Bridge",
-      "name": "JHL8440 (Goshen Ridge) Thunderbolt 4 Controller",
+      "name": "JHL8440",
       "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/0B26"
     },
     {
@@ -165,11 +172,60 @@
       "sourceURL": "https://devicehunt.com/view/type/pci/vendor/144D/device/A804"
     },
     {
+      "id": "PCI 1E4B:1202",
+      "manufacturer": "MAXIO",
+      "category": "NVMe Controller",
+      "name": "MAXIO MAP1202",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1E4B/device/1202"
+    },
+    {
+      "id": "PCI 1E4B:1602",
+      "manufacturer": "MAXIO",
+      "category": "NVMe Controller",
+      "name": "MAXIO MAP1602",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1E4B/device/1602"
+    },
+    {
+      "id": "PCI 1987:5012",
+      "manufacturer": "Phison",
+      "category": "NVMe Controller",
+      "name": "Phison PS5012-E12",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1987/device/5012"
+    },
+    {
+      "id": "PCI 1987:5016",
+      "manufacturer": "Phison",
+      "category": "NVMe Controller",
+      "name": "Phison PS5016-E16",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1987/device/5016"
+    },
+    {
+      "id": "PCI 1987:5018",
+      "manufacturer": "Phison",
+      "category": "NVMe Controller",
+      "name": "Phison PS5018-E18",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1987/device/5018"
+    },
+    {
       "id": "PCI 126F:2263",
       "manufacturer": "Silicon Motion",
       "category": "NVMe Controller",
       "name": "SM2263EN/SM2263XT NVMe SSD Controller",
       "sourceURL": "https://devicehunt.com/view/type/pci/vendor/126F/device/2263"
+    },
+    {
+      "id": "PCI 126F:2264",
+      "manufacturer": "Silicon Motion",
+      "category": "NVMe Controller",
+      "name": "Silicon Motion SM2264",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/126F/device/2264"
+    },
+    {
+      "id": "PCI 126F:2267",
+      "manufacturer": "Silicon Motion",
+      "category": "NVMe Controller",
+      "name": "Silicon Motion SM2267/SM2267XT",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/126F/device/2267"
     },
     {
       "id": "PCI 1106:3483",
