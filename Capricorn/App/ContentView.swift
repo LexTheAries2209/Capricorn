@@ -24,6 +24,8 @@ struct ContentView: View {
     @State private var sidebarAutoFitIsActive = false
     @State private var connectionTopologyGraph: DriveConnectionTopologyGraph?
     @State private var topologyResetRevision = 0
+    @State private var topologyZoomInRevision = 0
+    @State private var topologyZoomOutRevision = 0
     @AppStorage(AppPreferences.Key.opensSmartSelfTestProgressWindowAutomatically)
     private var opensSmartSelfTestProgressWindowAutomatically = AppPreferences.Defaults.opensSmartSelfTestProgressWindowAutomatically
     @AppStorage(AppPreferences.Key.redactSerialNumbers) private var redactSerialNumbers = false
@@ -121,6 +123,8 @@ struct ContentView: View {
         .environment(\.appLanguage, language)
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
         .environment(\.topologyResetRevision, topologyResetRevision)
+        .environment(\.topologyZoomInRevision, topologyZoomInRevision)
+        .environment(\.topologyZoomOutRevision, topologyZoomOutRevision)
         .background {
             FeatureTabKeyMonitor(
                 onOpenSettings: {
@@ -135,6 +139,16 @@ struct ContentView: View {
                 onResetTopology: {
                     guard viewModel.selectedFeatureTab == .topology else { return false }
                     topologyResetRevision += 1
+                    return true
+                },
+                onZoomInTopology: {
+                    guard viewModel.selectedFeatureTab == .topology else { return false }
+                    topologyZoomInRevision += 1
+                    return true
+                },
+                onZoomOutTopology: {
+                    guard viewModel.selectedFeatureTab == .topology else { return false }
+                    topologyZoomOutRevision += 1
                     return true
                 }
             )

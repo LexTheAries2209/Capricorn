@@ -22,9 +22,27 @@ private struct TopologyResetRevisionKey: EnvironmentKey {
     static let defaultValue = 0
 }
 
+private struct TopologyZoomInRevisionKey: EnvironmentKey {
+    static let defaultValue = 0
+}
+
+private struct TopologyZoomOutRevisionKey: EnvironmentKey {
+    static let defaultValue = 0
+}
+
 extension EnvironmentValues {
     var topologyResetRevision: Int {
         get { self[TopologyResetRevisionKey.self] }
         set { self[TopologyResetRevisionKey.self] = newValue }
+    }
+
+    var topologyZoomInRevision: Int {
+        get { self[TopologyZoomInRevisionKey.self] }
+        set { self[TopologyZoomInRevisionKey.self] = newValue }
+    }
+
+    var topologyZoomOutRevision: Int {
+        get { self[TopologyZoomOutRevisionKey.self] }
+        set { self[TopologyZoomOutRevisionKey.self] = newValue }
     }
 }

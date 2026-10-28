@@ -88,6 +88,8 @@ struct StorageTopologyGraphView: View {
     @Environment(\.appLanguage) private var language
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.topologyResetRevision) private var resetRevision
+    @Environment(\.topologyZoomInRevision) private var zoomInRevision
+    @Environment(\.topologyZoomOutRevision) private var zoomOutRevision
     @State private var zoom: CGFloat = 1
     @State private var viewportCommand = TopologyViewportCommand()
     @State private var nodePlacement = TopologyNodePlacement()
@@ -106,7 +108,7 @@ struct StorageTopologyGraphView: View {
                 Button { viewportCommand.request(.zoomOut) } label: {
                     Image(systemName: "minus.magnifyingglass")
                 }
-                .help(language.t("Zoom Out"))
+                .help("\(language.t("Zoom Out")) (-)")
                 .disabled(zoom <= TopologyZoomLimits.minimum + 0.001)
                 Button { resetViewport() } label: {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
@@ -115,7 +117,7 @@ struct StorageTopologyGraphView: View {
                 Button { viewportCommand.request(.zoomIn) } label: {
                     Image(systemName: "plus.magnifyingglass")
                 }
-                .help(language.t("Zoom In"))
+                .help("\(language.t("Zoom In")) (+)")
                 .disabled(zoom >= TopologyZoomLimits.maximum - 0.001)
             }
             .buttonStyle(.borderless)
@@ -155,6 +157,8 @@ struct StorageTopologyGraphView: View {
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor).opacity(0.5)))
         .accessibilityIdentifier("storageTopologyGraph")
         .onChange(of: resetRevision) { resetViewport() }
+        .onChange(of: zoomInRevision) { viewportCommand.request(.zoomIn) }
+        .onChange(of: zoomOutRevision) { viewportCommand.request(.zoomOut) }
         .onChange(of: diagram.graph.nodes.map(\.id)) { resetViewport() }
     }
 

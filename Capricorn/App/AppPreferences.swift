@@ -520,7 +520,9 @@ struct CapricornSettingsView: View {
                 shortcutRow(language.t("Save SMART Snapshot CSV"), keys: "⌘S")
                 shortcutRow(language.t("Switch feature pages in order"), keys: "Tab")
                 shortcutRow(language.t("Open connection topology"), keys: "M")
+                shortcutRow(language.t("Zoom out topology"), keys: "-")
                 shortcutRow(language.t("Rearrange and fit topology"), keys: "Z")
+                shortcutRow(language.t("Zoom in topology"), keys: "+")
             }
 
             Section(language.t("History Database")) {

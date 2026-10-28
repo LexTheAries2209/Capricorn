@@ -529,6 +529,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "USB Port": "USB 端口",
         "Zoom Out": "缩小",
         "Zoom In": "放大",
+        "Zoom out topology": "缩小拓扑图",
+        "Zoom in topology": "放大拓扑图",
         "Fit Topology": "适应拓扑大小",
         "Rearrange and fit topology": "重新排列拓扑并自适应显示",
         "Hardware Path": "硬件连接路径",

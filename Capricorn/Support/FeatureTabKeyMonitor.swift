@@ -7,13 +7,17 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
     var onNext: () -> Void
     var onOpenTopology: () -> Void
     var onResetTopology: () -> Bool = { false }
+    var onZoomInTopology: () -> Bool = { false }
+    var onZoomOutTopology: () -> Bool = { false }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             onOpenSettings: onOpenSettings,
             onNext: onNext,
             onOpenTopology: onOpenTopology,
-            onResetTopology: onResetTopology
+            onResetTopology: onResetTopology,
+            onZoomInTopology: onZoomInTopology,
+            onZoomOutTopology: onZoomOutTopology
         )
     }
 
@@ -28,6 +32,8 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
         context.coordinator.onOpenTopology = onOpenTopology
         context.coordinator.onOpenSettings = onOpenSettings
         context.coordinator.onResetTopology = onResetTopology
+        context.coordinator.onZoomInTopology = onZoomInTopology
+        context.coordinator.onZoomOutTopology = onZoomOutTopology
         context.coordinator.window = nsView.window
     }
 
@@ -40,6 +46,8 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
         var onNext: () -> Void
         var onOpenTopology: () -> Void
         var onResetTopology: () -> Bool
+        var onZoomInTopology: () -> Bool
+        var onZoomOutTopology: () -> Bool
         weak var window: NSWindow?
         private var monitor: Any?
 
@@ -47,12 +55,16 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
             onOpenSettings: @escaping () -> Void,
             onNext: @escaping () -> Void,
             onOpenTopology: @escaping () -> Void,
-            onResetTopology: @escaping () -> Bool = { false }
+            onResetTopology: @escaping () -> Bool = { false },
+            onZoomInTopology: @escaping () -> Bool = { false },
+            onZoomOutTopology: @escaping () -> Bool = { false }
         ) {
             self.onOpenSettings = onOpenSettings
             self.onNext = onNext
             self.onOpenTopology = onOpenTopology
             self.onResetTopology = onResetTopology
+            self.onZoomInTopology = onZoomInTopology
+            self.onZoomOutTopology = onZoomOutTopology
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self else { return event }
                 return self.handle(event)
@@ -102,6 +114,26 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
                 hasModifiers: !relevantModifiers.isEmpty,
                 isEditingText: isEditingText
             ), onResetTopology() {
+                return nil
+            }
+
+            if AppFeatureTabKeyRouter.matchesTopologyZoomIn(
+                keyCode: event.keyCode,
+                charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                hasShift: relevantModifiers.contains(.shift),
+                hasDisqualifyingModifiers: hasDisqualifyingModifiers,
+                isEditingText: isEditingText
+            ), onZoomInTopology() {
+                return nil
+            }
+
+            if AppFeatureTabKeyRouter.matchesTopologyZoomOut(
+                keyCode: event.keyCode,
+                charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                hasShift: relevantModifiers.contains(.shift),
+                hasDisqualifyingModifiers: hasDisqualifyingModifiers,
+                isEditingText: isEditingText
+            ), onZoomOutTopology() {
                 return nil
             }
 
