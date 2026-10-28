@@ -2,6 +2,23 @@
 import AppKit
 import SwiftUI
 
+// The production artwork view uses this environment only for its accessibility label.
+// Keep the preview independent of the application's unrelated domain translations.
+struct ReviewLanguage {
+    func t(_ key: String) -> String { key == "This Mac" ? "本机" : key }
+}
+
+private struct ReviewLanguageKey: EnvironmentKey {
+    static let defaultValue = ReviewLanguage()
+}
+
+extension EnvironmentValues {
+    var appLanguage: ReviewLanguage {
+        get { self[ReviewLanguageKey.self] }
+        set { self[ReviewLanguageKey.self] = newValue }
+    }
+}
+
 struct ReviewMarker: Decodable {
     let x: Double
     let y: Double
@@ -11,6 +28,7 @@ struct ReviewMarker: Decodable {
         switch kind {
         case "usbC": .orange
         case "usbA": .purple
+        case "thunderbolt5": .green
         default: .blue
         }
     }
@@ -24,22 +42,25 @@ struct ReviewProjection: Decodable {
 
 struct ReviewPanel: Decodable {
     let title: String
-    let asset: String
+    let asset: String?
     let url: URL?
     let crop: [Double]?
     let height: Double
     let projection: ReviewProjection?
     let productionModel: String?
+    let templateModel: String?
+    let portNumbers: [Int]?
+    let hostModels: [ReviewHost]?
     let markers: [ReviewMarker]
 
     func resolvedMarkers(imageSize: CGSize) -> [ReviewMarker] {
-        if let identifier = productionModel {
+        if let identifier = productionModel ?? templateModel {
             let model = StorageHostModel(identifier: identifier, board: "J414c")
             let frame = StorageHostArtworkGeometry.imageFrame
             let scale = min(frame.width / imageSize.width, frame.height / imageSize.height)
             let imageOrigin = CGPoint(x: frame.midX - imageSize.width * scale / 2,
                                       y: frame.midY - imageSize.height * scale / 2)
-            return (1...3).compactMap { number in
+            return (portNumbers ?? [1, 2, 3]).compactMap { number in
                 guard let point = StorageHostArtworkGeometry.anchor(.init(number: number), model: model)
                 else { return nil }
                 return .init(x: (point.x - imageOrigin.x) / scale,
@@ -56,6 +77,19 @@ struct ReviewPanel: Decodable {
         }
         return markers
     }
+}
+
+struct ReviewHost: Decodable {
+    let identifier: String
+    let title: String
+
+    var model: StorageHostModel {
+        .init(identifier: identifier, board: "", productName: title)
+    }
+}
+
+enum ReviewFailure: Error {
+    case invalidMarker(asset: String, x: Double, y: Double)
 }
 
 struct ReviewModel: Decodable {
@@ -106,6 +140,48 @@ struct ReviewImagePanel: View {
 }
 
 @MainActor
+struct ReviewSystemEndpoints: View {
+    let hosts: [ReviewHost]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("选中外置盘时的本机")
+                Spacer()
+                Text("选中系统盘时的本机")
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.secondary)
+            ForEach(hosts, id: \.identifier) { host in
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("\(host.title) · \(host.identifier)").font(.system(size: 12))
+                    HStack(spacing: 24) {
+                        endpoint(host.model, selected: false)
+                        endpoint(host.model, selected: true)
+                    }
+                }
+            }
+        }
+    }
+
+    private func endpoint(_ model: StorageHostModel, selected: Bool) -> some View {
+        ZStack(alignment: .topLeading) {
+            // Unverified desktop layouts use the node center in StorageTopologyGraphView.
+            if !selected {
+                TopologyConnectionLine(start: CGPoint(x: 153, y: 70),
+                    end: CGPoint(x: 300, y: 70), selected: true, unresolved: true)
+            }
+            StorageHostArtworkView(model: model, selected: selected)
+                .scaleEffect(0.5, anchor: .topLeading)
+                .frame(width: 170, height: 140, alignment: .topLeading)
+                .position(x: 153, y: 70)
+        }
+        .frame(width: 306, height: 152)
+        .clipped()
+    }
+}
+
+@MainActor
 struct ReviewView: View {
     let model: ReviewModel
     let images: [String: NSImage]
@@ -117,14 +193,21 @@ struct ReviewView: View {
                 Text(model.subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
             }
             ForEach(Array(model.panels.enumerated()), id: \.offset) { _, panel in
-                if let image = images[panel.asset] {
+                if let hosts = panel.hostModels {
+                    ReviewSystemEndpoints(hosts: hosts)
+                } else if let asset = panel.asset, let image = images[asset] {
                     ReviewImagePanel(panel: panel, image: image)
                 }
             }
-            HStack(spacing: 20) {
-                legend("雷雳 / USB 4 · 40 Gb/s", color: .blue)
-                legend("USB-C · 10 Gb/s", color: .orange)
-                legend("USB-A · 5 Gb/s", color: .purple)
+            if !model.panels.contains(where: { $0.hostModels != nil }) {
+                HStack(spacing: 16) {
+                    legend("雷雳 / USB 4 · 40 Gb/s", color: .blue)
+                    legend("USB-C · 10 Gb/s", color: .orange)
+                    legend("USB-A · 5 Gb/s", color: .purple)
+                    if model.panels.flatMap(\.markers).contains(where: { $0.kind == "thunderbolt5" }) {
+                        legend("雷雳 5 · 80 Gb/s", color: .green)
+                    }
+                }
             }
             Text(model.note).font(.system(size: 12)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -155,14 +238,29 @@ final class ReviewDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
             let resources = Bundle.main.resourceURL!
+            let additional = CommandLine.arguments.contains("--additional")
+            let manifest = additional ? "additional-models.json" : "models.json"
             let models = try JSONDecoder().decode([ReviewModel].self,
-                from: Data(contentsOf: resources.appendingPathComponent("models.json")))
+                from: Data(contentsOf: resources.appendingPathComponent(manifest)))
             var images: [String: NSImage] = [:]
             // This developer-only preview downloads official artwork once, then reuses the local files.
-            for panel in models.flatMap(\.panels) where images[panel.asset] == nil {
-                let path = resources.appendingPathComponent(panel.asset)
+            for panel in models.flatMap(\.panels) {
+                guard let asset = panel.asset else { continue }
+                let path = resources.appendingPathComponent(asset)
                 if !FileManager.default.fileExists(atPath: path.path), let url = panel.url {
-                    try Data(contentsOf: url).write(to: path, options: .atomic)
+                    let request = URLRequest(url: url, timeoutInterval: 20)
+                    let semaphore = DispatchSemaphore(value: 0)
+                    let download = ReviewDownload()
+                    URLSession.shared.dataTask(with: request) { data, response, error in
+                        download.data = (response as? HTTPURLResponse)?.statusCode == 200 ? data : nil
+                        download.error = error
+                        semaphore.signal()
+                    }.resume()
+                    guard semaphore.wait(timeout: .now() + 25) == .success,
+                          let data = download.data else {
+                        throw download.error ?? CocoaError(.fileReadUnknown)
+                    }
+                    try data.write(to: path, options: .atomic)
                 }
                 guard let image = NSImage(contentsOf: path) else {
                     throw CocoaError(.fileReadCorruptFile)
@@ -170,19 +268,29 @@ final class ReviewDelegate: NSObject, NSApplicationDelegate {
                 for marker in panel.resolvedMarkers(imageSize: image.size) {
                     guard marker.x.isFinite, marker.y.isFinite,
                           CGRect(origin: .zero, size: image.size).contains(CGPoint(x: marker.x, y: marker.y))
-                    else { throw CocoaError(.coderInvalidValue) }
+                    else { throw ReviewFailure.invalidMarker(asset: asset, x: marker.x, y: marker.y) }
                 }
                 if !panel.markers.isEmpty {
                     let bitmap = try NSBitmapImageRep(data: Data(contentsOf: path)).unwrap()
                     for marker in panel.markers {
-                        let color = try bitmap.colorAt(x: Int(marker.x), y: Int(marker.y))?
-                            .usingColorSpace(.deviceRGB).unwrap()
-                        // Explicit side/rear anchors must land on the dark socket, not the casing.
-                        guard let color, max(color.redComponent, color.greenComponent, color.blueComponent) < 0.55
-                        else { throw CocoaError(.coderInvalidValue) }
+                        // Colored iMac tongues are not dark; verify the surrounding socket opening.
+                        var darkPixels = 0
+                        for y in (Int(marker.y) - 4)...(Int(marker.y) + 4) {
+                            for x in (Int(marker.x) - 4)...(Int(marker.x) + 4) {
+                                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)
+                                else { continue }
+                                let luminance = color.redComponent * 0.2126
+                                    + color.greenComponent * 0.7152 + color.blueComponent * 0.0722
+                                if luminance < 0.3 {
+                                    darkPixels += 1
+                                }
+                            }
+                        }
+                        guard darkPixels >= 20
+                        else { throw ReviewFailure.invalidMarker(asset: asset, x: marker.x, y: marker.y) }
                     }
                 }
-                images[panel.asset] = image
+                images[asset] = image
             }
             let export = resources.deletingLastPathComponent().deletingLastPathComponent()
                 .deletingLastPathComponent().appendingPathComponent("renders", isDirectory: true)
@@ -205,13 +313,16 @@ final class ReviewDelegate: NSObject, NSApplicationDelegate {
                     window.contentView = NSHostingView(rootView: content.scaleEffect(scale)
                         .frame(width: 700 * scale, height: 780 * scale))
                     window.setFrameTopLeftPoint(CGPoint(
-                        x: screen.minX + 25 + CGFloat(index) * 45,
-                        y: screen.maxY - 25 - CGFloat(index) * 28))
+                        x: min(screen.maxX - 700 * scale - 10, screen.minX + 25 + CGFloat(index % 6) * 38),
+                        y: screen.maxY - 20 - CGFloat(index % 3)
+                            * min(18, max(0, (screen.height - 780 * scale - 40) / 3))))
                     window.makeKeyAndOrderFront(nil)
                     windows.append(window)
                 }
             }
-            try Data("Rendered \(models.count) models; opened \(windows.count) windows.\n".utf8)
+            let status = "Rendered \(models.count) models; opened \(windows.count) windows.\n"
+                + models.map(\.title).joined(separator: "\n") + "\n"
+            try Data(status.utf8)
                 .write(to: export.appendingPathComponent("status.txt"), options: .atomic)
             if CommandLine.arguments.contains("--render-only") {
                 NSApp.terminate(nil)
@@ -221,7 +332,7 @@ final class ReviewDelegate: NSObject, NSApplicationDelegate {
         } catch {
             failed = true
             NSLog("Port review failed: %@", String(describing: error))
-            NSApp.terminate(nil)
+            exit(1)
         }
     }
 
@@ -234,12 +345,30 @@ enum HostPortReview {
     static func main() {
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
+        let menu = NSMenu()
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "退出校对窗口", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+        menu.addItem(appItem)
+        let windowItem = NSMenuItem(title: "窗口", action: nil, keyEquivalent: "")
+        let windowMenu = NSMenu(title: "窗口")
+        windowItem.submenu = windowMenu
+        menu.addItem(windowItem)
+        app.mainMenu = menu
+        app.windowsMenu = windowMenu
         let delegate = ReviewDelegate()
         app.delegate = delegate
         app.run()
         withExtendedLifetime(delegate) {}
         if delegate.failed { exit(1) }
     }
+}
+
+private final class ReviewDownload: @unchecked Sendable {
+    // The semaphore publishes completion before the main thread reads these values.
+    var data: Data?
+    var error: Error?
 }
 
 private extension Optional {

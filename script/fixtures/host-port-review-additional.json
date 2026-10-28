@@ -1,0 +1,247 @@
+[
+  {
+    "id": "mini-m4",
+    "title": "Mac mini · M4 (2024) · 接口校对",
+    "subtitle": "背面三个雷雳 4 · 40 Gb/s；正面两个 USB-C · 10 Gb/s",
+    "note": "官方前后视图，点位落在接口开口中心。这里校对的是实体位置，尚未对应 IOKit 端口编号。",
+    "source": "https://support.apple.com/en-us/121555",
+    "panels": [
+      {
+        "title": "背面",
+        "asset": "mini-m4-back.png",
+        "url": "https://cdsassets.apple.com/live/7WUAS350/images/tech-specs/121555-mac-mini-2024-en-portimage2.png",
+        "height": 235,
+        "markers": [{"x": 529, "y": 258, "kind": "thunderbolt"}, {"x": 582, "y": 258, "kind": "thunderbolt"}, {"x": 635, "y": 258, "kind": "thunderbolt"}]
+      },
+      {
+        "title": "正面",
+        "asset": "mini-m4-front.png",
+        "url": "https://cdsassets.apple.com/live/7WUAS350/images/tech-specs/121555-mac-mini-2024-en-portimage1.png",
+        "height": 235,
+        "markers": [{"x": 161, "y": 223, "kind": "usbC"}, {"x": 252, "y": 223, "kind": "usbC"}]
+      }
+    ]
+  },
+  {
+    "id": "mini-m4-pro",
+    "title": "Mac mini · M4 Pro (2024) · 接口校对",
+    "subtitle": "背面三个雷雳 5 · 80 Gb/s；正面两个 USB-C · 10 Gb/s",
+    "note": "与 M4 相同接口位置，背面升级为雷雳 5。标注 80 Gb/s 双向链路，不以显示带宽增强的 120 Gb/s 作为磁盘速率。",
+    "source": "https://support.apple.com/en-us/121555",
+    "panels": [
+      {
+        "title": "背面",
+        "asset": "mini-m4-back.png",
+        "height": 235,
+        "markers": [{"x": 529, "y": 258, "kind": "thunderbolt5"}, {"x": 582, "y": 258, "kind": "thunderbolt5"}, {"x": 635, "y": 258, "kind": "thunderbolt5"}]
+      },
+      {
+        "title": "正面",
+        "asset": "mini-m4-front.png",
+        "height": 235,
+        "markers": [{"x": 161, "y": 223, "kind": "usbC"}, {"x": 252, "y": 223, "kind": "usbC"}]
+      }
+    ]
+  },
+  {
+    "id": "imac-m1",
+    "title": "iMac · M1 (2021) · 接口校对",
+    "subtitle": "24-inch · 双口 / 四口版本分开显示",
+    "note": "从背面正视：四口版本左侧两个是 USB 3，右侧两个是雷雳 / USB 4。使用相同接口布局的官方示意图，并以 M1 技术规格核对类型。",
+    "source": "https://support.apple.com/en-us/111895",
+    "panels": [
+      {
+        "title": "双口：两个雷雳 / USB 4 · 40 Gb/s",
+        "asset": "imac-two.png",
+        "url": "https://help.apple.com/assets/646BA1F028A6766AF70D82D8/646BE6B2FFC2C729F83355FD/en_US/e928130ed55334ad10ab810022eb9efb.png",
+        "height": 235,
+        "markers": [{"x": 518, "y": 191, "kind": "thunderbolt"}, {"x": 598, "y": 191, "kind": "thunderbolt"}]
+      },
+      {
+        "title": "四口：两个 USB-C · 10 Gb/s + 两个雷雳 / USB 4 · 40 Gb/s",
+        "asset": "imac-four.png",
+        "url": "https://help.apple.com/assets/646BA1F028A6766AF70D82D8/646BE6B2FFC2C729F83355FD/en_US/8e77e34759b7571357e47ec4dd9f314a.png",
+        "height": 235,
+        "markers": [{"x": 438, "y": 191, "kind": "usbC"}, {"x": 518, "y": 191, "kind": "usbC"}, {"x": 598, "y": 191, "kind": "thunderbolt"}, {"x": 678, "y": 191, "kind": "thunderbolt"}]
+      }
+    ]
+  },
+  {
+    "id": "imac-m3",
+    "title": "iMac · M3 (2023) · 接口校对",
+    "subtitle": "24-inch · 双口 / 四口版本分开显示",
+    "note": "四口版本仍是两个 USB 3 加两个雷雳口；不按 M4 四雷雳口显示。背视图左右方向以图片为准，未绑定系统端口编号。",
+    "source": "https://support.apple.com/en-us/117734",
+    "panels": [
+      {
+        "title": "双口：两个雷雳 / USB 4 · 40 Gb/s",
+        "asset": "imac-two.png",
+        "height": 235,
+        "markers": [{"x": 518, "y": 191, "kind": "thunderbolt"}, {"x": 598, "y": 191, "kind": "thunderbolt"}]
+      },
+      {
+        "title": "四口：两个 USB-C · 10 Gb/s + 两个雷雳 / USB 4 · 40 Gb/s",
+        "asset": "imac-four.png",
+        "height": 235,
+        "markers": [{"x": 438, "y": 191, "kind": "usbC"}, {"x": 518, "y": 191, "kind": "usbC"}, {"x": 598, "y": 191, "kind": "thunderbolt"}, {"x": 678, "y": 191, "kind": "thunderbolt"}]
+      }
+    ]
+  },
+  {
+    "id": "imac-m4",
+    "title": "iMac · M4 (2024) · 接口校对",
+    "subtitle": "24-inch · 双口版两个雷雳口；四口版四个雷雳 4",
+    "note": "M4 四口版的四个接口均为雷雳 4，不再把左侧两个标为 USB 3。这里只显示端点，不推测 macOS 编号。",
+    "source": "https://support.apple.com/en-us/121557",
+    "panels": [
+      {
+        "title": "双口：两个雷雳 / USB 4 · 40 Gb/s",
+        "asset": "imac-m4-two.png",
+        "url": "https://help.apple.com/assets/6751DB23764B24F68702812D/6751DB30D84A8F1507088DA6/en_US/cc973a368df2e2bfef58cb024ecef277.png",
+        "height": 235,
+        "markers": [{"x": 518, "y": 191, "kind": "thunderbolt"}, {"x": 598, "y": 191, "kind": "thunderbolt"}]
+      },
+      {
+        "title": "四口：四个雷雳 4 · 40 Gb/s",
+        "asset": "imac-m4-four.png",
+        "url": "https://help.apple.com/assets/6751DB23764B24F68702812D/6751DB30D84A8F1507088DA6/en_US/1d5edba43fbb375ad6d777c965b144f5.png",
+        "height": 235,
+        "markers": [{"x": 438, "y": 191, "kind": "thunderbolt"}, {"x": 518, "y": 191, "kind": "thunderbolt"}, {"x": 598, "y": 191, "kind": "thunderbolt"}, {"x": 678, "y": 191, "kind": "thunderbolt"}]
+      }
+    ]
+  },
+  {
+    "id": "mbp14-m3",
+    "title": "MBP 14 · M3 (2023) · 接口校对",
+    "subtitle": "基础款 M3 · 左侧两个雷雳 / USB 4；右侧没有雷雳口",
+    "note": "顶视复用已验收的同尺寸模具，保留左侧两个点并移除右点；官方左右侧视图确认端口数量。仅为视觉校对候选。",
+    "source": "https://support.apple.com/en-us/117735",
+    "panels": [
+      {
+        "title": "顶视候选 · 同模具银色参考图",
+        "asset": "mbp14-top.png",
+        "templateModel": "Mac14,9",
+        "portNumbers": [1, 2],
+        "height": 280,
+        "markers": []
+      },
+      {
+        "title": "Apple 官方左侧视图",
+        "asset": "mbp-m3-left.png",
+        "url": "https://cdsassets.apple.com/live/7WUAS350/images/tech-specs/117735-macbook-pro-portimage-1-en.png",
+        "height": 90,
+        "markers": [{"x": 262, "y": 145, "kind": "thunderbolt"}, {"x": 317, "y": 145, "kind": "thunderbolt"}]
+      },
+      {
+        "title": "Apple 官方右侧视图 · 只有 SDXC 与 HDMI",
+        "asset": "mbp-m3-right.png",
+        "url": "https://cdsassets.apple.com/live/7WUAS350/images/tech-specs/117735-macbook-pro-portimage-2-en.png",
+        "height": 90,
+        "markers": []
+      }
+    ]
+  },
+  {
+    "id": "mbp14-m3-pro-max",
+    "title": "MBP 14 · M3 Pro / Max (2023) · 接口校对",
+    "subtitle": "左侧两个、右侧一个雷雳 4 · 40 Gb/s",
+    "note": "与已验收的 14 寸模具采用相同顶视投影；区别于基础款 M3，右侧保留一个雷雳口。这里尚未启用 M3 机型的系统编号映射。",
+    "source": "https://support.apple.com/en-us/117736",
+    "panels": [
+      {
+        "title": "顶视候选 · 同模具银色参考图",
+        "asset": "mbp14-top.png",
+        "templateModel": "Mac14,9",
+        "height": 280,
+        "markers": []
+      },
+      {
+        "title": "Apple 官方左侧视图",
+        "asset": "mbp-m3-pro-left.png",
+        "url": "https://cdsassets.apple.com/live/7WUAS350/images/tech-specs/117736-117737-macbook-pro-portimage-1-en.png",
+        "height": 90,
+        "markers": [{"x": 239, "y": 145, "kind": "thunderbolt"}, {"x": 295, "y": 145, "kind": "thunderbolt"}]
+      },
+      {
+        "title": "Apple 官方右侧视图",
+        "asset": "mbp-m3-pro-right.png",
+        "url": "https://cdsassets.apple.com/live/7WUAS350/images/tech-specs/117736-117737-macbook-pro-portimage-2-en.png",
+        "height": 90,
+        "markers": [{"x": 761, "y": 145, "kind": "thunderbolt"}]
+      }
+    ]
+  },
+  {
+    "id": "mbp16-m3-pro-max",
+    "title": "MBP 16 · M3 Pro / Max (2023) · 接口校对",
+    "subtitle": "左侧两个、右侧一个雷雳 4 · 40 Gb/s",
+    "note": "16 寸使用独立顶视模具与坐标，不拉伸 14 寸图片。官方规格的侧视图为 14 / 16 寸共用示意，顶视点为候选投影。",
+    "source": "https://support.apple.com/en-us/117737",
+    "panels": [
+      {
+        "title": "顶视候选 · 16 寸同模具银色参考图",
+        "asset": "mbp16-top.png",
+        "templateModel": "Mac14,6",
+        "height": 280,
+        "markers": []
+      },
+      {
+        "title": "Apple 官方左侧接口示意",
+        "asset": "mbp-m3-pro-left.png",
+        "height": 90,
+        "markers": [{"x": 239, "y": 145, "kind": "thunderbolt"}, {"x": 295, "y": 145, "kind": "thunderbolt"}]
+      },
+      {
+        "title": "Apple 官方右侧接口示意",
+        "asset": "mbp-m3-pro-right.png",
+        "height": 90,
+        "markers": [{"x": 761, "y": 145, "kind": "thunderbolt"}]
+      }
+    ]
+  },
+  {
+    "id": "desktop-mini-system",
+    "title": "Mac mini · 当前系统节点显示",
+    "subtitle": "当前拓扑显示 · 外置盘 / 系统盘选中状态",
+    "note": "当前桌面机未启用实体端口定位：示例外置盘连线从本机节点中心引出。选中系统盘仅点亮本机；系统盘不新增节点。系统图无法识别机型时使用桌面电脑符号。",
+    "source": "https://support.apple.com/en-us/102852",
+    "panels": [
+      {
+        "title": "当前生产视图",
+        "height": 530,
+        "hostModels": [{"identifier": "Mac14,3", "title": "Mac mini M2 (2023)"}, {"identifier": "Mac16,10", "title": "Mac mini M4 (2024)"}, {"identifier": "Mac16,11", "title": "Mac mini M4 Pro (2024)"}],
+        "markers": []
+      }
+    ]
+  },
+  {
+    "id": "desktop-studio-system",
+    "title": "Mac Studio · 当前系统节点显示",
+    "subtitle": "当前拓扑显示 · 外置盘 / 系统盘选中状态",
+    "note": "这里显示系统按机型解析的官方渲染图，不把背面接口图当成当前生产界面。当前连线从本机节点中心引出，选中系统盘时本机出现蓝色光晕。",
+    "source": "https://support.apple.com/en-us/111835",
+    "panels": [
+      {
+        "title": "当前生产视图",
+        "height": 530,
+        "hostModels": [{"identifier": "Mac14,13", "title": "Mac Studio M2 Max (2023)"}, {"identifier": "Mac14,14", "title": "Mac Studio M2 Ultra (2023)"}],
+        "markers": []
+      }
+    ]
+  },
+  {
+    "id": "desktop-imac-system",
+    "title": "iMac · 当前系统节点显示",
+    "subtitle": "当前拓扑显示 · 外置盘 / 系统盘选中状态",
+    "note": "当前系统图显示 iMac 正面；背面端口点位位于另外的接口校对窗口。现有视图没有在正面捏造端口，未验证机型继续使用抽象连接。",
+    "source": "https://support.apple.com/en-us/108054",
+    "panels": [
+      {
+        "title": "当前生产视图",
+        "height": 530,
+        "hostModels": [{"identifier": "iMac21,1", "title": "iMac M1 (2021)"}, {"identifier": "Mac15,5", "title": "iMac M3 (2023)"}, {"identifier": "Mac16,3", "title": "iMac M4 (2024)"}],
+        "markers": []
+      }
+    ]
+  }
+]
