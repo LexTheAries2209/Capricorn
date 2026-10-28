@@ -56,10 +56,14 @@ enum StorageHostArtworkGeometry {
     static let imageFrame = CGRect(x: 10, y: 0, width: 320, height: 205)
     static let unresolvedAnchor = CGPoint(x: 170, y: 258)
 
+    static func assetName(for model: StorageHostModel) -> String? {
+        model.desktopPortLayout?.assetName
+    }
+
     static func anchor(_ port: StorageHostPort, model: StorageHostModel) -> CGPoint? {
-        // An OS-provided picture does not establish the physical socket geometry.
-        guard model.hasVerifiedPortLayout,
-              let topView = StorageHostTopView(identifier: model.identifier) else { return nil }
-        return topView.anchor(port)
+        if model.hasVerifiedPortLayout, let topView = StorageHostTopView(identifier: model.identifier) {
+            return topView.anchor(port)
+        }
+        return model.desktopPortLayout?.anchor(port)
     }
 }

@@ -31,9 +31,14 @@ struct StorageTopologyRadialLayout {
     }
 
     init(graph: DriveConnectionTopologyGraph, hostPortsByEdgeID: [String: StorageHostPort] = [:]) {
-        let defaultPositions = graph.hostModel?.hasVerifiedPortLayout == true
-            ? Self.physicalPositions(graph: graph, ports: hostPortsByEdgeID)
-            : Self.radialPositions(graph: graph)
+        let defaultPositions: [String: CGPoint]
+        if let host = graph.hostModel, host.desktopPortLayout != nil {
+            defaultPositions = Self.desktopPositions(graph: graph, ports: hostPortsByEdgeID)
+        } else {
+            defaultPositions = graph.hostModel?.hasVerifiedPortLayout == true
+                ? Self.physicalPositions(graph: graph, ports: hostPortsByEdgeID)
+                : Self.radialPositions(graph: graph)
+        }
         let positions = Self.compactedPositions(
             graph: graph, positions: defaultPositions, ports: hostPortsByEdgeID
         )
@@ -124,6 +129,67 @@ struct StorageTopologyRadialLayout {
         return positions
     }
 
+    private static func desktopPositions(
+        graph: DriveConnectionTopologyGraph,
+        ports: [String: StorageHostPort]
+    ) -> [String: CGPoint] {
+        let children = Dictionary(grouping: graph.edges, by: \.fromID)
+        let roots = (children["computer"] ?? []).sorted {
+            let lhs = ports[$0.id].flatMap { port in
+                graph.hostModel.flatMap { StorageHostArtworkGeometry.anchor(port, model: $0)?.x }
+            } ?? .greatestFiniteMagnitude
+            let rhs = ports[$1.id].flatMap { port in
+                graph.hostModel.flatMap { StorageHostArtworkGeometry.anchor(port, model: $0)?.x }
+            } ?? .greatestFiniteMagnitude
+            return lhs == rhs ? $0.toID < $1.toID : lhs < rhs
+        }
+        var positions: [String: CGPoint] = ["computer": .zero]
+        var visited: Set<String> = []
+        let isRearView = graph.hostModel?.desktopPortLayout?.family == .iMac
+        for side: StorageHostPortPosition? in [.front, .back, nil] {
+            let sideRoots = roots.filter { edge in
+                let position = ports[edge.id].flatMap { graph.hostModel?.position(for: $0) }
+                return position == side
+            }
+            var leaf = 0
+            var rows: [String: (depth: Int, row: Double, port: StorageHostPort?)] = [:]
+            @discardableResult
+            func place(_ id: String, depth: Int, rootPort: StorageHostPort?) -> [Int] {
+                guard visited.insert(id).inserted else { return [] }
+                let next = (children[id] ?? []).sorted { $0.toID < $1.toID }
+                var leaves = next.flatMap { place($0.toID, depth: depth + 1, rootPort: rootPort) }
+                if leaves.isEmpty {
+                    leaves = [leaf]
+                    leaf += 1
+                }
+                if let first = leaves.min(), let last = leaves.max() {
+                    rows[id] = (depth, Double(first + last) / 2, rootPort)
+                }
+                return leaves
+            }
+            for edge in sideRoots {
+                place(edge.toID, depth: 1, rootPort: ports[edge.id])
+            }
+            for (id, row) in rows {
+                let spread = row.row - Double(max(0, leaf - 1)) / 2
+                if side == nil {
+                    positions[id] = CGPoint(x: 420 + CGFloat(row.depth - 1) * 250,
+                                            y: spread * 185)
+                } else if isRearView {
+                    positions[id] = CGPoint(x: -420 - CGFloat(row.depth - 1) * 250,
+                                            y: spread * 185)
+                } else {
+                    let direction: CGFloat = side == .front ? 1 : -1
+                    positions[id] = CGPoint(
+                        x: spread * 250,
+                        y: direction * (360 + CGFloat(row.depth - 1) * 220)
+                    )
+                }
+            }
+        }
+        return positions
+    }
+
     private static func compactedPositions(
         graph: DriveConnectionTopologyGraph,
         positions: [String: CGPoint],
@@ -178,7 +244,7 @@ struct StorageTopologyRadialLayout {
                 guard visited.insert(edge.toID).inserted,
                       let target = nodes[edge.toID], let end = positions[edge.toID] else { continue }
                 var anchorOffset = CGPoint.zero
-                let usesSocket = id == "computer" && graph.hostModel?.hasVerifiedPortLayout == true
+                let usesSocket = id == "computer" && graph.hostModel?.hasPhysicalPortArtwork == true
                 if usesSocket, let host = graph.hostModel {
                     let anchor = ports[edge.id].flatMap { StorageHostArtworkGeometry.anchor($0, model: host) }
                         ?? StorageHostArtworkGeometry.unresolvedAnchor

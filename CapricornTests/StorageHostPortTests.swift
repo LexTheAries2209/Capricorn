@@ -33,6 +33,23 @@ final class StorageHostPortTests: XCTestCase {
         XCTAssertNil(StorageHostArtworkGeometry.anchor(.init(number: 1), model: unknownArtwork))
     }
 
+    func testDesktopModelsExposeFrontAndBackPortGroups() {
+        let mini = StorageHostModel(identifier: "Mac16,10", board: "")
+        XCTAssertEqual(mini.desktopPortLayout?.family, .mini)
+        XCTAssertEqual(mini.position(for: .init(number: 0, socketID: "rear-c-0")), .back)
+        XCTAssertEqual(mini.position(for: .init(number: 0, socketID: "front-c-0")), .front)
+        XCTAssertNil(mini.position(for: .init(number: 1)))
+
+        let studio = StorageHostModel(identifier: "Mac14,13", board: "")
+        XCTAssertEqual(studio.desktopPortLayout?.family, .studio)
+        XCTAssertEqual(studio.position(for: .init(number: 0, socketID: "rear-c-0")), .back)
+        XCTAssertEqual(studio.position(for: .init(number: 0, socketID: "front-c-0")), .front)
+
+        let iMac = StorageHostModel(identifier: "Mac16,3", board: "")
+        XCTAssertEqual(iMac.desktopPortLayout?.family, .iMac)
+        XCTAssertEqual(iMac.position(for: .init(number: 0, socketID: "rear-c-0")), .back)
+    }
+
     func testPortParserRequiresAnExplicitBuiltInUSBCSocket() {
         XCTAssertEqual(StorageHostPort.parse(type: "USB-C", number: 3, builtIn: true)?.number, 3)
         XCTAssertNil(StorageHostPort.parse(type: "USB-C", number: 3, builtIn: false))
@@ -126,6 +143,6 @@ final class StorageHostPortTests: XCTestCase {
     private func node(_ id: String, _ kind: DriveConnectionTopologyNode.Kind,
                       port: Int? = nil, bsd: String? = nil) -> DriveConnectionTopologyNode {
         .init(id: id, kind: kind, hardwareName: nil, portDescription: nil, linkRateDescription: nil,
-              bsdName: bsd, pcieLink: nil, isPCIeTunnelled: false, hostPort: port.map(StorageHostPort.init))
+              bsdName: bsd, pcieLink: nil, isPCIeTunnelled: false, hostPort: port.map { .init(number: $0) })
     }
 }

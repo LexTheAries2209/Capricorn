@@ -9,7 +9,8 @@ struct StorageTopologyDiagram {
     let systemDriveIDs: Set<String>
     let hostPortsByEdgeID: [String: StorageHostPort]
 
-    init(graph source: DriveConnectionTopologyGraph, systemDriveIDs: Set<String> = []) {
+    init(graph source: DriveConnectionTopologyGraph, systemDriveIDs: Set<String> = [],
+         hostPortOverrides: [String: StorageHostPort] = [:]) {
         self.systemDriveIDs = systemDriveIDs
         var paths: [String: DriveConnectionTopologyPath] = [:]
         var segments: [String: [DriveConnectionTopologyNode]] = [:]
@@ -31,7 +32,7 @@ struct StorageTopologyDiagram {
                 let keepUSBHub = node.kind == .usbHub
                     && (node.isUSBTunnelled || node.hardwareName.map { !Self.isGenericUSBHub($0) } == true)
                 let keep = [.computer, .disk].contains(node.kind) || keepUSBHub
-                    || (isHostThunderboltPort && hostPort == nil)
+                    || (isHostThunderboltPort && hostPort == nil && source.hostModel?.desktopPortLayout == nil)
                     || (node.kind == .pcieBridge && node.chipDescription != nil)
                     || (!hasPort && hostPort == nil
                         && [.usbHostController, .storageController, .sataController, .nvmeController].contains(node.kind))
@@ -44,6 +45,10 @@ struct StorageTopologyDiagram {
             paths[bsdName] = .init(nodes: visible, hasResolvedController: visible.count > 2)
             if let hostPort, visible.count > 1 {
                 portsByEdgeID["computer->\(visible[1].id)"] = hostPort
+            }
+            if visible.count > 1, let override = hostPortOverrides[visible[1].id],
+               source.hostModel?.position(for: override) != nil {
+                portsByEdgeID["computer->\(visible[1].id)"] = override
             }
         }
         let assembled = DriveConnectionTopologyGraph.assemble(paths: paths)
@@ -84,6 +89,7 @@ struct StorageTopologyGraphView: View {
     var resolvedChipRecords: [String: DeviceHuntChipCatalog.Record] = [:]
     var systemDriveIDs: Set<String> = []
     let selectDrive: (String) -> Void
+    var previewHostPortOverrides: [String: StorageHostPort] = [:]
 
     @Environment(\.appLanguage) private var language
     @Environment(\.colorScheme) private var colorScheme
@@ -93,9 +99,15 @@ struct StorageTopologyGraphView: View {
     @State private var zoom: CGFloat = 1
     @State private var viewportCommand = TopologyViewportCommand()
     @State private var nodePlacement = TopologyNodePlacement()
+    @AppStorage("topology.desktopSocketAssignments") private var socketAssignmentsData = Data()
+    @State private var reviewAssignments: [String: StorageHostPort]?
 
     var body: some View {
-        let diagram = StorageTopologyDiagram(graph: graph, systemDriveIDs: systemDriveIDs)
+        let assignments = StorageDesktopSocketAssignments(data: socketAssignmentsData)
+        let overrides = previewHostPortOverrides.isEmpty
+            ? assignments.ports(for: graph.hostModel) : reviewAssignments ?? previewHostPortOverrides
+        let diagram = StorageTopologyDiagram(graph: graph, systemDriveIDs: systemDriveIDs,
+            hostPortOverrides: overrides)
         let baseLayout = StorageTopologyRadialLayout(graph: diagram.graph, hostPortsByEdgeID: diagram.hostPortsByEdgeID)
         let layout = nodePlacement.layout(from: baseLayout)
         let selectedNodes = diagram.selectedNodeIDs(for: selectedDriveID)
@@ -105,6 +117,28 @@ struct StorageTopologyGraphView: View {
                 Label(language.t("Hardware Path"), systemImage: "point.3.connected.trianglepath.dotted")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
+                if let model = graph.hostModel, let profile = model.desktopPortLayout,
+                   let root = diagram.graph.path(for: selectedDriveID).dropFirst().first {
+                    Menu {
+                        Button("自动识别") {
+                            assignSocket(nil, to: root.id, model: model)
+                        }
+                        Divider()
+                        ForEach(profile.sockets) { socket in
+                            Button {
+                                assignSocket(socket.id, to: root.id, model: model)
+                            } label: {
+                                if diagram.hostPortsByEdgeID["computer->\(root.id)"] == socket.port {
+                                    Label(socket.title, systemImage: "checkmark")
+                                } else {
+                                    Text(socket.title)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("连接端口", systemImage: "cable.connector")
+                    }
+                }
                 Button { viewportCommand.request(.zoomOut) } label: {
                     Image(systemName: "minus.magnifyingglass")
                 }
@@ -151,7 +185,7 @@ struct StorageTopologyGraphView: View {
                     .environment(\.colorScheme, colorScheme)
                     .environment(\.locale, Locale(identifier: language.localeIdentifier))
             }
-            .frame(height: diagram.graph.hostModel?.hasVerifiedPortLayout == true ? 460 : 560)
+            .frame(height: diagram.graph.hostModel?.hasPhysicalPortArtwork == true ? 460 : 560)
         }
         .background(.quaternary.opacity(0.18), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor).opacity(0.5)))
@@ -165,6 +199,20 @@ struct StorageTopologyGraphView: View {
     private func resetViewport() {
         nodePlacement.reset()
         viewportCommand.request(.fit)
+    }
+
+    private func assignSocket(_ socketID: String?, to nodeID: String, model: StorageHostModel) {
+        if !previewHostPortOverrides.isEmpty {
+            var assignments = reviewAssignments ?? previewHostPortOverrides
+            assignments[nodeID] = socketID.map { StorageHostPort(number: 0, socketID: $0) }
+            reviewAssignments = assignments
+            resetViewport()
+            return
+        }
+        var assignments = StorageDesktopSocketAssignments(data: socketAssignmentsData)
+        assignments.assign(socketID, to: nodeID, model: model)
+        socketAssignmentsData = assignments.data
+        resetViewport()
     }
 
     private func drawing(
@@ -181,7 +229,7 @@ struct StorageTopologyGraphView: View {
                     let start = connectionOrigin(origin, edge: edge, diagram: diagram)
                     let selected = selectedEdges.contains(edge.id)
                     let unresolved = edge.fromID == "computer"
-                        && (diagram.graph.hostModel?.hasVerifiedPortLayout == true
+                        && (diagram.graph.hostModel?.hasPhysicalPortArtwork == true
                             ? diagram.hostPortsByEdgeID[edge.id] == nil
                             : diagram.graph.nodes.first { $0.id == edge.toID }?.kind == .disk)
                     TopologyConnectionLine(start: start, end: end, selected: selected, unresolved: unresolved)
@@ -198,7 +246,13 @@ struct StorageTopologyGraphView: View {
                                 selectDrive(id)
                             }
                         } label: {
-                            if model.hasVerifiedPortLayout {
+                            if model.desktopPortLayout != nil {
+                                StorageDesktopPortModelView(
+                                    model: model, selected: selected,
+                                    connectedPorts: Set(diagram.hostPortsByEdgeID.values),
+                                    selectedPorts: Set(diagram.hostPortsByEdgeID.filter { selectedEdges.contains($0.key) }.map(\.value))
+                                )
+                            } else if model.hasVerifiedPortLayout {
                                 MacBookPortModelView(
                                     model: model, selected: selected,
                                     connectedPorts: Set(diagram.hostPortsByEdgeID.values),
@@ -225,6 +279,28 @@ struct StorageTopologyGraphView: View {
                 .help(segment.map { $0.presentationName ?? language.t($0.kind.titleKey) }.joined(separator: " → "))
                 .position(layout.positions[node.id] ?? .zero)
             }
+            if let model = diagram.graph.hostModel, model.desktopPortLayout != nil,
+               let center = layout.positions["computer"] {
+                ForEach(diagram.graph.edges.filter { $0.fromID == "computer" }) { edge in
+                    if let port = diagram.hostPortsByEdgeID[edge.id],
+                       let point = StorageHostArtworkGeometry.anchor(port, model: model),
+                       let target = layout.positions[edge.toID] {
+                        let start = CGPoint(x: center.x + point.x - StorageHostArtworkGeometry.size.width / 2,
+                                            y: center.y + point.y - StorageHostArtworkGeometry.size.height / 2)
+                        let dx = target.x - start.x
+                        let dy = target.y - start.y
+                        let half = StorageHostArtworkGeometry.size
+                        let tx = dx == 0 ? CGFloat.infinity
+                            : ((dx > 0 ? center.x + half.width / 2 : center.x - half.width / 2) - start.x) / dx
+                        let ty = dy == 0 ? CGFloat.infinity
+                            : ((dy > 0 ? center.y + half.height / 2 : center.y - half.height / 2) - start.y) / dy
+                        let fraction = min(1, max(0, min(tx, ty)))
+                        let end = CGPoint(x: start.x + dx * fraction, y: start.y + dy * fraction)
+                        TopologyConnectionLine(start: start, end: end, selected: selectedEdges.contains(edge.id),
+                                               unresolved: false)
+                    }
+                }
+            }
         }
         .frame(width: layout.size.width, height: layout.size.height)
     }
@@ -232,7 +308,7 @@ struct StorageTopologyGraphView: View {
     private func connectionOrigin(
         _ origin: CGPoint, edge: DriveConnectionTopologyEdge, diagram: StorageTopologyDiagram
     ) -> CGPoint {
-        guard edge.fromID == "computer", let model = diagram.graph.hostModel, model.hasVerifiedPortLayout else {
+        guard edge.fromID == "computer", let model = diagram.graph.hostModel, model.hasPhysicalPortArtwork else {
             return origin
         }
         let anchor = diagram.hostPortsByEdgeID[edge.id]

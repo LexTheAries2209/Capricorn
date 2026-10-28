@@ -5,6 +5,7 @@ import Darwin
 
 struct StorageHostPort: Equatable, Hashable, Sendable {
     let number: Int
+    var socketID: String? = nil
 
     static func parse(type: String?, number: Int?, builtIn: Bool) -> StorageHostPort? {
         guard builtIn, type == "USB-C", let number, number > 0 else { return nil }
@@ -13,13 +14,15 @@ struct StorageHostPort: Equatable, Hashable, Sendable {
 }
 
 enum StorageHostPortPosition: String, Sendable {
-    case leftRear, leftFront, right
+    case leftRear, leftFront, right, front, back
 
     var titleKey: String {
         switch self {
         case .leftRear: "Left rear"
         case .leftFront: "Left front"
         case .right: "Right side"
+        case .front: "Front"
+        case .back: "Back"
         }
     }
 }
@@ -38,7 +41,18 @@ struct StorageHostModel: Equatable, Sendable {
             .contains(board.lowercased())
     }
 
+    var desktopPortLayout: StorageDesktopProfile? {
+        StorageDesktopProfile(model: self)
+    }
+
+    var hasPhysicalPortArtwork: Bool {
+        hasVerifiedPortLayout || desktopPortLayout != nil
+    }
+
     func position(for port: StorageHostPort) -> StorageHostPortPosition? {
+        if let desktopPortLayout {
+            return desktopPortLayout.socket(for: port)?.side
+        }
         guard hasVerifiedPortLayout else { return nil }
         switch port.number {
         case 1: return .leftRear
