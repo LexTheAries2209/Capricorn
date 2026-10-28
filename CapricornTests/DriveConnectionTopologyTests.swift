@@ -3,6 +3,32 @@ import XCTest
 @testable import Capricorn
 
 final class DriveConnectionTopologyTests: XCTestCase {
+    func testTopologyDeviceNodesUseCompactVerticalDimensions() {
+        let disk = DriveConnectionTopologyNode(
+            id: "disk:disk8",
+            kind: .disk,
+            hardwareName: "External SSD",
+            portDescription: nil,
+            linkRateDescription: nil,
+            bsdName: "disk8",
+            pcieLink: nil,
+            isPCIeTunnelled: false
+        )
+        let hub = DriveConnectionTopologyNode(
+            id: "hub",
+            kind: .usbHub,
+            hardwareName: "TS4 USB3.2 Gen2 HUB",
+            portDescription: nil,
+            linkRateDescription: nil,
+            bsdName: nil,
+            pcieLink: nil,
+            isPCIeTunnelled: false
+        )
+
+        XCTAssertEqual(StorageTopologyRadialLayout.nodeSize(disk), CGSize(width: 214, height: 124))
+        XCTAssertEqual(StorageTopologyRadialLayout.nodeSize(hub), CGSize(width: 184, height: 96))
+    }
+
     func testOpaqueUSBLocationAddressIsHiddenFromPresentationOnly() {
         let opaquePort = DriveConnectionTopologyNode(
             id: "usb-location",

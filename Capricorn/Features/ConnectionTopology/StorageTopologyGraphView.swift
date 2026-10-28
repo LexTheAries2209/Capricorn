@@ -254,7 +254,7 @@ struct StorageTopologyGraphView: View {
             let identifier = DeviceChipIdentifier(description: chipDescription)
             return identifier.flatMap { resolvedChipRecords[$0.displayValue]?.name } ?? chipDescription
         })).sorted()
-        return VStack(spacing: 5) {
+        return VStack(spacing: 4) {
             Image(systemName: node.kind.symbolName)
                 .font(.system(size: isHost ? 25 : 20))
                 .foregroundStyle(selected || isHost ? Color.accentColor : .secondary)
@@ -276,7 +276,7 @@ struct StorageTopologyGraphView: View {
                 Text(language.t("Chip model not reported")).font(.system(size: 10)).foregroundStyle(.secondary)
             }
         }
-        .padding(10)
+        .padding(.horizontal, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background, in: RoundedRectangle(cornerRadius: 8))
         .overlay {

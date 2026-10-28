@@ -15,8 +15,8 @@ struct StorageTopologyRadialLayout {
         switch node.kind {
         case .computer: host != nil
             ? StorageHostArtworkGeometry.size : CGSize(width: 130, height: 98)
-        case .disk: CGSize(width: 214, height: 140)
-        default: CGSize(width: 184, height: 108)
+        case .disk: CGSize(width: 214, height: 124)
+        default: CGSize(width: 184, height: 96)
         }
     }
 
