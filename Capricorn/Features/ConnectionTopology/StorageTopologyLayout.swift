@@ -6,6 +6,8 @@ struct StorageTopologyRadialLayout {
     let positions: [String: CGPoint]
     let size: CGSize
 
+    private static let connectionLengthScale = 0.7
+
     init(positions: [String: CGPoint], size: CGSize) {
         self.positions = positions
         self.size = size
@@ -15,15 +17,26 @@ struct StorageTopologyRadialLayout {
         switch node.kind {
         case .computer: host != nil
             ? StorageHostArtworkGeometry.size : CGSize(width: 130, height: 98)
-        case .disk: CGSize(width: 214, height: 124)
+        case .disk: CGSize(width: 214, height: 112)
         default: CGSize(width: 184, height: 96)
         }
     }
 
+    private static func shortenedCenterDistance(
+        defaultDistance: Double,
+        occupiedHalfExtent: Double,
+        scale: Double
+    ) -> Double {
+        defaultDistance - max(0, defaultDistance - occupiedHalfExtent) * (1 - scale)
+    }
+
     init(graph: DriveConnectionTopologyGraph, hostPortsByEdgeID: [String: StorageHostPort] = [:]) {
-        let positions = graph.hostModel?.hasVerifiedPortLayout == true
+        let defaultPositions = graph.hostModel?.hasVerifiedPortLayout == true
             ? Self.physicalPositions(graph: graph, ports: hostPortsByEdgeID)
             : Self.radialPositions(graph: graph)
+        let positions = Self.compactedPositions(
+            graph: graph, positions: defaultPositions, ports: hostPortsByEdgeID
+        )
         let bounds = graph.nodes.reduce(CGRect.null) { rect, node in
             let center = positions[node.id] ?? .zero
             let size = Self.nodeSize(node, host: graph.hostModel)
@@ -109,5 +122,91 @@ struct StorageTopologyRadialLayout {
             }
         }
         return positions
+    }
+
+    private static func compactedPositions(
+        graph: DriveConnectionTopologyGraph,
+        positions: [String: CGPoint],
+        ports: [String: StorageHostPort]
+    ) -> [String: CGPoint] {
+        func overlaps(_ candidate: [String: CGPoint]) -> Bool {
+            let frames = graph.nodes.compactMap { node -> CGRect? in
+                guard let center = candidate[node.id] else { return nil }
+                let size = nodeSize(node, host: graph.hostModel)
+                return CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2,
+                              width: size.width, height: size.height)
+            }
+            return frames.enumerated().contains { index, frame in
+                frames.dropFirst(index + 1).contains { frame.intersects($0) }
+            }
+        }
+        let compacted = shortenedPositions(graph: graph, positions: positions, ports: ports,
+                                          scale: connectionLengthScale)
+        guard overlaps(compacted) else { return compacted }
+        // Dense branches may need some of their original clearance to stay disjoint.
+        var lower = connectionLengthScale
+        var upper = 1.0
+        var safePositions = positions
+        for _ in 0..<10 {
+            let scale = (lower + upper) / 2
+            let candidate = shortenedPositions(graph: graph, positions: positions, ports: ports, scale: scale)
+            if overlaps(candidate) {
+                lower = scale
+            } else {
+                upper = scale
+                safePositions = candidate
+            }
+        }
+        return safePositions
+    }
+
+    private static func shortenedPositions(
+        graph: DriveConnectionTopologyGraph,
+        positions: [String: CGPoint],
+        ports: [String: StorageHostPort],
+        scale: Double
+    ) -> [String: CGPoint] {
+        let nodes = Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.id, $0) })
+        let children = Dictionary(grouping: graph.edges, by: \.fromID)
+        var result = positions
+        var visited: Set<String> = ["computer"]
+        func placeChildren(of id: String) {
+            guard let source = nodes[id], let originalCenter = positions[id],
+                  let center = result[id] else { return }
+            let sourceSize = nodeSize(source, host: graph.hostModel)
+            for edge in (children[id] ?? []).sorted(by: { $0.toID < $1.toID }) {
+                guard visited.insert(edge.toID).inserted,
+                      let target = nodes[edge.toID], let end = positions[edge.toID] else { continue }
+                var anchorOffset = CGPoint.zero
+                let usesSocket = id == "computer" && graph.hostModel?.hasVerifiedPortLayout == true
+                if usesSocket, let host = graph.hostModel {
+                    let anchor = ports[edge.id].flatMap { StorageHostArtworkGeometry.anchor($0, model: host) }
+                        ?? StorageHostArtworkGeometry.unresolvedAnchor
+                    anchorOffset = CGPoint(x: anchor.x - sourceSize.width / 2,
+                                           y: anchor.y - sourceSize.height / 2)
+                }
+                let dx = end.x - originalCenter.x - anchorOffset.x
+                let dy = end.y - originalCenter.y - anchorOffset.y
+                let distance = hypot(dx, dy)
+                guard distance > 0 else { continue }
+                let direction = CGPoint(x: dx / distance, y: dy / distance)
+                let targetSize = nodeSize(target, host: graph.hostModel)
+                let occupied = rayExtent(size: targetSize, direction: direction)
+                    + (usesSocket ? 0 : rayExtent(size: sourceSize, direction: direction))
+                // Compress only exposed wire, preserving card sizes and physical socket anchors.
+                let shortened = shortenedCenterDistance(defaultDistance: distance,
+                    occupiedHalfExtent: occupied, scale: scale)
+                result[edge.toID] = CGPoint(x: center.x + anchorOffset.x + direction.x * shortened,
+                                           y: center.y + anchorOffset.y + direction.y * shortened)
+                placeChildren(of: edge.toID)
+            }
+        }
+        placeChildren(of: "computer")
+        return result
+    }
+
+    private static func rayExtent(size: CGSize, direction: CGPoint) -> Double {
+        min(direction.x == 0 ? .infinity : size.width / (2 * abs(direction.x)),
+            direction.y == 0 ? .infinity : size.height / (2 * abs(direction.y)))
     }
 }

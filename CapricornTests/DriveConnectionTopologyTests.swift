@@ -25,8 +25,26 @@ final class DriveConnectionTopologyTests: XCTestCase {
             isPCIeTunnelled: false
         )
 
-        XCTAssertEqual(StorageTopologyRadialLayout.nodeSize(disk), CGSize(width: 214, height: 124))
+        XCTAssertEqual(StorageTopologyRadialLayout.nodeSize(disk), CGSize(width: 214, height: 112))
         XCTAssertEqual(StorageTopologyRadialLayout.nodeSize(hub), CGSize(width: 184, height: 96))
+    }
+
+    func testRadialLayoutShortensExposedConnectorByThirtyPercent() throws {
+        let host = node("computer", .computer)
+        let hub = node("hub", .usbHub)
+        let disk = node("disk:disk8", .disk, bsdName: "disk8")
+        let graph = DriveConnectionTopologyGraph.assemble(paths: [
+            "disk8": .init(nodes: [host, hub, disk], hasResolvedController: true)
+        ])
+        let layout = StorageTopologyRadialLayout(graph: graph)
+        let hubPosition = try XCTUnwrap(layout.positions[hub.id])
+        let diskPosition = try XCTUnwrap(layout.positions[disk.id])
+        let occupiedWidth = (StorageTopologyRadialLayout.nodeSize(hub).width
+            + StorageTopologyRadialLayout.nodeSize(disk).width) / 2
+
+        XCTAssertEqual(diskPosition.x - hubPosition.x - occupiedWidth,
+                       (250 - occupiedWidth) * 0.7, accuracy: 0.001)
+        XCTAssertEqual(diskPosition.y, hubPosition.y, accuracy: 0.001)
     }
 
     func testOpaqueUSBLocationAddressIsHiddenFromPresentationOnly() {

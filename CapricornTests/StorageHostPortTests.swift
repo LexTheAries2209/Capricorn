@@ -83,6 +83,26 @@ final class StorageHostPortTests: XCTestCase {
         XCTAssertGreaterThan(layout.positions["disk:disk9"]!.y, layout.positions["computer"]!.y)
     }
 
+    func testPhysicalLayoutShortensHubToDeviceConnectorByThirtyPercent() throws {
+        let host = node("computer", .computer)
+        let hub = node("hub", .usbHub)
+        let disk = node("disk:disk8", .disk, bsd: "disk8")
+        var graph = DriveConnectionTopologyGraph.assemble(paths: [
+            "disk8": .init(nodes: [host, hub, disk], hasResolvedController: true)
+        ])
+        graph.hostModel = .init(identifier: "Mac14,6", board: "J416c")
+        let layout = StorageTopologyRadialLayout(graph: graph,
+            hostPortsByEdgeID: ["computer->hub": .init(number: 3)])
+        let hubPosition = try XCTUnwrap(layout.positions[hub.id])
+        let diskPosition = try XCTUnwrap(layout.positions[disk.id])
+        let occupiedWidth = (StorageTopologyRadialLayout.nodeSize(hub).width
+            + StorageTopologyRadialLayout.nodeSize(disk).width) / 2
+
+        XCTAssertEqual(diskPosition.x - hubPosition.x - occupiedWidth,
+                       (250 - occupiedWidth) * 0.7, accuracy: 0.001)
+        XCTAssertEqual(diskPosition.y, hubPosition.y, accuracy: 0.001)
+    }
+
     private func rect(_ node: DriveConnectionTopologyNode, layout: StorageTopologyRadialLayout, host: StorageHostModel?) -> CGRect {
         let center = layout.positions[node.id]!
         let size = StorageTopologyRadialLayout.nodeSize(node, host: host)
