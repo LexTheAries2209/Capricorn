@@ -171,6 +171,16 @@ struct StorageTopologyGraphView: View {
                         frame: CGRect(x: position.x - size.width / 2, y: position.y - size.height / 2,
                                       width: size.width, height: size.height))
                 },
+                onNodeClick: { id in
+                    if id == "computer" {
+                        if let driveID = systemDriveIDs.contains(selectedDriveID)
+                            ? selectedDriveID : systemDriveIDs.sorted().first {
+                            selectDrive(driveID)
+                        }
+                    } else if let bsdName = diagram.graph.nodes.first(where: { $0.id == id })?.bsdName {
+                        selectDrive(bsdName)
+                    }
+                },
                 onNodeDrag: { id, translation in
                     guard let base = baseLayout.positions[id],
                           let node = diagram.graph.nodes.first(where: { $0.id == id }) else { return }

@@ -10,6 +10,7 @@ struct TopologyMagnifyingScrollView<Content: View>: NSViewRepresentable {
     let command: TopologyViewportCommand
     let onZoomChanged: (CGFloat) -> Void
     let nodeRegions: [TopologyNodeHitRegion]
+    let onNodeClick: (String) -> Void
     let onNodeDrag: (String, CGSize) -> Void
     let onNodeDragEnded: () -> Void
     @ViewBuilder var content: () -> Content
@@ -42,6 +43,7 @@ struct TopologyMagnifyingScrollView<Content: View>: NSViewRepresentable {
         scroll.fittingRect = fittingRect
         scroll.onZoomChanged = onZoomChanged
         context.coordinator.regions = nodeRegions
+        context.coordinator.onClick = onNodeClick
         context.coordinator.onDrag = { [weak scroll] id, translation in
             scroll?.preserveManualViewport()
             onNodeDrag(id, translation)

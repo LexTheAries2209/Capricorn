@@ -5,6 +5,43 @@ import XCTest
 
 final class TopologyViewportTests: XCTestCase {
     @MainActor
+    func testNativeClickUsesCurrentNodeRegionsAndIgnoresBackgroundAndActiveDrag() {
+        let coordinator = TopologyNodeDragCoordinator()
+        let frame = CGRect(x: 100, y: 100, width: 200, height: 150)
+        coordinator.regions = [.init(id: "computer", frame: frame), .init(id: "disk", frame: frame)]
+        var selections: [String] = []
+        coordinator.onClick = { selections.append($0) }
+        coordinator.routeClick(at: CGPoint(x: 150, y: 150))
+        coordinator.routeClick(at: .zero)
+        XCTAssertEqual(selections, ["disk"])
+        coordinator.regions = [.init(id: "computer", frame: frame)]
+        coordinator.routeClick(at: CGPoint(x: 150, y: 150))
+        XCTAssertEqual(selections, ["disk", "computer"])
+        coordinator.route(state: .began, location: CGPoint(x: 150, y: 150), translation: .zero)
+        coordinator.routeClick(at: CGPoint(x: 150, y: 150))
+        XCTAssertEqual(selections, ["disk", "computer"])
+        coordinator.cancelDrag()
+        coordinator.routeClick(at: CGPoint(x: 150, y: 150))
+        XCTAssertEqual(selections, ["disk", "computer", "computer"])
+        coordinator.invalidate()
+        coordinator.routeClick(at: CGPoint(x: 150, y: 150))
+        XCTAssertEqual(selections.count, 3)
+    }
+
+    @MainActor
+    func testClickWaitsForPanFailureAndBothRecognizersAreRemovedOnTeardown() throws {
+        let coordinator = TopologyNodeDragCoordinator()
+        let document = NSView()
+        coordinator.install(on: document)
+        let pan = try XCTUnwrap(document.gestureRecognizers.first { $0 is NSPanGestureRecognizer })
+        let click = try XCTUnwrap(document.gestureRecognizers.first { $0 is NSClickGestureRecognizer })
+        XCTAssertTrue(coordinator.gestureRecognizer(click, shouldRequireFailureOf: pan))
+        XCTAssertFalse(coordinator.gestureRecognizer(pan, shouldRequireFailureOf: click))
+        coordinator.invalidate()
+        XCTAssertTrue(document.gestureRecognizers.isEmpty)
+    }
+
+    @MainActor
     func testNativeDragKeepsOriginalNodeWhileHitRegionsUpdate() {
         let coordinator = TopologyNodeDragCoordinator()
         coordinator.regions = [
