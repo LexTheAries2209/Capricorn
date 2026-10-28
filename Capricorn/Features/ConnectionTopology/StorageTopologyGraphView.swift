@@ -66,6 +66,27 @@ struct StorageTopologyDiagram {
         systemDriveIDs.contains(driveID) ? ["computer"] : graph.pathNodeIDs(to: driveID)
     }
 
+    func detailNodes(for driveID: String) -> [DriveConnectionTopologyNode] {
+        let visiblePath = graph.path(for: driveID)
+        var result = visiblePath.filter { node in
+            guard ![.computer, .disk, .thunderboltPort, .usbPort].contains(node.kind) else { return false }
+            return node.chipDescription != nil || node.hardwareName != nil
+        }
+        var seenChipIDs = Set(result.compactMap { $0.chipDescription?.uppercased() })
+
+        if let disk = visiblePath.last(where: { $0.kind == .disk }),
+           let segment = hardwareSegments[disk.id] {
+            for node in segment where node.kind == .pcieDevice {
+                guard let chipDescription = node.chipDescription,
+                      seenChipIDs.insert(chipDescription.uppercased()).inserted else {
+                    continue
+                }
+                result.append(node)
+            }
+        }
+        return result
+    }
+
     // IOKit can expose one tunneled chip as repeated nested PCI bridge nodes.
     static func uniquePCIeBridgeChips(
         in nodes: [DriveConnectionTopologyNode]
@@ -338,7 +359,7 @@ struct StorageTopologyGraphView: View {
         let chips = Array(Set(segment.compactMap { node -> String? in
             guard let chipDescription = node.chipDescription else { return nil }
             let identifier = DeviceChipIdentifier(description: chipDescription)
-            return identifier.flatMap { resolvedChipRecords[$0.displayValue]?.name } ?? chipDescription
+            return identifier.flatMap { resolvedChipRecords[$0.displayValue]?.topologyName } ?? chipDescription
         })).sorted()
         return VStack(spacing: 4) {
             Image(systemName: node.kind.symbolName)
@@ -363,6 +384,7 @@ struct StorageTopologyGraphView: View {
             }
         }
         .padding(.horizontal, 10)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background, in: RoundedRectangle(cornerRadius: 8))
         .overlay {

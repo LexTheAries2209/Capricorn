@@ -107,6 +107,7 @@ final class StorageTopologyUSBPortPresentationTests: XCTestCase {
 
     func testRepeatedPCIeBridgeChipIsShownOnceButRawRegistryPathIsRetained() {
         let host = node("computer", .computer)
+        let port = node("thunderbolt-port", .thunderboltPort, name: "Thunderbolt Port Port 1", rate: "40 Gb/s")
         let jhl8440 = node("jhl8440", .pcieBridge, name: "PCI-Bridge", chip: "PCI 8086:0B26")
         let asmUpstream = node("asm-upstream", .pcieBridge, name: "PCI-Bridge", chip: "PCI 1B21:2463")
         let upstreamWrapper = node("upstream-wrapper", .pcieBridge, name: "IOPP")
@@ -115,18 +116,25 @@ final class StorageTopologyUSBPortPresentationTests: XCTestCase {
         let maxio = node("maxio", .pcieDevice, name: "MAP1602", chip: "PCI 1E4B:1602")
         let disk = node("disk:disk8", .disk, bsd: "disk8")
         let source = DriveConnectionTopologyGraph.assemble(paths: [
-            "disk8": .init(nodes: [host, jhl8440, asmUpstream, upstreamWrapper, asmDownstream,
+            "disk8": .init(nodes: [host, port, jhl8440, asmUpstream, upstreamWrapper, asmDownstream,
                                    downstreamWrapper, maxio, disk],
                            hasResolvedController: true)
         ])
 
         let diagram = StorageTopologyDiagram(graph: source)
-        let detailsHardware = StorageTopologyDiagram.uniquePCIeBridgeChips(in: source.path(for: "disk8"))
-            .filter { $0.kind == .pcieBridge }
+        let detailsHardware = diagram.detailNodes(for: "disk8")
+        let resolved = DeviceHuntChipCatalog.bundled.resolve(
+            chipDescriptions: detailsHardware.compactMap(\.chipDescription)
+        )
 
         XCTAssertEqual(diagram.graph.path(for: "disk8").map(\.id),
-                       ["computer", jhl8440.id, asmUpstream.id, disk.id])
-        XCTAssertEqual(detailsHardware.map(\.id), [jhl8440.id, asmUpstream.id])
+                       ["computer", port.id, jhl8440.id, asmUpstream.id, disk.id])
+        XCTAssertEqual(detailsHardware.map(\.id), [jhl8440.id, asmUpstream.id, maxio.id])
+        XCTAssertEqual(detailsHardware.compactMap(\.chipDescription),
+                       ["PCI 8086:0B26", "PCI 1B21:2463", "PCI 1E4B:1602"])
+        XCTAssertEqual(detailsHardware.compactMap { $0.chipDescription.flatMap { resolved[$0]?.topologyName } },
+                       ["JHL8440", "ASM2464PD", "MAXIO MAP1602"])
+        XCTAssertFalse(detailsHardware.contains { $0.kind == .thunderboltPort || $0.hardwareName == "IOPP" })
         XCTAssertEqual(source.path(for: "disk8").filter { $0.kind == .pcieBridge }.count, 5)
         XCTAssertEqual(diagram.hardwareSegments[disk.id]?.map(\.id), [maxio.id, disk.id])
     }

@@ -4,13 +4,14 @@ import SwiftUI
 struct StorageTopologyDetailsView: View {
     let drive: DriveDevice
     let graph: DriveConnectionTopologyGraph
+    var systemDriveIDs: Set<String> = []
     var resolvedChipRecords: [String: DeviceHuntChipCatalog.Record] = [:]
     @Environment(\.appLanguage) private var language
 
     var body: some View {
+        let diagram = StorageTopologyDiagram(graph: graph, systemDriveIDs: systemDriveIDs)
         let path = graph.path(for: drive.bsdName)
-        let hardware = StorageTopologyDiagram.uniquePCIeBridgeChips(in: path)
-            .filter { $0.kind != .computer && $0.kind != .disk }
+        let hardware = diagram.detailNodes(for: drive.bsdName)
         let pcieLinks = path.compactMap(\.pcieLink)
         InfoPanel(title: language.t("Selected drive details"),
                   symbol: drive.isSystemDisk ? "laptopcomputer" : "externaldrive") {
