@@ -6,6 +6,121 @@ import AppKit
 let inputs = URL(fileURLWithPath: CommandLine.arguments[1])
 let assets = URL(fileURLWithPath: CommandLine.arguments[2])
 
+struct Pixel {
+    var red: Double
+    var green: Double
+    var blue: Double
+    var alpha: Double
+
+    var whiteDistance: Double { 3 - red - green - blue }
+}
+
+func removeWhiteMatte(from image: NSBitmapImageRep, isIMac: Bool) {
+    let width = image.pixelsWide
+    let height = image.pixelsHigh
+    let source: [Pixel] = (0..<height).flatMap { y in
+        (0..<width).map { x in
+            let color = image.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
+            return Pixel(red: color.redComponent, green: color.greenComponent,
+                         blue: color.blueComponent, alpha: color.alphaComponent)
+        }
+    }
+    var coverage = source.map(\.alpha)
+
+    func scan(_ indices: [Int]) {
+        guard !indices.isEmpty else { return }
+        // Find a sustained departure from the white backdrop, then sample
+        // locally. A distant reference can mistake the logo for the chassis
+        // color or cut into a pale metal surface with a lighting gradient.
+        guard let edge = indices.indices.dropLast(2).first(where: { position in
+            (0..<3).allSatisfy { source[indices[position + $0]].whiteDistance > 0.045 }
+        }) else {
+            for index in indices { coverage[index] = 0 }
+            return
+        }
+        let samples = (3...6).map { source[indices[min(edge + $0, indices.count - 1)]].whiteDistance }
+        let foreground = samples.reduce(0, +) / Double(samples.count)
+        for position in 0..<min(edge + 3, indices.count) {
+            let index = indices[position]
+            let alpha = position < edge - 3 ? 0 :
+                min(1, max(0, source[index].whiteDistance / max(foreground, 0.001)))
+            coverage[index] = min(coverage[index], alpha < 0.06 ? 0 : alpha)
+        }
+    }
+
+    for y in 0..<height {
+        let range = isIMac && y >= 215 ? 119..<195 : 0..<width
+        let indices = range.map { y * width + $0 }
+        scan(indices)
+        scan(indices.reversed())
+        if isIMac && y >= 215 {
+            for x in 0..<width where !range.contains(x) { coverage[y * width + x] = 0 }
+        }
+    }
+    for x in 0..<width {
+        let end = isIMac && (x < 119 || x >= 195) ? 215 : height
+        let indices = (0..<end).map { $0 * width + x }
+        scan(indices)
+        scan(indices.reversed())
+    }
+    // JPEG ringing can leave isolated translucent specks outside the chassis.
+    // Every real part of these cutouts connects to the center of the panel.
+    let center = (height / 2) * width + width / 2
+    var connected = [Bool](repeating: false, count: source.count)
+    var queue = [center]
+    connected[center] = true
+    var cursor = 0
+    while cursor < queue.count {
+        let index = queue[cursor]
+        cursor += 1
+        let x = index % width
+        let y = index / width
+        for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+            where nx >= 0 && nx < width && ny >= 0 && ny < height {
+            let neighbor = ny * width + nx
+            if !connected[neighbor] && coverage[neighbor] > 0.06 {
+                connected[neighbor] = true
+                queue.append(neighbor)
+            }
+        }
+    }
+    for y in 0..<height {
+        for x in 0..<width {
+            let index = y * width + x
+            let pixel = source[index]
+            let alpha = connected[index] ? coverage[index] : 0
+            // JPEG edge colors already contain white. Removing it before PNG
+            // encoding prevents a bright halo on dark topology backgrounds.
+            func unmatte(_ channel: Double) -> Double {
+                alpha == 0 ? 0 : min(1, max(0, 1 - (1 - channel) / alpha))
+            }
+            image.setColor(NSColor(deviceRed: unmatte(pixel.red),
+                                   green: unmatte(pixel.green),
+                                   blue: unmatte(pixel.blue), alpha: alpha),
+                           atX: x, y: y)
+        }
+    }
+}
+
+func removeStudioShadow(from image: NSBitmapImageRep) {
+    let width = Double(image.pixelsWide)
+    let height = Double(image.pixelsHigh)
+    let radius = width * 0.17
+    for y in 0..<image.pixelsHigh {
+        for x in 0..<image.pixelsWide {
+            let px = Double(x) + 0.5
+            let py = Double(y) + 0.5
+            let cx = min(width - radius - 0.6, max(radius + 0.6, px))
+            let cy = min(height - radius - 0.6, max(radius + 0.6, py))
+            let coverage = min(1, max(0, radius + 0.5 - hypot(px - cx, py - cy)))
+            let color = image.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
+            image.setColor(NSColor(deviceRed: color.redComponent, green: color.greenComponent,
+                                   blue: color.blueComponent,
+                                   alpha: color.alphaComponent * coverage), atX: x, y: y)
+        }
+    }
+}
+
 func export(_ source: String, crop: CGRect, asset: String, name: String,
             hideExtraSockets: Bool = false) throws {
     let data = try Data(contentsOf: inputs.appendingPathComponent(source))
@@ -19,28 +134,11 @@ func export(_ source: String, crop: CGRect, asset: String, name: String,
     NSImage(cgImage: cropped, size: NSSize(width: cropped.width, height: cropped.height))
         .draw(in: NSRect(x: 0, y: 0, width: cropped.width, height: cropped.height))
     NSGraphicsContext.restoreGraphicsState()
-    let transparent = NSColor(deviceRed: 0, green: 0, blue: 0, alpha: 0)
-    if asset.hasPrefix("MacMini") || asset == "MacStudioTop" {
-        let width = CGFloat(cropped.width)
-        let height = CGFloat(cropped.height)
-        let radius = width * 0.17
-        for y in 0..<cropped.height {
-            for x in 0..<cropped.width {
-                let px = CGFloat(x) + 0.5
-                let py = CGFloat(y) + 0.5
-                let cx = min(width - radius, max(radius, px))
-                let cy = min(height - radius, max(radius, py))
-                if hypot(px - cx, py - cy) > radius {
-                    image.setColor(transparent, atX: x, y: y)
-                }
-            }
-        }
-    } else {
-        for y in 215..<cropped.height {
-            for x in 0..<cropped.width where x < 119 || x > 194 {
-                image.setColor(transparent, atX: x, y: y)
-            }
-        }
+    // Keep the official PNG's native alpha; the JPEGs need their white matte
+    // removed. Canvas sizes stay fixed so existing port anchors do not move.
+    if source.hasSuffix(".jpg") {
+        removeWhiteMatte(from: image, isIMac: asset.hasPrefix("iMac"))
+        if asset == "MacStudioTop" { removeStudioShadow(from: image) }
     }
     if hideExtraSockets {
         // The two-port enclosure has the same back panel. Remove the two unused
