@@ -258,9 +258,6 @@ struct StorageTopologyGraphView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-            if let port = node.portDescription {
-                Text(port).font(.system(size: 10)).lineLimit(1)
-            }
             if let bsdName = node.bsdName {
                 Text(bsdName).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
             }

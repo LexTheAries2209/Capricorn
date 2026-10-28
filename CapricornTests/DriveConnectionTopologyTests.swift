@@ -3,6 +3,33 @@ import XCTest
 @testable import Capricorn
 
 final class DriveConnectionTopologyTests: XCTestCase {
+    func testOpaqueUSBLocationAddressIsHiddenFromPresentationOnly() {
+        let opaquePort = DriveConnectionTopologyNode(
+            id: "usb-location",
+            kind: .usbPort,
+            hardwareName: nil,
+            portDescription: "USB 0x02200000",
+            linkRateDescription: nil,
+            bsdName: nil,
+            pcieLink: nil,
+            isPCIeTunnelled: false
+        )
+        let readablePort = DriveConnectionTopologyNode(
+            id: "usb-port",
+            kind: .usbPort,
+            hardwareName: nil,
+            portDescription: "USB Port 1",
+            linkRateDescription: nil,
+            bsdName: nil,
+            pcieLink: nil,
+            isPCIeTunnelled: false
+        )
+
+        XCTAssertEqual(opaquePort.portDescription, "USB 0x02200000")
+        XCTAssertNil(opaquePort.displayPortDescription)
+        XCTAssertEqual(readablePort.displayPortDescription, "USB Port 1")
+    }
+
     func testPCIeLinkStatusDecodesGenerationSpeedAndWidth() throws {
         let link = try XCTUnwrap(DrivePCIeLinkParser.parse(linkStatus: 4 | (4 << 4)))
 

@@ -55,6 +55,17 @@ struct DriveConnectionTopologyNode: Equatable, Sendable, Identifiable {
         }
         return "PCI-Bridge"
     }
+
+    var displayPortDescription: String? {
+        guard let portDescription else { return nil }
+        let value = portDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let address = value.hasPrefix("USB ") ? String(value.dropFirst(4)) : value
+        let digits = address.lowercased().hasPrefix("0x") ? address.dropFirst(2) : Substring()
+        guard digits.count >= 4, digits.allSatisfy(\.isHexDigit) else {
+            return portDescription
+        }
+        return nil
+    }
 }
 
 struct DriveConnectionTopologyPath: Equatable, Sendable {
