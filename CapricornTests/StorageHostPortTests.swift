@@ -18,6 +18,19 @@ final class StorageHostPortTests: XCTestCase {
         let model = StorageHostModel(identifier: "Mac14,6", board: "Unknown")
         XCTAssertFalse(model.hasVerifiedPortLayout)
         XCTAssertNil(model.position(for: .init(number: 1)))
+        XCTAssertNil(StorageHostArtworkGeometry.anchor(.init(number: 1), model: model))
+    }
+
+    func testUnverifiedOrNewModelsNeverInheritMacBookSocketCoordinates() {
+        for identifier in ["Mac17,16", "Mac18,5", "Mac16,3", "CapricornUnknownMac999,1"] {
+            let model = StorageHostModel(identifier: identifier, board: "")
+            XCTAssertFalse(model.hasVerifiedPortLayout)
+            for number in 1...3 {
+                XCTAssertNil(StorageHostArtworkGeometry.anchor(.init(number: number), model: model), identifier)
+            }
+        }
+        let unknownArtwork = StorageHostModel(identifier: "CapricornUnknownMac999,1", board: "J414c")
+        XCTAssertNil(StorageHostArtworkGeometry.anchor(.init(number: 1), model: unknownArtwork))
     }
 
     func testPortParserRequiresAnExplicitBuiltInUSBCSocket() {

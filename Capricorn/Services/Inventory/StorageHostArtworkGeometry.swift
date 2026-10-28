@@ -57,15 +57,9 @@ enum StorageHostArtworkGeometry {
     static let unresolvedAnchor = CGPoint(x: 170, y: 258)
 
     static func anchor(_ port: StorageHostPort, model: StorageHostModel) -> CGPoint? {
-        if let topView = StorageHostTopView(identifier: model.identifier) {
-            return topView.anchor(port)
-        }
-        // System artwork remains available for models without an alternate view.
-        switch port.number {
-        case 1: return CGPoint(x: 32, y: 183)
-        case 2: return CGPoint(x: 14, y: 197)
-        case 3: return CGPoint(x: 324, y: 190)
-        default: return nil
-        }
+        // An OS-provided picture does not establish the physical socket geometry.
+        guard model.hasVerifiedPortLayout,
+              let topView = StorageHostTopView(identifier: model.identifier) else { return nil }
+        return topView.anchor(port)
     }
 }
