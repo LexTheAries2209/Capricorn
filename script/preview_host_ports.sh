@@ -17,6 +17,7 @@ swiftc -parse-as-library \
     "$ROOT_DIR/script/render_host_port_review.swift" \
     "$ROOT_DIR/Capricorn/Services/Inventory/StorageHostArtworkGeometry.swift" \
     "$ROOT_DIR/Capricorn/Services/Inventory/StorageHostPorts.swift" \
+    "$ROOT_DIR/Capricorn/Services/Inventory/StorageDesktopProfile.swift" \
     "$ROOT_DIR/Capricorn/Services/Inventory/StorageHostArtwork.swift" \
     "$ROOT_DIR/Capricorn/Features/ConnectionTopology/StorageHostArtworkView.swift" \
     "$ROOT_DIR/Capricorn/Features/ConnectionTopology/TopologyConnectionLine.swift" \

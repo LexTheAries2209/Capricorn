@@ -7,6 +7,7 @@ CONFIGURATION="Debug"
 SHOW_LOGS=0
 TELEMETRY=0
 VERIFY=0
+DESKTOP_REVIEW=0
 
 for argument in "$@"; do
     case "$argument" in
@@ -14,6 +15,7 @@ for argument in "$@"; do
         --logs) SHOW_LOGS=1 ;;
         --telemetry) TELEMETRY=1 ;;
         --verify) VERIFY=1 ;;
+        --review-desktop-topology) DESKTOP_REVIEW=1 ;;
         *)
             print -u2 "Unknown option: $argument"
             exit 2
@@ -44,7 +46,12 @@ fi
 if (( TELEMETRY )); then
     CAPRICORN_TELEMETRY=1 "$EXECUTABLE" >/dev/null 2>&1 &
 else
-    open "$APP_PATH"
+    if (( DESKTOP_REVIEW )); then
+        open "$APP_PATH" --args --review-desktop-topology \
+            --desktop-review-export "$ROOT_DIR/DerivedData/DesktopTopologyReview"
+    else
+        open "$APP_PATH"
+    fi
 fi
 
 if (( VERIFY )); then
