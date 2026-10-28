@@ -74,6 +74,13 @@
       "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/1E31"
     },
     {
+      "id": "PCI 8086:0B26",
+      "manufacturer": "Intel",
+      "category": "Thunderbolt 4 Bridge",
+      "name": "JHL8440 (Goshen Ridge) Thunderbolt 4 Controller",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/8086/device/0B26"
+    },
+    {
       "id": "PCI 8086:8C31",
       "manufacturer": "Intel",
       "category": "USB Host Controller",

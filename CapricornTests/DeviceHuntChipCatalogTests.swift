@@ -50,6 +50,14 @@ final class DeviceHuntChipCatalogTests: XCTestCase {
         XCTAssertEqual(matches["USB 2109:0812"]?.name, "VL812 Hub")
     }
 
+    func testCatalogResolvesGoshenRidgeThunderboltBridgeAsJHL8440() {
+        let record = DeviceHuntChipCatalog.bundled.resolve(chipDescriptions: ["PCI 8086:0B26"])["PCI 8086:0B26"]
+
+        XCTAssertEqual(record?.manufacturer, "Intel")
+        XCTAssertEqual(record?.name, "JHL8440 (Goshen Ridge) Thunderbolt 4 Controller")
+        XCTAssertEqual(record?.category, "Thunderbolt 4 Bridge")
+    }
+
     func testResolvesPCIStorageAndUSBBridgeChipNamesLocally() {
         let catalog = DeviceHuntChipCatalog.bundled
         let matches = catalog.resolve(chipDescriptions: [
