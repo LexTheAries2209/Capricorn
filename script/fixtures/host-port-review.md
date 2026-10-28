@@ -68,3 +68,31 @@ On October 28, 2026, the user accepted the previously shown MacBook Air M2,
 MacBook Pro 13 M1, and MacBook Pro 14 M2 chassis previews. This records visual
 acceptance only; it does not establish the IOKit port numbering of other models.
 The additional M3 MacBook and desktop previews remain pending user review.
+
+## October 2026 Review Batch
+
+Run `./script/preview_host_ports.sh --2026`, optionally with `--render-only`,
+for the October 28, 2026 batch. Sources are linked in
+`host-port-review-2026.json`:
+
+- Mac mini M5 Pro and M6, as listed in Apple's 2026 specification. The front and
+  rear reference artwork uses the same official enclosure view as the 2024
+  fixture; capabilities come from the 2026 specification.
+- iMac M6 two-port and four-port variants, using the current official port
+  photographs from Apple's specification page.
+- 14-inch MacBook Pro M6, using current official side photographs and the
+  accepted matching-size keyboard template as a candidate top projection.
+- Unknown-model handling, displaying the actual system-artwork lookup for
+  Apple's published mini identifiers and a clearly named synthetic unknown ID.
+
+These are visual review fixtures, not additional verified IOKit port layouts.
+M6 iMac and MacBook Pro registry identifiers are not guessed. The old-coordinate
+fallback in `StorageHostArtworkGeometry.anchor` has been removed: a socket
+coordinate now requires both a verified board layout and a matching top-view
+profile. Unverified hosts retain abstract connections.
+
+For unlisted models, production artwork first uses a declared macOS device-model
+type. If the local OS does not know that identifier, the existing generic desktop
+computer symbol is shown, with blue selection coloring for the system disk.
+An OS artwork entry is independent of physical socket mapping; it never grants
+permission to reuse a different model's port coordinates.

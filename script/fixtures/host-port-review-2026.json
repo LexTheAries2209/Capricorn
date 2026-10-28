@@ -1,0 +1,122 @@
+[
+  {
+    "id": "mini-m5-pro",
+    "title": "Mac mini · M5 Pro (2026) · 接口校对",
+    "subtitle": "背面三个雷雳 5 · 80 Gb/s；正面两个 USB-C · 10 Gb/s",
+    "note": "按 Apple 2026 技术规格核对；接口图复用相同外壳的官方前后视图。M5 系列 mini 为 M5 Pro，无基础款 M5。尚未验证系统端口编号。",
+    "source": "https://support.apple.com/en-us/128108",
+    "panels": [
+      {
+        "title": "背面 · 同外壳官方参照图",
+        "asset": "mini-m4-back.png",
+        "url": "https://cdsassets.apple.com/live/7WUAS350/images/tech-specs/121555-mac-mini-2024-en-portimage2.png",
+        "height": 235,
+        "markers": [{"x": 529, "y": 258, "kind": "thunderbolt5"}, {"x": 582, "y": 258, "kind": "thunderbolt5"}, {"x": 635, "y": 258, "kind": "thunderbolt5"}]
+      },
+      {
+        "title": "正面 · 同外壳官方参照图",
+        "asset": "mini-m4-front.png",
+        "url": "https://cdsassets.apple.com/live/7WUAS350/images/tech-specs/121555-mac-mini-2024-en-portimage1.png",
+        "height": 235,
+        "markers": [{"x": 161, "y": 223, "kind": "usbC"}, {"x": 252, "y": 223, "kind": "usbC"}]
+      }
+    ]
+  },
+  {
+    "id": "mini-m6",
+    "title": "Mac mini · M6 (2026) · 接口校对",
+    "subtitle": "背面三个雷雳 4 · 40 Gb/s；正面两个 USB-C · 10 Gb/s",
+    "note": "2026 mini 的另一款为 M6，区别于 M5 Pro 的雷雳 5。使用同外壳参照图，类型以 2026 官方规格为准；不推测 IOKit 编号。",
+    "source": "https://support.apple.com/en-us/128108",
+    "panels": [
+      {
+        "title": "背面 · 同外壳官方参照图",
+        "asset": "mini-m4-back.png",
+        "height": 235,
+        "markers": [{"x": 529, "y": 258, "kind": "thunderbolt"}, {"x": 582, "y": 258, "kind": "thunderbolt"}, {"x": 635, "y": 258, "kind": "thunderbolt"}]
+      },
+      {
+        "title": "正面 · 同外壳官方参照图",
+        "asset": "mini-m4-front.png",
+        "height": 235,
+        "markers": [{"x": 161, "y": 223, "kind": "usbC"}, {"x": 252, "y": 223, "kind": "usbC"}]
+      }
+    ]
+  },
+  {
+    "id": "imac-m6",
+    "title": "iMac · M6 (2026) · 接口校对",
+    "subtitle": "双口版与四口版 · 雷雳 4 / USB 4 · 40 Gb/s",
+    "note": "使用 Apple M6 iMac 技术规格页的官方背面图片；四口版全部为雷雳 4。机型标识与 IOKit 物理编号映射未经验证，未启用到生产拓扑。",
+    "source": "https://www.apple.com/imac/specs/",
+    "panels": [
+      {
+        "title": "双口版 · 两个雷雳 / USB 4",
+        "asset": "imac-m6-two.jpg",
+        "url": "https://www.apple.com/v/imac/specs/c/images/specs/connections_02__ualqjxeeyn22_large.jpg",
+        "crop": [0, 0, 592, 139],
+        "height": 235,
+        "markers": [{"x": 276, "y": 60, "kind": "thunderbolt"}, {"x": 318, "y": 60, "kind": "thunderbolt"}]
+      },
+      {
+        "title": "四口版 · 四个雷雳 4",
+        "asset": "imac-m6-four.jpg",
+        "url": "https://www.apple.com/v/imac/specs/c/images/specs/connections_01__x95nkikhdj6y_large.jpg",
+        "crop": [0, 0, 592, 139],
+        "height": 235,
+        "markers": [{"x": 234, "y": 60, "kind": "thunderbolt"}, {"x": 276, "y": 60, "kind": "thunderbolt"}, {"x": 318, "y": 60, "kind": "thunderbolt"}, {"x": 361, "y": 60, "kind": "thunderbolt"}]
+      }
+    ]
+  },
+  {
+    "id": "mbp14-m6",
+    "title": "MBP 14 · M6 (2026) · 接口校对",
+    "subtitle": "左侧两个、右侧一个雷雳 4 · 40 Gb/s",
+    "note": "2026-10-27 发布的 14 寸基础款 M6，不能按基础款 M3 的双雷雳口处理。顶视沿用已验收同尺寸模具；实际数量由本代官方侧视图核对。",
+    "source": "https://www.apple.com/macbook-pro/specs/",
+    "panels": [
+      {
+        "title": "顶视候选 · 同模具银色参考图",
+        "asset": "mbp14-top.png",
+        "templateModel": "Mac14,9",
+        "height": 280,
+        "markers": []
+      },
+      {
+        "title": "本代官方左侧视图",
+        "asset": "mbp-m6-left.jpg",
+        "url": "https://www.apple.com/v/macbook-pro/specs/e/images/specs/14-inch/ports_1_14_inch__d5zi3oye530i_large.jpg",
+        "crop": [0, 4, 409, 53],
+        "height": 90,
+        "markers": [{"x": 141, "y": 32, "kind": "thunderbolt"}, {"x": 186, "y": 32, "kind": "thunderbolt"}]
+      },
+      {
+        "title": "本代官方右侧视图",
+        "asset": "mbp-m6-right.jpg",
+        "url": "https://www.apple.com/v/macbook-pro/specs/e/images/specs/14-inch/ports_2_14_inch__fyp4hk8z9qi6_large.jpg",
+        "crop": [0, 4, 409, 53],
+        "height": 90,
+        "markers": [{"x": 268, "y": 32, "kind": "thunderbolt"}]
+      }
+    ]
+  },
+  {
+    "id": "unknown-model-system",
+    "title": "新型号 / 未收录机型 · 回退显示校对",
+    "subtitle": "已发布新机型与未知机型模拟 · 普通 / 系统盘选中状态",
+    "note": "若 macOS 已收录机型，自动取得系统渲染图；否则显示通用电脑符号。磁盘路径与蓝色选中高亮保留；不继承旧机型插孔坐标。最后一行是模拟未知型号，不是实际产品。",
+    "source": "https://support.apple.com/en-us/102852",
+    "panels": [
+      {
+        "title": "当前生产视图",
+        "height": 530,
+        "hostModels": [
+          {"identifier": "Mac17,16", "title": "Mac mini M5 Pro (2026)"},
+          {"identifier": "Mac18,5", "title": "Mac mini M6 (2026)"},
+          {"identifier": "CapricornUnknownMac999,1", "title": "未知机型（模拟）"}
+        ],
+        "markers": []
+      }
+    ]
+  }
+]

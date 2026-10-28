@@ -239,7 +239,8 @@ final class ReviewDelegate: NSObject, NSApplicationDelegate {
         do {
             let resources = Bundle.main.resourceURL!
             let additional = CommandLine.arguments.contains("--additional")
-            let manifest = additional ? "additional-models.json" : "models.json"
+            let manifest = CommandLine.arguments.contains("--2026") ? "2026-models.json"
+                : additional ? "additional-models.json" : "models.json"
             let models = try JSONDecoder().decode([ReviewModel].self,
                 from: Data(contentsOf: resources.appendingPathComponent(manifest)))
             var images: [String: NSImage] = [:]
@@ -273,15 +274,21 @@ final class ReviewDelegate: NSObject, NSApplicationDelegate {
                 if !panel.markers.isEmpty {
                     let bitmap = try NSBitmapImageRep(data: Data(contentsOf: path)).unwrap()
                     for marker in panel.markers {
-                        // Colored iMac tongues are not dark; verify the surrounding socket opening.
+                        func luminance(_ x: Int, _ y: Int) -> Double {
+                            guard x >= 0, y >= 0, x < bitmap.pixelsWide, y < bitmap.pixelsHigh,
+                                  let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)
+                            else { return 1 }
+                            return color.redComponent * 0.2126
+                                + color.greenComponent * 0.7152 + color.blueComponent * 0.0722
+                        }
+                        // Silver and colored socket tongues need contrast against the nearby casing.
+                        let casing = (luminance(Int(marker.x) - 12, Int(marker.y))
+                            + luminance(Int(marker.x) + 12, Int(marker.y))) / 2
+                        let threshold = max(0.3, min(0.55, casing - 0.15))
                         var darkPixels = 0
                         for y in (Int(marker.y) - 4)...(Int(marker.y) + 4) {
                             for x in (Int(marker.x) - 4)...(Int(marker.x) + 4) {
-                                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)
-                                else { continue }
-                                let luminance = color.redComponent * 0.2126
-                                    + color.greenComponent * 0.7152 + color.blueComponent * 0.0722
-                                if luminance < 0.3 {
+                                if luminance(x, y) < threshold {
                                     darkPixels += 1
                                 }
                             }

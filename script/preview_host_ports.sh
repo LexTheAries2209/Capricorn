@@ -9,6 +9,7 @@ mkdir -p "$APP_PATH/Contents/MacOS" "$RESOURCES"
 cp "$ROOT_DIR/script/fixtures/HostPortReview-Info.plist" "$APP_PATH/Contents/Info.plist"
 cp "$ROOT_DIR/script/fixtures/host-port-review.json" "$RESOURCES/models.json"
 cp "$ROOT_DIR/script/fixtures/host-port-review-additional.json" "$RESOURCES/additional-models.json"
+cp "$ROOT_DIR/script/fixtures/host-port-review-2026.json" "$RESOURCES/2026-models.json"
 cp "$ROOT_DIR/Capricorn/Assets.xcassets/MacBookPro14Top2023.imageset/macbook-pro-14-top.png" "$RESOURCES/mbp14-top.png"
 cp "$ROOT_DIR/Capricorn/Assets.xcassets/MacBookPro16Top2023.imageset/macbook-pro-16-top.png" "$RESOURCES/mbp16-top.png"
 
