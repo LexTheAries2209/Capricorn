@@ -290,6 +290,9 @@ final class USBRawSmartTests: XCTestCase {
         XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 37)
         XCTAssertEqual(model.selectedSnapshot?.selectedProvider, USBRawSmartService.providerName)
         XCTAssertEqual(model.selectedSnapshot?.capturedAt, capturedAt)
+        XCTAssertFalse(model.selectedSnapshot?.providerStatuses.contains {
+            $0.message == "Refreshing Native SMART data..."
+        } ?? true)
         XCTAssertFalse(model.offersUSBRawSmart(for: try XCTUnwrap(model.selectedDrive)))
     }
 

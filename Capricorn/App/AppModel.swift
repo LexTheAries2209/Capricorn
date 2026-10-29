@@ -726,11 +726,16 @@ final class AppModel {
             let previousMatches = previousDrives.filter { DriveStableIdentityMatcher.matches($0, drive) }
             let previousDrive = previousMatches.first
             if let previousDrive, let previousSnapshot = previousSnapshots[previousDrive.id] {
-                if previousSnapshot.selectedProvider == USBRawSmartService.providerName,
-                   (previousMatches.count != 1 || loadedDrives.filter({
-                       DriveStableIdentityMatcher.matches(previousDrive, $0)
-                   }).count != 1) {
-                    return (drive.id, discovery.snapshots[drive.id] ?? SmartSnapshot.refreshingNative(for: drive))
+                if previousSnapshot.selectedProvider == USBRawSmartService.providerName {
+                    guard previousMatches.count == 1, loadedDrives.filter({
+                        DriveStableIdentityMatcher.matches(previousDrive, $0)
+                    }).count == 1 else {
+                        return (drive.id, discovery.snapshots[drive.id] ?? SmartSnapshot.refreshingNative(for: drive))
+                    }
+                    // This reading cannot be refreshed by an automatic scan.
+                    var retained = previousSnapshot
+                    retained.driveID = drive.id
+                    return (drive.id, retained)
                 }
                 return (drive.id, previousSnapshot.markingNativeSMARTRefreshing(for: drive))
             }
