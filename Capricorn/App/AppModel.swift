@@ -85,6 +85,7 @@ final class AppModel {
     var completedSmartSelfTest: SmartSelfTestCompletion?
     var diskOperationLockNotice: DiskOperationLockNotice?
     var usbRawSmartSession: USBRawSmartSession?
+    var isUSBRawSmartPresented = false
     var isUSBRawSmartActive: Bool { usbRawSmartSession?.state == .running }
     private(set) var isInstallingAppUpdate = false
     private var activeDiskCommandCount = 0
@@ -1364,7 +1365,7 @@ final class AppModel {
     }
 
     func beginUSBRawSmart() async {
-        guard let session = usbRawSmartSession, session.state == .confirmation,
+        guard isUSBRawSmartPresented, let session = usbRawSmartSession, session.state == .confirmation,
               canBeginUSBRawSmart,
               let current = drives.first(where: { $0.id == session.drive.id }),
               offersUSBRawSmart(for: current),

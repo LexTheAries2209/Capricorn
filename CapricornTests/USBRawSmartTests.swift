@@ -215,7 +215,39 @@ final class USBRawSmartTests: XCTestCase {
         let stillZero = await service.readCount
         XCTAssertEqual(stillZero, 0)
         model.closeUSBRawSmart()
+        XCTAssertFalse(model.isUSBRawSmartPresented)
+        XCTAssertNotNil(model.usbRawSmartSession)
+        model.finishUSBRawSmartDismissal()
         XCTAssertNil(model.usbRawSmartSession)
+    }
+
+    @MainActor
+    func testClosingResultKeepsSheetContentUntilDismissalCompletes() async throws {
+        let model = Self.model(service: USBRawSuspendedService())
+        model.requestUSBRawSmart(for: Self.drive())
+        model.usbRawSmartSession?.state = .completed
+        model.usbRawSmartSession?.result = Self.result(restored: true)
+        let view = NSHostingView(rootView: USBRawSmartSheet(viewModel: model, language: .simplifiedChinese))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 628, height: 450),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(50))
+        let originalHeight = view.fittingSize.height
+        XCTAssertGreaterThan(originalHeight, 250)
+        model.closeUSBRawSmart()
+        try await Task.sleep(for: .milliseconds(50))
+        view.layoutSubtreeIfNeeded()
+        XCTAssertNotNil(model.usbRawSmartSession)
+        XCTAssertEqual(view.fittingSize.height, originalHeight, accuracy: 1)
+        XCTAssertFalse(model.isUSBRawSmartPresented)
+        model.finishUSBRawSmartDismissal()
+        XCTAssertNil(model.usbRawSmartSession)
+        model.requestUSBRawSmart(for: Self.drive())
+        XCTAssertTrue(model.isUSBRawSmartPresented)
+        model.finishUSBRawSmartDismissal()
+        XCTAssertNotNil(model.usbRawSmartSession, "A stale dismiss callback must not clear a new presentation.")
     }
 
     @MainActor
@@ -286,6 +318,7 @@ final class USBRawSmartTests: XCTestCase {
         await task.value
         let capturedAt = try XCTUnwrap(model.selectedSnapshot?.capturedAt)
         model.closeUSBRawSmart()
+        model.finishUSBRawSmartDismissal()
         await model.refresh()
         XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 37)
         XCTAssertEqual(model.selectedSnapshot?.selectedProvider, USBRawSmartService.providerName)
@@ -386,6 +419,7 @@ final class USBRawSmartTests: XCTestCase {
         await service.finish()
         await task.value
         model.closeUSBRawSmart()
+        model.finishUSBRawSmartDismissal()
 
         var renamed = Self.drive()
         renamed.bsdName = "disk101"

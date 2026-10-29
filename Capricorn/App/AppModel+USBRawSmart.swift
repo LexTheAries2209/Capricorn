@@ -16,6 +16,7 @@ extension AppModel {
             let target = try usbRawSmartTarget(for: drive)
             selectedDriveID = drive.id
             usbRawSmartSession = USBRawSmartSession(drive: drive, target: target)
+            isUSBRawSmartPresented = true
         } catch {
             refreshMessage = error.localizedDescription
         }
@@ -23,6 +24,12 @@ extension AppModel {
 
     func closeUSBRawSmart() {
         guard !isUSBRawSmartActive else { return }
+        isUSBRawSmartPresented = false
+    }
+
+    func finishUSBRawSmartDismissal() {
+        guard !isUSBRawSmartActive, !isUSBRawSmartPresented else { return }
+        // A fixed-size sheet must keep its content through the close animation.
         usbRawSmartSession = nil
     }
 }

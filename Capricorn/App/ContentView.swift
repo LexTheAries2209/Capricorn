@@ -302,9 +302,11 @@ struct ContentView: View {
             DiskFirstAidSheet(viewModel: viewModel, language: language)
         }
         .sheet(isPresented: Binding(
-            get: { viewModel.usbRawSmartSession != nil },
+            get: { viewModel.isUSBRawSmartPresented },
             set: { if !$0 { viewModel.closeUSBRawSmart() } }
-        )) {
+        ), onDismiss: {
+            viewModel.finishUSBRawSmartDismissal()
+        }) {
             USBRawSmartSheet(viewModel: viewModel, language: language)
         }
         .sheet(isPresented: $showsSmartSelfTestSheet, onDismiss: {
