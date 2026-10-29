@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		A11CE001BADD1E0000000001 /* Capricorn/Resources/Smartmontools/drivedb.h in Resources */ = {isa = PBXBuildFile; fileRef = A11CE001BADD1E0000000002 /* Capricorn/Resources/Smartmontools/drivedb.h */; };
 		A11CE002BADD1E0000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A11CE002BADD1E0000000002 /* Sparkle */; };
+		A11CE003BADD1E0000000001 /* smartctl-usbraw in Executables */ = {isa = PBXBuildFile; fileRef = A11CE003BADD1E0000000002 /* smartctl-usbraw */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -21,11 +22,36 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		A11CE003BADD1E0000000003 /* Embed SNT Executable */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 6;
+			files = (
+				A11CE003BADD1E0000000001 /* smartctl-usbraw in Executables */,
+			);
+			name = "Embed SNT Executable";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		0BC08D39966F483D907890D0 /* CapricornTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CapricornTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		587A84672FE6BDAA0045BA20 /* Capricorn.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Capricorn.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A11CE001BADD1E0000000002 /* Capricorn/Resources/Smartmontools/drivedb.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Capricorn/Resources/Smartmontools/drivedb.h; sourceTree = SOURCE_ROOT; };
+		A11CE003BADD1E0000000002 /* smartctl-usbraw */ = {isa = PBXFileReference; lastKnownFileType = compiled.mach-o.executable; path = Capricorn/Resources/Smartmontools/smartctl-usbraw; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A11CE003BADD1E0000000004 /* SNT executable membership */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Resources/Smartmontools/smartctl-usbraw,
+			);
+			target = 587A84662FE6BDAA0045BA20 /* Capricorn */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		09B48EF062434AE09FD8BCEE /* CapricornTests */ = {
@@ -35,6 +61,9 @@
 		};
 		587A84692FE6BDAA0045BA20 /* Capricorn */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A11CE003BADD1E0000000004 /* SNT executable membership */,
+			);
 			path = Capricorn;
 			sourceTree = "<group>";
 		};
@@ -63,6 +92,7 @@
 			isa = PBXGroup;
 			children = (
 				A11CE001BADD1E0000000002 /* Capricorn/Resources/Smartmontools/drivedb.h */,
+				A11CE003BADD1E0000000002 /* smartctl-usbraw */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -119,6 +149,7 @@
 				587A84632FE6BDAA0045BA20 /* Sources */,
 				587A84642FE6BDAA0045BA20 /* Frameworks */,
 				587A84652FE6BDAA0045BA20 /* Resources */,
+				A11CE003BADD1E0000000003 /* Embed SNT Executable */,
 			);
 			buildRules = (
 			);

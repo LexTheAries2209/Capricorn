@@ -55,6 +55,40 @@ final class USBRawSmartTests: XCTestCase {
         }
     }
 
+    func testAuthorizedCommandRejoinsRequestingAppSessionWithoutDroppingRoot() async throws {
+        let shell = USBRawRecordingRunner(result: CommandResult(
+            stdout: Data("CAPRICORN_USBRAW_EXIT=0\n".utf8), stderr: Data(), terminationStatus: 0))
+        let runner = AdministratorUSBRawCommandRunner(runner: shell, userID: 501)
+        _ = try await runner.run("/path with spaces/tool", arguments: ["a'b", "$HOME"])
+        let calls = await shell.calls
+        let call = try XCTUnwrap(calls.first)
+        XCTAssertEqual(call.executable, "/usr/bin/osascript")
+        let script = try XCTUnwrap(call.arguments.last)
+        for token in ["/bin/launchctl", "asuser", "501", "/usr/bin/env"] {
+            XCTAssertTrue(script.contains("'\(token)'"))
+        }
+        XCTAssertTrue(script.contains("'CAPRICORN_USBRAW_USER_UID=501'"))
+        XCTAssertTrue(script.contains("'/path with spaces/tool'"))
+        XCTAssertTrue(script.contains("'$HOME'"))
+        XCTAssertFalse(script.contains("sudo"))
+        XCTAssertFalse(script.contains("bsexec"))
+        XCTAssertTrue(script.hasSuffix("with administrator privileges"))
+    }
+
+    func testSystemOrInvalidRequesterCannotAuthorizeUSB() async {
+        let shell = USBRawRecordingRunner(result: Self.commandResult())
+        let invalidUsers: [UInt32] = [0, .max]
+        for uid in invalidUsers {
+            let runner = AdministratorUSBRawCommandRunner(runner: shell, userID: uid)
+            do {
+                _ = try await runner.run("/usr/bin/true", arguments: [])
+                XCTFail("An invalid GUI requester must not reach authorization")
+            } catch {}
+        }
+        let calls = await shell.calls
+        XCTAssertTrue(calls.isEmpty)
+    }
+
     func testReadAndMountRestorationHaveIndependentOutcomes() {
         let failed = Self.result(restored: false)
         XCTAssertEqual(failed.snapshot?.temperatureCelsius, 37)
@@ -107,7 +141,7 @@ final class USBRawSmartTests: XCTestCase {
         let privileged = USBRawRecordingRunner(result: Self.commandResult())
         let service = USBRawSmartService(
             runner: scan, administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
-            targetResolver: { _ in Self.target })
+            targetResolver: { _ in Self.target }, authorizeVolumes: { _ in })
         let result = try await service.read(drive: drive, target: Self.target, bridge: .automatic)
         XCTAssertTrue(result.snapshot?.hasSMARTPayload == true)
         let scans = await scan.calls
@@ -126,7 +160,7 @@ final class USBRawSmartTests: XCTestCase {
         let privileged = USBRawRecordingRunner(result: Self.commandResult())
         let service = USBRawSmartService(
             runner: scan, administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
-            targetResolver: { _ in Self.target })
+            targetResolver: { _ in Self.target }, authorizeVolumes: { _ in })
         do {
             _ = try await service.read(drive: drive, target: Self.target, bridge: .automatic)
             XCTFail("Unknown bridge must stop before authorization")
@@ -149,6 +183,22 @@ final class USBRawSmartTests: XCTestCase {
         let reads = await privileged.calls
         XCTAssertTrue(scans.isEmpty)
         XCTAssertTrue(reads.isEmpty)
+    }
+
+    func testDeniedVolumeAccessStopsBeforeRootAndCapture() async {
+        let drive = Self.drive()
+        let scan = USBRawRecordingRunner(result: Self.scan(for: drive, type: "sntasmedia"))
+        let privileged = USBRawRecordingRunner(result: Self.commandResult())
+        let service = USBRawSmartService(
+            runner: scan, administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in Self.target },
+            authorizeVolumes: { _ in throw CocoaError(.fileReadNoPermission) })
+        do {
+            _ = try await service.read(drive: drive, target: Self.target, bridge: .automatic)
+            XCTFail("Denied removable-volume access must leave the device mounted")
+        } catch {}
+        let calls = await privileged.calls
+        XCTAssertTrue(calls.isEmpty)
     }
 
     @MainActor

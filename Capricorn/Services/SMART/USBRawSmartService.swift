@@ -2,6 +2,7 @@
 import Foundation
 import IOKit
 import IOKit.storage
+import Darwin
 
 enum SNTBridge: String, CaseIterable, Identifiable, Sendable {
     case automatic
@@ -144,11 +145,27 @@ struct USBRawSmartTargetResolver: Sendable {
 final class AdministratorUSBRawCommandRunner: CommandRunning, @unchecked Sendable {
     static let statusMarker = "CAPRICORN_USBRAW_EXIT="
     private let runner: CommandRunning
+    private let userID: UInt32
 
-    init(runner: CommandRunning = ShellCommandRunner()) { self.runner = runner }
+    init(
+        runner: CommandRunning = ShellCommandRunner(),
+        userID: UInt32 = getuid()
+    ) {
+        self.runner = runner
+        self.userID = userID
+    }
 
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
-        let command = ([executable] + arguments).map(AdministratorCommandRunner.shellQuote).joined(separator: " ")
+        guard userID > 0, userID != UInt32.max else {
+            throw USBRawSmartError.unavailable("SNT requires a logged-in user's Capricorn process.")
+        }
+        // Authorization runs in a system context. Rejoin the requesting user's
+        // bootstrap/audit session without dropping the root credentials.
+        // bsexec exits successfully without adopting that session on macOS 26.
+        let command = ([
+            "/bin/launchctl", "asuser", String(userID), "/usr/bin/env",
+            "CAPRICORN_USBRAW_USER_UID=\(userID)"
+        ] + [executable] + arguments).map(AdministratorCommandRunner.shellQuote).joined(separator: " ")
         let wrapper = "\(command) 2>&1; capricorn_status=$?; printf '\\n\(Self.statusMarker)%d\\n' \"$capricorn_status\""
         let result = try await runner.run("/usr/bin/osascript", arguments: [
             "-e", AdministratorCommandRunner.script(for: "/bin/sh", arguments: ["-c", wrapper])
@@ -176,19 +193,23 @@ struct USBRawSmartService: USBRawSmartRunning {
     let administratorRunner: CommandRunning
     let executableURL: URL?
     let targetResolver: @Sendable (DriveDevice) throws -> USBRawSmartTarget
+    let authorizeVolumes: @Sendable (DriveDevice) throws -> Void
 
     init(
         runner: CommandRunning = ShellCommandRunner(),
         administratorRunner: CommandRunning = AdministratorUSBRawCommandRunner(),
-        executableURL: URL? = Bundle.main.url(forResource: "smartctl-usbraw", withExtension: nil),
+        executableURL: URL? = Bundle.main.executableURL?
+            .deletingLastPathComponent().appendingPathComponent("smartctl-usbraw"),
         targetResolver: @escaping @Sendable (DriveDevice) throws -> USBRawSmartTarget = {
             try USBRawSmartTargetResolver().target(for: $0)
-        }
+        },
+        authorizeVolumes: @escaping @Sendable (DriveDevice) throws -> Void = Self.authorizeMountedVolumes
     ) {
         self.runner = runner
         self.administratorRunner = administratorRunner
         self.executableURL = executableURL
         self.targetResolver = targetResolver
+        self.authorizeVolumes = authorizeVolumes
     }
 
     func target(for drive: DriveDevice) throws -> USBRawSmartTarget { try targetResolver(drive) }
@@ -219,6 +240,9 @@ struct USBRawSmartService: USBRawSmartRunning {
         } else {
             type = bridge.rawValue
         }
+        // Request removable-volume access from the user's app before entering
+        // administrator authorization. A denial must leave the disk mounted.
+        try authorizeVolumes(drive)
         guard try self.target(for: drive) == target else {
             throw USBRawSmartError.unavailable("The USB device changed after confirmation. Refresh disks before trying SNT.")
         }
@@ -231,6 +255,14 @@ struct USBRawSmartService: USBRawSmartRunning {
             ])
         }
         return Self.parse(result, drive: drive, target: target, type: type)
+    }
+
+    static func authorizeMountedVolumes(for drive: DriveDevice) throws {
+        for path in Set(drive.displayableVolumes.compactMap(\.mountPoint)) {
+            // This filesystem operation lets TCC prompt in the GUI user's
+            // context. Discard names; no file contents are read or modified.
+            _ = try FileManager.default.contentsOfDirectory(atPath: path)
+        }
     }
 
     static func parse(_ result: CommandResult, drive: DriveDevice, target: USBRawSmartTarget, type: String) -> USBRawSmartResult {

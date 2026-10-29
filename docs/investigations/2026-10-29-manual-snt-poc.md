@@ -93,3 +93,54 @@ xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn \
 
 Pinned corresponding source, local patch and license information are recorded
 in `ThirdParty/SmartctlUSBRaw/README.md` and `THIRD_PARTY_NOTICES.md`.
+
+## Privileged TCC Follow-Up (2026-10-29)
+
+The user's first hardware attempt reached unmount/capture but failed creating
+`IOUSBHostInterface` with `0xe00002c9`. The system log identified the concrete
+denial as `kTCCServiceSystemPolicyRemovableVolumes`. The old root tool had
+audit user `-1`, a build-dependent ad-hoc signing identifier, and its own TCC
+identity instead of the application bundle.
+
+The revised `capricorn2` integration:
+
+- Embeds the tool in `Contents/MacOS`, signed on copy with the app's identity,
+  retaining the stable identifier `lex.Capricorn.smartctl-usbraw`.
+- Includes `NSRemovableVolumesUsageDescription` in the app and requests access
+  to the selected mounted directories in the user's process before elevation.
+  Directory names are discarded; file contents are not read.
+- Runs administrator commands through `launchctl asuser <requesting UID>`.
+  A tested `bsexec` alternative exited successfully but retained the system
+  audit identity/session, so it was rejected.
+- Requires root plus the expected audit UID in a non-default audit session.
+  The raw-device node must open read-only and is immediately closed, with no
+  reads. These checks run before every capture, before any unmount.
+- Provides `--capricorn-usb-preflight usbraw:ID` for that same check without
+  invoking unmount, USB capture, or SMART commands.
+
+Observed on the attached ASMedia disk at 23:16:47 CST:
+
+```text
+CAPRICORN_USBRAW_CONTEXT uid=0 euid=0 auid=501 asid=100024 audit_status=0
+CAPRICORN_USBRAW_ACCESS granted
+CAPRICORN_USBRAW_PREFLIGHT passed (no unmount or capture)
+PROBE_EXIT=0
+```
+
+The TCC log validated the helper signature, resolved its executable to
+`Capricorn.app`, and evaluated removable-volume access as
+`Sub:{lex.Capricorn}` with `Allowed (User Consent)`. `sandboxd` confirmed
+`kTCCServiceSystemPolicyRemovableVolumes granted by TCC for smartctl-usbraw`.
+An earlier `SystemPolicyAllFiles` policy denial in the same request fell
+through to this successful removable-volume authorization; it is not evidence
+that Full Disk Access is required for this device.
+
+The selected APFS volume remained mounted at `/Volumes/40G4T_APFS_F`.
+No hardware capture was run during this authorization follow-up. Passing the
+preflight proves the tested identity/TCC/raw-node-access path, not subsequent
+IOUSBHost interface creation, bridge commands, or mount restoration.
+
+Validation: universal tool build; all 3 upstream synthetic tests; all 15
+application SNT tests; nested app/tool signature validation. Three added tests
+cover the user-session command, invalid requesting UID, and denied volume
+access stopping before administrator invocation.

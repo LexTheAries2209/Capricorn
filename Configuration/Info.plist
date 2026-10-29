@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>Capricorn needs access to the selected external disk to check its health and restore its mounted volumes after a manual SNT read.</string>
     <key>CFBundleLocalizations</key>
     <array>
         <string>en</string>

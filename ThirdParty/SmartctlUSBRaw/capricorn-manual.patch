@@ -1,12 +1,81 @@
+diff --git a/lib/os_darwin_usb.h b/lib/os_darwin_usb.h
+index 506be2b..ced01f0 100644
+--- a/lib/os_darwin_usb.h
++++ b/lib/os_darwin_usb.h
+@@ -58,0 +59,4 @@ bool darwin_usb_scan_devices(std::vector<darwin_usb_device_info> & devices,
++// Check the root process's user audit session and raw-device access without
++// unmounting, capturing, issuing commands, or reading any device bytes.
++int capricorn_usb_authorization_probe(const char * selector);
++
 diff --git a/lib/os_darwin_usb.mm b/lib/os_darwin_usb.mm
-index e84929b..c1a04d1 100644
+index e84929b..8902900 100644
 --- a/lib/os_darwin_usb.mm
 +++ b/lib/os_darwin_usb.mm
-@@ -758,0 +759 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
+@@ -26,0 +27,2 @@
++#include <fcntl.h>
++#include <bsm/audit.h>
+@@ -758,0 +761 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
 +  fprintf(stderr, "CAPRICORN_USBRAW\trestoring\n");
-@@ -776,0 +778 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
+@@ -776,0 +780 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
 +  fprintf(stderr, "CAPRICORN_USBRAW\t%s\n", ok ? "restored" : "restore_failed");
-@@ -1982,0 +1985,7 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -1977,0 +1982,56 @@ static bool select_protocol(IOUSBHostInterface * interface, uint8_t number,
++static bool capricorn_authorize_device(const darwin_usb_device_info & info,
++  int & error_number, std::string & error_message)
++{
++  auditinfo_addr_t audit = {};
++  const char * expected_user = getenv("CAPRICORN_USBRAW_USER_UID");
++  char * end = nullptr;
++  errno = 0;
++  unsigned long uid = expected_user ? strtoul(expected_user, &end, 10) : 0;
++  int parse_error = errno;
++  int audit_status = getaudit_addr(&audit, sizeof(audit));
++  fprintf(stderr, "CAPRICORN_USBRAW_CONTEXT\tuid=%u euid=%u auid=%u asid=%u audit_status=%d\n",
++    getuid(), geteuid(), audit.ai_auid, audit.ai_asid, audit_status);
++  if (!expected_user || !*expected_user || !end || *end || parse_error
++      || uid == 0 || uid >= UINT32_MAX || geteuid() != 0
++      || audit_status != 0 || audit.ai_auid != uid
++      || audit.ai_asid == AU_DEFAUDITSID) {
++    error_number = EPERM;
++    error_message = "SNT authorization requires root in the requesting GUI user's audit session";
++    return false;
++  }
++  const char * name = strip_bsd_device_path(info.device_name.c_str());
++  if (!is_whole_disk_name(name)) {
++    error_number = ENODEV;
++    error_message = "SNT authorization could not resolve the physical disk";
++    return false;
++  }
++  std::string path = std::string("/dev/r") + name;
++  int fd = ::open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
++  if (fd < 0) {
++    error_number = errno;
++    error_message = std::string("SNT authorization preflight could not open ")
++      + path + ": " + strerror(errno)
++      + "; check Capricorn's Removable Volumes permission before retrying";
++    return false;
++  }
++  ::close(fd);
++  fprintf(stderr, "CAPRICORN_USBRAW_ACCESS\tgranted\n");
++  return true;
++}
++
++int capricorn_usb_authorization_probe(const char * selector)
++{
++  int error_number = 0;
++  std::string error_message;
++  darwin_usb_device_info info;
++  if (strncmp(selector, "usbraw:", 7)
++      || !darwin_usb_get_device_info(selector, info, error_number, error_message)
++      || !capricorn_authorize_device(info, error_number, error_message)) {
++    fprintf(stderr, "CAPRICORN_USBRAW_PREFLIGHT\tfailed: %s\n",
++      error_message.empty() ? "an explicit usbraw selector is required" : error_message.c_str());
++    return 2;
++  }
++  fprintf(stderr, "CAPRICORN_USBRAW_PREFLIGHT\tpassed (no unmount or capture)\n");
++  return 0;
++}
++
+@@ -1982,0 +2043,7 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +  // This separately bundled experimental tool must never capture implicitly.
 +  const char * manual = getenv("CAPRICORN_USBRAW_MANUAL");
 +  if (!manual || strcmp(manual, "1") || strncmp(selector, "usbraw:", 7)) {
@@ -14,11 +83,30 @@ index e84929b..c1a04d1 100644
 +    error_message = "Capricorn raw USB capture requires explicit manual authorization and a usbraw selector";
 +    return 0;
 +  }
-@@ -2034,0 +2044 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -2023,0 +2091,5 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
++    if (!capricorn_authorize_device(info, error_number, error_message)) {
++      IOObjectRelease(service);
++      return 0;
++    }
++
+@@ -2034,0 +2107 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +    fprintf(stderr, "CAPRICORN_USBRAW\tunmounting\n");
-@@ -2042,0 +2053 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -2042,0 +2116 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +    fprintf(stderr, "CAPRICORN_USBRAW\tcapturing\n");
-@@ -2175,0 +2187 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -2175,0 +2250 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +    fprintf(stderr, "CAPRICORN_USBRAW\treading\n");
-@@ -2186,0 +2199 @@ bool darwin_usb_close(darwin_usb_handle * handle, int & error_number,
+@@ -2186,0 +2262 @@ bool darwin_usb_close(darwin_usb_handle * handle, int & error_number,
 +  fprintf(stderr, "CAPRICORN_USBRAW\treleasing\n");
+diff --git a/src/smartctl.cpp b/src/smartctl.cpp
+index 63a2801..c8998c7 100644
+--- a/src/smartctl.cpp
++++ b/src/smartctl.cpp
+@@ -43,0 +44,3 @@
++#ifdef __APPLE__
++#include "../lib/os_darwin_usb.h"
++#endif
+@@ -1735,0 +1739,4 @@ int main(int argc, char **argv)
++#ifdef __APPLE__
++  if (argc == 3 && !strcmp(argv[1], "--capricorn-usb-preflight"))
++    return os_darwin::capricorn_usb_authorization_probe(argv[2]);
++#endif
