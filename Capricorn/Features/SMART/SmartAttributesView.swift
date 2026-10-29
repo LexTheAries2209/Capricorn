@@ -228,8 +228,8 @@ struct SmartAttributesView: View {
                     .width(72)
                 TableColumn(language.t("Status")) { smartAttributeStatusBadge($0).fixedSize() }
                     .width(82)
-                TableColumn(language.t("Source")) { Text($0.source) }
-                    .width(92)
+                TableColumn(language.t("Source")) { smartAttributeSourceCell($0) }
+                    .width(min: 110, ideal: 130, max: 300)
             }
         } else {
             Table(attributes) {
@@ -243,14 +243,23 @@ struct SmartAttributesView: View {
                     .width(min: 140, ideal: 180)
                 TableColumn(language.t("Status")) { smartAttributeStatusBadge($0).fixedSize() }
                     .width(82)
-                TableColumn(language.t("Source")) { Text($0.source) }
-                    .width(92)
+                TableColumn(language.t("Source")) { smartAttributeSourceCell($0) }
+                    .width(min: 110, ideal: 130, max: 300)
             }
         }
     }
 
     private var normalizedValueHelp: String {
         "Current, worst, and threshold are ATA normalized health values. NVMe and native macOS SMART usually do not provide them."
+    }
+
+    private func smartAttributeSourceCell(_ attribute: SmartAttribute) -> some View {
+        // Keep the full provider identity in data and exports; the table uses
+        // a compact transport label with the original name available on hover.
+        Text(attribute.source == USBRawSmartService.providerName ? "SNT (USB)" : attribute.source)
+            .lineLimit(1)
+            .help(attribute.source)
+            .accessibilityLabel(attribute.source)
     }
 
     @ViewBuilder
