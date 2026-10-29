@@ -275,6 +275,128 @@ final class USBRawSmartTests: XCTestCase {
     }
 
     @MainActor
+    func testManualReadSurvivesOrdinaryRefreshAfterClosingResult() async throws {
+        let service = USBRawSuspendedService()
+        let inventory = USBRawUpdatingRefresh()
+        let model = Self.model(service: service, refresh: inventory)
+        model.requestUSBRawSmart(for: Self.drive())
+        let task = Task { await model.beginUSBRawSmart() }
+        await service.waitUntilStarted()
+        await service.finish()
+        await task.value
+        let capturedAt = try XCTUnwrap(model.selectedSnapshot?.capturedAt)
+        model.closeUSBRawSmart()
+        await model.refresh()
+        XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 37)
+        XCTAssertEqual(model.selectedSnapshot?.selectedProvider, USBRawSmartService.providerName)
+        XCTAssertEqual(model.selectedSnapshot?.capturedAt, capturedAt)
+        XCTAssertFalse(model.offersUSBRawSmart(for: try XCTUnwrap(model.selectedDrive)))
+    }
+
+    @MainActor
+    func testManualReadFollowsStableIdentityButNotReusedBSDNameOrReconnect() async throws {
+        let service = USBRawSuspendedService()
+        let inventory = USBRawUpdatingRefresh()
+        let model = Self.model(service: service, refresh: inventory)
+        model.requestUSBRawSmart(for: Self.drive())
+        let task = Task { await model.beginUSBRawSmart() }
+        await service.waitUntilStarted()
+        await service.finish()
+        await task.value
+        model.closeUSBRawSmart()
+
+        var renamed = Self.drive()
+        renamed.bsdName = "disk101"
+        renamed.deviceNode = "/dev/disk101"
+        await inventory.setDrives([renamed])
+        await model.refresh()
+        XCTAssertEqual(model.snapshots["disk101"]?.temperatureCelsius, 37)
+        XCTAssertEqual(model.snapshots["disk101"]?.driveID, "disk101")
+        XCTAssertNil(model.snapshots["disk99"])
+
+        var replacement = renamed
+        replacement.serialNumber = "DIFFERENT-DRIVE"
+        await inventory.setDrives([replacement])
+        await model.refresh()
+        XCTAssertNil(model.snapshots["disk101"]?.temperatureCelsius)
+        XCTAssertNotEqual(model.snapshots["disk101"]?.selectedProvider, USBRawSmartService.providerName)
+
+        await inventory.setDrives([])
+        await model.refresh()
+        await inventory.setDrives([renamed])
+        await model.refresh()
+        XCTAssertNil(model.snapshots["disk101"]?.temperatureCelsius)
+    }
+
+    @MainActor
+    func testAmbiguousIdentityDoesNotDuplicateManualReading() async {
+        let inventory = USBRawUpdatingRefresh()
+        let model = Self.model(service: USBRawSuspendedService(), refresh: inventory)
+        model.snapshots[Self.drive().id] = Self.result(restored: true).snapshot
+        var duplicate = Self.drive()
+        duplicate.bsdName = "disk101"
+        duplicate.deviceNode = "/dev/disk101"
+        await inventory.setDrives([Self.drive(), duplicate])
+        await model.refresh()
+        XCTAssertTrue(model.snapshots.values.allSatisfy { $0.temperatureCelsius == nil })
+    }
+
+    func testVerifiedNewReadingSupersedesManualSnapshotButUnsupportedStatusDoesNot() throws {
+        let previous = try XCTUnwrap(Self.result(restored: true).snapshot)
+        var drive = Self.drive()
+        drive.smartStatusRaw = "Not Supported"
+        let unavailable = SmartSnapshot.unavailable(for: drive, reason: "USB SMART unsupported")
+        XCTAssertTrue(unavailable.hasSMARTPayload) // A status string alone is not a verified reading.
+        let retained = USBRawSmartService.retainingManualRead(in: unavailable, from: previous, for: drive)
+        XCTAssertEqual(retained.id, previous.id)
+        XCTAssertEqual(retained.capturedAt, previous.capturedAt)
+        var fresh = previous
+        fresh.id = UUID()
+        fresh.temperatureCelsius = 30
+        fresh.selectedProvider = "Native macOS"
+        fresh.providerStatuses = [ProviderStatus(name: "Native macOS", state: .available, message: "Read")]
+        XCTAssertEqual(USBRawSmartService.retainingManualRead(
+            in: fresh, from: previous, for: drive).id, fresh.id)
+    }
+
+    @MainActor
+    func testCaptureEventsCannotInterruptPostReadInventoryReconciliation() async throws {
+        let service = USBRawSuspendedService()
+        let inventory = USBRawReconciliationRefresh()
+        let monitor = ManualDriveSystemEventMonitor()
+        let model = AppModel(refreshService: inventory, driveSystemEventMonitor: monitor,
+                             driveSystemEventDebounceNanoseconds: 1_000_000, usbRawSmartService: service)
+        let drive = Self.drive()
+        model.drives = [drive]
+        model.snapshots = [drive.id: .unavailable(for: drive, reason: "Not supported")]
+        model.startDriveSystemEventMonitoring()
+        defer { model.stopDriveSystemEventMonitoring() }
+        let subscribed = await AsyncTestWaiter.wait { monitor.hasSubscriber }
+        XCTAssertTrue(subscribed)
+        model.requestUSBRawSmart(for: drive)
+        let task = Task { await model.beginUSBRawSmart() }
+        await service.waitUntilStarted()
+        monitor.send(.volumeUnmounted)
+        monitor.send(.deviceTerminated)
+        await service.finish()
+        let reconciling = await AsyncTestWaiter.wait { model.isRefreshing }
+        XCTAssertTrue(reconciling)
+        XCTAssertTrue(model.isUSBRawSmartActive)
+        model.closeUSBRawSmart()
+        XCTAssertNotNil(model.usbRawSmartSession)
+        monitor.send(.deviceAppeared)
+        monitor.send(.volumeMounted)
+        await model.refresh()
+        try await Task.sleep(for: .milliseconds(30))
+        let count = await inventory.discoverCount
+        XCTAssertEqual(count, 1)
+        await inventory.finish()
+        await task.value
+        XCTAssertEqual(model.usbRawSmartSession?.state, .completed)
+        XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 37)
+    }
+
+    @MainActor
     static func model(service: USBRawSmartRunning, refresh: DriveRefreshing = USBRawTestRefresh()) -> AppModel {
         let model = AppModel(refreshService: refresh, usbRawSmartService: service)
         let drive = drive()
@@ -341,6 +463,53 @@ private actor USBRawTestRefresh: DriveRefreshing {
         var drive = USBRawSmartTests.drive()
         drive.isSystemDisk = true // Avoid unrelated automatic capability probes.
         return DriveRefreshSnapshot(drives: [drive], snapshots: [:])
+    }
+    func snapshotUpdates(for drives: [DriveDevice]) async -> AsyncStream<DriveSnapshotUpdate> {
+        AsyncStream { $0.finish() }
+    }
+}
+
+private actor USBRawUpdatingRefresh: DriveRefreshing {
+    var liveDrives = [USBRawSmartTests.drive()]
+    func setDrives(_ drives: [DriveDevice]) { liveDrives = drives }
+
+    func discover() async throws -> DriveRefreshSnapshot {
+        let drives = liveDrives.map { original in
+            var drive = original
+            drive.isSystemDisk = true // Avoid unrelated capability probes in this fixture.
+            return drive
+        }
+        return DriveRefreshSnapshot(drives: drives, snapshots: [:])
+    }
+
+    func snapshotUpdates(for drives: [DriveDevice]) async -> AsyncStream<DriveSnapshotUpdate> {
+        AsyncStream { continuation in
+            for drive in drives {
+                for phase in [DriveSnapshotUpdatePhase.native, .complete] {
+                    continuation.yield(DriveSnapshotUpdate(
+                        driveID: drive.id,
+                        snapshot: .unavailable(for: drive, reason: "USB SMART unsupported"),
+                        phase: phase))
+                }
+            }
+            continuation.finish()
+        }
+    }
+}
+
+private actor USBRawReconciliationRefresh: DriveRefreshing {
+    var discoverCount = 0
+    var continuation: CheckedContinuation<Void, Never>?
+    func discover() async throws -> DriveRefreshSnapshot {
+        discoverCount += 1
+        await withCheckedContinuation { continuation = $0 }
+        var drive = USBRawSmartTests.drive()
+        drive.isSystemDisk = true
+        return DriveRefreshSnapshot(drives: [drive], snapshots: [:])
+    }
+    func finish() {
+        continuation?.resume()
+        continuation = nil
     }
     func snapshotUpdates(for drives: [DriveDevice]) async -> AsyncStream<DriveSnapshotUpdate> {
         AsyncStream { $0.finish() }

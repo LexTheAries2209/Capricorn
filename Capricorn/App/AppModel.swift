@@ -646,6 +646,9 @@ final class AppModel {
     }
 
     private func scheduleRefresh(for event: DriveSystemEvent) {
+        // Capture generates its own detach/mount events. The SNT workflow
+        // reconciles the inventory once, after its transport has released USB.
+        guard !isUSBRawSmartActive else { return }
         CapricornLog.inventory.info("Scheduling refresh after system event: \(event.rawValue, privacy: .public)")
         driveSystemEventDebounceTask?.cancel()
         let delay = driveSystemEventDebounceNanoseconds
@@ -661,8 +664,8 @@ final class AppModel {
         }
     }
 
-    func refresh(allowDuringFirstAid: Bool = false) async {
-        guard !isInstallingAppUpdate, !isUSBRawSmartActive else { return }
+    func refresh(allowDuringFirstAid: Bool = false, allowDuringUSBRawSmart: Bool = false) async {
+        guard !isInstallingAppUpdate, allowDuringUSBRawSmart || !isUSBRawSmartActive else { return }
         guard allowDuringFirstAid || !diskOperations.isFirstAidBlocking else { return }
         refreshTask?.cancel()
         let refreshID = UUID()
@@ -720,8 +723,15 @@ final class AppModel {
             if drive.isVirtual, let snapshot = previousSnapshots[drive.id] {
                 return (drive.id, snapshot)
             }
-            let previousDrive = previousDrives.first { DriveStableIdentityMatcher.matches($0, drive) }
+            let previousMatches = previousDrives.filter { DriveStableIdentityMatcher.matches($0, drive) }
+            let previousDrive = previousMatches.first
             if let previousDrive, let previousSnapshot = previousSnapshots[previousDrive.id] {
+                if previousSnapshot.selectedProvider == USBRawSmartService.providerName,
+                   (previousMatches.count != 1 || loadedDrives.filter({
+                       DriveStableIdentityMatcher.matches(previousDrive, $0)
+                   }).count != 1) {
+                    return (drive.id, discovery.snapshots[drive.id] ?? SmartSnapshot.refreshingNative(for: drive))
+                }
                 return (drive.id, previousSnapshot.markingNativeSMARTRefreshing(for: drive))
             }
             return (drive.id, discovery.snapshots[drive.id] ?? SmartSnapshot.refreshingNative(for: drive))
@@ -787,6 +797,8 @@ final class AppModel {
         if let previous {
             refreshed = refreshed.retainingNativeSMARTDataIfNeeded(from: previous, for: drive)
             refreshed = refreshed.retainingSMARTData(from: previous, for: drive)
+            refreshed = USBRawSmartService.retainingManualRead(
+                in: refreshed, from: previous, for: drive)
         }
         snapshots[update.driveID] = refreshed
         if update.phase == .complete {
@@ -1354,6 +1366,8 @@ final class AppModel {
               let lease = acquireDiskOperationLock(for: current, operation: .usbRawSmart) else { return }
         usbRawSmartSession?.state = .running
         usbRawSmartSession?.error = nil
+        driveSystemEventDebounceTask?.cancel()
+        driveSystemEventDebounceTask = nil
         activeDiskCommandCount += 1
         defer {
             activeDiskCommandCount -= 1
@@ -1364,10 +1378,9 @@ final class AppModel {
             let result = try await usbRawSmartService.read(
                 drive: session.drive, target: session.target, bridge: session.bridge)
             usbRawSmartSession?.result = result
-            usbRawSmartSession?.state = .completed
             // BSD names may change or be reused after capture. Publish only
             // against a unique stable identity after re-enumerating the disk.
-            await refresh()
+            await refresh(allowDuringUSBRawSmart: true)
             let matches = drives.filter { DriveStableIdentityMatcher.matches(session.drive, $0) }
             if matches.count == 1, let restoredDrive = matches.first,
                var snapshot = result.snapshot, snapshot.hasSMARTPayload {
@@ -1376,11 +1389,12 @@ final class AppModel {
                 selectedDriveID = restoredDrive.id
                 selectedFeatureTab = .smart
             }
+            usbRawSmartSession?.state = .completed
             refreshMessage = result.message
         } catch {
             usbRawSmartSession?.error = error.localizedDescription
+            await refresh(allowDuringUSBRawSmart: true)
             usbRawSmartSession?.state = .completed
-            await refresh()
             refreshMessage = error.localizedDescription
         }
     }

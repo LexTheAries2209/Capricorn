@@ -265,6 +265,19 @@ struct USBRawSmartService: USBRawSmartRunning {
         }
     }
 
+    /// Ordinary refresh cannot repeat a manual capture. Keep that reading's
+    /// original timestamp until a verified provider supplies a new reading.
+    /// AppModel matches stable disk identity before calling this method.
+    static func retainingManualRead(
+        in refreshed: SmartSnapshot, from previous: SmartSnapshot, for drive: DriveDevice
+    ) -> SmartSnapshot {
+        guard previous.selectedProvider == providerName, previous.hasSMARTPayload,
+              refreshed.verifiedSource == nil else { return refreshed }
+        var retained = previous
+        retained.driveID = drive.id
+        return retained
+    }
+
     static func parse(_ result: CommandResult, drive: DriveDevice, target: USBRawSmartTarget, type: String) -> USBRawSmartResult {
         let transcript = [result.stdoutString, result.stderrString].filter { !$0.isEmpty }.joined(separator: "\n")
         let lines = transcript.components(separatedBy: .newlines)
