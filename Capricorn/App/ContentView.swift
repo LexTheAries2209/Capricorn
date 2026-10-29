@@ -301,6 +301,12 @@ struct ContentView: View {
         .sheet(isPresented: firstAidPresentationBinding) {
             DiskFirstAidSheet(viewModel: viewModel, language: language)
         }
+        .sheet(isPresented: Binding(
+            get: { viewModel.usbRawSmartSession != nil },
+            set: { if !$0 { viewModel.closeUSBRawSmart() } }
+        )) {
+            USBRawSmartSheet(viewModel: viewModel, language: language)
+        }
         .sheet(isPresented: $showsSmartSelfTestSheet, onDismiss: {
             // Keep the sheet content alive until its dismissal animation finishes.
             viewModel.hideSmartSelfTestMonitor()
@@ -677,6 +683,16 @@ struct ContentView: View {
             Divider()
         }
 
+        if viewModel.offersUSBRawSmart(for: drive) {
+            Button {
+                viewModel.requestUSBRawSmart(for: drive)
+            } label: {
+                Label(language.t("Try SNT…"), systemImage: "externaldrive.badge.questionmark")
+            }
+            .disabled(!viewModel.canBeginUSBRawSmart)
+            Divider()
+        }
+
         ForEach(DiskSidebarActionPolicy.actionsOutsideCheckAndRepair(for: drive)) { action in
             sidebarActionButton(action, for: drive)
         }
@@ -766,7 +782,7 @@ struct ContentView: View {
             for: drive,
             targetVolume: viewModel.representativeVolume(for: drive)
         ) else { return true }
-        if viewModel.isFirstAidBlocking { return true }
+        if viewModel.isFirstAidBlocking || viewModel.isUSBRawSmartActive { return true }
         if action == .firstAid {
             return viewModel.isRefreshing || viewModel.isDiskChecking || viewModel.isBenchmarking || viewModel.isLiveActivityWorkloadRunning
         }

@@ -6,6 +6,7 @@ enum DiskOperationKind: String, Codable, Sendable {
     case benchmark
     case activityWorkload
     case smartSelfTest
+    case usbRawSmart
     case quickCheck
     case detailedCheck
     case firstAid
@@ -21,6 +22,7 @@ enum DiskOperationKind: String, Codable, Sendable {
         case .benchmark: "Benchmark"
         case .activityWorkload: "Large File Workload"
         case .smartSelfTest: "SMART Self-Tests"
+        case .usbRawSmart: "Try SNT"
         case .quickCheck: "Quick Disk Check"
         case .detailedCheck: "System Check"
         case .firstAid: "First Aid"

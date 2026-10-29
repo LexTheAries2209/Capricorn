@@ -54,6 +54,7 @@ struct CapricornApp: App {
                 .frame(minWidth: 1050, minHeight: 680)
                 .task {
                     appDelegate.updater = updateChecker
+                    appDelegate.appModel = viewModel
                 }
                 .onChange(of: viewModel.appUpdateConflicts) {
                     updateChecker.conflictsDidChange()

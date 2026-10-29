@@ -4,6 +4,7 @@ import AppKit
 @MainActor
 final class CapricornAppDelegate: NSObject, NSApplicationDelegate {
     weak var updater: AppUpdater?
+    weak var appModel: AppModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
@@ -16,6 +17,8 @@ final class CapricornAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        updater?.applicationMayTerminate() == false ? .terminateCancel : .terminateNow
+        // The raw process must finish releasing the device and restoring mounts.
+        if appModel?.isUSBRawSmartActive == true { return .terminateCancel }
+        return updater?.applicationMayTerminate() == false ? .terminateCancel : .terminateNow
     }
 }

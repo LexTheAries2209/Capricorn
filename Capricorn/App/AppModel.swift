@@ -84,6 +84,8 @@ final class AppModel {
     var smartErrorLogMessage: String?
     var completedSmartSelfTest: SmartSelfTestCompletion?
     var diskOperationLockNotice: DiskOperationLockNotice?
+    var usbRawSmartSession: USBRawSmartSession?
+    var isUSBRawSmartActive: Bool { usbRawSmartSession?.state == .running }
     private(set) var isInstallingAppUpdate = false
     private var activeDiskCommandCount = 0
 
@@ -205,7 +207,7 @@ final class AppModel {
     }
 
     var isDriveSelectionLocked: Bool {
-        isBenchmarking || isLiveActivityMonitoring || isLiveActivityWorkloadRunning
+        isBenchmarking || isLiveActivityMonitoring || isLiveActivityWorkloadRunning || isUSBRawSmartActive
     }
 
     func selectDriveFromSidebar(_ driveID: String?) {
@@ -329,6 +331,7 @@ final class AppModel {
     private let smartSnapshotService: SmartSnapshotService
     private let smartSelfTestService: SmartSelfTestService
     private let smartErrorLogService: SmartErrorLogService
+    private let usbRawSmartService: USBRawSmartRunning
     private let smartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching
     private let benchmarkRunner: BenchmarkRunning
     private let diskActivityProvider: DiskActivityProviding
@@ -386,6 +389,7 @@ final class AppModel {
         notificationCoordinator: NotificationCoordinator = NotificationCoordinator(),
         smartSelfTestService: SmartSelfTestService = SmartSelfTestService(),
         smartErrorLogService: SmartErrorLogService = SmartErrorLogService(),
+        usbRawSmartService: USBRawSmartRunning = USBRawSmartService(),
         smartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching = SmartDiagnosticsCapabilityCache(),
         virtualT7DemoMode: Bool = false,
         virtualT7DemoStepNanoseconds: UInt64 = 1_000_000_000
@@ -393,6 +397,7 @@ final class AppModel {
         self.smartSnapshotService = smartService
         self.smartSelfTestService = smartSelfTestService
         self.smartErrorLogService = smartErrorLogService
+        self.usbRawSmartService = usbRawSmartService
         self.smartDiagnosticsCapabilityCache = smartDiagnosticsCapabilityCache
         self.refreshService = refreshService ?? DriveRefreshService(
             inventoryProvider: inventoryProvider,
@@ -657,7 +662,7 @@ final class AppModel {
     }
 
     func refresh(allowDuringFirstAid: Bool = false) async {
-        guard !isInstallingAppUpdate else { return }
+        guard !isInstallingAppUpdate, !isUSBRawSmartActive else { return }
         guard allowDuringFirstAid || !diskOperations.isFirstAidBlocking else { return }
         refreshTask?.cancel()
         let refreshID = UUID()
@@ -795,7 +800,7 @@ final class AppModel {
         volumePath: String? = nil,
         resultUpdatePolicy: BenchmarkResultUpdatePolicy = .replaceProfile
     ) -> Bool {
-        guard !isInstallingAppUpdate, selectedDrive?.isVirtual != true,
+        guard !isInstallingAppUpdate, !isUSBRawSmartActive, selectedDrive?.isVirtual != true,
               benchmarkTask == nil, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return false }
         benchmarkProgress = nil
         benchmarkError = nil
@@ -818,7 +823,7 @@ final class AppModel {
         volumePath: String? = nil,
         resultUpdatePolicy: BenchmarkResultUpdatePolicy = .replaceProfile
     ) async {
-        guard !isInstallingAppUpdate, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return }
+        guard !isInstallingAppUpdate, !isUSBRawSmartActive, benchmarkSession.state == .idle, !diskOperations.isFirstAidBlocking else { return }
         guard let drive = selectedDrive else {
             benchmarkError = "Select a drive before running a benchmark."
             return
@@ -982,7 +987,7 @@ final class AppModel {
     }
 
     func inspectOpenFiles(on drive: DriveDevice) async {
-        guard !isInstallingAppUpdate else { return }
+        guard !isInstallingAppUpdate, !isUSBRawSmartActive else { return }
         guard !drive.isVirtual else { return }
         activeDiskCommandCount += 1
         defer { activeDiskCommandCount -= 1 }
@@ -1041,7 +1046,7 @@ final class AppModel {
     }
 
     func prepareFirstAid(on drive: DriveDevice) async {
-        guard !isInstallingAppUpdate else { return }
+        guard !isInstallingAppUpdate, !isUSBRawSmartActive else { return }
         guard !drive.isVirtual else { return }
         guard !diskOperations.isFirstAidBlocking,
               !isDiskChecking,
@@ -1304,7 +1309,7 @@ final class AppModel {
         for drive: DriveDevice,
         operation: DiskOperationKind
     ) -> DiskOperationLease? {
-        guard !isInstallingAppUpdate else { return nil }
+        guard !isInstallingAppUpdate, !isUSBRawSmartActive else { return nil }
         do {
             return try diskOperationLockCoordinator.acquire(for: drive, operation: operation)
         } catch let DiskOperationLockError.conflict(conflict) {
@@ -1337,8 +1342,51 @@ final class AppModel {
         }
     }
 
+    func usbRawSmartTarget(for drive: DriveDevice) throws -> USBRawSmartTarget {
+        try usbRawSmartService.target(for: drive)
+    }
+
+    func beginUSBRawSmart() async {
+        guard let session = usbRawSmartSession, session.state == .confirmation,
+              canBeginUSBRawSmart,
+              let current = drives.first(where: { $0.id == session.drive.id }),
+              offersUSBRawSmart(for: current),
+              let lease = acquireDiskOperationLock(for: current, operation: .usbRawSmart) else { return }
+        usbRawSmartSession?.state = .running
+        usbRawSmartSession?.error = nil
+        activeDiskCommandCount += 1
+        defer {
+            activeDiskCommandCount -= 1
+            lease.release()
+        }
+        refreshMessage = "Running SNT..."
+        do {
+            let result = try await usbRawSmartService.read(
+                drive: session.drive, target: session.target, bridge: session.bridge)
+            usbRawSmartSession?.result = result
+            usbRawSmartSession?.state = .completed
+            // BSD names may change or be reused after capture. Publish only
+            // against a unique stable identity after re-enumerating the disk.
+            await refresh()
+            let matches = drives.filter { DriveStableIdentityMatcher.matches(session.drive, $0) }
+            if matches.count == 1, let restoredDrive = matches.first,
+               var snapshot = result.snapshot, snapshot.hasSMARTPayload {
+                snapshot.driveID = restoredDrive.id
+                snapshots[restoredDrive.id] = snapshot
+                selectedDriveID = restoredDrive.id
+                selectedFeatureTab = .smart
+            }
+            refreshMessage = result.message
+        } catch {
+            usbRawSmartSession?.error = error.localizedDescription
+            usbRawSmartSession?.state = .completed
+            await refresh()
+            refreshMessage = error.localizedDescription
+        }
+    }
+
     func startLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {
-        guard !isInstallingAppUpdate else { return }
+        guard !isInstallingAppUpdate, !isUSBRawSmartActive else { return }
         guard !drive.isVirtual else { return }
         guard liveActivitySession.workloadState == .idle, !diskOperations.isFirstAidBlocking else { return }
         stopLiveActivityMonitoring()
@@ -1614,7 +1662,7 @@ final class AppModel {
     }
 
     func readSmartErrorLog(for drive: DriveDevice) {
-        guard !isInstallingAppUpdate else { return }
+        guard !isInstallingAppUpdate, !isUSBRawSmartActive else { return }
         guard !drive.isVirtual || virtualT7DemoMode else { return }
         guard !drive.isSystemDisk else { return }
         guard smartErrorLogReadTasks[drive.id] == nil else { return }
@@ -1721,7 +1769,7 @@ final class AppModel {
     }
 
     private func probeSmartSelfTestCapability(for drive: DriveDevice, force: Bool) {
-        guard !isInstallingAppUpdate else { return }
+        guard !isInstallingAppUpdate, !isUSBRawSmartActive else { return }
         guard !drive.isVirtual || virtualT7DemoMode else { return }
         guard !drive.isSystemDisk else { return }
         if virtualT7DemoMode {
@@ -1855,7 +1903,7 @@ final class AppModel {
     }
 
     func requestSmartSelfTest(kind: SmartSelfTestKind, drive: DriveDevice) {
-        guard !isInstallingAppUpdate else { return }
+        guard !isInstallingAppUpdate, !isUSBRawSmartActive else { return }
         guard !isSmartSelfTestActive else { return }
         guard kind == .short || kind == .long else { return }
         guard !drive.isSystemDisk else {

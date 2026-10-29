@@ -263,7 +263,7 @@ final class AdministratorCommandRunner: CommandRunning, @unchecked Sendable {
         return "do shell script \(appleScriptQuote(command)) with administrator privileges"
     }
 
-    private static func shellQuote(_ value: String) -> String {
+    static func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
