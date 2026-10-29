@@ -38,3 +38,15 @@ by `scripts/verify-smartctl-bundle.sh`.
 When distributing a Capricorn binary that contains these resources, distribute the
 corresponding source archive, build script, license, and this notice with that binary
 or provide the complete corresponding source as required by GPL-2.0-or-later.
+
+## Experimental Darwin raw USB transport
+
+The separate `smartctl-usbraw` executable is based on smartmontools PR #639,
+commit `c68a1b9af76ba9ca3a2e987def6384377f73a4b8` (GPL-2.0-or-later).
+It is used only by the explicitly confirmed manual SNT workflow.
+The upstream raw USB implementation is copyright 2026 PeratX.
+
+Complete corresponding source, local manual-authorization/lifecycle patch and
+build instructions are retained under `ThirdParty/SmartctlUSBRaw/` and
+`scripts/build-smartctl-usbraw.sh`. Preserve and distribute those materials
+with this experimental binary, in accordance with GPL-2.0-or-later.

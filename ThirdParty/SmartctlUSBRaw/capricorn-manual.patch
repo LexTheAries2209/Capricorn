@@ -1,0 +1,24 @@
+diff --git a/lib/os_darwin_usb.mm b/lib/os_darwin_usb.mm
+index e84929b..c1a04d1 100644
+--- a/lib/os_darwin_usb.mm
++++ b/lib/os_darwin_usb.mm
+@@ -758,0 +759 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
++  fprintf(stderr, "CAPRICORN_USBRAW\trestoring\n");
+@@ -776,0 +778 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
++  fprintf(stderr, "CAPRICORN_USBRAW\t%s\n", ok ? "restored" : "restore_failed");
+@@ -1982,0 +1985,7 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
++  // This separately bundled experimental tool must never capture implicitly.
++  const char * manual = getenv("CAPRICORN_USBRAW_MANUAL");
++  if (!manual || strcmp(manual, "1") || strncmp(selector, "usbraw:", 7)) {
++    error_number = EPERM;
++    error_message = "Capricorn raw USB capture requires explicit manual authorization and a usbraw selector";
++    return 0;
++  }
+@@ -2034,0 +2044 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
++    fprintf(stderr, "CAPRICORN_USBRAW\tunmounting\n");
+@@ -2042,0 +2053 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
++    fprintf(stderr, "CAPRICORN_USBRAW\tcapturing\n");
+@@ -2175,0 +2187 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
++    fprintf(stderr, "CAPRICORN_USBRAW\treading\n");
+@@ -2186,0 +2199 @@ bool darwin_usb_close(darwin_usb_handle * handle, int & error_number,
++  fprintf(stderr, "CAPRICORN_USBRAW\treleasing\n");
