@@ -2,13 +2,13 @@
 
 Formerly DiskSpeedTest.
 
-Capricorn is a local macOS utility for disk inspection, SMART health checks, storage benchmarking, and live disk activity monitoring.
+Capricorn is a local macOS utility for disk inspection, SMART health checks, storage benchmarking, live disk activity monitoring, and storage connection topology.
 
-Capricorn 是一个本地 macOS 工具，用于磁盘检查、SMART 健康状态查看、存储测速和实时磁盘活动监控。
+Capricorn 是一个本地 macOS 工具，用于磁盘检查、SMART 健康状态查看、存储测速、实时磁盘活动监控和硬盘连接拓扑查看。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.11.1`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.12.0`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v2.11.1.md](docs/releases/v2.11.1.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v2.12.0.md](docs/releases/v2.12.0.md)
 
 Complete release log / 完整更新记录：[CHANGELOG.md](CHANGELOG.md)
 
@@ -24,7 +24,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 
 ### 下载和安装
 
-前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.11.1-macOS.zip`，解压后将 `Capricorn.app` 放到 `Applications` 或其他本地工具目录。V2.10.1 及更早版本需手动安装一次，之后可使用应用内更新。
+前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.12.0-macOS.zip`，解压后将 `Capricorn.app` 放到 `Applications` 或其他本地工具目录。V2.10.1 及更早版本需手动安装一次，之后可使用应用内更新。
 
 首次打开时，如果 macOS Gatekeeper 显示互联网下载提示，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
@@ -32,6 +32,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 
 - 识别本机物理磁盘、外接磁盘、网络卷和存储卡，并显示关联卷宗。
 - 显示磁盘容量、文件系统、设备名称、序列号和连接信息。
+- 在共享拓扑图中查看硬盘、集线器与控制器的连接路径、链路速率和本地芯片名称，支持节点拖动与缩放。
 - 查看 SMART 健康状态、温度、寿命、通电时间、介质错误和读写数据。
 - 支持查看 SMART 自检状态和历史记录。
 - 对指定文件夹执行顺序、随机、读取、写入和混合测速。
@@ -64,7 +65,7 @@ Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，�
 
 ### 构建和测试
 
-自 V2.10.2 起采用“完整版本号 + 独立四位构建号”，本版为版本 `2.11.1`、Build `0047`。构建号根据发布构建记录全局递增，不再拼成版本号的第三段。详见[版本规则](docs/versioning.md)。
+自 V2.10.2 起采用“完整版本号 + 独立四位构建号”，本版为版本 `2.12.0`、Build `0048`。构建号根据发布构建记录全局递增，不再拼成版本号的第三段。详见[版本规则](docs/versioning.md)。
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build
@@ -84,7 +85,7 @@ Capricorn is for macOS users who need to inspect drive status, review external d
 
 ### Download And Install
 
-Download `Capricorn-v2.11.1-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn.app` to `Applications` or another local tools folder. V2.10.1 and earlier require one manual installation before in-app updates are available.
+Download `Capricorn-v2.12.0-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn.app` to `Applications` or another local tools folder. V2.10.1 and earlier require one manual installation before in-app updates are available.
 
 On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
@@ -92,6 +93,7 @@ On first launch, if macOS Gatekeeper shows an internet-download warning, right-c
 
 - Identifies local physical disks, external drives, network volumes, and memory cards, with their associated volumes.
 - Shows capacity, filesystem, device name, serial number, and connection information.
+- Shows shared storage paths, hubs, controllers, link rates, and local chip names in a topology diagram with draggable nodes and zoom.
 - Displays SMART health, temperature, life remaining, power-on time, media errors, and read/write data.
 - Supports SMART self-test status and history.
 - Benchmarks a selected folder with sequential, random, read, write, and mixed tests.
@@ -124,7 +126,7 @@ Network volumes can be benchmarked as mounted folders, but they do not provide a
 
 ### Build And Test
 
-Starting with V2.10.2, the complete version and four-digit build are separate: this release is Version `2.11.1`, Build `0047`. Build increases globally with release-build allocations and is no longer the third version component. See the [version rules](docs/versioning.md).
+Starting with V2.10.2, the complete version and four-digit build are separate: this release is Version `2.12.0`, Build `0048`. Build increases globally with release-build allocations and is no longer the third version component. See the [version rules](docs/versioning.md).
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build

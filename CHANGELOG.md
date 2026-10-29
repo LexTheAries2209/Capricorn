@@ -8,6 +8,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V2.12.0 - 2026-10-29
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.12.0) | [Release Notes / 发布说明](docs/releases/v2.12.0.md)
+
+### 中文
+
+- 新增共享硬盘连接拓扑，展示 USB、雷雳与 PCIe 通路、链路速率及离线芯片名称；点击硬盘或机身可同步切换详情。
+- 支持拖动节点、触控板缩放和平移，以及 M 打开、- / = 缩放和 Z 重新整理。
+- 增加 Mac 机型与端口视图，支持桌面机型的前后接口选择。
+
+### English
+
+- Adds shared storage topology with USB, Thunderbolt, and PCIe paths, link rates, and offline chip names. Select a disk or the computer to update its details.
+- Supports draggable nodes, trackpad zoom and pan, M to open, - / = to zoom, and Z to rearrange.
+- Adds Mac model and port views, with front and rear socket selection for desktop models.
+
 ## V2.11.1 - 2026-10-19
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.11.1) | [Release Notes / 发布说明](docs/releases/v2.11.1.md)
