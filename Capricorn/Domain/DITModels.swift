@@ -191,6 +191,7 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
         var deviceIdentifier: String
         var name: String
         var mountPoint: String?
+        /// Capacity of this volume or partition, independently of its parent media.
         var sizeBytes: Int64
         var isWritable: Bool
         var isSystem: Bool
@@ -218,6 +219,7 @@ struct DriveDevice: Identifiable, Codable, Hashable, Sendable {
     var displayName: String
     var mediaName: String
     var protocolName: String
+    /// Whole physical media capacity; filesystem capacity belongs to `volumes`.
     var sizeBytes: Int64
     var blockSize: Int
     var isInternal: Bool

@@ -983,6 +983,43 @@ final class CapricornTests: XCTestCase {
         XCTAssertFalse(drive.displayableVolumes[0].isWritable)
     }
 
+    func testDiskutilParserSeparatesUDFMediaCapacityFromVolumeCapacity() throws {
+        let info: [String: Any] = [
+            "DeviceIdentifier": "disk13", "DeviceNode": "/dev/disk13",
+            "WholeDisk": true, "BusProtocol": "USB",
+            "MediaName": "COMPACT DRIVE", "FilesystemType": "udf",
+            "MountPoint": "/Volumes/B_0022_1DOZ", "VolumeName": "B_0022_1DOZ",
+            "IOKitSize": Int64(960_197_124_096), "Size": Int64(960_197_124_096),
+            "TotalSize": Int64(960_191_528_960), "VolumeSize": Int64(960_191_528_960),
+            "Writable": false, "WritableMedia": true
+        ]
+        let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        let drive = try XCTUnwrap(DiskutilPlistParser.parseDevice(infoData: data, volumes: []))
+        XCTAssertEqual(drive.sizeBytes, 960_197_124_096)
+        XCTAssertEqual(drive.displayableVolumes.first?.sizeBytes, 960_191_528_960)
+        XCTAssertEqual(drive.displayableVolumes.first?.mountPoint, "/Volumes/B_0022_1DOZ")
+        XCTAssertFalse(try XCTUnwrap(drive.displayableVolumes.first).isWritable)
+        XCTAssertTrue(drive.isWritable)
+    }
+
+    func testDiskutilPhysicalCapacityUsesPositiveMediaFieldsBeforeLegacyTotalSize() throws {
+        let cases: [(fields: [String: Int64], expected: Int64)] = [
+            (["IOKitSize": 1000, "Size": 900, "TotalSize": 800], 1000),
+            (["Size": 900, "TotalSize": 800], 900),
+            (["IOKitSize": 0, "Size": 900, "TotalSize": 800], 900),
+            (["IOKitSize": -1, "Size": 0, "TotalSize": 800], 800),
+            (["TotalSize": 800], 800),
+            (["IOKitSize": 0, "Size": -1, "TotalSize": 0], 0)
+        ]
+        for entry in cases {
+            var info: [String: Any] = ["DeviceIdentifier": "disk13", "WholeDisk": true]
+            for (key, value) in entry.fields { info[key] = value }
+            let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+            let drive = try XCTUnwrap(DiskutilPlistParser.parseDevice(infoData: data, volumes: []))
+            XCTAssertEqual(drive.sizeBytes, entry.expected, "\(entry.fields)")
+        }
+    }
+
     func testDiskutilParserDoesNotTreatMountedPartitionTypeAsFilesystem() throws {
         let list = try DiskutilPlistParser.parseList(Self.sdCardPartitionListFixture.data(using: .utf8)!)
         let volume = try XCTUnwrap(list.volumesByPhysicalDisk["disk14"]?.first)

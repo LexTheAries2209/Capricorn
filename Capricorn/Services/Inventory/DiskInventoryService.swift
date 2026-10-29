@@ -295,13 +295,18 @@ enum DiskutilPlistParser {
             content: content
         )
         let solidState = info.bool("SolidState")
+        // On whole-disk UDF media TotalSize can describe the filesystem,
+        // while IOKitSize/Size describe the physical IOMedia used by SNT.
+        let mediaSize = ["IOKitSize", "Size", "TotalSize"]
+            .compactMap { info.int64($0) }
+            .first { $0 > 0 } ?? 0
         return DriveDevice(
             bsdName: bsdName,
             deviceNode: info.string("DeviceNode") ?? "/dev/\(bsdName)",
             displayName: displayName,
             mediaName: mediaName ?? displayName,
             protocolName: protocolName,
-            sizeBytes: info.int64("TotalSize") ?? info.int64("Size") ?? info.int64("IOKitSize") ?? 0,
+            sizeBytes: mediaSize,
             blockSize: info.int("DeviceBlockSize") ?? 512,
             isInternal: info.bool("Internal") ?? false,
             isRemovable: info.bool("RemovableMediaOrExternalDevice") ?? info.bool("Removable") ?? false,
