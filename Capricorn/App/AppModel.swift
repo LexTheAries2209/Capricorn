@@ -1386,10 +1386,10 @@ final class AppModel {
             usbRawSmartSession?.result = result
             // BSD names may change or be reused after capture. Publish only
             // against a unique stable identity after re-enumerating the disk.
-            await refresh(allowDuringUSBRawSmart: true)
-            let matches = drives.filter { DriveStableIdentityMatcher.matches(session.drive, $0) }
+            let restoredDrive = await reconcileUSBRawSmartDrive(
+                session.drive, hasSMARTPayload: result.snapshot?.hasSMARTPayload == true)
             if var snapshot = result.snapshot, snapshot.hasSMARTPayload {
-                if matches.count == 1, let restoredDrive = matches.first {
+                if let restoredDrive {
                     snapshot.driveID = restoredDrive.id
                     snapshots[restoredDrive.id] = snapshot
                     selectedDriveID = restoredDrive.id

@@ -97,6 +97,41 @@ The application was rebuilt with its Apple Development identity and launched.
 Its embedded, signed universal executable reports `capricorn3` and passed the
 same live mount preflight.
 
-This validates removal of the UUID precondition for the attached card.
-Actual USB capture, SNT commands and remount after release have not yet been
-tested with this exception.
+At this stage only removal of the UUID precondition had been validated.
+The subsequent live capture and publication checks are recorded below.
+
+## Post-Capture Result Reconciliation
+
+The user's 02:36:10 diagnostic confirms that `sntjmicron` returned the CODEX
+NVMe identity and SMART log with exit status zero, followed by `restored`.
+The application nevertheless rejected publication because its one inventory
+refresh did not produce a unique stable identity. That diagnostic did not
+include the expected or rediscovered identity fields, so it does not establish
+which field differed or whether there were zero or multiple matches.
+
+The application now allows up to four inventory refreshes, separated by
+500 ms, when a successful reading has zero identity matches. Multiple matches
+remain an immediate refusal. These retries only re-enumerate inventory and
+perform normal read-only SMART refresh; they do not repeat USB capture.
+`CAPRICORN_USBRAW_IDENTITY` records the expected identity, external physical
+device candidates and matches for each attempt in the diagnostic transcript.
+The existing CODEX name exception and other stable-identity rules are unchanged.
+
+Two regression tests cover incomplete metadata followed by a complete,
+renumbered CODEX device, and immediate rejection of ambiguous CODEX names even
+when a later inventory would contain only one of them.
+
+A live manual JMicron read at 02:47:42 completed all six lifecycle stages.
+It returned model `CDXCDC0096M200N30A`, temperature 31 C, percentage used 5,
+power-on hours 617 and zero media errors. Reconciliation found exactly one
+match, `disk13`, on attempt one, with volume `B_0022_1DOZ`, physical size
+`960197124096`, 512-byte blocks and USB identity `2818:0012`.
+Closing the result sheet displayed the SMART attribute table and good health
+in the sidebar. A subsequent manual refresh retained those readings.
+Diskutil independently confirmed the UDF volume was mounted at its original
+path. This run did not reproduce the original identity mismatch, so the
+bounded-retry regression coverage should not be mistaken for proof of its
+precise cause.
+
+Validation: all 29 focused SNT tests passed. The full application suite passed
+632 tests with 8 existing environment-dependent skips and no failures.

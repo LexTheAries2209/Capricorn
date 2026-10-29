@@ -104,6 +104,65 @@ final class USBRawSmartTests: XCTestCase {
         XCTAssertTrue(model.snapshots.values.allSatisfy { $0.selectedProvider != USBRawSmartService.providerName })
     }
 
+    @MainActor
+    func testCodexReadWaitsForCompleteReconnectedInventory() async {
+        let drive = Self.codexDrive()
+        var incomplete = drive
+        incomplete.volumes = []
+        incomplete.usbDevice = nil
+        var restored = drive
+        restored.bsdName = "disk101"
+        restored.volumes[0].deviceIdentifier = restored.bsdName
+        let inventory = USBRawSequencedRefresh(inventories: [[incomplete], [restored]])
+        let service = USBRawSuspendedService()
+        let model = AppModel(refreshService: inventory, usbRawSmartService: service)
+        model.drives = [drive]
+        model.snapshots = [drive.id: .unavailable(for: drive, reason: "Not supported")]
+        model.smartSelfTestCapabilities[restored.id] = .unavailable("Fixture")
+        model.requestUSBRawSmart(for: drive)
+        let task = Task { await model.beginUSBRawSmart() }
+        await service.waitUntilStarted()
+        await service.finish()
+        await task.value
+        XCTAssertNil(model.usbRawSmartSession?.error)
+        XCTAssertEqual(model.selectedDriveID, restored.id)
+        XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 37)
+        let count = await inventory.discoverCount
+        XCTAssertEqual(count, 2)
+        let transcript = model.usbRawSmartSession?.result?.transcript ?? ""
+        XCTAssertTrue(transcript.contains("CAPRICORN_USBRAW_IDENTITY"))
+        XCTAssertTrue(transcript.contains(#""attempt":2"#))
+        model.closeUSBRawSmart()
+        model.finishUSBRawSmartDismissal()
+        await model.refresh()
+        XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 37)
+    }
+
+    @MainActor
+    func testAmbiguousCodexReadDoesNotRetryUntilOneDeviceDisappears() async {
+        let drive = Self.codexDrive()
+        var duplicate = drive
+        duplicate.bsdName = "disk101"
+        duplicate.volumes[0].deviceIdentifier = duplicate.bsdName
+        let inventory = USBRawSequencedRefresh(inventories: [[drive, duplicate], [drive]])
+        let service = USBRawSuspendedService()
+        let model = AppModel(refreshService: inventory, usbRawSmartService: service)
+        model.drives = [drive]
+        model.snapshots = [drive.id: .unavailable(for: drive, reason: "Not supported")]
+        for item in [drive, duplicate] {
+            model.smartSelfTestCapabilities[item.id] = .unavailable("Fixture")
+        }
+        model.requestUSBRawSmart(for: drive)
+        let task = Task { await model.beginUSBRawSmart() }
+        await service.waitUntilStarted()
+        await service.finish()
+        await task.value
+        XCTAssertNotNil(model.usbRawSmartSession?.error)
+        let count = await inventory.discoverCount
+        XCTAssertEqual(count, 1)
+        XCTAssertTrue(model.snapshots.values.allSatisfy { $0.selectedProvider != USBRawSmartService.providerName })
+    }
+
     func testMenuRequiresExternalUSBWithoutSMARTPayload() {
         let drive = Self.drive()
         let missing = SmartSnapshot.unavailable(for: drive, reason: "Not supported")
@@ -628,6 +687,20 @@ private actor USBRawRecordingRunner: CommandRunning {
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
         calls.append(Call(executable: executable, arguments: arguments))
         return result
+    }
+}
+
+private actor USBRawSequencedRefresh: DriveRefreshing {
+    let inventories: [[DriveDevice]]
+    private(set) var discoverCount = 0
+    init(inventories: [[DriveDevice]]) { self.inventories = inventories }
+    func discover() async throws -> DriveRefreshSnapshot {
+        let index = min(discoverCount, inventories.count - 1)
+        discoverCount += 1
+        return .init(drives: inventories[index], snapshots: [:])
+    }
+    func snapshotUpdates(for drives: [DriveDevice]) async -> AsyncStream<DriveSnapshotUpdate> {
+        await USBRawCodexRefresh(drives: drives).snapshotUpdates(for: drives)
     }
 }
 
