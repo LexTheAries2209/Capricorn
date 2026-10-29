@@ -34,6 +34,22 @@ Only the confirmed manual SNT workflow may invoke raw capture. Passive discovery
 uses `--scan -d usb --json=c`, never `--scan-open`. An unsupported or ambiguous
 device is refused; no forced unmount, self-test, or firmware operation is used.
 
+Patch `capricorn3` adds a user-authorized mount-identity exception for CODEX
+Compact Drive media when Disk Arbitration supplies neither a volume UUID nor
+a media UUID. It requires USB VID/PID `2818:0012`, a reader serial and location,
+whole-media UDF, and the exact media name `CODEX COMPACT DRIVE Media`. The
+original volume name, physical capacity and block size are recorded before
+unmounting. Restoration requires the same USB identity and a unique matching
+volume; a missing or ambiguous match is refused. Other UUID-less media keep
+the existing refusal. The application uses the corresponding narrow name
+identity when publishing and retaining the SMART result.
+
+`--capricorn-usb-mount-preflight usbraw:ID` checks mount-identity eligibility
+without administrator credentials, unmounting, capture or device-byte reads.
+For the CODEX exception it emits `CAPRICORN_USBRAW_CODEX_NAME` with the volume
+name. Passing this check does not establish SNT command compatibility.
+Chipset detection and vendor transport selection are unchanged.
+
 The application first requests filesystem access to its selected mounted
 volumes in the user's context. Its administrator command uses
 `launchctl asuser <requesting UID>` while preserving root credentials and

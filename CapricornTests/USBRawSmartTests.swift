@@ -22,6 +22,88 @@ final class USBRawSmartTests: XCTestCase {
     static let target = USBRawSmartTarget(registryID: 987654321)
     static let json = #"{"smartctl":{"exit_status":0,"version":[8,0]},"device":{"name":"usbraw:987654321","type":"sntrealtek","protocol":"NVMe"},"model_name":"Test NVMe","smart_status":{"passed":true},"nvme_smart_health_information_log":{"temperature":37,"percentage_used":3,"available_spare":100,"power_on_hours":20}}"#
 
+    static func codexDrive() -> DriveDevice {
+        var drive = drive()
+        drive.serialNumber = nil
+        drive.mediaName = "COMPACT DRIVE"
+        drive.sizeBytes = 960_197_124_096
+        drive.blockSize = 512
+        drive.usbDevice = DriveUSBDeviceIdentity(
+            vendorName: "CODEX", productName: "CX.0001005", vendorID: 0x2818, productID: 0x0012)
+        drive.volumes = [.init(
+            deviceIdentifier: drive.bsdName, name: "B_0022_1DOZ", mountPoint: "/Volumes/B_0022_1DOZ",
+            sizeBytes: 960_191_528_960, isWritable: false, isSystem: false, fileSystemType: "udf",
+            topologyKind: .physicalPartition)]
+        return drive
+    }
+
+    func testCodexNameExceptionIsNarrowAndSurvivesBSDRenumbering() {
+        let drive = Self.codexDrive()
+        var renamed = drive
+        renamed.bsdName = "disk101"
+        renamed.volumes[0].deviceIdentifier = renamed.bsdName
+        XCTAssertTrue(DriveStableIdentityMatcher.matches(drive, renamed))
+        for invalid in 0..<10 {
+            var candidate = renamed
+            switch invalid {
+            case 0: candidate.usbDevice?.vendorID = 0x174c
+            case 1: candidate.usbDevice?.productID = 0x0001
+            case 2: candidate.mediaName = "OTHER DRIVE"
+            case 3: candidate.volumes[0].name = "OTHER_CARD"
+            case 4: candidate.volumes[0].fileSystemType = "exfat"
+            case 5: candidate.sizeBytes += 512
+            case 6: candidate.blockSize = 4096
+            case 7: candidate.volumes[0].name = ""
+            case 8: candidate.volumes[0].volumeUUID = "OTHER-UUID"
+            default: candidate.volumes.append(candidate.volumes[0])
+            }
+            XCTAssertFalse(DriveStableIdentityMatcher.matches(drive, candidate), "\(invalid)")
+        }
+    }
+
+    @MainActor
+    func testCodexManualReadPublishesAndSurvivesRefreshByVolumeName() async {
+        let drive = Self.codexDrive()
+        let service = USBRawSuspendedService()
+        let model = AppModel(refreshService: USBRawCodexRefresh(drives: [drive]), usbRawSmartService: service)
+        model.drives = [drive]
+        model.snapshots = [drive.id: .unavailable(for: drive, reason: "Not supported")]
+        model.smartSelfTestCapabilities[drive.id] = .unavailable("Fixture")
+        model.requestUSBRawSmart(for: drive)
+        let task = Task { await model.beginUSBRawSmart() }
+        await service.waitUntilStarted()
+        await service.finish()
+        await task.value
+        XCTAssertNil(model.usbRawSmartSession?.error)
+        XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 37)
+        model.closeUSBRawSmart()
+        model.finishUSBRawSmartDismissal()
+        await model.refresh()
+        XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 37)
+    }
+
+    @MainActor
+    func testDuplicateCodexNamesNeverPublishAnAmbiguousManualRead() async {
+        let drive = Self.codexDrive()
+        var duplicate = drive
+        duplicate.bsdName = "disk101"
+        duplicate.volumes[0].deviceIdentifier = duplicate.bsdName
+        let service = USBRawSuspendedService()
+        let model = AppModel(refreshService: USBRawCodexRefresh(drives: [drive, duplicate]), usbRawSmartService: service)
+        model.drives = [drive, duplicate]
+        for item in model.drives {
+            model.snapshots[item.id] = .unavailable(for: item, reason: "Not supported")
+            model.smartSelfTestCapabilities[item.id] = .unavailable("Fixture")
+        }
+        model.requestUSBRawSmart(for: drive)
+        let task = Task { await model.beginUSBRawSmart() }
+        await service.waitUntilStarted()
+        await service.finish()
+        await task.value
+        XCTAssertTrue(model.usbRawSmartSession?.error?.contains("uniquely identified") == true)
+        XCTAssertTrue(model.snapshots.values.allSatisfy { $0.selectedProvider != USBRawSmartService.providerName })
+    }
+
     func testMenuRequiresExternalUSBWithoutSMARTPayload() {
         let drive = Self.drive()
         let missing = SmartSnapshot.unavailable(for: drive, reason: "Not supported")
@@ -546,6 +628,20 @@ private actor USBRawRecordingRunner: CommandRunning {
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
         calls.append(Call(executable: executable, arguments: arguments))
         return result
+    }
+}
+
+private struct USBRawCodexRefresh: DriveRefreshing {
+    let drives: [DriveDevice]
+    func discover() async throws -> DriveRefreshSnapshot { .init(drives: drives, snapshots: [:]) }
+    func snapshotUpdates(for drives: [DriveDevice]) async -> AsyncStream<DriveSnapshotUpdate> {
+        AsyncStream { continuation in
+            for drive in drives {
+                continuation.yield(.init(driveID: drive.id,
+                    snapshot: .unavailable(for: drive, reason: "Not supported"), phase: .complete))
+            }
+            continuation.finish()
+        }
     }
 }
 

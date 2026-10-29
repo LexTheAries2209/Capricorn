@@ -1,24 +1,193 @@
 diff --git a/lib/os_darwin_usb.h b/lib/os_darwin_usb.h
-index 506be2b..ced01f0 100644
+index 506be2b..fa6ad4d 100644
 --- a/lib/os_darwin_usb.h
 +++ b/lib/os_darwin_usb.h
-@@ -58,0 +59,4 @@ bool darwin_usb_scan_devices(std::vector<darwin_usb_device_info> & devices,
+@@ -58,0 +59,5 @@ bool darwin_usb_scan_devices(std::vector<darwin_usb_device_info> & devices,
 +// Check the root process's user audit session and raw-device access without
 +// unmounting, capturing, issuing commands, or reading any device bytes.
 +int capricorn_usb_authorization_probe(const char * selector);
++int capricorn_usb_mount_preflight(const char * selector);
 +
 diff --git a/lib/os_darwin_usb.mm b/lib/os_darwin_usb.mm
-index e84929b..8902900 100644
+index e84929b..308b46b 100644
 --- a/lib/os_darwin_usb.mm
 +++ b/lib/os_darwin_usb.mm
 @@ -26,0 +27,2 @@
 +#include <fcntl.h>
 +#include <bsm/audit.h>
-@@ -758,0 +761 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
+@@ -58,0 +61,3 @@ struct darwin_mounted_volume
++  std::string codex_volume_name;
++  uint64_t media_size = 0;
++  uint32_t block_size = 0;
+@@ -445,0 +451,36 @@ static std::string description_string(CFDictionaryRef description,
++static uint64_t description_number(CFDictionaryRef description, CFStringRef key)
++{
++  CFTypeRef value = CFDictionaryGetValue(description, key);
++  int64_t number = 0;
++  if (!value || CFGetTypeID(value) != CFNumberGetTypeID()
++      || !CFNumberGetValue((CFNumberRef)value, kCFNumberSInt64Type, &number)
++      || number <= 0)
++    return 0;
++  return (uint64_t)number;
++}
++
++static bool codex_name_identity(CFDictionaryRef description,
++  const darwin_usb_device_info & usb, darwin_mounted_volume & volume)
++{
++  // User-authorized exception for the observed CODEX Compact Drive reader.
++  // Do not generalize name-only matching to other UUID-less USB media.
++  if (usb.vendor_id != 0x2818 || usb.product_id != 0x0012
++      || !usb.location_id || usb.serial_number.empty()
++      || !description_uuid(description, kDADiskDescriptionVolumeUUIDKey).empty()
++      || !description_uuid(description, kDADiskDescriptionMediaUUIDKey).empty()
++      || CFDictionaryGetValue(description, kDADiskDescriptionMediaWholeKey) != kCFBooleanTrue
++      || description_string(description, kDADiskDescriptionMediaNameKey) != "CODEX COMPACT DRIVE Media"
++      || description_string(description, kDADiskDescriptionVolumeKindKey) != "udf")
++    return false;
++  const std::string name = description_string(description, kDADiskDescriptionVolumeNameKey);
++  uint64_t size = description_number(description, kDADiskDescriptionMediaSizeKey);
++  uint64_t block = description_number(description, kDADiskDescriptionMediaBlockSizeKey);
++  if (name.find_first_not_of(" \t\r\n") == std::string::npos
++      || name.find('/') != std::string::npos || !size || !block || block > UINT32_MAX)
++    return false;
++  volume.codex_volume_name = name;
++  volume.media_size = size;
++  volume.block_size = (uint32_t)block;
++  return true;
++}
++
+@@ -519,0 +561,4 @@ static bool get_mounted_volumes(io_service_t device, const disk_session_ptr & se
++    if (volume.volume_uuid.empty() && volume.media_uuid.empty()
++        && codex_name_identity(description, usb_identity, volume)) {
++      fprintf(stderr, "CAPRICORN_USBRAW_CODEX_NAME\t%s\n", volume.codex_volume_name.c_str());
++    }
+@@ -525 +570,3 @@ static bool get_mounted_volumes(io_service_t device, const disk_session_ptr & se
+-          ? std::string("media:") + volume.media_uuid : std::string());
++          ? std::string("media:") + volume.media_uuid
++          : (!volume.codex_volume_name.empty()
++              ? std::string("codex-name:") + volume.codex_volume_name : std::string()));
+@@ -532 +579,7 @@ static bool get_mounted_volumes(io_service_t device, const disk_session_ptr & se
+-    if (identifiers.insert(identifier).second)
++    bool inserted = identifiers.insert(identifier).second;
++    if (!inserted && !volume.codex_volume_name.empty()) {
++      IOObjectRelease(iterator);
++      error_message = "multiple CODEX volumes have the same name";
++      return false;
++    }
++    if (inserted)
+@@ -538,0 +592,25 @@ static bool get_mounted_volumes(io_service_t device, const disk_session_ptr & se
++int capricorn_usb_mount_preflight(const char * selector)
++{
++  @autoreleasepool {
++    std::string error;
++    io_service_t device = strncmp(selector, "usbraw:", 7) ? 0 : resolve_selector(selector, error);
++    if (!device) {
++      fprintf(stderr, "CAPRICORN_USBRAW_MOUNT_PREFLIGHT\tfailed: invalid or missing USB target\n");
++      return 2;
++    }
++    DASessionRef ref = DASessionCreate(kCFAllocatorDefault);
++    if (!ref) {
++      IOObjectRelease(device);
++      return 2;
++    }
++    disk_session_ptr session = std::make_shared<darwin_disk_session>(ref);
++    DASessionSetDispatchQueue(ref, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
++    std::vector<darwin_mounted_volume> volumes;
++    bool ok = get_mounted_volumes(device, session, volumes, error);
++    IOObjectRelease(device);
++    fprintf(stderr, "CAPRICORN_USBRAW_MOUNT_PREFLIGHT\t%s (no unmount or capture)%s%s\n",
++      ok ? "passed" : "failed", error.empty() ? "" : ": ", error.c_str());
++    return ok ? 0 : 2;
++  }
++}
++
+@@ -611,3 +689,7 @@ static bool volume_matches(CFDictionaryRef description,
+-  return !volume.media_uuid.empty()
+-    && description_uuid(description, kDADiskDescriptionMediaUUIDKey)
+-      == volume.media_uuid;
++  if (!volume.media_uuid.empty())
++    return description_uuid(description, kDADiskDescriptionMediaUUIDKey) == volume.media_uuid;
++  darwin_mounted_volume candidate;
++  return !volume.codex_volume_name.empty()
++    && codex_name_identity(description, volume.usb_identity, candidate)
++    && candidate.codex_volume_name == volume.codex_volume_name
++    && candidate.media_size == volume.media_size && candidate.block_size == volume.block_size;
+@@ -619 +701,2 @@ static const std::string & volume_identifier(
+-  return !volume.volume_uuid.empty() ? volume.volume_uuid : volume.media_uuid;
++  return !volume.volume_uuid.empty() ? volume.volume_uuid
++    : (!volume.media_uuid.empty() ? volume.media_uuid : volume.codex_volume_name);
+@@ -627,0 +711 @@ struct volume_lookup
++  std::set<uint64_t> matching_media;
+@@ -647,0 +732,9 @@ static void restore_disk_appeared(DADiskRef disk, void * context)
++    if (!lookup.volume.codex_volume_name.empty()) {
++      uint64_t registry_id = 0;
++      if (IORegistryEntryGetRegistryEntryID(media, &registry_id) != KERN_SUCCESS || !registry_id) {
++        CFRelease(description);
++        IOObjectRelease(media);
++        return;
++      }
++      lookup.matching_media.insert(registry_id);
++    }
+@@ -667,0 +761,46 @@ static void restore_disk_changed(DADiskRef disk, CFArrayRef, void * context)
++static bool codex_volume_is_unique(const disk_session_ptr & session,
++  DADiskRef disk, const darwin_mounted_volume & volume)
++{
++  io_service_t media = DADiskCopyIOMedia(disk);
++  if (!media)
++    return false;
++  uint64_t expected_id = 0;
++  IORegistryEntryGetRegistryEntryID(media, &expected_id);
++  io_service_t device = find_usb_device_ancestor(media);
++  IOObjectRelease(media);
++  if (!device || !expected_id) {
++    if (device)
++      IOObjectRelease(device);
++    return false;
++  }
++  io_iterator_t iterator = 0;
++  kern_return_t status = IORegistryEntryCreateIterator(device, kIOServicePlane,
++    kIORegistryIterateRecursively, &iterator);
++  IOObjectRelease(device);
++  if (status != KERN_SUCCESS)
++    return false;
++  // Inspect all current media, including unmounted ones. Do not accept the
++  // first appeared notification before a second same-name volume is observed.
++  std::set<uint64_t> matches;
++  bool inspected = true;
++  io_service_t candidate = 0;
++  while ((candidate = IOIteratorNext(iterator))) {
++    if (IOObjectConformsTo(candidate, kIOMediaClass)) {
++      DADiskRef current = DADiskCreateFromIOMedia(kCFAllocatorDefault, session->ref, candidate);
++      CFDictionaryRef description = current ? DADiskCopyDescription(current) : nullptr;
++      uint64_t identifier = 0;
++      if (!description || IORegistryEntryGetRegistryEntryID(candidate, &identifier) != KERN_SUCCESS)
++        inspected = false;
++      else if (volume_matches(description, volume))
++        matches.insert(identifier);
++      if (description)
++        CFRelease(description);
++      if (current)
++        CFRelease(current);
++    }
++    IOObjectRelease(candidate);
++  }
++  IOObjectRelease(iterator);
++  return inspected && matches.size() == 1 && matches.count(expected_id) == 1;
++}
++
+@@ -698,0 +838,7 @@ static DADiskRef find_volume(const disk_session_ptr & session,
++  if (!volume.codex_volume_name.empty() && (!lookup.disk
++      || lookup.matching_media.size() != 1 || !codex_volume_is_unique(session, lookup.disk, volume))) {
++    if (lookup.disk)
++      CFRelease(lookup.disk);
++    fprintf(stderr, "CAPRICORN_USBRAW_CODEX_NAME\tvolume name did not uniquely identify restored media\n");
++    return nullptr;
++  }
+@@ -758,0 +905 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
 +  fprintf(stderr, "CAPRICORN_USBRAW\trestoring\n");
-@@ -776,0 +780 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
+@@ -776,0 +924 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
 +  fprintf(stderr, "CAPRICORN_USBRAW\t%s\n", ok ? "restored" : "restore_failed");
-@@ -1977,0 +1982,56 @@ static bool select_protocol(IOUSBHostInterface * interface, uint8_t number,
+@@ -1977,0 +2126,56 @@ static bool select_protocol(IOUSBHostInterface * interface, uint8_t number,
 +static bool capricorn_authorize_device(const darwin_usb_device_info & info,
 +  int & error_number, std::string & error_message)
 +{
@@ -75,7 +244,7 @@ index e84929b..8902900 100644
 +  return 0;
 +}
 +
-@@ -1982,0 +2043,7 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -1982,0 +2187,7 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +  // This separately bundled experimental tool must never capture implicitly.
 +  const char * manual = getenv("CAPRICORN_USBRAW_MANUAL");
 +  if (!manual || strcmp(manual, "1") || strncmp(selector, "usbraw:", 7)) {
@@ -83,30 +252,94 @@ index e84929b..8902900 100644
 +    error_message = "Capricorn raw USB capture requires explicit manual authorization and a usbraw selector";
 +    return 0;
 +  }
-@@ -2023,0 +2091,5 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -2023,0 +2235,5 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +    if (!capricorn_authorize_device(info, error_number, error_message)) {
 +      IOObjectRelease(service);
 +      return 0;
 +    }
 +
-@@ -2034,0 +2107 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -2034,0 +2251 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +    fprintf(stderr, "CAPRICORN_USBRAW\tunmounting\n");
-@@ -2042,0 +2116 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -2042,0 +2260 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +    fprintf(stderr, "CAPRICORN_USBRAW\tcapturing\n");
-@@ -2175,0 +2250 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -2175,0 +2394 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +    fprintf(stderr, "CAPRICORN_USBRAW\treading\n");
-@@ -2186,0 +2262 @@ bool darwin_usb_close(darwin_usb_handle * handle, int & error_number,
+@@ -2186,0 +2406 @@ bool darwin_usb_close(darwin_usb_handle * handle, int & error_number,
 +  fprintf(stderr, "CAPRICORN_USBRAW\treleasing\n");
+diff --git a/lib/tests/os_darwin_usb_test.mm b/lib/tests/os_darwin_usb_test.mm
+index e18863f..b8d394a 100644
+--- a/lib/tests/os_darwin_usb_test.mm
++++ b/lib/tests/os_darwin_usb_test.mm
+@@ -526,0 +527,57 @@ int main()
++    // Only the observed CODEX Compact Drive UDF media may use its unique
++    // recording name when Disk Arbitration supplies neither UUID.
++    darwin_usb_device_info codexUSB = {};
++    codexUSB.vendor_id = 0x2818;
++    codexUSB.product_id = 0x0012;
++    codexUSB.location_id = 2097152;
++    codexUSB.serial_number = "000001053430";
++    CFMutableDictionaryRef codexDescription = CFDictionaryCreateMutable(
++      kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
++      &kCFTypeDictionaryValueCallBacks);
++    auto putNumber = [&](CFStringRef key, int64_t number) {
++      CFNumberRef value = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &number);
++      CFDictionarySetValue(codexDescription, key, value);
++      CFRelease(value);
++    };
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionMediaWholeKey, kCFBooleanTrue);
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionMediaNameKey, CFSTR("CODEX COMPACT DRIVE Media"));
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionVolumeKindKey, CFSTR("udf"));
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionVolumeNameKey, CFSTR("B_0022_1DOZ"));
++    putNumber(kDADiskDescriptionMediaSizeKey, 960197124096);
++    putNumber(kDADiskDescriptionMediaBlockSizeKey, 512);
++    darwin_mounted_volume codexVolume;
++    codexVolume.usb_identity = codexUSB;
++    CHECK(codex_name_identity(codexDescription, codexUSB, codexVolume));
++    CHECK(codexVolume.codex_volume_name == "B_0022_1DOZ");
++    CHECK(volume_matches(codexDescription, codexVolume));
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionVolumeNameKey, CFSTR("OTHER_CARD"));
++    CHECK(!volume_matches(codexDescription, codexVolume));
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionVolumeNameKey, CFSTR("B_0022_1DOZ"));
++    putNumber(kDADiskDescriptionMediaSizeKey, 960191528960);
++    CHECK(!volume_matches(codexDescription, codexVolume));
++    putNumber(kDADiskDescriptionMediaSizeKey, 960197124096);
++    putNumber(kDADiskDescriptionMediaBlockSizeKey, 4096);
++    CHECK(!volume_matches(codexDescription, codexVolume));
++    putNumber(kDADiskDescriptionMediaBlockSizeKey, 512);
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionMediaWholeKey, kCFBooleanFalse);
++    CHECK(!volume_matches(codexDescription, codexVolume));
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionMediaWholeKey, kCFBooleanTrue);
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionVolumeKindKey, CFSTR("exfat"));
++    CHECK(!volume_matches(codexDescription, codexVolume));
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionVolumeKindKey, CFSTR("udf"));
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionMediaNameKey, CFSTR("OTHER Media"));
++    CHECK(!volume_matches(codexDescription, codexVolume));
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionMediaNameKey, CFSTR("CODEX COMPACT DRIVE Media"));
++    darwin_mounted_volume rejected;
++    for (unsigned invalid = 0; invalid < 4; ++invalid) {
++      auto usb = codexUSB;
++      if (invalid == 0) usb.vendor_id = 0x174c;
++      if (invalid == 1) usb.product_id = 0x0001;
++      if (invalid == 2) usb.location_id = 0;
++      if (invalid == 3) usb.serial_number.clear();
++      CHECK(!codex_name_identity(codexDescription, usb, rejected));
++    }
++    CFDictionarySetValue(codexDescription, kDADiskDescriptionVolumeNameKey, CFSTR(""));
++    CHECK(!codex_name_identity(codexDescription, codexUSB, rejected));
++    CFRelease(codexDescription);
++
 diff --git a/src/smartctl.cpp b/src/smartctl.cpp
-index 63a2801..c8998c7 100644
+index 63a2801..4ccbe46 100644
 --- a/src/smartctl.cpp
 +++ b/src/smartctl.cpp
 @@ -43,0 +44,3 @@
 +#ifdef __APPLE__
 +#include "../lib/os_darwin_usb.h"
 +#endif
-@@ -1735,0 +1739,4 @@ int main(int argc, char **argv)
+@@ -1735,0 +1739,6 @@ int main(int argc, char **argv)
 +#ifdef __APPLE__
 +  if (argc == 3 && !strcmp(argv[1], "--capricorn-usb-preflight"))
 +    return os_darwin::capricorn_usb_authorization_probe(argv[2]);
++  if (argc == 3 && !strcmp(argv[1], "--capricorn-usb-mount-preflight"))
++    return os_darwin::capricorn_usb_mount_preflight(argv[2]);
 +#endif

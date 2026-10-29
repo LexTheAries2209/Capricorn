@@ -431,6 +431,11 @@ enum DriveStableIdentityMatcher {
 
         let lhsVolumeUUIDs = dataVolumeUUIDs(lhs)
         let rhsVolumeUUIDs = dataVolumeUUIDs(rhs)
+        if lhsVolumeUUIDs.isEmpty && rhsVolumeUUIDs.isEmpty,
+           let lhsName = CodexCompactDriveNameIdentity.volumeName(for: lhs),
+           let rhsName = CodexCompactDriveNameIdentity.volumeName(for: rhs) {
+            return lhsName == rhsName && lhs.sizeBytes == rhs.sizeBytes && lhs.blockSize == rhs.blockSize
+        }
         guard !lhsVolumeUUIDs.isEmpty, !rhsVolumeUUIDs.isEmpty else { return false }
         return !lhsVolumeUUIDs.isDisjoint(with: rhsVolumeUUIDs)
     }
@@ -447,6 +452,21 @@ enum DriveStableIdentityMatcher {
         guard let value else { return nil }
         let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         return normalized.isEmpty || normalized == "NIL" ? nil : normalized
+    }
+}
+
+enum CodexCompactDriveNameIdentity {
+    static func volumeName(for drive: DriveDevice) -> String? {
+        guard !drive.isVirtual, !drive.isInternal, !drive.isSystemDisk, !drive.isNetwork,
+              drive.protocolName.caseInsensitiveCompare("USB") == .orderedSame,
+              drive.usbDevice?.vendorID == 0x2818, drive.usbDevice?.productID == 0x0012,
+              drive.mediaName == "COMPACT DRIVE", drive.sizeBytes > 0, drive.blockSize > 0,
+              drive.volumeUUIDs.isEmpty, drive.displayableVolumes.count == 1,
+              let volume = drive.displayableVolumes.first, volume.deviceIdentifier == drive.bsdName,
+              volume.fileSystemType?.caseInsensitiveCompare("udf") == .orderedSame,
+              !volume.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !volume.name.contains("/") else { return nil }
+        return volume.name
     }
 }
 
