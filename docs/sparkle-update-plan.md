@@ -1,14 +1,18 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
-## V2.12.0 / Build 0048：发布候选
+## V2.12.0 / Build 0048：已发布
 
-2026-10-29 准备共享硬盘连接拓扑版本，继续使用固定 `Capricorn.app`、既有公钥和稳定 feed，不改变更新下载与安装策略。
+2026-10-29 发布共享硬盘连接拓扑版本，标签指向 `a5c507d53ac252a67ca624a643a7baed43093b31`，已设为最新正式版。继续使用固定 `Capricorn.app`、既有公钥和稳定 feed，不改变更新下载与安装策略。
 
 最终全量 601 项测试通过，无失败或跳过；严格并发、Swift 6、Universal Archive、双架构 dSYM UUID、完整 bundle 签名和归档 App 启动通过。首轮系统截屏命令失败经单项和最终全量复测通过。19 个真实 Sparkle 隔离场景通过，手动与自动安装保留测试历史及偏好；下载中冲突场景使用两秒延迟确保冲突注入。安装测试没有替换真实用户 App 或数据库。
 
 候选签名源已由真实 Sparkle 核验：`0047` 发现 `2.12.0 / 0048`，`0048` 无更新。最终 ZIP 为 12,290,365 字节，SHA-256 为 `d9270836dac1634e2c38e2709cc94386cd13f1c4128f3f70b75adf44e39ee9f0`；更新包和清单使用既有 Ed25519 密钥签名并复验。App 继续使用有效 ad-hoc bundle 签名，没有 Developer ID 或 Apple 公证。
 
 存档源码已通过独立 Universal Release 构建，完整 xcarchive/dSYM 和版本备份保留；无额外桌面副本。
+
+[GitHub CI](https://github.com/LexTheAries2209/Capricorn/actions/runs/40835823957) 的全量测试、严格并发和 Swift 6 三项检查全部通过。GitHub 附件大小及 ZIP 摘要与本地一致，从 Releases API 下载的公开 appcast 与本地签名文件逐字节一致并通过签名复验。本机系统代理未启用，直连 github.com 超时（URLSession `NSURLErrorDomain -1001`），因此发布后客户端直接读取稳定源及直连下载链接验证未完成；不将候选源通过视为该项通过。
+
+最终归档阶段约 58.5 秒，全量测试命令约 126.2 秒，其中测试执行约 101.4 秒。常规 HTTPS 推送断开后使用受保护 Git Data API 保留全部原提交并以 `force=false` 更新 Main，后备同步约 159.7 秒；ZIP 上传约 8.4 秒。首轮编译检查修正和网络诊断增加了发布耗时。
 
 ## V2.11.1 / Build 0047：已发布
 
