@@ -1387,15 +1387,18 @@ final class AppModel {
             // against a unique stable identity after re-enumerating the disk.
             await refresh(allowDuringUSBRawSmart: true)
             let matches = drives.filter { DriveStableIdentityMatcher.matches(session.drive, $0) }
-            if matches.count == 1, let restoredDrive = matches.first,
-               var snapshot = result.snapshot, snapshot.hasSMARTPayload {
-                snapshot.driveID = restoredDrive.id
-                snapshots[restoredDrive.id] = snapshot
-                selectedDriveID = restoredDrive.id
-                selectedFeatureTab = .smart
+            if var snapshot = result.snapshot, snapshot.hasSMARTPayload {
+                if matches.count == 1, let restoredDrive = matches.first {
+                    snapshot.driveID = restoredDrive.id
+                    snapshots[restoredDrive.id] = snapshot
+                    selectedDriveID = restoredDrive.id
+                    selectedFeatureTab = .smart
+                } else {
+                    usbRawSmartSession?.error = "SMART data was read, but the disk could not be uniquely identified after reconnecting. The reading is available in Diagnostic Output."
+                }
             }
             usbRawSmartSession?.state = .completed
-            refreshMessage = result.message
+            refreshMessage = usbRawSmartSession?.error ?? result.message
         } catch {
             usbRawSmartSession?.error = error.localizedDescription
             await refresh(allowDuringUSBRawSmart: true)

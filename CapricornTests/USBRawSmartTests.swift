@@ -297,6 +297,85 @@ final class USBRawSmartTests: XCTestCase {
     }
 
     @MainActor
+    func testSharedEFIUUIDDoesNotPreventPublishingOrRetainingManualRead() async throws {
+        let service = USBRawSuspendedService()
+        let inventory = USBRawUpdatingRefresh()
+        var target = Self.drive()
+        target.serialNumber = nil
+        target.volumes = [
+            .init(deviceIdentifier: "disk100s1", name: "Data F", mountPoint: "/Volumes/Data F",
+                  sizeBytes: target.sizeBytes, isWritable: true, isSystem: false,
+                  fileSystemType: "APFS", volumeUUID: "7D9E2270-0778-4D7D-9212-697D6AB4022D",
+                  topologyKind: .logicalVolume),
+            .init(deviceIdentifier: "disk99s1", name: "EFI", mountPoint: nil,
+                  sizeBytes: 209_715_200, isWritable: true, isSystem: false,
+                  fileSystemType: "EFI", volumeUUID: "0E239BC6-F960-3107-89CF-1C97F78BB46B",
+                  topologyKind: .physicalPartition)
+        ]
+        var other = target
+        other.bsdName = "disk101"
+        other.deviceNode = "/dev/disk101"
+        other.serialNumber = "OTHER-DRIVE"
+        other.volumes[0].volumeUUID = "CF64F70E-C347-4668-85A2-9B2691AF499A"
+        other.volumes[0].deviceIdentifier = "disk102s1"
+        other.volumes[0].name = "Data D"
+        other.volumes[0].mountPoint = "/Volumes/Data D"
+        XCTAssertFalse(DriveStableIdentityMatcher.matches(target, other))
+
+        await inventory.setDrives([target, other])
+        let model = Self.model(service: service, refresh: inventory)
+        model.drives = [target, other]
+        model.requestUSBRawSmart(for: target)
+        let task = Task { await model.beginUSBRawSmart() }
+        await service.waitUntilStarted()
+        await service.finish()
+        await task.value
+        XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 37)
+        XCTAssertEqual(model.selectedDriveID, target.id)
+        XCTAssertNil(model.usbRawSmartSession?.error)
+        await model.refresh()
+        XCTAssertEqual(model.snapshots[target.id]?.temperatureCelsius, 37)
+        XCTAssertNotEqual(model.snapshots[other.id]?.selectedProvider, USBRawSmartService.providerName)
+    }
+
+    func testMountedEFIAndAuxiliaryUUIDsCannotIdentifyUnrelatedDisks() {
+        var first = Self.drive()
+        first.serialNumber = nil
+        first.volumes = [
+            .init(deviceIdentifier: "disk99s1", name: "EFI", mountPoint: "/Volumes/EFI",
+                  sizeBytes: 209_715_200, isWritable: true, isSystem: false,
+                  fileSystemType: "FAT32", volumeUUID: "SHARED-EFI",
+                  topologyKind: .physicalPartition, partitionContent: "EFI"),
+            .init(deviceIdentifier: "disk100s2", name: "Preboot", mountPoint: nil,
+                  sizeBytes: 4096, isWritable: true, isSystem: false,
+                  fileSystemType: "APFS", volumeUUID: "SHARED-PREBOOT", apfsRole: "Preboot",
+                  topologyKind: .logicalVolume)
+        ]
+        var second = first
+        second.bsdName = "disk101"
+        XCTAssertFalse(DriveStableIdentityMatcher.matches(first, second))
+    }
+
+    @MainActor
+    func testUnmatchedReadingExplainsWhyItWasNotPublished() async {
+        let service = USBRawSuspendedService()
+        let inventory = USBRawUpdatingRefresh()
+        var duplicate = Self.drive()
+        duplicate.bsdName = "disk101"
+        await inventory.setDrives([Self.drive(), duplicate])
+        let model = Self.model(service: service, refresh: inventory)
+        model.requestUSBRawSmart(for: Self.drive())
+        let task = Task { await model.beginUSBRawSmart() }
+        await service.waitUntilStarted()
+        await service.finish()
+        await task.value
+        XCTAssertTrue(model.usbRawSmartSession?.result?.snapshot?.hasSMARTPayload == true)
+        XCTAssertTrue(model.usbRawSmartSession?.error?.contains("uniquely identified") == true)
+        XCTAssertEqual(model.refreshMessage, model.usbRawSmartSession?.error)
+        XCTAssertNotEqual(model.selectedSnapshot?.selectedProvider, USBRawSmartService.providerName)
+    }
+
+    @MainActor
     func testManualReadFollowsStableIdentityButNotReusedBSDNameOrReconnect() async throws {
         let service = USBRawSuspendedService()
         let inventory = USBRawUpdatingRefresh()

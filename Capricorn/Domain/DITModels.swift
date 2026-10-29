@@ -427,10 +427,18 @@ enum DriveStableIdentityMatcher {
             return lhsSerial == rhsSerial
         }
 
-        let lhsVolumeUUIDs = Set(lhs.volumeUUIDs)
-        let rhsVolumeUUIDs = Set(rhs.volumeUUIDs)
+        let lhsVolumeUUIDs = dataVolumeUUIDs(lhs)
+        let rhsVolumeUUIDs = dataVolumeUUIDs(rhs)
         guard !lhsVolumeUUIDs.isEmpty, !rhsVolumeUUIDs.isEmpty else { return false }
         return !lhsVolumeUUIDs.isDisjoint(with: rhsVolumeUUIDs)
+    }
+
+    private static func dataVolumeUUIDs(_ drive: DriveDevice) -> Set<String> {
+        // EFI filesystem UUIDs can be identical on unrelated disks. Boot
+        // metadata and APFS backing stores must never identify a physical disk.
+        Set(VolumeUUIDNormalizer.normalized(drive.displayableVolumes.filter {
+            $0.partitionContent?.caseInsensitiveCompare("EFI") != .orderedSame
+        }.compactMap(\.volumeUUID)))
     }
 
     private static func normalizedSerial(_ value: String?) -> String? {

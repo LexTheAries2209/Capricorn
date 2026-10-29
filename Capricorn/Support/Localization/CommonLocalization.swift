@@ -286,6 +286,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Volume Restoration Failed": "卷挂载恢复失败",
         "Diagnostic Output": "诊断输出",
         "SMART data was read and volume restoration completed.": "已读取 SMART，卷挂载恢复完成。",
+        "SMART data was read, but the disk could not be uniquely identified after reconnecting. The reading is available in Diagnostic Output.": "已读取 SMART，但无法唯一确认重新连接后的硬盘，因此未将数据应用到硬盘页面。读数保留在“诊断输出”中。",
         "SMART data was read, but volume restoration could not be confirmed. Check the disk in Disk Utility.": "已读取 SMART，但无法确认卷挂载已恢复。请在“磁盘工具”中检查硬盘。",
         "SNT did not reach the USB capture workflow. Review the diagnostic output.": "SNT 未进入 USB 设备接管流程，请查看诊断输出。",
         "SNT returned no SMART data. Volume restoration completed.": "SNT 未返回 SMART 数据，卷挂载恢复完成。",
