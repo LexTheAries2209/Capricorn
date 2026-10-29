@@ -8,6 +8,7 @@ struct TopologyNodeHitRegion {
 
 /// Keep the pan recognizer on the stable hosting view while SwiftUI redraws
 /// node positions. Replacing hosted content must not cancel an active drag.
+@MainActor
 final class TopologyNodeDragCoordinator: NSObject, NSGestureRecognizerDelegate {
     var regions: [TopologyNodeHitRegion] = []
     var onClick: ((String) -> Void)?

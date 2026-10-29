@@ -388,8 +388,8 @@ enum DriveConnectionTopologyResolver {
     }
 
     private static func isNamedUSBDock(_ entry: DriveConnectionRegistryEntry) -> Bool {
-        guard let candidate = nonempty(entry.hardwareDescription)
-                ?? (entry.entryName == entry.className ? nil : nonempty(entry.entryName)) else { return false }
+        guard (nonempty(entry.hardwareDescription)
+                ?? (entry.entryName == entry.className ? nil : nonempty(entry.entryName))) != nil else { return false }
         return !isGenericUSBHubName(entry)
     }
 
@@ -397,7 +397,6 @@ enum DriveConnectionTopologyResolver {
         let candidate = nonempty(entry.hardwareDescription)
             ?? (entry.entryName == entry.className ? nil : nonempty(entry.entryName))
         guard let candidate else { return false }
-        let normalized = candidate.lowercased().filter { $0.isLetter }
         return USBHubPresentation.isGeneric(candidate)
     }
 

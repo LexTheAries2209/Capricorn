@@ -41,6 +41,7 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
         coordinator.invalidate()
     }
 
+    @MainActor
     final class Coordinator {
         var onOpenSettings: () -> Void
         var onNext: () -> Void
@@ -71,7 +72,7 @@ struct FeatureTabKeyMonitor: NSViewRepresentable {
             }
         }
 
-        deinit {
+        isolated deinit {
             invalidate()
         }
 
