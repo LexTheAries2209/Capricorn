@@ -7,8 +7,7 @@ Branch: `codex/darwin-usb-smart-poc`
 1. Wait for the normal disk/SMART refresh to finish.
 2. Right-click an external USB disk that has no SMART payload and choose
    **Try SNT…** / **尝试 SNT…**.
-3. Review the physical disk and mounted volumes. Keep **Detect Bridge** unless
-   the enclosure's chipset has been independently identified.
+3. Review the physical disk and mounted volumes. Chipset selection is automatic.
 4. Choose **Unmount and Try SNT** and approve the native administrator prompt.
 5. The isolated tool attempts non-forced unmount, exclusive USB capture,
    Identify/Health reads, release, and mount restoration.
@@ -16,8 +15,14 @@ Branch: `codex/darwin-usb-smart-poc`
    includes the tool's lifecycle events and JSON. A restore failure does not
    discard health data that was successfully obtained.
 
-The bridge selector permits JMicron, ASMedia and Realtek explicitly. Automatic
-detection refuses an unknown/SAT bridge instead of guessing vendor commands.
+Passive discovery first selects a recognized JMicron, ASMedia or Realtek SNT
+type. For an unknown/SAT type, the confirmed manual operation tries JMicron,
+ASMedia and Realtek in that order, stopping at the first SMART payload.
+Identify-only JSON and ordinary text do not count as a successful read.
+Each protocol owns a complete unmount/capture/read/release/restore cycle.
+A failed or unconfirmed restoration stops further probing immediately.
+If all three return no SMART payload after confirmed restoration, the result
+reports that SMART could not be queried. There is no manual chipset picker.
 Composite devices and ambiguous multi-disk/LUN configurations are refused by
 the upstream raw USB discovery policy.
 
@@ -31,6 +36,10 @@ The live whole-disk size and USB ancestry are checked before confirmation.
 The USB Registry ID is frozen, rechecked before administrator authorization,
 and passed as an explicit `usbraw:ID` target. The transport does not fall back
 from a missing Registry ID to a reused BSD name.
+Between protocol attempts, a unique stable identity match is required in a
+fresh inventory, and its current USB Registry ID is resolved and revalidated.
+Missing or ambiguous identity stops further capture. The command coordinator
+remains held across the complete protocol sequence.
 
 During execution, refresh, diagnostics, new disk operations, monitoring,
 workloads, benchmarks and updates are blocked. The existing physical-disk
@@ -40,9 +49,13 @@ This lease does not lock other applications or the file system; the transport
 must still obtain system-level exclusive access.
 
 After release, Capricorn refreshes the inventory and publishes the reading only
-against a unique stable identity match (serial or volume UUID). It does not
+against a unique stable identity match (serial, volume UUID, or the narrowly
+authorized CODEX Compact Drive name exception). It does not
 assign data to another disk merely because it reused the old BSD name.
 If no stable match is available, the reading remains in the session result.
+Diagnostics retain every protocol attempt with `CAPRICORN_USBRAW_ATTEMPT`,
+its selector, lifecycle events and JSON. The visible lifecycle list represents
+the final attempt.
 
 ## Validation On 2026-10-29
 
@@ -209,3 +222,57 @@ This is controlled evidence for this enclosure and attached drive. It does not
 establish compatibility with other bridge chipsets or unplugging/timeout
 recovery. Retained readings are past manual samples, not new measurements from
 automatic refresh.
+
+## Automatic Protocol Attempts On 2026-10-30
+
+The manual chipset picker was removed. A recognized passive SNT type selects
+that protocol directly. If discovery returns an unknown/SAT type, the
+confirmed operation tries JMicron, ASMedia and Realtek in order. A SMART
+payload stops the sequence, including a valid reading with health-warning
+exit bits. Model information, JSON output and ordinary error text do not
+count as a SMART payload.
+
+Each unsuccessful attempt must confirm restoration before the next capture.
+The application re-enumerates inventory, requires a unique stable identity,
+and resolves and rechecks the current USB Registry ID. Missing or ambiguous
+identity, authorization errors and unconfirmed restoration stop further
+capture. Diagnostics preserve all attempted protocols and any interruption.
+These checks and attempts are part of one manual operation; normal refresh
+does not invoke them.
+
+Validation: all 36 SNT tests passed in the full application suite, which passed
+639 tests with 8 existing environment-dependent skips and no failures.
+Coverage includes a successful second protocol using a new USB selector,
+all three returning no SMART, matched-only selection, restoration failure
+or missing evidence, changed/ambiguous devices and valid health-warning data.
+A further regression test confirms that an administrator-runner failure on
+the second attempt cannot reuse the first attempt's restoration status.
+Its cleanup is reported as unconfirmed and later protocols are not attempted.
+English and Chinese confirmation sheets were rendered and inspected.
+
+After the user reconnected both test devices, the signed Debug application
+was rebuilt and launched. The following live UI reads completed:
+
+| Device / time (CST) | Protocol attempt | Result |
+| --- | --- | --- |
+| `40G4T_APFS_F`, 04:59:40 | `1 sntasmedia usbraw:4297354928` | Exit 0, Lexar SSD ARES 4TB, 39 C, percentage used 2, zero media errors |
+| `B_0023_1DOZ`, 05:02:26 | `1 sntjmicron usbraw:4297354374` | Exit 0, CDXCDC0096M200N30A, 35 C, percentage used 5, zero media errors |
+
+The F disk changed from `disk15` to `disk6` and was correctly associated by
+its data-volume UUID. The CODEX card changed from `disk14` to `disk13` and
+was correctly associated by its authorized name identity. Both transcripts
+contain all six lifecycle stages ending in `restored`, exactly one protocol
+attempt and exactly one application identity match.
+
+A subsequent passive scan reported `sntasmedia` for the F disk and `sat,auto`
+for CODEX, confirming the matched-protocol and unknown-type paths,
+respectively. CODEX succeeded on the first fallback protocol, so there was
+no reason to send ASMedia or Realtek commands to it. Actual second/third
+protocol fallback and triple failure were covered by simulated command and
+inventory tests, not by deliberately sending incompatible commands to these
+working devices.
+
+Both result sheets were closed and the SMART tables displayed their data.
+Manual refreshes at 05:01:31 and 05:05:00 retained the readings. Diskutil
+independently confirmed both original volume paths were mounted. The running
+application was left open with both manual SMART results.

@@ -34,6 +34,14 @@ Only the confirmed manual SNT workflow may invoke raw capture. Passive discovery
 uses `--scan -d usb --json=c`, never `--scan-open`. An unsupported or ambiguous
 device is refused; no forced unmount, self-test, or firmware operation is used.
 
+The application uses a recognized SNT type from passive discovery directly.
+An unknown/SAT type triggers JMicron, ASMedia and Realtek protocol attempts
+within the confirmed manual operation. Each attempt uses this same tool and
+finishes release and restoration before another can begin; the application
+re-enumerates and verifies a unique stable device identity and fresh USB target
+between attempts. It stops at a SMART payload or uncertain restoration.
+Automatic background refresh never starts this sequence.
+
 Patch `capricorn3` adds a user-authorized mount-identity exception for CODEX
 Compact Drive media when Disk Arbitration supplies neither a volume UUID nor
 a media UUID. It requires USB VID/PID `2818:0012`, a reader serial and location,

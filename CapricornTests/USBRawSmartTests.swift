@@ -283,7 +283,7 @@ final class USBRawSmartTests: XCTestCase {
         let service = USBRawSmartService(
             runner: scan, administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
             targetResolver: { _ in Self.target }, authorizeVolumes: { _ in })
-        let result = try await service.read(drive: drive, target: Self.target, bridge: .automatic)
+        let result = try await service.read(drive: drive, target: Self.target)
         XCTAssertTrue(result.snapshot?.hasSMARTPayload == true)
         let scans = await scan.calls
         XCTAssertEqual(scans.first?.arguments, ["--scan", "-d", "usb", "--json=c"])
@@ -295,19 +295,165 @@ final class USBRawSmartTests: XCTestCase {
         ])
     }
 
-    func testUnknownBridgeDoesNotAuthorizeCapture() async {
+    func testUnknownBridgeStartsAutomaticProbeAndStopsAtFirstSMARTPayload() async throws {
         let drive = Self.drive()
         let scan = USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto"))
         let privileged = USBRawRecordingRunner(result: Self.commandResult())
         let service = USBRawSmartService(
             runner: scan, administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
             targetResolver: { _ in Self.target }, authorizeVolumes: { _ in })
-        do {
-            _ = try await service.read(drive: drive, target: Self.target, bridge: .automatic)
-            XCTFail("Unknown bridge must stop before authorization")
-        } catch {}
+        let result = try await service.read(drive: drive, target: Self.target)
         let calls = await privileged.calls
-        XCTAssertTrue(calls.isEmpty)
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertTrue(calls[0].arguments.contains("sntjmicron"))
+        XCTAssertEqual(result.attemptedBridges, [.jmicron])
+        XCTAssertTrue(result.snapshot?.hasSMARTPayload == true)
+    }
+
+    func testAutomaticProbeUsesFreshTargetAfterRestorationAndPreservesEveryAttempt() async throws {
+        let drive = Self.drive()
+        var reconnected = drive
+        reconnected.bsdName = "disk101"
+        reconnected.deviceNode = "/dev/disk101"
+        let inventory = USBRawProbeInventory(drives: [reconnected])
+        let privileged = USBRawProbeRunner(results: [Self.emptyProbeResult(), Self.commandResult()])
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto")),
+            administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { drive in drive.bsdName == "disk101" ? .init(registryID: 222) : Self.target },
+            authorizeVolumes: { _ in }, inventoryProvider: inventory)
+        let result = try await service.read(drive: drive, target: Self.target)
+        let calls = await privileged.calls
+        XCTAssertEqual(calls.count, 2)
+        XCTAssertEqual(calls[0].last, Self.target.selector)
+        XCTAssertEqual(calls[1].last, "usbraw:222")
+        XCTAssertTrue(calls[1].contains("sntasmedia"))
+        XCTAssertEqual(result.attemptedBridges, [.jmicron, .asmedia])
+        XCTAssertEqual(result.snapshot?.selectedTransport, "sntasmedia")
+        XCTAssertTrue(result.transcript.contains("CAPRICORN_USBRAW_ATTEMPT\t1\tsntjmicron"))
+        XCTAssertTrue(result.transcript.contains("CAPRICORN_USBRAW_ATTEMPT\t2\tsntasmedia"))
+        XCTAssertEqual(result.phases, Self.result(restored: true).phases)
+        let reloads = await inventory.loadCount
+        XCTAssertEqual(reloads, 1)
+    }
+
+    func testAutomaticProbeTriesAllThreeBeforeReportingNoSMART() async throws {
+        let drive = Self.drive()
+        let inventory = USBRawProbeInventory(drives: [drive])
+        let privileged = USBRawProbeRunner(results: Array(repeating: Self.emptyProbeResult(), count: 3))
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto")),
+            administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in Self.target }, authorizeVolumes: { _ in }, inventoryProvider: inventory)
+        let result = try await service.read(drive: drive, target: Self.target)
+        let calls = await privileged.calls
+        XCTAssertEqual(calls.count, 3)
+        XCTAssertEqual(calls.compactMap { args in args.firstIndex(of: "-d").map { args[$0 + 1] } },
+                       ["sntjmicron", "sntasmedia", "sntrealtek"])
+        XCTAssertEqual(result.attemptedBridges, SNTBridge.allCases)
+        XCTAssertTrue(result.restorationConfirmed)
+        XCTAssertFalse(result.snapshot?.hasSMARTPayload == true)
+        XCTAssertTrue(result.message.contains("JMicron, ASMedia and Realtek"))
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t(result.message),
+                       "JMicron、ASMedia 和 Realtek 均未返回 SMART 数据，无法查询，卷挂载恢复完成。")
+        let reloads = await inventory.loadCount
+        XCTAssertEqual(reloads, 2)
+    }
+
+    func testDetectedBridgeUsesOnlyItsMatchedProtocol() async throws {
+        let drive = Self.drive()
+        let privileged = USBRawProbeRunner(results: [Self.emptyProbeResult()])
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sntasmedia")),
+            administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in Self.target }, authorizeVolumes: { _ in })
+        let result = try await service.read(drive: drive, target: Self.target)
+        XCTAssertEqual(result.attemptedBridges, [.asmedia])
+        XCTAssertFalse(result.message.contains("JMicron, ASMedia and Realtek"))
+        let calls = await privileged.calls
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertTrue(calls[0].contains("sntasmedia"))
+    }
+
+    func testAutomaticProbeStopsWhenRestorationIsMissingOrFailed() async throws {
+        for marker in ["CAPRICORN_USBRAW\trestore_failed", ""] {
+            let drive = Self.drive()
+            var command = Self.emptyProbeResult()
+            command.stderr = Data(("CAPRICORN_USBRAW\tcapturing\n" + marker).utf8)
+            let privileged = USBRawProbeRunner(results: [command])
+            let inventory = USBRawProbeInventory(drives: [drive])
+            let service = USBRawSmartService(
+                runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto")),
+                administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+                targetResolver: { _ in Self.target }, authorizeVolumes: { _ in }, inventoryProvider: inventory)
+            let result = try await service.read(drive: drive, target: Self.target)
+            XCTAssertFalse(result.restorationConfirmed)
+            XCTAssertEqual(result.attemptedBridges, [.jmicron])
+            let calls = await privileged.calls
+            let reloads = await inventory.loadCount
+            XCTAssertEqual(calls.count, 1)
+            XCTAssertEqual(reloads, 0)
+        }
+    }
+
+    func testAutomaticProbeStopsOnReplacedOrAmbiguousDeviceAndRetainsDiagnostics() async throws {
+        for ambiguous in [false, true] {
+            let drive = Self.drive()
+            var replacement = drive
+            replacement.serialNumber = ambiguous ? drive.serialNumber : "DIFFERENT-DISK"
+            replacement.bsdName = "disk101"
+            let inventory = USBRawProbeInventory(drives: ambiguous ? [drive, replacement] : [replacement])
+            let privileged = USBRawProbeRunner(results: [Self.emptyProbeResult()])
+            let service = USBRawSmartService(
+                runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto")),
+                administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+                targetResolver: { _ in Self.target }, authorizeVolumes: { _ in }, inventoryProvider: inventory)
+            let result = try await service.read(drive: drive, target: Self.target)
+            XCTAssertEqual(result.attemptedBridges, [.jmicron])
+            XCTAssertTrue(result.restorationConfirmed)
+            XCTAssertNotNil(result.probeInterruption)
+            XCTAssertTrue(result.transcript.contains("CAPRICORN_USBRAW_ATTEMPT\t1"))
+            XCTAssertTrue(result.transcript.contains("CAPRICORN_USBRAW_PROBE_STOP"))
+            let calls = await privileged.calls
+            XCTAssertEqual(calls.count, 1)
+        }
+    }
+
+    func testAutomaticProbeStopsAtValidSMARTWithHealthWarningExitStatus() async throws {
+        let drive = Self.drive()
+        var command = Self.commandResult()
+        command.terminationStatus = 8
+        command.stdout = Data(Self.json.replacingOccurrences(of: #""exit_status":0"#,
+                                                           with: #""exit_status":8"#).utf8)
+        let privileged = USBRawProbeRunner(results: [command])
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto")),
+            administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in Self.target }, authorizeVolumes: { _ in })
+        let result = try await service.read(drive: drive, target: Self.target)
+        XCTAssertTrue(result.snapshot?.hasSMARTPayload == true)
+        XCTAssertEqual(result.exitStatus, 8)
+        XCTAssertEqual(result.attemptedBridges, [.jmicron])
+        let calls = await privileged.calls
+        XCTAssertEqual(calls.count, 1)
+    }
+
+    func testSecondAdministratorCallFailureCannotReuseFirstRestorationStatus() async throws {
+        let drive = Self.drive()
+        let privileged = USBRawProbeRunner(results: [Self.emptyProbeResult()])
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto")),
+            administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in Self.target }, authorizeVolumes: { _ in },
+            inventoryProvider: USBRawProbeInventory(drives: [drive]))
+        let result = try await service.read(drive: drive, target: Self.target)
+        XCTAssertFalse(result.restorationConfirmed)
+        XCTAssertEqual(result.attemptedBridges, [.jmicron, .asmedia])
+        XCTAssertTrue(result.message.contains("restoration could not be confirmed"))
+        XCTAssertTrue(result.transcript.contains("CAPRICORN_USBRAW_ATTEMPT\t2\tsntasmedia"))
+        XCTAssertTrue(result.transcript.contains("CAPRICORN_USBRAW_PROBE_STOP"))
+        let calls = await privileged.calls
+        XCTAssertEqual(calls.count, 2)
     }
 
     func testChangedDeviceDoesNotAuthorizeCapture() async {
@@ -317,7 +463,7 @@ final class USBRawSmartTests: XCTestCase {
             runner: scan, administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
             targetResolver: { _ in USBRawSmartTarget(registryID: 222) })
         do {
-            _ = try await service.read(drive: Self.drive(), target: Self.target, bridge: .realtek)
+            _ = try await service.read(drive: Self.drive(), target: Self.target)
             XCTFail("A reused disk node must not capture a new device")
         } catch {}
         let scans = await scan.calls
@@ -335,7 +481,7 @@ final class USBRawSmartTests: XCTestCase {
             targetResolver: { _ in Self.target },
             authorizeVolumes: { _ in throw CocoaError(.fileReadNoPermission) })
         do {
-            _ = try await service.read(drive: drive, target: Self.target, bridge: .automatic)
+            _ = try await service.read(drive: drive, target: Self.target)
             XCTFail("Denied removable-volume access must leave the device mounted")
         } catch {}
         let calls = await privileged.calls
@@ -677,6 +823,35 @@ final class USBRawSmartTests: XCTestCase {
         CommandResult(stdout: Data(#"{"devices":[{"name":"/dev/\#(drive.bsdName)","type":"\#(type)","protocol":"NVMe"}]}"#.utf8),
                       stderr: Data(), terminationStatus: 0)
     }
+
+    static func emptyProbeResult() -> CommandResult {
+        // A bridge can return Identify JSON and still provide no SMART data.
+        CommandResult(stdout: Data(#"{"smartctl":{"exit_status":2},"model_name":"Bridge"}"#.utf8),
+                      stderr: Data("CAPRICORN_USBRAW\tcapturing\nCAPRICORN_USBRAW\treleasing\nCAPRICORN_USBRAW\trestoring\nCAPRICORN_USBRAW\trestored".utf8),
+                      terminationStatus: 2)
+    }
+}
+
+private actor USBRawProbeRunner: CommandRunning {
+    let results: [CommandResult]
+    private(set) var calls: [[String]] = []
+    init(results: [CommandResult]) { self.results = results }
+    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        let index = calls.count
+        calls.append(arguments)
+        guard index < results.count else { throw CocoaError(.fileReadUnknown) }
+        return results[index]
+    }
+}
+
+private actor USBRawProbeInventory: DiskInventoryProviding {
+    let drives: [DriveDevice]
+    private(set) var loadCount = 0
+    init(drives: [DriveDevice]) { self.drives = drives }
+    func loadDrives() async throws -> [DriveDevice] {
+        loadCount += 1
+        return drives
+    }
 }
 
 private actor USBRawRecordingRunner: CommandRunning {
@@ -723,7 +898,7 @@ private actor USBRawSuspendedService: USBRawSmartRunning {
     var continuation: CheckedContinuation<USBRawSmartResult, Never>?
     var startObserver: CheckedContinuation<Void, Never>?
     nonisolated func target(for drive: DriveDevice) throws -> USBRawSmartTarget { USBRawSmartTests.target }
-    func read(drive: DriveDevice, target: USBRawSmartTarget, bridge: SNTBridge) async throws -> USBRawSmartResult {
+    func read(drive: DriveDevice, target: USBRawSmartTarget) async throws -> USBRawSmartResult {
         readCount += 1
         return await withCheckedContinuation {
             continuation = $0

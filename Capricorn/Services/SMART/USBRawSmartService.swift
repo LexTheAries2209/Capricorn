@@ -4,21 +4,10 @@ import IOKit
 import IOKit.storage
 import Darwin
 
-enum SNTBridge: String, CaseIterable, Identifiable, Sendable {
-    case automatic
+enum SNTBridge: String, CaseIterable, Sendable {
     case jmicron = "sntjmicron"
     case asmedia = "sntasmedia"
     case realtek = "sntrealtek"
-
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .automatic: "Detect Bridge"
-        case .jmicron: "JMicron"
-        case .asmedia: "ASMedia"
-        case .realtek: "Realtek"
-        }
-    }
 }
 
 enum USBRawSmartPhase: String, CaseIterable, Sendable {
@@ -48,12 +37,15 @@ struct USBRawSmartResult: Sendable {
     var phases: [USBRawSmartPhase]
     var transcript: String
     var exitStatus: Int32
+    var attemptedBridges: [SNTBridge] = []
+    var probeInterruption: String?
 
     var restorationConfirmed: Bool {
         phases.last == .restored
     }
 
     var message: String {
+        if let probeInterruption { return probeInterruption }
         if snapshot?.hasSMARTPayload == true {
             return restorationConfirmed
                 ? "SMART data was read and volume restoration completed."
@@ -61,6 +53,9 @@ struct USBRawSmartResult: Sendable {
         }
         if phases.isEmpty {
             return "SNT did not reach the USB capture workflow. Review the diagnostic output."
+        }
+        if restorationConfirmed, attemptedBridges.count == SNTBridge.allCases.count {
+            return "JMicron, ASMedia and Realtek returned no SMART data. Volume restoration completed."
         }
         return restorationConfirmed
             ? "SNT returned no SMART data. Volume restoration completed."
@@ -73,7 +68,6 @@ struct USBRawSmartSession: Identifiable {
     let id = UUID()
     let drive: DriveDevice
     let target: USBRawSmartTarget
-    var bridge: SNTBridge = .automatic
     var state: State = .confirmation
     var result: USBRawSmartResult?
     var error: String?
@@ -98,7 +92,7 @@ enum USBRawSmartError: Error, LocalizedError {
 
 protocol USBRawSmartRunning: Sendable {
     func target(for drive: DriveDevice) throws -> USBRawSmartTarget
-    func read(drive: DriveDevice, target: USBRawSmartTarget, bridge: SNTBridge) async throws -> USBRawSmartResult
+    func read(drive: DriveDevice, target: USBRawSmartTarget) async throws -> USBRawSmartResult
 }
 
 /// Resolves a whole physical disk to the live USB device. The registry ID is
@@ -194,6 +188,7 @@ struct USBRawSmartService: USBRawSmartRunning {
     let executableURL: URL?
     let targetResolver: @Sendable (DriveDevice) throws -> USBRawSmartTarget
     let authorizeVolumes: @Sendable (DriveDevice) throws -> Void
+    let inventoryProvider: DiskInventoryProviding
 
     init(
         runner: CommandRunning = ShellCommandRunner(),
@@ -203,18 +198,20 @@ struct USBRawSmartService: USBRawSmartRunning {
         targetResolver: @escaping @Sendable (DriveDevice) throws -> USBRawSmartTarget = {
             try USBRawSmartTargetResolver().target(for: $0)
         },
-        authorizeVolumes: @escaping @Sendable (DriveDevice) throws -> Void = Self.authorizeMountedVolumes
+        authorizeVolumes: @escaping @Sendable (DriveDevice) throws -> Void = Self.authorizeMountedVolumes,
+        inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(networkProvider: nil)
     ) {
         self.runner = runner
         self.administratorRunner = administratorRunner
         self.executableURL = executableURL
         self.targetResolver = targetResolver
         self.authorizeVolumes = authorizeVolumes
+        self.inventoryProvider = inventoryProvider
     }
 
     func target(for drive: DriveDevice) throws -> USBRawSmartTarget { try targetResolver(drive) }
 
-    func read(drive: DriveDevice, target: USBRawSmartTarget, bridge: SNTBridge) async throws -> USBRawSmartResult {
+    func read(drive: DriveDevice, target: USBRawSmartTarget) async throws -> USBRawSmartResult {
         guard let executableURL, FileManager.default.isExecutableFile(atPath: executableURL.path) else {
             throw USBRawSmartError.unavailable("The experimental SNT tool is missing from this application.")
         }
@@ -224,22 +221,14 @@ struct USBRawSmartService: USBRawSmartRunning {
         // Passive discovery filters out composite devices and multiple disks/LUNs.
         // Never use --scan-open: that would capture before the explicit read.
         let scan = try await runner.run(executableURL.path, arguments: ["--scan", "-d", "usb", "--json=c"], timeout: 15)
-        guard scan.terminationStatus == 0,
-              let devices = SmartctlParser.parseScan(scan.stdout),
-              let device = devices.first(where: {
-                  URL(fileURLWithPath: $0.name).lastPathComponent == drive.bsdName
-              }) else {
+        let devices = SmartctlParser.parseScan(scan.stdout)?.filter {
+            URL(fileURLWithPath: $0.name).lastPathComponent == drive.bsdName
+        } ?? []
+        guard scan.terminationStatus == 0, devices.count == 1, let device = devices.first else {
             throw USBRawSmartError.unavailable("This USB device is unsupported or has multiple storage interfaces or disks. It was not captured.")
         }
-        let type: String
-        if bridge == .automatic {
-            guard let detected = device.type, SNTBridge(rawValue: detected) != nil, detected != "automatic" else {
-                throw USBRawSmartError.unavailable("The SNT bridge could not be detected. Select its verified chipset before trying again.")
-            }
-            type = detected
-        } else {
-            type = bridge.rawValue
-        }
+        let detected = device.type.flatMap(SNTBridge.init(rawValue:))
+        let bridges = detected.map { [$0] } ?? SNTBridge.allCases
         // Request removable-volume access from the user's app before entering
         // administrator authorization. A denial must leave the disk mounted.
         try authorizeVolumes(drive)
@@ -248,13 +237,88 @@ struct USBRawSmartService: USBRawSmartRunning {
         }
         // The tool itself owns non-forced unmount and restoration. Do not put
         // either around the process in a script or lose its original mount list.
-        let result = try await SmartctlCommandCoordinator.shared.run {
-            try await administratorRunner.run("/usr/bin/env", arguments: [
-                "CAPRICORN_USBRAW_MANUAL=1", executableURL.path,
-                "-i", "-H", "-A", "--json=c", "-d", type, target.selector
-            ])
+        return try await SmartctlCommandCoordinator.shared.run {
+            try await probeBridges(bridges, drive: drive, target: target, executableURL: executableURL)
         }
-        return Self.parse(result, drive: drive, target: target, type: type)
+    }
+
+    private func probeBridges(
+        _ bridges: [SNTBridge], drive: DriveDevice, target: USBRawSmartTarget, executableURL: URL
+    ) async throws -> USBRawSmartResult {
+        var currentTarget = target
+        var previous: USBRawSmartResult?
+        var transcripts: [String] = []
+        var attempted: [SNTBridge] = []
+        for bridge in bridges {
+            var captureRequested = false
+            do {
+                try Task.checkCancellation()
+                if previous == nil {
+                    guard try self.target(for: drive) == target else {
+                        throw USBRawSmartError.unavailable("The USB device changed after confirmation. Refresh disks before trying SNT.")
+                    }
+                } else {
+                    // Release/re-enumeration can change both diskN and the USB
+                    // registry ID. Revalidate stable identity before each capture.
+                    let reconnected = try await reconnectedDrive(matching: drive)
+                    currentTarget = try self.target(for: reconnected)
+                    try authorizeVolumes(reconnected)
+                    guard try self.target(for: reconnected) == currentTarget else {
+                        throw USBRawSmartError.unavailable("The USB device changed after confirmation. Refresh disks before trying SNT.")
+                    }
+                }
+                attempted.append(bridge)
+                let header = "CAPRICORN_USBRAW_ATTEMPT\t\(attempted.count)\t\(bridge.rawValue)\t\(currentTarget.selector)\n"
+                transcripts.append(header)
+                captureRequested = true
+                let command = try await administratorRunner.run("/usr/bin/env", arguments: [
+                    "CAPRICORN_USBRAW_MANUAL=1", executableURL.path,
+                    "-i", "-H", "-A", "--json=c", "-d", bridge.rawValue, currentTarget.selector
+                ])
+                var result = Self.parse(command, drive: drive, target: currentTarget, type: bridge.rawValue)
+                transcripts[transcripts.count - 1] = header + result.transcript
+                result.transcript = transcripts.joined(separator: "\n")
+                result.attemptedBridges = attempted
+                // Text/JSON output or Identify alone is not a SMART result.
+                // Never capture again when release/restoration is uncertain.
+                if result.snapshot?.hasSMARTPayload == true || !result.restorationConfirmed {
+                    return result
+                }
+                previous = result
+            } catch {
+                guard var result = previous else { throw error }
+                // A failed process call provides no cleanup evidence for this
+                // attempt. The preceding attempt's restored marker is stale.
+                if captureRequested {
+                    result.phases = []
+                    result.probeInterruption = "SNT protocol probing stopped, and volume restoration could not be confirmed. Check the disk in Disk Utility."
+                } else {
+                    result.probeInterruption = error.localizedDescription
+                }
+                result.attemptedBridges = attempted
+                result.transcript = transcripts.joined(separator: "\n")
+                    + "\nCAPRICORN_USBRAW_PROBE_STOP\t" + error.localizedDescription
+                return result
+            }
+        }
+        // The list always contains a detected bridge or all three protocols.
+        guard let previous else { throw USBRawSmartError.unavailable("No SNT protocols were selected.") }
+        return previous
+    }
+
+    private func reconnectedDrive(matching expected: DriveDevice) async throws -> DriveDevice {
+        for attempt in 1...4 {
+            try Task.checkCancellation()
+            let matches = try await inventoryProvider.loadDrives().filter {
+                DriveStableIdentityMatcher.matches(expected, $0)
+            }
+            if matches.count == 1, let drive = matches.first { return drive }
+            guard matches.isEmpty, attempt < 4 else {
+                throw USBRawSmartError.unavailable("The USB disk could not be uniquely identified between SNT protocols. Further capture was stopped.")
+            }
+            try await Task.sleep(nanoseconds: 500_000_000)
+        }
+        throw USBRawSmartError.unavailable("The USB disk could not be uniquely identified between SNT protocols. Further capture was stopped.")
     }
 
     static func authorizeMountedVolumes(for drive: DriveDevice) throws {

@@ -59,15 +59,8 @@ struct USBRawSmartSheet: View {
             Text(language.t("This will attempt to unmount all volumes on this USB device and take exclusive control of the device. Open files and disk operations must be closed first."))
             Text(language.t("After reading SMART, Capricorn will release the device and attempt to restore its previous mounts. Restoration may fail; reconnecting the disk or using Disk Utility may be necessary. Administrator authorization is required."))
                 .foregroundStyle(.secondary)
-            Picker(language.t("SNT Bridge"), selection: Binding(
-                get: { viewModel.usbRawSmartSession?.bridge ?? .automatic },
-                set: { viewModel.usbRawSmartSession?.bridge = $0 }
-            )) {
-                ForEach(SNTBridge.allCases) { bridge in
-                    Text(language.t(bridge.title)).tag(bridge)
-                }
-            }
-            .pickerStyle(.menu)
+            Text(language.t("If automatic identification fails, up to three SNT protocols will be tried. Volumes may be unmounted and restored more than once."))
+                .foregroundStyle(.secondary)
             if session.drive.volumes.contains(where: { $0.mountPoint != nil }) {
                 Text(language.t("Mounted Volumes")).font(.subheadline.bold())
                 ScrollView {

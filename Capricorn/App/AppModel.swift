@@ -1382,7 +1382,7 @@ final class AppModel {
         refreshMessage = "Running SNT..."
         do {
             let result = try await usbRawSmartService.read(
-                drive: session.drive, target: session.target, bridge: session.bridge)
+                drive: session.drive, target: session.target)
             usbRawSmartSession?.result = result
             // BSD names may change or be reused after capture. Publish only
             // against a unique stable identity after re-enumerating the disk.
