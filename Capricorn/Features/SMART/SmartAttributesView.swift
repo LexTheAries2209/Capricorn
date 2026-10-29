@@ -229,7 +229,7 @@ struct SmartAttributesView: View {
                 TableColumn(language.t("Status")) { smartAttributeStatusBadge($0).fixedSize() }
                     .width(82)
                 TableColumn(language.t("Source")) { smartAttributeSourceCell($0) }
-                    .width(min: 110, ideal: 130, max: 300)
+                    .disabledCustomizationBehavior(.resize)
             }
         } else {
             Table(attributes) {
@@ -244,7 +244,7 @@ struct SmartAttributesView: View {
                 TableColumn(language.t("Status")) { smartAttributeStatusBadge($0).fixedSize() }
                     .width(82)
                 TableColumn(language.t("Source")) { smartAttributeSourceCell($0) }
-                    .width(min: 110, ideal: 130, max: 300)
+                    .disabledCustomizationBehavior(.resize)
             }
         }
     }
