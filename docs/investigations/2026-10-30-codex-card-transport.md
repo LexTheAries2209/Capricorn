@@ -48,6 +48,19 @@ implementation.
 
 ## Validation
 
-The two new parser tests pass. They cover separate physical and filesystem
-capacities and reject non-positive media fields before falling back. The
-existing SNT/USB implementation remains unchanged.
+The two new parser tests failed before the capacity fix and pass after it.
+They cover separate physical and filesystem capacities and reject non-positive
+media fields before falling back. The complete suite passed 627 tests with
+8 existing environment-dependent skips and no failures.
+
+A live probe using the application's inventory provider and USB target
+resolver returned:
+
+```text
+CODEX physical=960197124096 volume=960191528960 target=usbraw:4297324860
+```
+
+The signed application was rebuilt and launched. Clicking Try SNT on the
+Codex card now opened the confirmation sheet with its mounted UDF volume.
+The sheet was cancelled without administrator authorization, unmount or
+capture. The existing SNT/USB transport implementation remains unchanged.
