@@ -144,3 +144,68 @@ Validation: universal tool build; all 3 upstream synthetic tests; all 15
 application SNT tests; nested app/tool signature validation. Three added tests
 cover the user-session command, invalid requesting UID, and denied volume
 access stopping before administrator invocation.
+
+## Hardware Read And Refresh Regression (2026-10-29)
+
+The user reported that a successful reading appeared briefly and disappeared.
+This was reproduced with an application regression test: a normal refresh's
+native/complete updates replaced the manual reading with an unsupported
+snapshot. The existing retention rules only covered native transient failures
+and smartctl reads skipped to avoid waking a disk.
+
+Commits `e66016a` and `78a28a8` retain the manual snapshot's original timestamp
+and provider when ordinary providers have no verified replacement. Retention
+requires a unique stable identity across inventory refresh. It follows BSD
+renumbering, is discarded on observed disconnection or device replacement, and
+does not duplicate a reading across ambiguous identities. A verified new
+provider reading supersedes it. Ordinary refresh does not perform another
+SNT capture and does not mark the retained reading as a native read in progress.
+
+The capture workflow now remains protected through post-read disk discovery
+and result publication. Its own detach/mount events are ignored while active;
+pending event debounce work is cancelled before capture. This prevents an
+event-triggered refresh from cancelling inventory reconciliation.
+
+An application-driven hardware read completed at 23:45:43 CST on
+`ASMT 2462 NVME Media`, a 4.1 TB ASMedia USB-NVMe enclosure with APFS volume
+`40G4T_APFS_F`. The completion status confirmed SMART data and mount
+restoration. The system again logged removable-volume access granted to
+`smartctl-usbraw`.
+
+Observed device data:
+
+| Field | Reading |
+| --- | --- |
+| Temperature | 38 C |
+| Estimated lifetime remaining | 98% |
+| Percentage used | 2% |
+| Available spare / threshold | 100% / 10% |
+| Power-on hours | 964 |
+| Critical warning | 0 |
+| Media errors / error-log entries | 0 / 0 |
+| Unsafe shutdowns | 432 |
+| Data units read | 592043228 (303.13 TB) |
+| Data units written | 223056003 (114.2 TB) |
+
+The same volume UUID `7D9E2270-0778-4D7D-9212-697D6AB4022D` was present
+before and after at `/Volumes/40G4T_APFS_F`. Captured volume metadata is in
+`DerivedData/USBRawHardwareValidation-20261029/volume-before.plist` and
+`volume-after.plist`. The result sheet was closed; ordinary application
+refreshes completed at 23:48:02 and 23:48:39 with the NVMe attributes,
+temperature and manual source still present.
+
+Validation: the original regression failed before the fix; 22 focused tests
+passed after the fix. The full suite passed 621 tests with 8 existing
+environment-dependent skips and no failures. After the follow-up native
+loading-state fix, both the same 22 focused tests and the full 621-test suite
+passed again, with the same 8 environment-dependent skips.
+
+A second application-driven hardware attempt on the final build was initiated
+at approximately 23:53 CST. It is awaiting the user's native administrator
+authentication; it has not entered USB capture. Its outcome is not included
+in the successful hardware results above.
+
+This is controlled evidence for this enclosure and attached drive. It does not
+establish compatibility with other bridge chipsets or unplugging/timeout
+recovery. Retained readings are past manual samples, not new measurements from
+automatic refresh.
