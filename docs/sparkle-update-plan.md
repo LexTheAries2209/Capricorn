@@ -1,6 +1,6 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
-## V3.0.0 / Build 0049：发布候选验证
+## V3.0.0 / Build 0049：已发布
 
 SNT 分支已快进合并到 Main。完整版本为 `3.0.0`，独立全局构建号 `0049`，上一分发构建为 `0048`。
 
@@ -9,6 +9,10 @@ SNT 分支已快进合并到 Main。完整版本为 `3.0.0`，独立全局构建
 19 个真实 Sparkle 隔离场景全部通过，包含手动和自动安装保留历史与偏好、取消、任务冲突、签名拒绝与启动检查。测试使用独立 App、历史与偏好，不替换真实用户 App 或数据库。
 
 真实 Sparkle 验证候选签名源：`0048` 发现 `3.0.0 / 0049`，`0049` 无更新。ZIP 为 13,407,049 字节，SHA-256 为 `c68e15dcd52131f78ba550478ba12fea99b2be07b82b01995c83a98886f8c6d4`。更新包和清单使用既有 Ed25519 密钥签名并复验；App 延续有效 ad-hoc 分发，没有 Developer ID 或 Apple 公证。完整 xcarchive/dSYM、版本备份 App/README/源码和 ZIP/feed 均保留，无额外桌面副本。
+
+正式标签指向 `602d7e3afbc2aa7b53b699dcba3638ffd1114e62`，已设为最新正式版。[GitHub CI](https://github.com/LexTheAries2209/Capricorn/actions/runs/41026985016) 三项检查全部通过。真实 Sparkle 对公开稳定源完成 `0048` 发现新版本、`0049` 无更新验证；公开 ZIP 返回 HTTP 200，附件大小与 GitHub ZIP digest 一致，公开 appcast 与本地逐字节一致且签名有效。网络验证通过本机已配置的代理完成，没有修改系统网络设置。
+
+Release 同时提供固定发布提交生成的 `Capricorn-v3.0.0-source.tar.gz`，包含 smartctl 7.5 与实验性 SNT 工具的对应源码、本地补丁、许可证及构建脚本。发布后的构建号状态与验证记录单独提交，已发布的 App、ZIP、feed 和标签保持不变。
 
 ## V2.12.0 / Build 0048：已发布
 
