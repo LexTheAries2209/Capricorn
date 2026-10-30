@@ -8,6 +8,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V3.0.0 - 2026-10-30
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.0.0) | [Release Notes / 发布说明](docs/releases/v3.0.0.md)
+
+### 中文
+
+- 新增实验性 USB-NVMe SNT SMART 手动读取，自动选择兼容的桥接协议，并尝试恢复卷挂载。
+- SMART 页面提供读取引导，右键菜单支持刷新 SNT SMART；展示读取到的序列号，并保留手动读取结果。
+- 分别显示物理设备容量与卷容量，完善 USB SMART 数据来源和读取状态说明。
+
+### English
+
+- Adds experimental manual USB-NVMe SNT SMART reads with automatic bridge protocol selection and volume restoration attempts.
+- Adds SMART-page guidance and a context-menu SNT refresh action, displays retrieved serial numbers, and retains manual read results.
+- Distinguishes physical device capacity from volume capacity and clarifies USB SMART sources and read status.
+
 ## V2.12.0 - 2026-10-29
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v2.12.0) | [Release Notes / 发布说明](docs/releases/v2.12.0.md)

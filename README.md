@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for disk inspection, SMART health checks, sto
 
 Capricorn 是一个本地 macOS 工具，用于磁盘检查、SMART 健康状态查看、存储测速、实时磁盘活动监控和硬盘连接拓扑查看。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v2.12.0`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v3.0.0`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v2.12.0.md](docs/releases/v2.12.0.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v3.0.0.md](docs/releases/v3.0.0.md)
 
 Complete release log / 完整更新记录：[CHANGELOG.md](CHANGELOG.md)
 
@@ -24,7 +24,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 
 ### 下载和安装
 
-前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v2.12.0-macOS.zip`，解压后将 `Capricorn.app` 放到 `Applications` 或其他本地工具目录。V2.10.1 及更早版本需手动安装一次，之后可使用应用内更新。
+前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v3.0.0-macOS.zip`，解压后将 `Capricorn.app` 放到 `Applications` 或其他本地工具目录。V2.10.1 及更早版本需手动安装一次，之后可使用应用内更新。
 
 首次打开时，如果 macOS Gatekeeper 显示互联网下载提示，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
@@ -34,6 +34,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 - 显示磁盘容量、文件系统、设备名称、序列号和连接信息。
 - 在共享拓扑图中查看硬盘、集线器与控制器的连接路径、链路速率和本地芯片名称，支持节点拖动与缩放。
 - 查看 SMART 健康状态、温度、寿命、通电时间、介质错误和读写数据。
+- 对兼容的 USB-NVMe 设备手动尝试 SNT SMART 读取，并可刷新已读取的数据。
 - 支持查看 SMART 自检状态和历史记录。
 - 对指定文件夹执行顺序、随机、读取、写入和混合测速。
 - 观察实时磁盘读写活动，并运行读写负载。
@@ -48,6 +49,8 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 不同磁盘、存储卡、USB 桥接器和网络卷能够提供的 SMART 信息不同。Capricorn 只显示设备实际提供的数据，不对缺失信息进行推测。
 
 Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，也不会直接向裸设备写入测速数据。
+
+常规读取未返回数据的 USB-NVMe 设备可尝试实验性 SNT 读取，支持 JMicron、ASMedia 和 Realtek 桥接协议。读取需要管理员授权并暂时卸载设备上的卷，结束后尝试恢复挂载；请先关闭相关文件并备份重要数据。兼容性取决于桥接器及固件，不保证所有 USB 设备可用。
 
 ### 测速和实时活动
 
@@ -65,7 +68,7 @@ Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，�
 
 ### 构建和测试
 
-自 V2.10.2 起采用“完整版本号 + 独立四位构建号”，本版为版本 `2.12.0`、Build `0048`。构建号根据发布构建记录全局递增，不再拼成版本号的第三段。详见[版本规则](docs/versioning.md)。
+自 V2.10.2 起采用“完整版本号 + 独立四位构建号”，本版为版本 `3.0.0`、Build `0049`。构建号根据发布构建记录全局递增，不再拼成版本号的第三段。详见[版本规则](docs/versioning.md)。
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build
@@ -85,7 +88,7 @@ Capricorn is for macOS users who need to inspect drive status, review external d
 
 ### Download And Install
 
-Download `Capricorn-v2.12.0-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn.app` to `Applications` or another local tools folder. V2.10.1 and earlier require one manual installation before in-app updates are available.
+Download `Capricorn-v3.0.0-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn.app` to `Applications` or another local tools folder. V2.10.1 and earlier require one manual installation before in-app updates are available.
 
 On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
@@ -95,6 +98,7 @@ On first launch, if macOS Gatekeeper shows an internet-download warning, right-c
 - Shows capacity, filesystem, device name, serial number, and connection information.
 - Shows shared storage paths, hubs, controllers, link rates, and local chip names in a topology diagram with draggable nodes and zoom.
 - Displays SMART health, temperature, life remaining, power-on time, media errors, and read/write data.
+- Offers manual SNT SMART reads for compatible USB-NVMe devices and refreshes previously retrieved data.
 - Supports SMART self-test status and history.
 - Benchmarks a selected folder with sequential, random, read, write, and mixed tests.
 - Shows live disk activity and runs read/write workloads.
@@ -109,6 +113,8 @@ On first launch, if macOS Gatekeeper shows an internet-download warning, right-c
 SMART availability varies across drives, memory cards, USB bridges, and network volumes. Capricorn reports data provided by the device without inferring missing values.
 
 Capricorn bundles smartmontools 7.5. It does not automatically install or remove system drivers, and benchmarks do not write directly to raw devices.
+
+USB-NVMe devices that return no data through ordinary reads can try experimental SNT reads using JMicron, ASMedia, or Realtek bridge protocols. This requires administrator authorization and temporarily unmounts the device's volumes, then attempts to restore them. Close related files and back up important data first. Compatibility depends on the bridge and firmware; support for every USB device is not guaranteed.
 
 ### Benchmark And Live Activity
 
@@ -126,7 +132,7 @@ Network volumes can be benchmarked as mounted folders, but they do not provide a
 
 ### Build And Test
 
-Starting with V2.10.2, the complete version and four-digit build are separate: this release is Version `2.12.0`, Build `0048`. Build increases globally with release-build allocations and is no longer the third version component. See the [version rules](docs/versioning.md).
+Starting with V2.10.2, the complete version and four-digit build are separate: this release is Version `3.0.0`, Build `0049`. Build increases globally with release-build allocations and is no longer the third version component. See the [version rules](docs/versioning.md).
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build
@@ -154,6 +160,10 @@ Sparkle 2.10.0 按 MIT 许可提供，并附带其内置组件的其他许可声
 Bundled smartctl and its corresponding source are provided under `GPL-2.0-or-later`. See [ThirdParty/smartmontools](ThirdParty/smartmontools) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source, licenses, and build instructions.
 
 内置 smartctl 及对应源代码按 `GPL-2.0-or-later` 提供。源代码、许可证和构建说明见 [ThirdParty/smartmontools](ThirdParty/smartmontools) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+The experimental SNT tool is also GPL-2.0-or-later. Its pinned upstream source, local patch, and build instructions are in [ThirdParty/SmartctlUSBRaw](ThirdParty/SmartctlUSBRaw).
+
+实验性 SNT 工具同样使用 GPL-2.0-or-later 授权，固定版本的上游源码、本地补丁与构建说明见 [ThirdParty/SmartctlUSBRaw](ThirdParty/SmartctlUSBRaw)。
 
 Capricorn source code is licensed under the GNU General Public License v3.0 only (`GPL-3.0-only`). See [LICENSE](LICENSE).
 
