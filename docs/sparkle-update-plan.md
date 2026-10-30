@@ -1,5 +1,15 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
+## V3.0.0 / Build 0049：发布候选验证
+
+SNT 分支已快进合并到 Main。完整版本为 `3.0.0`，独立全局构建号 `0049`，上一分发构建为 `0048`。
+
+全量 648 项测试通过，零失败、零跳过；严格并发、Swift 6、Universal Archive、双架构 dSYM UUID、完整 bundle 与嵌入 SNT 工具签名、归档 App 启动和独立存档源码 Universal Release 构建通过。Swift 6 保留已有的 `init(cString:)` 弃用警告。
+
+19 个真实 Sparkle 隔离场景全部通过，包含手动和自动安装保留历史与偏好、取消、任务冲突、签名拒绝与启动检查。测试使用独立 App、历史与偏好，不替换真实用户 App 或数据库。
+
+真实 Sparkle 验证候选签名源：`0048` 发现 `3.0.0 / 0049`，`0049` 无更新。ZIP 为 13,407,049 字节，SHA-256 为 `c68e15dcd52131f78ba550478ba12fea99b2be07b82b01995c83a98886f8c6d4`。更新包和清单使用既有 Ed25519 密钥签名并复验；App 延续有效 ad-hoc 分发，没有 Developer ID 或 Apple 公证。完整 xcarchive/dSYM、版本备份 App/README/源码和 ZIP/feed 均保留，无额外桌面副本。
+
 ## V2.12.0 / Build 0048：已发布
 
 2026-10-29 发布共享硬盘连接拓扑版本，标签指向 `a5c507d53ac252a67ca624a643a7baed43093b31`，已设为最新正式版。继续使用固定 `Capricorn.app`、既有公钥和稳定 feed，不改变更新下载与安装策略。
