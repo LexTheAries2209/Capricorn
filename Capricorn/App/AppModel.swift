@@ -1368,7 +1368,7 @@ final class AppModel {
         guard isUSBRawSmartPresented, let session = usbRawSmartSession, session.state == .confirmation,
               canBeginUSBRawSmart,
               let current = drives.first(where: { $0.id == session.drive.id }),
-              offersUSBRawSmart(for: current),
+              offersUSBRawSmart(for: current) || offersUSBRawSmartRefresh(for: current),
               let lease = acquireDiskOperationLock(for: current, operation: .usbRawSmart) else { return }
         usbRawSmartSession?.state = .running
         usbRawSmartSession?.error = nil

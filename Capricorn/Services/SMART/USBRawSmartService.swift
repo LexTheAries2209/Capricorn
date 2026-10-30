@@ -75,11 +75,20 @@ struct USBRawSmartSession: Identifiable {
 
 enum USBRawSmartPolicy {
     static func isEligible(drive: DriveDevice, snapshot: SmartSnapshot?) -> Bool {
+        supportsManualRead(drive) && snapshot != nil && snapshot?.hasSMARTPayload == false
+    }
+
+    static func canRefresh(drive: DriveDevice, snapshot: SmartSnapshot?) -> Bool {
+        supportsManualRead(drive) && snapshot?.driveID == drive.id
+            && snapshot?.hasSMARTPayload == true
+            && snapshot?.selectedProvider == USBRawSmartService.providerName
+    }
+
+    private static func supportsManualRead(_ drive: DriveDevice) -> Bool {
         guard !drive.isVirtual, !drive.isInternal, !drive.isSystemDisk,
               !drive.isNetwork, !drive.isMemoryCard,
-              drive.protocolName.localizedCaseInsensitiveContains("USB"),
-              let snapshot else { return false }
-        return !snapshot.hasSMARTPayload
+              drive.protocolName.localizedCaseInsensitiveContains("USB") else { return false }
+        return true
     }
 }
 

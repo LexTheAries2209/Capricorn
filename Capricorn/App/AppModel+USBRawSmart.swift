@@ -10,8 +10,13 @@ extension AppModel {
         USBRawSmartPolicy.isEligible(drive: drive, snapshot: snapshots[drive.id])
     }
 
+    func offersUSBRawSmartRefresh(for drive: DriveDevice) -> Bool {
+        USBRawSmartPolicy.canRefresh(drive: drive, snapshot: snapshots[drive.id])
+    }
+
     func requestUSBRawSmart(for drive: DriveDevice) {
-        guard usbRawSmartSession == nil, canBeginUSBRawSmart, offersUSBRawSmart(for: drive) else { return }
+        guard usbRawSmartSession == nil, canBeginUSBRawSmart,
+              offersUSBRawSmart(for: drive) || offersUSBRawSmartRefresh(for: drive) else { return }
         do {
             let target = try usbRawSmartTarget(for: drive)
             selectedDriveID = drive.id

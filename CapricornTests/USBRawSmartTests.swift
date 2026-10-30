@@ -232,6 +232,80 @@ final class USBRawSmartTests: XCTestCase {
         }
     }
 
+    func testSNTRefreshRequiresManualPayloadOnEligiblePhysicalUSBDrive() {
+        let drive = Self.drive()
+        let snapshot = Self.result(restored: true).snapshot
+        XCTAssertTrue(USBRawSmartPolicy.canRefresh(drive: drive, snapshot: snapshot))
+        XCTAssertFalse(USBRawSmartPolicy.canRefresh(drive: drive, snapshot: nil))
+        XCTAssertFalse(USBRawSmartPolicy.canRefresh(
+            drive: drive, snapshot: .unavailable(for: drive, reason: "Unavailable")))
+        var ordinary = snapshot
+        ordinary?.selectedProvider = "smartctl"
+        XCTAssertFalse(USBRawSmartPolicy.canRefresh(drive: drive, snapshot: ordinary))
+        var wrongDrive = snapshot
+        wrongDrive?.driveID = "disk101"
+        XCTAssertFalse(USBRawSmartPolicy.canRefresh(drive: drive, snapshot: wrongDrive))
+        for kind in ["internal", "system", "virtual", "network", "card", "thunderbolt"] {
+            var protected = drive
+            switch kind {
+            case "internal": protected.isInternal = true
+            case "system": protected.isSystemDisk = true
+            case "virtual": protected.isVirtual = true
+            case "network": protected.isNetwork = true
+            case "card": protected.isMemoryCard = true
+            default: protected.protocolName = "Thunderbolt"
+            }
+            XCTAssertFalse(USBRawSmartPolicy.canRefresh(drive: protected, snapshot: snapshot), kind)
+        }
+    }
+
+    @MainActor
+    func testManualSNTRefreshConfirmsUpdatesAndKeepsPreviousReadWhenNoNewPayload() async throws {
+        let drive = Self.drive()
+        let service = USBRawSuspendedService()
+        let model = AppModel(refreshService: USBRawCodexRefresh(drives: [drive]), usbRawSmartService: service)
+        let original = try XCTUnwrap(Self.result(restored: true).snapshot)
+        model.drives = [drive]
+        model.snapshots = [drive.id: original]
+        model.smartSelfTestCapabilities[drive.id] = .unavailable("Fixture")
+        XCTAssertFalse(model.offersUSBRawSmart(for: drive))
+        XCTAssertTrue(model.offersUSBRawSmartRefresh(for: drive))
+        model.requestUSBRawSmart(for: drive)
+        XCTAssertEqual(model.usbRawSmartSession?.state, .confirmation)
+        let initialReads = await service.readCount
+        XCTAssertEqual(initialReads, 0)
+        model.closeUSBRawSmart()
+        model.finishUSBRawSmartDismissal()
+        XCTAssertEqual(model.selectedSnapshot?.id, original.id)
+
+        model.requestUSBRawSmart(for: drive)
+        let read = Task { await model.beginUSBRawSmart() }
+        await service.waitUntilStarted()
+        var updated = Self.result(restored: true)
+        updated.snapshot?.temperatureCelsius = 42
+        await service.finish(updated)
+        await read.value
+        XCTAssertNil(model.usbRawSmartSession?.error)
+        XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 42)
+        let updatedID = model.selectedSnapshot?.id
+        XCTAssertNotEqual(updatedID, original.id)
+        model.closeUSBRawSmart()
+        model.finishUSBRawSmartDismissal()
+
+        model.requestUSBRawSmart(for: drive)
+        let failedRead = Task { await model.beginUSBRawSmart() }
+        await service.waitUntilStarted()
+        var failed = Self.result(restored: true)
+        failed.snapshot = nil
+        await service.finish(failed)
+        await failedRead.value
+        XCTAssertEqual(model.selectedSnapshot?.id, updatedID)
+        XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 42)
+        XCTAssertTrue(model.offersUSBRawSmartRefresh(for: drive))
+        let reads = await service.readCount
+        XCTAssertEqual(reads, 2)
+    }
+
     func testExitEnvelopePreservesHealthWarningAndCleanupOutput() throws {
         let output = Self.json + "\nCAPRICORN_USBRAW\trestore_failed\nCAPRICORN_USBRAW_EXIT=8\n"
         let decoded = try AdministratorUSBRawCommandRunner.decode(output)
@@ -959,8 +1033,8 @@ private actor USBRawSuspendedService: USBRawSmartRunning {
         if continuation != nil { return }
         await withCheckedContinuation { startObserver = $0 }
     }
-    func finish() {
-        continuation?.resume(returning: USBRawSmartTests.result(restored: true))
+    func finish(_ result: USBRawSmartResult? = nil) {
+        continuation?.resume(returning: result ?? USBRawSmartTests.result(restored: true))
         continuation = nil
     }
 }

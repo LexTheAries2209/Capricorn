@@ -315,3 +315,19 @@ Validation: all 38 SNT tests passed, including serial normalization, redaction,
 CSV metadata, snapshot coding/legacy decoding and refresh retention for CODEX.
 The full suite passed 643 tests with 8 existing environment-dependent skips
 and no failures.
+
+## Manual SNT Refresh Entry On 2026-10-30
+
+Eligible external USB disks with a valid current SNT snapshot now offer
+**Refresh SNT SMART** in the context menu. This opens the same confirmation
+sheet and explicit manual read as the initial attempt, retaining operation
+locks and authorization. Ordinary refresh still never starts USB capture.
+Cancelling confirmation or returning no new SMART payload preserves the
+previous reading. The SMART table's compact source label is now **SNT SMART**;
+the underlying provider identity and diagnostic tooltip are unchanged.
+
+Validation: all 40 SNT tests passed, including refresh eligibility, confirmation
+without capture, replacement by a new sample and retention after an empty
+read. The signed Debug application built and launched. Only the internal disk
+was attached at UI verification time, so this change was not exercised against
+an external device in that run.

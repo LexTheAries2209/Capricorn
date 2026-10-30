@@ -685,11 +685,14 @@ struct ContentView: View {
             Divider()
         }
 
-        if viewModel.offersUSBRawSmart(for: drive) {
+        if viewModel.offersUSBRawSmart(for: drive) || viewModel.offersUSBRawSmartRefresh(for: drive) {
             Button {
                 viewModel.requestUSBRawSmart(for: drive)
             } label: {
-                Label(language.t("Try SNT Read"), systemImage: "externaldrive.badge.questionmark")
+                Label(
+                    language.t(viewModel.offersUSBRawSmartRefresh(for: drive) ? "Refresh SNT SMART" : "Try SNT Read"),
+                    systemImage: viewModel.offersUSBRawSmartRefresh(for: drive) ? "arrow.clockwise" : "externaldrive.badge.questionmark"
+                )
             }
             .disabled(!viewModel.canBeginUSBRawSmart)
             Divider()

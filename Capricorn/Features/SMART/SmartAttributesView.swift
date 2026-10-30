@@ -273,7 +273,7 @@ struct SmartAttributesView: View {
     private func smartAttributeSourceCell(_ attribute: SmartAttribute) -> some View {
         // Keep the full provider identity in data and exports; the table uses
         // a compact transport label with the original name available on hover.
-        Text(attribute.source == USBRawSmartService.providerName ? "SNT USB SMART" : attribute.source)
+        Text(attribute.source == USBRawSmartService.providerName ? "SNT SMART" : attribute.source)
             .lineLimit(1)
             .help(attribute.source)
             .accessibilityLabel(attribute.source)
