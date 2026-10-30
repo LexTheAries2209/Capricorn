@@ -6,7 +6,8 @@ Branch: `codex/darwin-usb-smart-poc`
 
 1. Wait for the normal disk/SMART refresh to finish.
 2. Right-click an external USB disk that has no SMART payload and choose
-   **Try SNT…** / **尝试 SNT…**.
+   **Try SNT Read** / **尝试 SNT 读取**.
+   The SMART empty state also offers this same action for eligible USB devices.
 3. Review the physical disk and mounted volumes. Chipset selection is automatic.
 4. Choose **Unmount and Try SNT** and approve the native administrator prompt.
 5. The isolated tool attempts non-forced unmount, exclusive USB capture,
@@ -276,3 +277,20 @@ Both result sheets were closed and the SMART tables displayed their data.
 Manual refreshes at 05:01:31 and 05:05:00 retained the readings. Diskutil
 independently confirmed both original volume paths were mounted. The running
 application was left open with both manual SMART results.
+
+## SMART Page Entry On 2026-10-30
+
+The SMART empty state now offers **Try SNT Read** using the same eligibility,
+busy-state check and confirmation action as the context menu. Both entry labels
+use this wording without an ellipsis. The empty-state title is **No SMART Data
+Read** rather than **No SMART Attributes**. Eligible USB devices explain that
+standard access has returned no data and a USB-NVMe device may support SNT;
+the guidance also states that reading temporarily unmounts volumes and requires
+administrator authorization. Other devices retain their diagnostic description.
+
+The 43 existing SNT and SMART presentation tests passed. Two additional
+rendering tests passed for full English/Chinese guidance and SD-card exclusion.
+The signed Debug application was rebuilt and launched. On the attached F disk,
+clicking the SMART-page button opened the existing confirmation sheet with
+the correct disk and mounted volume. The sheet was cancelled without unmount
+or USB capture.

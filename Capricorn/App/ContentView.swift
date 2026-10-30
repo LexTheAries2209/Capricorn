@@ -689,7 +689,7 @@ struct ContentView: View {
             Button {
                 viewModel.requestUSBRawSmart(for: drive)
             } label: {
-                Label(language.t("Try SNT…"), systemImage: "externaldrive.badge.questionmark")
+                Label(language.t("Try SNT Read"), systemImage: "externaldrive.badge.questionmark")
             }
             .disabled(!viewModel.canBeginUSBRawSmart)
             Divider()

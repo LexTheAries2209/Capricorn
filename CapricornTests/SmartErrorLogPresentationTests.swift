@@ -243,6 +243,74 @@ final class SmartErrorLogPresentationTests: XCTestCase {
     }
 
     @MainActor
+    func testUSBEmptySmartPageOffersSNTGuidanceInBothLanguages() async throws {
+        let drive = USBRawSmartTests.drive()
+        let snapshot = SmartSnapshot.unavailable(for: drive, reason: "This device does not support native SMART.")
+        let model = AppModel()
+        model.drives = [drive]
+        model.snapshots = [drive.id: snapshot]
+        for language in AppLanguage.allCases {
+            let root = SmartAttributesView(
+                drive: drive, snapshot: snapshot, viewModel: model, selfTestHistory: [],
+                saveSnapshot: { _ in "" }, exportSelfTestHistory: { _, _, _ in "" },
+                exportErrorLog: { _, _, _ in "" }, satDriverGuidance: nil,
+                openSATDriverSettings: {}
+            )
+            .environment(\.appLanguage, language)
+            .environment(\.locale, Locale(identifier: language.localeIdentifier))
+            .environment(\.colorScheme, .light)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .frame(width: 740, height: 540)
+            let hostingView = NSHostingView(rootView: root)
+            let window = makeWindow(hostingView)
+            defer { window.orderOut(nil) }
+            try await Task.sleep(for: .milliseconds(200))
+            hostingView.layoutSubtreeIfNeeded()
+            let image = try capturedImage(in: hostingView, name: "usb-snt-guidance-\(language.rawValue)")
+            let lines = try textObservations(in: image).compactMap { $0.topCandidates(1).first?.string }
+            let text = normalized(lines.joined())
+            for caption in [
+                "No SMART Data Read",
+                "Standard access has not returned SMART data. USB-NVMe devices may support a manual SNT read.",
+                "Reading temporarily unmounts the volumes and requires administrator authorization.",
+                "Try SNT Read"
+            ] {
+                XCTAssertTrue(captionIsVisible(language.t(caption), in: lines), "\(language): \(lines)")
+            }
+            XCTAssertFalse(text.contains(normalized(language.t("This device does not support native SMART."))))
+            XCTAssertNil(model.usbRawSmartSession, "Displaying guidance must not start a read or request authorization.")
+        }
+    }
+
+    @MainActor
+    func testSDCardEmptySmartPageDoesNotOfferSNT() async throws {
+        var drive = USBRawSmartTests.drive()
+        drive.isMemoryCard = true
+        let snapshot = SmartSnapshot.unavailable(for: drive, reason: "SD cards do not expose standard SMART health data on macOS.")
+        let model = AppModel()
+        model.drives = [drive]
+        model.snapshots = [drive.id: snapshot]
+        let root = SmartAttributesView(
+            drive: drive, snapshot: snapshot, viewModel: model, selfTestHistory: [],
+            saveSnapshot: { _ in "" }, exportSelfTestHistory: { _, _, _ in "" },
+            exportErrorLog: { _, _, _ in "" }, satDriverGuidance: nil, openSATDriverSettings: {}
+        )
+        .environment(\.appLanguage, .english)
+        .environment(\.colorScheme, .light)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(width: 740, height: 540)
+        let hostingView = NSHostingView(rootView: root)
+        let window = makeWindow(hostingView)
+        defer { window.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(200))
+        let image = try capturedImage(in: hostingView, name: "sd-no-snt-guidance")
+        let text = normalized(try textObservations(in: image).compactMap { $0.topCandidates(1).first?.string }.joined())
+        XCTAssertTrue(text.contains(normalized("No SMART Data Read")))
+        XCTAssertFalse(text.contains(normalized("Try SNT")))
+        XCTAssertFalse(text.contains(normalized("USB-NVMe")))
+    }
+
+    @MainActor
     func testFullSmartPageKeepsHistoricalErrorExplanationVisible() async throws {
         let suiteName = "CapricornTests.errorReportLayout.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

@@ -148,14 +148,31 @@ struct SmartAttributesView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
             Group {
-                if let satDriverGuidance {
+                if viewModel.offersUSBRawSmart(for: drive) {
+                    ContentUnavailableView {
+                        Label(language.t("No SMART Data Read"), systemImage: "externaldrive.badge.questionmark")
+                    } description: {
+                        VStack(spacing: 8) {
+                            Text(language.t("Standard access has not returned SMART data. USB-NVMe devices may support a manual SNT read."))
+                            Text(language.t("Reading temporarily unmounts the volumes and requires administrator authorization."))
+                        }
+                    } actions: {
+                        Button {
+                            viewModel.requestUSBRawSmart(for: drive)
+                        } label: {
+                            Label(language.t("Try SNT Read"), systemImage: "externaldrive.badge.questionmark")
+                        }
+                        .disabled(!viewModel.canBeginUSBRawSmart)
+                        .accessibilityIdentifier("trySNTFromSMART")
+                    }
+                } else if let satDriverGuidance {
                     SATSMARTDriverGuidanceUnavailableView(
                         guidance: satDriverGuidance,
                         openSettings: openSATDriverSettings
                     )
                 } else {
                     ContentUnavailableView(
-                        language.t("No SMART Attributes"),
+                        language.t("No SMART Data Read"),
                         systemImage: "questionmark.folder",
                         description: Text(language.statusMessage(snapshot?.summary) ?? language.t("SMART data is unavailable for this drive."))
                     )
