@@ -31,6 +31,27 @@ Normal automatic SMART reads continue to use the original smartctl 7.5.
 The experiment is never used as an automatic fallback and does not run
 `--scan-open`. Passive experiment discovery is `--scan -d usb --json=c`.
 
+## Overview USB Passthrough Status
+
+The overview provider panel now uses the neutral title **USB SMART Passthrough**
+for both SAT and SNT. Transport guesses no longer label a failed read as a
+confirmed USB-SATA device. A successful read, a limited read and a read returning
+no valid SMART payload have separate messages. Eligible devices with no data
+from ordinary USB access are guided toward a manual SNT read.
+
+The state follows the selected manual SNT provider when present, otherwise
+the ordinary smartctl provider. A failed ordinary read cannot override selected
+SNT success. Available or limited provider status without a SMART payload is
+downgraded to unavailable. Existing exclusions for internal/system/network/
+virtual disks and memory cards, and the transport-diagnostic visibility
+requirement, remain in place.
+
+Validation includes selected SNT success alongside ordinary smartctl failure,
+limited SNT status, no-data states, SNT guidance eligibility, and English/Chinese
+overview rendering for both successful and unsuccessful reads.
+All 46 focused tests passed. The complete application suite passed 648 tests
+with 8 existing environment-dependent skips and no failures.
+
 ## Coordination And Device Identity
 
 The live whole-disk size and USB ancestry are checked before confirmation.

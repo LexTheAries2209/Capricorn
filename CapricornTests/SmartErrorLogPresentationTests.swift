@@ -7,6 +7,40 @@ import XCTest
 
 final class SmartErrorLogPresentationTests: XCTestCase {
     @MainActor
+    func testOverviewUSBPassthroughRendersSNTSuccessAndOrdinaryFailureInBothLanguages() async throws {
+        let drive = USBRawSmartTests.drive()
+        let successful = try XCTUnwrap(USBRawSmartTests.result(restored: true).snapshot)
+        var failed = SmartSnapshot.unavailable(for: drive, reason: "No data")
+        failed.smartctlDiagnostics = .init(deviceType: "sat", protocolName: "ATA")
+        failed.providerStatuses = [.init(name: "smartctl", state: .failed, message: "No data")]
+        for language in AppLanguage.allCases {
+            for (name, snapshot) in [("success", successful), ("failure", failed)] {
+                let root = OverviewView(
+                    drive: drive, snapshot: snapshot, diskCheckReport: nil, isDiskChecking: false,
+                    showsQuickDiskCheck: false, canRunQuickCheck: false, runQuickCheck: {},
+                    satDriverGuidance: nil, openSATDriverSettings: {}
+                )
+                .environment(\.appLanguage, language)
+                .environment(\.locale, Locale(identifier: language.localeIdentifier))
+                .environment(\.colorScheme, .light)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .frame(width: 900, height: 1100)
+                let hostingView = NSHostingView(rootView: root)
+                let window = makeWindow(hostingView)
+                defer { window.orderOut(nil) }
+                try await Task.sleep(for: .milliseconds(200))
+                hostingView.layoutSubtreeIfNeeded()
+                let image = try capturedImage(in: hostingView, name: "usb-passthrough-\(name)-\(language.rawValue)")
+                let lines = try textObservations(in: image).compactMap { $0.topCandidates(1).first?.string }
+                let status = try XCTUnwrap(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
+                XCTAssertTrue(captionIsVisible(language.t("USB SMART Passthrough"), in: lines), "\(lines)")
+                XCTAssertTrue(captionIsVisible(language.t(status.messageKey), in: lines), "\(lines)")
+                XCTAssertFalse(lines.joined().contains("USB-SATA"))
+            }
+        }
+    }
+
+    @MainActor
     func testTitleRowButtonCollapsesAndExpandsDiagnosticsWithoutSummary() async throws {
         var drive = CapricornTests.fixtureDrive()
         drive.isSystemDisk = false

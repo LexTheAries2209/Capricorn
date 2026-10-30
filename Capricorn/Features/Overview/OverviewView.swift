@@ -139,9 +139,9 @@ struct OverviewView: View {
                             Image(systemName: passthrough.state.symbolName)
                                 .foregroundStyle(passthrough.state.tint)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(language.t(passthrough.kind.titleKey))
+                                Text(language.t("USB SMART Passthrough"))
                                     .font(.headline)
-                                Text(language.statusMessage(passthrough.state.messageKey))
+                                Text(language.t(passthrough.messageKey))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -234,25 +234,6 @@ enum ProviderStatusPresentation {
             || drive.isMemoryCard
             || status.name.caseInsensitiveCompare("Native macOS") == .orderedSame
         return shouldShowUnavailableAsFailure ? .failed : .unavailable
-    }
-}
-
-private extension USBSmartCommandPassthroughKind {
-    var titleKey: String {
-        switch self {
-        case .sata: "USB-SATA SMART Command Passthrough"
-        case .nvme: "USB-NVMe SMART Command Passthrough"
-        }
-    }
-}
-
-private extension ProviderState {
-    var messageKey: String {
-        switch self {
-        case .available: "SMART data was successfully read through this USB bridge."
-        case .limited: "The USB bridge was identified, but SMART data is currently limited."
-        case .unavailable, .failed: "The USB bridge was identified, but SMART commands could not be read."
-        }
     }
 }
 

@@ -259,6 +259,50 @@ final class USBRawSmartTests: XCTestCase {
         }
     }
 
+    func testUSBPassthroughUsesSelectedSNTStatusInsteadOfFailedOrdinaryRead() throws {
+        let drive = Self.drive()
+        var snapshot = try XCTUnwrap(Self.result(restored: true).snapshot)
+        snapshot.providerStatuses.insert(
+            .init(name: "smartctl", state: .failed, message: "Ordinary read failed."), at: 0)
+        let status = try XCTUnwrap(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
+        XCTAssertEqual(status.kind, .nvme)
+        XCTAssertEqual(status.state, .available)
+        XCTAssertFalse(status.suggestsSNTRead)
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t(status.messageKey), "已通过 USB 通道成功读取 SMART 数据。")
+
+        snapshot.providerStatuses = [
+            .init(name: USBRawSmartService.providerName, state: .limited, message: "Restoration unconfirmed."),
+            .init(name: "smartctl", state: .available, message: "Previous data.")
+        ]
+        let limited = try XCTUnwrap(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
+        XCTAssertEqual(limited.state, .limited)
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t(limited.messageKey),
+                       "已通过 USB 通道读取 SMART 数据，但存在限制，请查看上方来源说明。")
+    }
+
+    func testUSBPassthroughOffersSNTWhenOrdinaryReadReturnsNoData() throws {
+        let drive = Self.drive()
+        var snapshot = SmartSnapshot.unavailable(for: drive, reason: "No data")
+        snapshot.smartctlDiagnostics = .init(deviceType: "sat", protocolName: "ATA")
+        snapshot.providerStatuses = [.init(name: "smartctl", state: .failed, message: "Read failed.")]
+        let failed = try XCTUnwrap(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
+        XCTAssertEqual(failed.state, .failed)
+        XCTAssertTrue(failed.suggestsSNTRead)
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t(failed.messageKey),
+                       "常规 USB 通道未返回 SMART 数据。USB-NVMe 设备可尝试 SNT 读取。")
+        for state in [ProviderState.available, .limited] {
+            snapshot.providerStatuses[0].state = state
+            let empty = try XCTUnwrap(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
+            XCTAssertEqual(empty.state, .unavailable, "An identified protocol is not proof of a SMART read.")
+            XCTAssertTrue(empty.suggestsSNTRead)
+        }
+        snapshot.selectedProvider = USBRawSmartService.providerName
+        snapshot.providerStatuses = [.init(name: USBRawSmartService.providerName, state: .failed, message: "No data")]
+        let sntFailure = try XCTUnwrap(USBSmartCommandPassthroughStatus.resolve(for: drive, snapshot: snapshot))
+        XCTAssertFalse(sntFailure.suggestsSNTRead)
+        XCTAssertEqual(AppLanguage.simplifiedChinese.t(sntFailure.messageKey), "USB 通道尚未返回有效 SMART 数据。")
+    }
+
     @MainActor
     func testManualSNTRefreshConfirmsUpdatesAndKeepsPreviousReadWhenNoNewPayload() async throws {
         let drive = Self.drive()

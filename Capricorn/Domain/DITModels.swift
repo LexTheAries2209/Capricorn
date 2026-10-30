@@ -1849,6 +1849,20 @@ enum USBSmartCommandPassthroughKind: Hashable, Sendable {
 struct USBSmartCommandPassthroughStatus: Hashable, Sendable {
     var kind: USBSmartCommandPassthroughKind
     var state: ProviderState
+    var suggestsSNTRead = false
+
+    var messageKey: String {
+        switch state {
+        case .available:
+            "SMART data was successfully read through USB."
+        case .limited:
+            "SMART data was read through USB with limitations. Review the source details above."
+        case .unavailable, .failed:
+            suggestsSNTRead
+                ? "Standard USB access returned no SMART data. USB-NVMe devices may support an SNT read."
+                : "USB access has not returned valid SMART data."
+        }
+    }
 
     static func resolve(for drive: DriveDevice, snapshot: SmartSnapshot?) -> Self? {
         guard !drive.isInternal,
@@ -1862,26 +1876,25 @@ struct USBSmartCommandPassthroughStatus: Hashable, Sendable {
             return nil
         }
 
-        let smartctlState = snapshot?.providerStatuses.first {
-            $0.name.caseInsensitiveCompare("smartctl") == .orderedSame
+        // Manual SNT has its own provider status. Do not let an unavailable
+        // ordinary smartctl attempt override a successful selected SNT read.
+        let provider = snapshot?.selectedProvider == USBRawSmartService.providerName
+            ? USBRawSmartService.providerName : "smartctl"
+        let providerState = snapshot?.providerStatuses.first {
+            $0.name.caseInsensitiveCompare(provider) == .orderedSame
         }?.state ?? .unavailable
         // A transport descriptor alone is not proof that SMART was read.
         // Keep the row visible for diagnostics, but never show a green
         // passthrough result when the snapshot contains no SMART payload.
-        let hasSmartPayload = snapshot.map {
-            $0.smartStatusRaw != nil
-                || !$0.attributes.isEmpty
-                || $0.temperatureCelsius != nil
-                || $0.lifeRemainingPercent != nil
-                || $0.powerOnHours != nil
-                || $0.powerCycleCount != nil
-                || $0.mediaErrors != nil
-                || $0.unsafeShutdowns != nil
-        } ?? false
-        let effectiveState: ProviderState = smartctlState == .available && !hasSmartPayload
+        let effectiveState: ProviderState = (providerState == .available || providerState == .limited)
+            && snapshot?.hasSMARTPayload != true
             ? .unavailable
-            : smartctlState
-        return Self(kind: kind, state: effectiveState)
+            : providerState
+        return Self(
+            kind: kind, state: effectiveState,
+            suggestsSNTRead: provider != USBRawSmartService.providerName
+                && USBRawSmartPolicy.isEligible(drive: drive, snapshot: snapshot)
+        )
     }
 
     private static func kind(for diagnostics: SmartctlDiagnostics) -> USBSmartCommandPassthroughKind? {
