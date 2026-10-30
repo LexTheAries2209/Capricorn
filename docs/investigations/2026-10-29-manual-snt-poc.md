@@ -294,3 +294,24 @@ The signed Debug application was rebuilt and launched. On the attached F disk,
 clicking the SMART-page button opened the existing confirmation sheet with
 the correct disk and mounted volume. The sheet was cancelled without unmount
 or USB capture.
+
+## Reported Device Serial On 2026-10-30
+
+SNT returned `serial_number` in Identify JSON, but the SMART parser discarded
+it and the sidebar/page headers displayed only the inventory serial. USB
+bridges can leave that inventory value empty or report the bridge's identity
+instead of the NVMe device's identity.
+
+Successful SMART snapshots now retain the normalized device-reported serial.
+The sidebar and shared page header prefer that value for the matching drive,
+and SMART CSV metadata uses the same source. Redaction still applies.
+Transport identity matching remains based on the original inventory fields;
+a reported device serial does not overwrite a bridge serial used to associate
+the reconnected physical disk. Retained SNT snapshots keep the serial during
+refresh and BSD renumbering, and snapshot serialization preserves it without
+breaking older records that lack the field.
+
+Validation: all 38 SNT tests passed, including serial normalization, redaction,
+CSV metadata, snapshot coding/legacy decoding and refresh retention for CODEX.
+The full suite passed 643 tests with 8 existing environment-dependent skips
+and no failures.

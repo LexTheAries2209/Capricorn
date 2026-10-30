@@ -1508,6 +1508,7 @@ enum SmartctlParser {
             smartctlDiagnostics: smartctlDiagnostics
         )
         let evaluator = DriveHealthEvaluator()
+        snapshot.deviceSerialNumber = root.string("serial_number").flatMap(DriveSerialNumberNormalizer.normalize)
         snapshot.health = evaluator.evaluate(drive: drive, snapshot: snapshot)
         snapshot.summary = evaluator.summary(for: drive, snapshot: snapshot)
         return snapshot
@@ -2164,6 +2165,7 @@ final class SmartSnapshotService: @unchecked Sendable {
             merged.mediaErrors = snapshot.mediaErrors ?? merged.mediaErrors
             merged.unsafeShutdowns = snapshot.unsafeShutdowns ?? merged.unsafeShutdowns
             merged.smartStatusRaw = snapshot.smartStatusRaw ?? merged.smartStatusRaw
+            merged.deviceSerialNumber = snapshot.deviceSerialNumber ?? merged.deviceSerialNumber
             merged.selfTestStatus = snapshot.selfTestStatus ?? merged.selfTestStatus
             merged.selfTestReport = snapshot.selfTestReport ?? merged.selfTestReport
             merged.enduranceUsedPercent = snapshot.enduranceUsedPercent ?? merged.enduranceUsedPercent

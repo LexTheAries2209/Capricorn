@@ -565,7 +565,7 @@ enum ReportExporter {
                 englishName: "Serial Number",
                 chineseName: "序列号",
                 description: language == .simplifiedChinese ? "设备报告的硬件序列号" : "Hardware serial reported by the device",
-                value: drive.serialNumber.map {
+                value: (snapshot.reportedSerialNumber(for: drive) ?? drive.serialNumber).map {
                     SerialNumberDisplayFormatter.displayValue($0, redact: redactSerialNumbers)
                 } ?? ""
             ),

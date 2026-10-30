@@ -1152,16 +1152,20 @@ enum AppFeatureTabKeyRouter {
 }
 
 enum DrivePageHeaderText {
-    static func serialNumber(for drive: DriveDevice, language: AppLanguage, redact: Bool = false) -> String {
-        SerialNumberDisplayFormatter.displayValue(
-            drive.serialNumber,
+    static func serialNumber(
+        for drive: DriveDevice, snapshot: SmartSnapshot? = nil, language: AppLanguage, redact: Bool = false
+    ) -> String {
+        return SerialNumberDisplayFormatter.displayValue(
+            snapshot?.reportedSerialNumber(for: drive) ?? drive.serialNumber,
             redact: redact,
             missingValue: language.t("None")
         )
     }
 
-    static func serialNumberLine(for drive: DriveDevice, language: AppLanguage, redact: Bool = false) -> String {
-        "\(language.t("Serial Number")): \(serialNumber(for: drive, language: language, redact: redact))"
+    static func serialNumberLine(
+        for drive: DriveDevice, snapshot: SmartSnapshot? = nil, language: AppLanguage, redact: Bool = false
+    ) -> String {
+        "\(language.t("Serial Number")): \(serialNumber(for: drive, snapshot: snapshot, language: language, redact: redact))"
     }
 
     static func mediaKind(for drive: DriveDevice, language: AppLanguage) -> String {
@@ -1657,6 +1661,14 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     var selectedTransport: String? = nil
     var fallbackUsed: Bool? = nil
     var fallbackReason: String? = nil
+    var deviceSerialNumber: String? = nil
+
+    func reportedSerialNumber(for drive: DriveDevice) -> String? {
+        // A SMART response identifies the storage device, while the inventory
+        // serial may belong to its USB bridge. Keep transport matching separate.
+        guard driveID == drive.id, hasSMARTPayload else { return nil }
+        return deviceSerialNumber
+    }
 
     var hasSMARTPayload: Bool {
         smartStatusRaw?.isEmpty == false || !attributes.isEmpty
@@ -1738,6 +1750,7 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
         retained.powerCycleCount = retained.powerCycleCount ?? previous.powerCycleCount
         retained.mediaErrors = retained.mediaErrors ?? previous.mediaErrors
         retained.unsafeShutdowns = retained.unsafeShutdowns ?? previous.unsafeShutdowns
+        retained.deviceSerialNumber = retained.deviceSerialNumber ?? previous.deviceSerialNumber
         retained.smartStatusRaw = retained.smartStatusRaw ?? previous.smartStatusRaw
         retained.selfTestStatus = retained.selfTestStatus ?? previous.selfTestStatus
         retained.selfTestReport = retained.selfTestReport ?? previous.selfTestReport

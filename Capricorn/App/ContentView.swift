@@ -1303,7 +1303,7 @@ struct DriveSidebarRow: View {
                     .fixedSize(horizontal: measuresIntrinsicWidth, vertical: allowsTextWrapping)
                     .truncationMode(.middle)
                     .help(drive.catalogDisplayHelp(language: language))
-                Text(DrivePageHeaderText.serialNumberLine(for: drive, language: language, redact: redactSerialNumbers))
+                Text(DrivePageHeaderText.serialNumberLine(for: drive, snapshot: snapshot, language: language, redact: redactSerialNumbers))
                     .font(DriveSidebarTypography.metadata)
                     .foregroundStyle(.secondary)
                     .lineLimit(allowsTextWrapping ? nil : 1)
@@ -1540,7 +1540,7 @@ struct DrivePageHeaderView: View {
                     .lineLimit(2)
                     .help(drive.catalogDisplayHelp(language: language))
                 if showsSerialNumber {
-                    Text(DrivePageHeaderText.serialNumberLine(for: drive, language: language, redact: redactSerialNumbers))
+                    Text(DrivePageHeaderText.serialNumberLine(for: drive, snapshot: snapshot, language: language, redact: redactSerialNumbers))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

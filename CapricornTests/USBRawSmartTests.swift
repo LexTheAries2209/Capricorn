@@ -20,7 +20,7 @@ final class USBRawSmartTests: XCTestCase {
     }
 
     static let target = USBRawSmartTarget(registryID: 987654321)
-    static let json = #"{"smartctl":{"exit_status":0,"version":[8,0]},"device":{"name":"usbraw:987654321","type":"sntrealtek","protocol":"NVMe"},"model_name":"Test NVMe","smart_status":{"passed":true},"nvme_smart_health_information_log":{"temperature":37,"percentage_used":3,"available_spare":100,"power_on_hours":20}}"#
+    static let json = #"{"smartctl":{"exit_status":0,"version":[8,0]},"device":{"name":"usbraw:987654321","type":"sntrealtek","protocol":"NVMe"},"model_name":"Test NVMe","serial_number":"NVME-DEVICE-SERIAL","smart_status":{"passed":true},"nvme_smart_health_information_log":{"temperature":37,"percentage_used":3,"available_spare":100,"power_on_hours":20}}"#
 
     static func codexDrive() -> DriveDevice {
         var drive = drive()
@@ -76,10 +76,59 @@ final class USBRawSmartTests: XCTestCase {
         await task.value
         XCTAssertNil(model.usbRawSmartSession?.error)
         XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 37)
+        XCTAssertEqual(model.selectedSnapshot?.deviceSerialNumber, "NVME-DEVICE-SERIAL")
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(
+            for: drive, snapshot: model.selectedSnapshot, language: .english), "NVME-DEVICE-SERIAL")
         model.closeUSBRawSmart()
         model.finishUSBRawSmartDismissal()
         await model.refresh()
         XCTAssertEqual(model.selectedSnapshot?.temperatureCelsius, 37)
+        XCTAssertEqual(model.selectedSnapshot?.deviceSerialNumber, "NVME-DEVICE-SERIAL")
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(
+            for: drive, snapshot: model.selectedSnapshot, language: .english), "NVME-DEVICE-SERIAL")
+        XCTAssertNil(model.selectedDrive?.serialNumber, "Transport identity must remain independent of the reported NVMe serial.")
+    }
+
+    func testSNTSerialIsParsedNormalizedAndUsedBySharedDisplayWithRedaction() throws {
+        let drive = Self.drive()
+        let snapshot = try XCTUnwrap(Self.result(restored: true).snapshot)
+        XCTAssertEqual(snapshot.deviceSerialNumber, "NVME-DEVICE-SERIAL")
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(
+            for: drive, snapshot: snapshot, language: .english), "NVME-DEVICE-SERIAL")
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(
+            for: drive, snapshot: snapshot, language: .english, redact: true),
+            SerialNumberDisplayFormatter.displayValue("NVME-DEVICE-SERIAL", redact: true))
+        let csv = ReportExporter.smartSnapshotCSVReport(drive: drive, snapshot: snapshot, language: .english)
+        XCTAssertTrue(csv.contains("serial_number,Serial Number,Hardware serial reported by the device,NVME-DEVICE-SERIAL"))
+        let redactedCSV = ReportExporter.smartSnapshotCSVReport(
+            drive: drive, snapshot: snapshot, language: .english, redactSerialNumbers: true)
+        XCTAssertFalse(redactedCSV.contains("NVME-DEVICE-SERIAL"))
+        var wrongDrive = drive
+        wrongDrive.bsdName = "disk101"
+        XCTAssertEqual(DrivePageHeaderText.serialNumber(
+            for: wrongDrive, snapshot: snapshot, language: .english), drive.serialNumber)
+        for value in ["", "   ", "unknown", "nil", "  X01TV11K520591  "] {
+            let json = Self.json.replacingOccurrences(of: "NVME-DEVICE-SERIAL", with: value)
+            let parsed = USBRawSmartService.parse(
+                CommandResult(stdout: Data(json.utf8), stderr: Data(), terminationStatus: 0),
+                drive: drive, target: Self.target, type: "sntjmicron")
+            XCTAssertEqual(parsed.snapshot?.deviceSerialNumber,
+                           value.contains("X01") ? "X01TV11K520591" : nil)
+            XCTAssertEqual(DrivePageHeaderText.serialNumber(
+                for: drive, snapshot: parsed.snapshot, language: .english),
+                value.contains("X01") ? "X01TV11K520591" : "SNT-TEST-DRIVE")
+        }
+    }
+
+    func testSNTSerialSurvivesSnapshotCodingAndLegacySnapshotsDecodeWithoutIt() throws {
+        let snapshot = try XCTUnwrap(Self.result(restored: true).snapshot)
+        let data = try JSONEncoder().encode(snapshot)
+        XCTAssertEqual(try JSONDecoder().decode(SmartSnapshot.self, from: data).deviceSerialNumber,
+                       "NVME-DEVICE-SERIAL")
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacy.removeValue(forKey: "deviceSerialNumber")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacy)
+        XCTAssertNil(try JSONDecoder().decode(SmartSnapshot.self, from: legacyData).deviceSerialNumber)
     }
 
     @MainActor
