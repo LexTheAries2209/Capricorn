@@ -271,7 +271,7 @@ final class SmartErrorLogPresentationTests: XCTestCase {
             let text = normalized(lines.joined())
             for caption in [
                 "No SMART Data Read",
-                "Standard access has not returned SMART data. USB-NVMe devices may support a manual SNT read.",
+                "Standard access has not returned SMART data.\nUSB-NVMe devices may support a manual SNT read.",
                 "Reading temporarily unmounts the volumes and requires administrator authorization.",
                 "Try SNT Read"
             ] {

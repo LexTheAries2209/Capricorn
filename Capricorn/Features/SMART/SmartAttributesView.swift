@@ -153,7 +153,7 @@ struct SmartAttributesView: View {
                         Label(language.t("No SMART Data Read"), systemImage: "externaldrive.badge.questionmark")
                     } description: {
                         VStack(spacing: 8) {
-                            Text(language.t("Standard access has not returned SMART data. USB-NVMe devices may support a manual SNT read."))
+                            Text(language.t("Standard access has not returned SMART data.\nUSB-NVMe devices may support a manual SNT read."))
                             Text(language.t("Reading temporarily unmounts the volumes and requires administrator authorization."))
                         }
                     } actions: {

@@ -785,7 +785,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "No SMART Attributes": "无 SMART 属性",
         "No SMART Data Read": "尚未读取到 SMART 数据",
         "Try SNT Read": "尝试 SNT 读取",
-        "Standard access has not returned SMART data. USB-NVMe devices may support a manual SNT read.": "常规读取尚未返回 SMART 数据。USB-NVMe 设备可尝试通过 SNT 手动读取。",
+        "Standard access has not returned SMART data.\nUSB-NVMe devices may support a manual SNT read.": "常规读取尚未返回 SMART 数据。\nUSB-NVMe 设备可尝试通过 SNT 手动读取。",
         "Reading temporarily unmounts the volumes and requires administrator authorization.": "读取期间会暂时卸载卷，并需要管理员授权。",
         "SMART data is unavailable for this drive.": "此硬盘的 SMART 数据不可用。",
         "Profile": "配置",
