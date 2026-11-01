@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
+import ServiceManagement
 import IOKit
 import IOKit.storage
 import OSLog
@@ -524,6 +525,8 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
     private let commandCoordinator: SmartctlCommandCoordinator
     private let ioServiceTargetResolver: any SmartctlIOServiceTargetResolving
     private let avoidsWakingSleepingDisks: @Sendable () -> Bool
+    private let privilegedRunner: CommandRunning
+    private let deviceServiceEnabled: @Sendable () -> Bool
 
     init(
         runner: CommandRunning = ShellCommandRunner(),
@@ -537,6 +540,10 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
             // Keep refresh behavior aligned with the settings default before a choice is saved.
             UserDefaults.standard.object(forKey: AppPreferences.Key.avoidWakingSleepingDisks) as? Bool
                 ?? AppPreferences.Defaults.avoidWakingSleepingDisks
+        },
+        privilegedRunner: CommandRunning = PrivilegedDeviceCommandRunner(),
+        deviceServiceEnabled: @escaping @Sendable () -> Bool = {
+            SMAppService.daemon(plistName: DeviceHelperIdentity.plistName).status == .enabled
         }
     ) {
         self.runner = runner
@@ -547,6 +554,8 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         self.commandCoordinator = commandCoordinator
         self.ioServiceTargetResolver = ioServiceTargetResolver
         self.avoidsWakingSleepingDisks = avoidsWakingSleepingDisks
+        self.privilegedRunner = privilegedRunner
+        self.deviceServiceEnabled = deviceServiceEnabled
     }
 
     func snapshot(for drive: DriveDevice) async -> SmartSnapshot? {
@@ -693,12 +702,21 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         fallback: String,
         executable: SmartctlExecutableDescriptor
     ) async throws -> SmartSnapshot {
-        let result = try await commandCoordinator.run { [self] in
+        var result = try await commandCoordinator.run { [self] in
             try await self.runner.run(
                 executable.path,
                 arguments: self.smartReadArguments(for: drive, target: target, fallback: fallback, executable: executable),
                 timeout: Self.readTimeout
             )
+        }
+        // Background refresh never registers a helper or opens an auth prompt.
+        // Escalate a denied read only when the user has already enabled it.
+        if SmartctlParser.requiresAdministrator(result), deviceServiceEnabled() {
+            result = try await commandCoordinator.run { [self] in
+                try await self.privilegedRunner.run(
+                    executable.path,
+                    arguments: self.smartReadArguments(for: drive, target: target, fallback: fallback, executable: executable))
+            }
         }
         var snapshot = SmartctlParser.parseSnapshot(
             result.stdout,
@@ -958,7 +976,7 @@ final class SmartSelfTestService: @unchecked Sendable {
     init(
         smartctlProvider: SmartctlSmartProvider = SmartctlSmartProvider(),
         runner: CommandRunning = ShellCommandRunner(),
-        administratorRunner: CommandRunning = AdministratorCommandRunner(),
+        administratorRunner: CommandRunning = PrivilegedDeviceCommandRunner(),
         commandCoordinator: SmartctlCommandCoordinator = .shared
     ) {
         self.smartctlProvider = smartctlProvider
@@ -1145,7 +1163,7 @@ final class SmartErrorLogService: @unchecked Sendable {
     init(
         smartctlProvider: SmartctlSmartProvider = SmartctlSmartProvider(),
         runner: CommandRunning = ShellCommandRunner(),
-        administratorRunner: CommandRunning = AdministratorCommandRunner(),
+        administratorRunner: CommandRunning = PrivilegedDeviceCommandRunner(),
         commandCoordinator: SmartctlCommandCoordinator = .shared
     ) {
         self.smartctlProvider = smartctlProvider

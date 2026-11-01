@@ -201,7 +201,7 @@ struct USBRawSmartService: USBRawSmartRunning {
 
     init(
         runner: CommandRunning = ShellCommandRunner(),
-        administratorRunner: CommandRunning = AdministratorUSBRawCommandRunner(),
+        administratorRunner: CommandRunning = PrivilegedDeviceCommandRunner(),
         executableURL: URL? = Bundle.main.executableURL?
             .deletingLastPathComponent().appendingPathComponent("smartctl-usbraw"),
         targetResolver: @escaping @Sendable (DriveDevice) throws -> USBRawSmartTarget = {

@@ -265,6 +265,21 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
 
     private static let zhHans: [String: String] = [
+        "Privileged Device Service": "特权设备服务",
+        "Disable the device service in Settings before updating": "更新前请先在设置中停用设备服务",
+        "The device service is busy. Wait for its current operation to complete.": "设备服务正忙，请等待当前操作和挂载恢复完成。",
+        "Enable Device Service": "启用设备服务",
+        "Disable Device Service": "停用设备服务",
+        "Review System Approval": "查看系统批准",
+        "Refresh Service Status": "刷新服务状态",
+        "Device Service Enabled": "设备服务已启用",
+        "Device Service Awaiting System Approval": "设备服务等待系统批准",
+        "Device Service Not Enabled": "设备服务未启用",
+        "Device Service Not Found": "未找到设备服务",
+        "Device Service Unavailable": "设备服务不可用",
+        "SMART reads, supported hardware self-tests and manual SNT share this service. SNT still asks before unmounting. Removable-volume privacy permission remains separate.": "SMART 读取、受支持的硬件自检和手动 SNT 共用此服务。SNT 仍会在卸载前确认，可移动卷隐私授权仍需单独授予。",
+        "Enable the privileged device service in Settings before running this operation.": "请先在设置中启用特权设备服务，再执行此操作。",
+        "Install the signed Capricorn application in /Applications before enabling the device service.": "请先将已签名的 Capricorn 安装到 /Applications，再启用设备服务。",
         "Try SNT…": "尝试 SNT…",
         "Try SNT": "尝试 SNT",
         "Detect Bridge": "自动识别桥接芯片",

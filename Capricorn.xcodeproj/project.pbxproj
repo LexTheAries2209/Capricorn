@@ -9,7 +9,14 @@
 /* Begin PBXBuildFile section */
 		A11CE001BADD1E0000000001 /* Capricorn/Resources/Smartmontools/drivedb.h in Resources */ = {isa = PBXBuildFile; fileRef = A11CE001BADD1E0000000002 /* Capricorn/Resources/Smartmontools/drivedb.h */; };
 		A11CE002BADD1E0000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A11CE002BADD1E0000000002 /* Sparkle */; };
-		A11CE003BADD1E0000000001 /* smartctl-usbraw in Executables */ = {isa = PBXBuildFile; fileRef = A11CE003BADD1E0000000002 /* smartctl-usbraw */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		A11CE003BADD1E0000000001 /* Capricorn/Resources/Smartmontools/smartctl-usbraw in Embed SNT Executable */ = {isa = PBXBuildFile; fileRef = A11CE003BADD1E0000000002 /* Capricorn/Resources/Smartmontools/smartctl-usbraw */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		B10000000000000000000001 /* CapricornDeviceHelper in Embed SNT Executable */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* CapricornDeviceHelper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		B10000000000000000000003 /* Capricorn/Resources/Smartmontools/smartctl in Embed SNT Executable */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* Capricorn/Resources/Smartmontools/smartctl */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		B10000000000000000000005 /* Configuration/lex.Capricorn.DeviceHelper.plist in Embed Device Service */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* Configuration/lex.Capricorn.DeviceHelper.plist */; };
+		B10000000000000000000007 /* Capricorn/Services/PrivilegedDevice/DeviceHelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* Capricorn/Services/PrivilegedDevice/DeviceHelperProtocol.swift */; };
+		B10000000000000000000009 /* Capricorn/Services/PrivilegedDevice/DeviceHelperDeviceResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* Capricorn/Services/PrivilegedDevice/DeviceHelperDeviceResolver.swift */; };
+		B1000000000000000000000B /* Capricorn/Services/PrivilegedDevice/DeviceHelperSigning.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* Capricorn/Services/PrivilegedDevice/DeviceHelperSigning.swift */; };
+		B10000000000000000000040 /* Capricorn/Services/PrivilegedDevice/DeviceHelperOperationGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000041 /* Capricorn/Services/PrivilegedDevice/DeviceHelperOperationGate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -20,6 +27,13 @@
 			remoteGlobalIDString = 587A84662FE6BDAA0045BA20;
 			remoteInfo = Capricorn;
 		};
+		58D83BCC3096EA9E00922BD1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 587A845F2FE6BDAA0045BA20 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B10000000000000000000010;
+			remoteInfo = CapricornDeviceHelper;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -29,9 +43,22 @@
 			dstPath = "";
 			dstSubfolderSpec = 6;
 			files = (
-				A11CE003BADD1E0000000001 /* smartctl-usbraw in Executables */,
+				A11CE003BADD1E0000000001 /* Capricorn/Resources/Smartmontools/smartctl-usbraw in Embed SNT Executable */,
+				B10000000000000000000001 /* CapricornDeviceHelper in Embed SNT Executable */,
+				B10000000000000000000003 /* Capricorn/Resources/Smartmontools/smartctl in Embed SNT Executable */,
 			);
 			name = "Embed SNT Executable";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1000000000000000000000D /* Embed Device Service */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Library/LaunchDaemons;
+			dstSubfolderSpec = 1;
+			files = (
+				B10000000000000000000005 /* Configuration/lex.Capricorn.DeviceHelper.plist in Embed Device Service */,
+			);
+			name = "Embed Device Service";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -40,14 +67,21 @@
 		0BC08D39966F483D907890D0 /* CapricornTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CapricornTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		587A84672FE6BDAA0045BA20 /* Capricorn.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Capricorn.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A11CE001BADD1E0000000002 /* Capricorn/Resources/Smartmontools/drivedb.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Capricorn/Resources/Smartmontools/drivedb.h; sourceTree = SOURCE_ROOT; };
-		A11CE003BADD1E0000000002 /* smartctl-usbraw */ = {isa = PBXFileReference; lastKnownFileType = compiled.mach-o.executable; path = Capricorn/Resources/Smartmontools/smartctl-usbraw; sourceTree = SOURCE_ROOT; };
+		A11CE003BADD1E0000000002 /* Capricorn/Resources/Smartmontools/smartctl-usbraw */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = "Capricorn/Resources/Smartmontools/smartctl-usbraw"; sourceTree = SOURCE_ROOT; };
+		B10000000000000000000002 /* CapricornDeviceHelper */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; path = CapricornDeviceHelper; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000004 /* Capricorn/Resources/Smartmontools/smartctl */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = Capricorn/Resources/Smartmontools/smartctl; sourceTree = SOURCE_ROOT; };
+		B10000000000000000000006 /* Configuration/lex.Capricorn.DeviceHelper.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Configuration/lex.Capricorn.DeviceHelper.plist; sourceTree = SOURCE_ROOT; };
+		B10000000000000000000008 /* Capricorn/Services/PrivilegedDevice/DeviceHelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capricorn/Services/PrivilegedDevice/DeviceHelperProtocol.swift; sourceTree = SOURCE_ROOT; };
+		B1000000000000000000000A /* Capricorn/Services/PrivilegedDevice/DeviceHelperDeviceResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capricorn/Services/PrivilegedDevice/DeviceHelperDeviceResolver.swift; sourceTree = SOURCE_ROOT; };
+		B1000000000000000000000C /* Capricorn/Services/PrivilegedDevice/DeviceHelperSigning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capricorn/Services/PrivilegedDevice/DeviceHelperSigning.swift; sourceTree = SOURCE_ROOT; };
+		B10000000000000000000041 /* Capricorn/Services/PrivilegedDevice/DeviceHelperOperationGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capricorn/Services/PrivilegedDevice/DeviceHelperOperationGate.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		A11CE003BADD1E0000000004 /* SNT executable membership */ = {
+		A11CE003BADD1E0000000004 /* Exceptions for "Capricorn" folder in "Capricorn" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Resources/Smartmontools/smartctl-usbraw,
+				"Resources/Smartmontools/smartctl-usbraw",
 			);
 			target = 587A84662FE6BDAA0045BA20 /* Capricorn */;
 		};
@@ -62,9 +96,14 @@
 		587A84692FE6BDAA0045BA20 /* Capricorn */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				A11CE003BADD1E0000000004 /* SNT executable membership */,
+				A11CE003BADD1E0000000004 /* Exceptions for "Capricorn" folder in "Capricorn" target */,
 			);
 			path = Capricorn;
+			sourceTree = "<group>";
+		};
+		B1000000000000000000000E /* DeviceHelper */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DeviceHelper;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -92,7 +131,14 @@
 			isa = PBXGroup;
 			children = (
 				A11CE001BADD1E0000000002 /* Capricorn/Resources/Smartmontools/drivedb.h */,
-				A11CE003BADD1E0000000002 /* smartctl-usbraw */,
+				A11CE003BADD1E0000000002 /* Capricorn/Resources/Smartmontools/smartctl-usbraw */,
+				B10000000000000000000008 /* Capricorn/Services/PrivilegedDevice/DeviceHelperProtocol.swift */,
+				B1000000000000000000000A /* Capricorn/Services/PrivilegedDevice/DeviceHelperDeviceResolver.swift */,
+				B1000000000000000000000C /* Capricorn/Services/PrivilegedDevice/DeviceHelperSigning.swift */,
+				B10000000000000000000041 /* Capricorn/Services/PrivilegedDevice/DeviceHelperOperationGate.swift */,
+				B10000000000000000000002 /* CapricornDeviceHelper */,
+				B10000000000000000000004 /* Capricorn/Resources/Smartmontools/smartctl */,
+				B10000000000000000000006 /* Configuration/lex.Capricorn.DeviceHelper.plist */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -101,6 +147,7 @@
 			isa = PBXGroup;
 			children = (
 				587A84692FE6BDAA0045BA20 /* Capricorn */,
+				B1000000000000000000000E /* DeviceHelper */,
 				09B48EF062434AE09FD8BCEE /* CapricornTests */,
 				587A84682FE6BDAA0045BA20 /* Products */,
 				5867E0AC304ED54E006FD81D /* Recovered References */,
@@ -150,10 +197,12 @@
 				587A84642FE6BDAA0045BA20 /* Frameworks */,
 				587A84652FE6BDAA0045BA20 /* Resources */,
 				A11CE003BADD1E0000000003 /* Embed SNT Executable */,
+				B1000000000000000000000D /* Embed Device Service */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B10000000000000000000013 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				587A84692FE6BDAA0045BA20 /* Capricorn */,
@@ -165,6 +214,24 @@
 			productName = Capricorn;
 			productReference = 587A84672FE6BDAA0045BA20 /* Capricorn.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B10000000000000000000010 /* CapricornDeviceHelper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B10000000000000000000011 /* Build configuration list for PBXNativeTarget "CapricornDeviceHelper" */;
+			buildPhases = (
+				B10000000000000000000012 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B1000000000000000000000E /* DeviceHelper */,
+			);
+			name = CapricornDeviceHelper;
+			productName = CapricornDeviceHelper;
+			productReference = B10000000000000000000002 /* CapricornDeviceHelper */;
+			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
 
@@ -203,6 +270,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				B10000000000000000000010 /* CapricornDeviceHelper */,
 				587A84662FE6BDAA0045BA20 /* Capricorn */,
 				149144093BAB4359818339AF /* CapricornTests */,
 			);
@@ -242,6 +310,17 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B10000000000000000000012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000007 /* Capricorn/Services/PrivilegedDevice/DeviceHelperProtocol.swift in Sources */,
+				B10000000000000000000009 /* Capricorn/Services/PrivilegedDevice/DeviceHelperDeviceResolver.swift in Sources */,
+				B1000000000000000000000B /* Capricorn/Services/PrivilegedDevice/DeviceHelperSigning.swift in Sources */,
+				B10000000000000000000040 /* Capricorn/Services/PrivilegedDevice/DeviceHelperOperationGate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -249,6 +328,11 @@
 			isa = PBXTargetDependency;
 			target = 587A84662FE6BDAA0045BA20 /* Capricorn */;
 			targetProxy = 585973B1ABFE48E9B653BC73 /* PBXContainerItemProxy */;
+		};
+		B10000000000000000000013 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B10000000000000000000010 /* CapricornDeviceHelper */;
+			targetProxy = 58D83BCC3096EA9E00922BD1 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -472,6 +556,36 @@
 			};
 			name = Debug;
 		};
+		B10000000000000000000014 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 6PYLB6N93R;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_CODE_SIGN_FLAGS = "--identifier lex.Capricorn.DeviceHelper";
+				PRODUCT_BUNDLE_IDENTIFIER = lex.Capricorn.DeviceHelper;
+				PRODUCT_NAME = CapricornDeviceHelper;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B10000000000000000000015 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 6PYLB6N93R;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_CODE_SIGN_FLAGS = "--identifier lex.Capricorn.DeviceHelper";
+				PRODUCT_BUNDLE_IDENTIFIER = lex.Capricorn.DeviceHelper;
+				PRODUCT_NAME = CapricornDeviceHelper;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		C714EE6B4A9846598FEA8FBB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -525,6 +639,15 @@
 			buildConfigurations = (
 				587A84732FE6BDAB0045BA20 /* Debug */,
 				587A84742FE6BDAB0045BA20 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B10000000000000000000011 /* Build configuration list for PBXNativeTarget "CapricornDeviceHelper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B10000000000000000000014 /* Debug */,
+				B10000000000000000000015 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

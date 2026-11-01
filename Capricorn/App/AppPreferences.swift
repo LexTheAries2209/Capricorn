@@ -366,6 +366,8 @@ struct CapricornSettingsView: View {
             )
                 .id(CapricornSettingsDestination.updates)
 
+            DeviceHelperSettingsSection(language: language)
+
             Section(language.t("Interface Display")) {
                 Picker(language.t("Language"), selection: $preferences.languageRawValue) {
                     ForEach(AppLanguage.allCases) { language in
