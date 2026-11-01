@@ -117,8 +117,10 @@ The existing raw worker still checks root UID, audit UID/session and raw-node
 access before unmounting. Its user-side volume permission request is retained.
 
 The earlier one-shot runner's TCC success is not proof that a new daemon and
-snapshot path are authorized. This new path needs a first-run hardware/TCC
-validation after the user approves the installed service.
+snapshot path are authorized. Native NVMe reads through the daemon and signed
+snapshot passed the installed hardware validation below. That connection did
+not exercise raw USB removable-volume TCC; the SNT path still needs separate
+validation with a USB mass-storage device.
 
 ## Stop And Updates
 
@@ -151,11 +153,10 @@ unprivileged direct-launch rejection. Existing SNT tests cover confirmation,
 volume-access denial, bridge probing, restoration evidence, refresh retention,
 stable identity matching and dismissal behavior.
 
-System service approval, the first daemon-launched TCC check, a full hardware
-SNT read/restoration, and self-test start/abort are not simulated as successful
-by these unit tests. They require a controlled hardware validation after
-installation. No hardware self-test or USB capture is started automatically
-by building or running the test suite.
+The ordinary suite does not simulate system approval, a successful raw USB
+TCC check, a full hardware SNT read/restoration or self-test start/abort.
+The explicit hardware suite described below performs only SMART/log reads.
+No hardware self-test or USB capture is started by either suite.
 
 ## First Installed Hardware Baseline
 
@@ -198,6 +199,93 @@ no volume was unmounted or USB device captured in this baseline step.
 Testing SNT additionally requires a USB mass-storage connection rather than
 this disk's current native PCIe/NVMe connection.
 
+## Approved Service Hardware Validation
+
+After the user confirmed system approval on 2026-11-01, launchd exposed the
+registered system Mach service. The first real XPC test revealed two runtime
+issues that had not been covered by ordinary unit tests:
+
+1. `BundleProgram` launches with a relative `argv[0]`
+   (`Contents/MacOS/CapricornDeviceHelper`). Interpreting that as an absolute
+   image location made startup verify the wrong containing directory and exit
+   before listening. Commit `29c6474` resolves the actual loaded image using
+   `_NSGetExecutablePath`, checks standard app embedding, and records startup
+   failures with unified logging.
+2. Foundation canonicalizes `/private/var` to `/var`. Comparing a resolved
+   framework symlink to an unresolved snapshot root falsely rejected legitimate
+   internal Sparkle links as external. Commit `7d8167c` canonicalizes both
+   paths while preserving the descendant boundary check. Regression coverage
+   includes the alias, a valid framework link and an external sibling target.
+
+For each replacement, the service was disabled/unregistered and the older app
+was moved into `output/DeviceHelperBackups/` before installing a newly verified
+universal development build. No bundle was replaced while a device worker was
+active. Once startup worked, the actual authenticated prepare-to-stop and
+unregister sequence also completed successfully.
+
+At 14:07 CST, the opt-in Xcode hardware test passed against the installed
+service and external `disk6`. A second successful run at 14:09 CST used the
+production `DeviceHelperClient.perform` for the initial SMART request.
+Both client and server retained their production signing requirements.
+
+Verified results:
+
+- SMART, self-test capability, self-test log and error-log reads all returned
+  exit status 0. No self-test was started or aborted.
+- The production client received `Lexar SSD ARES 4TB` data: 56 C, 2% endurance
+  used, zero media errors in the second run. Values are point-in-time readings.
+- The helper was a launchd child with real/effective UID 0. Its execution logs
+  reported `euid 0` and authenticated console UID 501 for every operation.
+- `smartctl`'s returned arguments referenced the database in
+  `/private/var/run/lex.Capricorn.DeviceHelper.C3w60z/Capricorn.app`.
+  The test independently verified the snapshot's strict nested signature,
+  root ownership, and absence of group/other write permission on the app,
+  database and SMART executable.
+- Replaying a completed request UUID returned identical cached output.
+- A request with an altered media Registry ID was rejected by the server
+  before another device command ran.
+- A separate probe signed by the **same development team**, but with identifier
+  `lex.Capricorn.UntrustedProbe`, received an XPC interruption instead of a
+  version reply. The helper's system log explicitly recorded
+  `Dropping check-in message due to code signing requirement`.
+- `40G4T_APFS_F` remained mounted at `/Volumes/40G4T_APFS_F`, with its original
+  volume UUID. No unmount, raw USB capture or forced operation was performed.
+
+The added hardware test is skipped unless both environment variables are set:
+
+```sh
+TEST_RUNNER_CAPRICORN_HELPER_TEST_DISK=disk6 \
+TEST_RUNNER_CAPRICORN_HELPER_TEST_TYPE=nvme \
+xcodebuild test -project Capricorn.xcodeproj -scheme Capricorn \
+  -configuration Debug -destination 'platform=macOS' \
+  -derivedDataPath DerivedData \
+  -only-testing:CapricornTests/DeviceHelperHardwareTests \
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY='Apple Development'
+```
+
+The disk name above is historical; select and verify the currently connected
+external physical disk before enabling this test. It refuses internal disks
+and sends no SNT/self-test-control request. SMART health-warning exit bits are
+preserved rather than confused with transport failures.
+
+The non-app rejection probe is `script/device_helper_client_rejection.swift`.
+Compile it outside the app and sign with a different identifier; it only asks
+for the protocol version, never a device operation. A reply is failure and a
+timeout is inconclusive. Its observed rejection was corroborated by the
+service's signing-requirement log, not just a disconnected socket.
+
+Final ordinary regression run at 14:13 CST: **669 tests, 9 skipped, 0 failures**.
+The skips comprise the previous 8 environment-dependent skips and the new
+explicitly opt-in hardware test. The hardware test separately passed with
+opt-in enabled. The installed helper and app remain system-approved and
+development-signed; no distribution notarization is claimed.
+
+The NVMe path emitted no matching removable-volume TCC record in the inspected
+window. Therefore these results do **not** establish raw USB audit-session/TCC,
+SNT capture/restoration, UI publication after SNT, or hardware self-test
+start/abort. Those still need the appropriate USB connection or supported
+self-test transport and manual confirmations.
+
 ## 中文操作摘要
 
 - 在设置中启用一次“特权设备服务”，经系统批准后，受限的 SMART 功能共用一个
@@ -207,8 +295,10 @@ this disk's current native PCIe/NVMe connection.
 - 不提供任意 shell、路径、命令或通用磁盘操作接口。
 - 正在执行或恢复挂载时不能通过 Capricorn 停用服务。
 - 第一版更新前须先停用服务，更新完成后再启用。
-- 新服务的真实 TCC 归属、硬件读取和挂载恢复必须在系统批准后另行验证；
-  单元测试通过不代表这些硬件步骤已经完成。
+- 已完成系统批准后的真实 XPC、root 工具快照、NVMe SMART 与日志只读验证，
+  并验证错误磁盘身份和非本 App 客户端会被拒绝。
+- USB-SNT 的 TCC 归属、接管与挂载恢复仍需 USB 通路真机验证；本轮的 PCIe/
+  NVMe 成功不能替代这些步骤。
 
 ### 首次真机验收
 
