@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "source": "DeviceHunt",
-  "snapshotDate": "2026-10-28",
+  "snapshotDate": "2026-11-01",
   "records": [
     {
       "id": "PCI 1B21:0612",
@@ -387,6 +387,62 @@
       "category": "NVMe Controller",
       "name": "NVMe SSD Controller SM961/PM961/SM963",
       "sourceURL": "https://devicehunt.com/view/type/pci/vendor/144D/device/A804"
+    },
+    {
+      "id": "PCI 1D97:2508",
+      "manufacturer": "Longsys",
+      "category": "NVMe Controller",
+      "name": "Lexar NM1090 PRO",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1D97/device/2508"
+    },
+    {
+      "id": "PCI 1D97:1202",
+      "manufacturer": "Longsys",
+      "category": "NVMe Controller",
+      "name": "Lexar NM610 PRO",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1D97/device/1202"
+    },
+    {
+      "id": "PCI 1D97:1D97",
+      "manufacturer": "Longsys",
+      "category": "NVMe Controller",
+      "name": "Lexar NM620",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1D97/device/1D97"
+    },
+    {
+      "id": "PCI 1D97:1062",
+      "manufacturer": "Longsys",
+      "category": "NVMe Controller",
+      "name": "Lexar NM710",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1D97/device/1062"
+    },
+    {
+      "id": "PCI 1D97:1602",
+      "manufacturer": "Longsys",
+      "category": "NVMe Controller",
+      "name": "Lexar NM790 / Patriot VP4300 Lite",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1D97/device/1602"
+    },
+    {
+      "id": "PCI 1D97:5236",
+      "manufacturer": "Longsys",
+      "category": "NVMe Controller",
+      "name": "Lexar NM800 PRO",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1D97/device/5236"
+    },
+    {
+      "id": "PCI 1D97:1806",
+      "manufacturer": "Longsys",
+      "category": "NVMe Controller",
+      "name": "Lexar NM990",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1D97/device/1806"
+    },
+    {
+      "id": "PCI 1D97:5772",
+      "manufacturer": "Longsys",
+      "category": "NVMe Controller",
+      "name": "Lexar NQ700",
+      "sourceURL": "https://devicehunt.com/view/type/pci/vendor/1D97/device/5772"
     },
     {
       "id": "PCI 1E4B:1202",

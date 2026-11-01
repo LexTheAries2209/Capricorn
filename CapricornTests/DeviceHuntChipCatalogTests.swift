@@ -25,7 +25,7 @@ final class DeviceHuntChipCatalogTests: XCTestCase {
         let catalog = DeviceHuntChipCatalog.bundled
         XCTAssertGreaterThanOrEqual(catalog.records.count, 30)
         XCTAssertEqual(catalog.source, "DeviceHunt")
-        XCTAssertEqual(catalog.snapshotDate, "2026-10-28")
+        XCTAssertEqual(catalog.snapshotDate, "2026-11-01")
 
         let manufacturers = Set(catalog.records.map(\.manufacturer))
         XCTAssertTrue(manufacturers.contains("ASMedia"))
