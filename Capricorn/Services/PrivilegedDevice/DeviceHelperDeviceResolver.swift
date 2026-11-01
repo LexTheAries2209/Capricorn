@@ -36,7 +36,8 @@ enum DeviceHelperDeviceResolver {
                properties["Physical Interconnect Location"] as? String == "Internal" {
                 isInternal = true
             }
-            if IOObjectConformsTo(entry, "IOUSBHostDevice") != 0 {
+            // Keep the nearest USB device; higher ancestors may be upstream hubs.
+            if usbID == nil, IOObjectConformsTo(entry, "IOUSBHostDevice") != 0 {
                 var identifier: UInt64 = 0
                 if IORegistryEntryGetRegistryEntryID(entry, &identifier) == KERN_SUCCESS { usbID = identifier }
             }

@@ -1,10 +1,48 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
+import IOKit
 import XCTest
 @testable import Capricorn
 
 /// Explicit opt-in only. This suite never starts self-tests or captures USB.
 final class DeviceHelperHardwareTests: XCTestCase {
+    func testUSBIdentityRoundTripsThroughNestedHubs() throws {
+        guard let name = ProcessInfo.processInfo.environment["CAPRICORN_HELPER_TEST_USB_DISK"] else {
+            throw XCTSkip("Set CAPRICORN_HELPER_TEST_USB_DISK for a read-only USB identity check through nested hubs.")
+        }
+        let disk = try DeviceHelperDeviceResolver.resolve(bsdName: name)
+        XCTAssertFalse(disk.isInternal)
+        var entry = IOServiceGetMatchingService(
+            kIOMainPortDefault, IORegistryEntryIDMatching(disk.mediaRegistryID))
+        var usbAncestors: [UInt64] = []
+        while entry != 0 {
+            if IOObjectConformsTo(entry, "IOUSBHostDevice") != 0 {
+                var identifier: UInt64 = 0
+                let status = IORegistryEntryGetRegistryEntryID(entry, &identifier)
+                XCTAssertEqual(status, KERN_SUCCESS)
+                if status == KERN_SUCCESS { usbAncestors.append(identifier) }
+            }
+            var parent: io_registry_entry_t = 0
+            let status = IORegistryEntryGetParentEntry(entry, kIOServicePlane, &parent)
+            IOObjectRelease(entry)
+            entry = status == KERN_SUCCESS ? parent : 0
+        }
+        XCTAssertGreaterThan(usbAncestors.count, 1, "Connect the selected USB disk through a hub.")
+        let nearestUSB = try XCTUnwrap(usbAncestors.first)
+        var drive = USBRawSmartTests.drive()
+        drive.bsdName = disk.bsdName
+        drive.sizeBytes = disk.sizeBytes
+        let target = try USBRawSmartTargetResolver().target(for: drive)
+        XCTAssertEqual(target.registryID, nearestUSB)
+        XCTAssertEqual(disk.usbRegistryID, nearestUSB)
+        XCTAssertEqual(try DeviceHelperDeviceResolver.disk(forTarget: target.selector), disk)
+        for hub in usbAncestors.dropFirst() {
+            XCTAssertThrowsError(try DeviceHelperDeviceResolver.disk(forTarget: "usbraw:\(hub)"),
+                                 "An upstream hub must not identify a physical disk.")
+        }
+        print("DEVICE_HELPER_USB_IDENTITY disk=\(name) device=\(nearestUSB) upstream_hubs=\(usbAncestors.dropFirst())")
+    }
+
     func testApprovedServiceReadsExternalDiskAndRejectsStaleIdentity() async throws {
         let environment = ProcessInfo.processInfo.environment
         guard let name = environment["CAPRICORN_HELPER_TEST_DISK"],

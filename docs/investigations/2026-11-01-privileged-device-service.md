@@ -296,6 +296,36 @@ SNT capture/restoration, UI publication after SNT, or hardware self-test
 start/abort. Those still need the appropriate USB connection or supported
 self-test transport and manual confirmations.
 
+## USB Identity Through Nested Hubs
+
+The aigo U330 volume named `声音U盘` reproduced a resolver defect on
+2026-11-01. The SNT entry point used the nearest USB device, while the device
+helper resolver overwrote its ID with each USB ancestor, ending at an upstream
+hub. Reverse lookup therefore found no matching physical disk and rejected the
+request before XPC execution.
+
+The resolver now retains the nearest USB device ID while continuing the full
+ancestor walk for physical/internal-device checks. Unique physical-disk
+matching and service-side identity revalidation remain required.
+
+The opt-in `testUSBIdentityRoundTripsThroughNestedHubs` failed before the fix
+and passed afterward with the U330 behind three USB hubs. It checks agreement
+with the SNT target resolver, reverse lookup to the same physical disk, and
+rejection of every upstream hub as a disk target. It only reads IORegistry
+metadata; it does not connect to the root service, read device bytes, unmount
+volumes, or capture USB.
+
+To repeat it, verify the current disk name and set
+`TEST_RUNNER_CAPRICORN_HELPER_TEST_USB_DISK` when running that test with
+`xcodebuild test`. Ordinary runs skip it unless explicitly enabled.
+This establishes corrected device mapping, not SMART/SNT support for the U330.
+Both the app and embedded helper must use the corrected build; an already
+running older service must be safely disabled before manual replacement.
+
+Validation with the USB identity test enabled: **689 tests, 9 skipped,
+0 failures**. The strict-concurrency build with warnings treated as errors
+also passed.
+
 ## 中文操作摘要
 
 - 在设置中启用一次“特权设备服务”，经系统批准后，受限的 SMART 功能共用一个
