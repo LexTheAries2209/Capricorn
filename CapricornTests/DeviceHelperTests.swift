@@ -276,6 +276,26 @@ final class DeviceHelperTests: XCTestCase {
         }
     }
 
+    func testSnapshotLinksCanonicalizeVarAliasAndRejectExternalTargets() throws {
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("Capricorn-helper-links-" + UUID().uuidString)
+        let snapshot = temporary.appendingPathComponent("Capricorn.app")
+        let child = snapshot.appendingPathComponent("Contents/Frameworks/Example.framework/Versions/B")
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        let link = child.deletingLastPathComponent().appendingPathComponent("Current")
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "B")
+        let canonical = snapshot.resolvingSymlinksInPath()
+        let privateAlias = URL(fileURLWithPath: "/private" + canonical.path)
+        XCTAssertTrue(canonical.path.hasPrefix("/var/"), "This regression targets macOS's /private/var alias.")
+        XCTAssertTrue(DeviceHelperSigning.isInternalSnapshotLink(link, snapshot: privateAlias))
+        XCTAssertTrue(DeviceHelperSigning.isInternalSnapshotLink(link, snapshot: canonical))
+        let sibling = temporary.appendingPathComponent("Capricorn.app-other")
+        try FileManager.default.createDirectory(at: sibling, withIntermediateDirectories: true)
+        let outside = snapshot.appendingPathComponent("external")
+        try FileManager.default.createSymbolicLink(atPath: outside.path, withDestinationPath: sibling.path)
+        XCTAssertFalse(DeviceHelperSigning.isInternalSnapshotLink(outside, snapshot: privateAlias))
+        XCTAssertFalse(DeviceHelperSigning.isInternalSnapshotLink(snapshot, snapshot: canonical))
+    }
+
     func testLaunchDaemonIsDemandStartedAndUsesOnlyBundledProgram() throws {
         let url = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/LaunchDaemons/" + DeviceHelperIdentity.plistName)
         let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: Any])

@@ -4,6 +4,11 @@ import Security
 import MachO
 
 enum DeviceHelperSigning {
+    static func isInternalSnapshotLink(_ entry: URL, snapshot: URL) -> Bool {
+        let root = snapshot.resolvingSymlinksInPath().path
+        return entry.resolvingSymlinksInPath().path.hasPrefix(root + "/")
+    }
+
     static func containingApp() throws -> URL {
         // launchd may supply a bundle-relative argv[0]. Resolve the loaded
         // image through dyld rather than interpreting it against launchd's cwd.

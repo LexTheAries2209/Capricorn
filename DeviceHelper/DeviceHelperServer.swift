@@ -2,10 +2,12 @@
 import Foundation
 import SystemConfiguration
 import Darwin
+import OSLog
 
 /// One process-wide queue serializes all clients, including different users.
 /// Disconnecting a client never terminates a worker that owns USB restoration.
 final class DeviceHelperExecutor: @unchecked Sendable {
+    private let logger = Logger(subsystem: "lex.Capricorn", category: "DeviceHelper")
     private let queue = DispatchQueue(label: "lex.Capricorn.DeviceHelper.operations")
     private let gate = DeviceHelperOperationGate()
     private var stagedApp: URL?
@@ -127,7 +129,7 @@ final class DeviceHelperExecutor: @unchecked Sendable {
             let attributes = try FileManager.default.attributesOfItem(atPath: entry.path)
             let type = attributes[.type] as? FileAttributeType
             if type == .typeSymbolicLink {
-                guard entry.resolvingSymlinksInPath().path.hasPrefix(app.path + "/") else {
+                guard DeviceHelperSigning.isInternalSnapshotLink(entry, snapshot: app) else {
                     throw DeviceHelperError.rejected("The tools snapshot contains an external symbolic link.")
                 }
                 guard lchown(entry.path, 0, 0) == 0 else {
@@ -163,6 +165,7 @@ final class DeviceHelperExecutor: @unchecked Sendable {
         process.standardError = stderr
         let output = DeviceHelperOutput()
         let group = DispatchGroup()
+        logger.notice("Starting \(request.operation.rawValue, privacy: .public) as euid \(geteuid()) for console uid \(uid).")
         try process.run()
         for (handle, isError) in [(stdout.fileHandleForReading, false), (stderr.fileHandleForReading, true)] {
             group.enter()
@@ -187,6 +190,7 @@ final class DeviceHelperExecutor: @unchecked Sendable {
         process.waitUntilExit()
         timeout.cancel()
         group.wait()
+        logger.notice("Completed \(request.operation.rawValue, privacy: .public) with exit \(process.terminationStatus).")
         return DeviceHelperResponse(requestID: request.id, stdout: output.stdout, stderr: output.stderr,
                                     exitStatus: process.terminationStatus)
     }
