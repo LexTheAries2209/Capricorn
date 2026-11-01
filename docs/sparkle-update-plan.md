@@ -1,5 +1,19 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
+## V3.1.0 / Build 0050：已发布
+
+2026-11-01 发布为最新正式版，标签指向 `4ce59162f846c1e67d34b94bad369c9764e4dd23`。特权设备服务分支已快进合并到 Main。版本为 `3.1.0`，独立全局构建号 `0050`；保持固定 `Capricorn.app`、既有更新公钥和稳定 feed。
+
+本机发布验证：全量 688 项测试，679 通过、9 项环境或硬件条件跳过、0 失败。严格并发、Swift 6、Universal Archive、归档 App 启动、双架构和 dSYM UUID、完整 bundle 及辅助程序签名通过。20 个真实 Sparkle 隔离场景通过，服务衔接场景使用模拟协调器，不能代替真实 root 服务跨版本授权验收。存档源码独立 Universal Release 构建用时 72.94 秒。
+
+候选与公开源均由真实 Sparkle 验证：旧 `0049` 发现 `3.1.0 / 0050`，当前 `0050` 无更新。公开 ZIP 返回 HTTP 200，公开 appcast 与本地签名文件逐字节一致。ZIP 为 14,451,792 字节，SHA-256 为 `8ee44da6084f1a746a68d5f080d8c9594d5d60d5c1326f3d8bd557121693f9fc`；ZIP、源码包与 feed 的 GitHub 大小和摘要均已核对。
+
+完整 xcarchive/dSYM 保存在 `~/Library/Developer/Xcode/Archives/2026-11-01/Capricorn V3.1.0.xcarchive`，App、README、源码快照及 `update/` 下的包和签名 feed 保存在 `Capricorn旧版软件/Capricorn V3.1.0/`，无额外桌面副本。源码包来自固定发布提交，包含两套 smartctl 对应源码、SNT 补丁、构建脚本和许可证。
+
+App、特权服务和工具使用同一团队 Apple Development 证书，更新继续使用既有 Ed25519 密钥；没有 Developer ID 或 Apple 公证。真实 USB-SNT 隐私归属、接管和恢复挂载、硬件自检启动/中止，以及其他 Mac 的服务批准仍需对应环境验收。
+
+发布提交的首轮 CI 严格并发与 Swift 6 通过，全量测试有一项失败：无证书 CI 构建直接运行了要求证书团队的签名集成测试。后续提交 `9937aab` 只修正测试前置条件：先确认无证书或 ad-hoc 主程序被服务拒绝，再跳过证书专属校验；有证书构建继续执行完整校验。本机两种配置均验证通过，[后续 CI](https://github.com/LexTheAries2209/Capricorn/actions/runs/41292243441) 的全量测试、严格并发和 Swift 6 三项全部通过。发布标签、App、ZIP、源码包和签名 feed 均保持原样。
+
 ## V3.0.0 / Build 0049：已发布
 
 SNT 分支已快进合并到 Main。完整版本为 `3.0.0`，独立全局构建号 `0049`，上一分发构建为 `0048`。
