@@ -36,7 +36,7 @@ final class AppUpdaterTests: XCTestCase {
     func testRetiredDriverCannotOverwriteTimeoutDuringManualRetry() {
         let presenter = RecordingUpdatePromptPresenter()
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .english },
             allowsStartup: false, promptPresenter: presenter
         )
         let standard = RecordingUpdateUserDriver()
@@ -61,7 +61,7 @@ final class AppUpdaterTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let makeUpdater = {
-            AppUpdater(safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            AppUpdater(safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .english },
                        allowsStartup: false, defaults: defaults)
         }
         let updater = makeUpdater()
@@ -88,7 +88,7 @@ final class AppUpdaterTests: XCTestCase {
         defaults.set(true, forKey: AppUpdater.PreferenceKey.checksOnLaunch)
         defaults.set(true, forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads)
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .english },
             allowsStartup: false, defaults: defaults
         )
         XCTAssertFalse(defaults.bool(forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads))
@@ -103,7 +103,7 @@ final class AppUpdaterTests: XCTestCase {
         defaults.set(true, forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads)
         let preferences = AppPreferences(defaults: defaults)
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .english },
             allowsStartup: false, defaults: defaults,
             automaticUpdatesEnabled: { preferences.allowsAutomaticUpdateInstallation }
         )
@@ -129,13 +129,13 @@ final class AppUpdaterTests: XCTestCase {
             defaults.removeObject(forKey: AppUpdater.PreferenceKey.checksOnLaunch)
             defaults.set(legacyConsent, forKey: AppUpdater.PreferenceKey.legacyAutomaticChecks)
             let updater = AppUpdater(
-                safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+                safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .english },
                 allowsStartup: false, defaults: defaults
             )
             XCTAssertEqual(updater.automaticallyChecksForUpdates, legacyConsent)
             updater.setAutomaticallyChecksForUpdates(!legacyConsent)
             let reopened = AppUpdater(
-                safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+                safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .english },
                 allowsStartup: false, defaults: defaults
             )
             XCTAssertEqual(reopened.automaticallyChecksForUpdates, !legacyConsent)
@@ -149,7 +149,7 @@ final class AppUpdaterTests: XCTestCase {
         defaults.set(true, forKey: AppUpdater.PreferenceKey.checksOnLaunch)
         var alerts: [String] = []
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [.refresh] }), language: { .english },
+            safety: AppUpdateSafetyGate(conflicts: { [.refresh] }, deviceServiceEnabled: { false }), language: { .english },
             // An invalid host proves launch proceeds to configuration without making a network request.
             hostBundle: Bundle(for: NSObject.self), allowsStartup: true, defaults: defaults,
             presentAlert: { title, _ in alerts.append(title) }
@@ -167,7 +167,7 @@ final class AppUpdaterTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         var alerts = 0
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [.workload] }), language: { .english },
+            safety: AppUpdateSafetyGate(conflicts: { [.workload] }, deviceServiceEnabled: { false }), language: { .english },
             hostBundle: Bundle(for: NSObject.self), allowsStartup: true, defaults: defaults,
             presentAlert: { _, _ in alerts += 1 }
         )
@@ -184,14 +184,14 @@ final class AppUpdaterTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .english },
             allowsStartup: false, defaults: defaults
         )
         updater.setAutomaticallyChecksForUpdates(true)
         defaults.set(true, forKey: AppUpdater.PreferenceKey.legacyAutomaticDownloads)
         AppPreferences(defaults: defaults).resetAllSettings()
         let reopened = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .english },
             allowsStartup: false, defaults: defaults
         )
         XCTAssertFalse(reopened.automaticallyChecksForUpdates)
@@ -215,7 +215,7 @@ final class AppUpdaterTests: XCTestCase {
     func testManualCheckDoesNotPresentTaskConflictBeforeStartingUpdater() {
         var alerts: [String] = []
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [.benchmark, .selfTest] }),
+            safety: AppUpdateSafetyGate(conflicts: { [.benchmark, .selfTest] }, deviceServiceEnabled: { false }),
             language: { .simplifiedChinese }, allowsStartup: false,
             presentAlert: { title, body in alerts.append(title + body) }
         )
@@ -232,7 +232,8 @@ final class AppUpdaterTests: XCTestCase {
         var saves = 0
         let gate = AppUpdateSafetyGate(
             conflicts: { AppUpdateConflict.allCases.filter { $0 != .installation } },
-            save: { saves += 1 }
+            save: { saves += 1 },
+            deviceServiceEnabled: { false }
         )
         let updater = AppUpdater(
             safety: gate, language: { .english }, allowsStartup: false,
@@ -253,7 +254,7 @@ final class AppUpdaterTests: XCTestCase {
     func testAutomaticDownloadConflictStaysAvailableWithoutWarningOrRetry() {
         var conflicts: [AppUpdateConflict] = [.refresh, .benchmark]
         var alerts = 0
-        let gate = AppUpdateSafetyGate(conflicts: { conflicts })
+        let gate = AppUpdateSafetyGate(conflicts: { conflicts }, deviceServiceEnabled: { false })
         let updater = AppUpdater(
             safety: gate, language: { .english }, allowsStartup: false,
             presentAlert: { _, _ in alerts += 1 }
@@ -273,7 +274,7 @@ final class AppUpdaterTests: XCTestCase {
     func testManualDownloadStillPresentsLocalizedTaskConflict() {
         var alerts: [String] = []
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [.refresh, .firstAid] }),
+            safety: AppUpdateSafetyGate(conflicts: { [.refresh, .firstAid] }, deviceServiceEnabled: { false }),
             language: { .simplifiedChinese }, allowsStartup: false,
             presentAlert: { title, body in alerts.append(title + body) }
         )
@@ -289,7 +290,7 @@ final class AppUpdaterTests: XCTestCase {
         var conflicts: [AppUpdateConflict] = []
         var alerts = 0
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { conflicts }),
+            safety: AppUpdateSafetyGate(conflicts: { conflicts }, deviceServiceEnabled: { false }),
             language: { .english }, allowsStartup: false,
             presentAlert: { _, _ in alerts += 1 }
         )
@@ -308,7 +309,7 @@ final class AppUpdaterTests: XCTestCase {
 
     func testOrdinaryQuitCancelsPreparedUpdateAndWaitsWithoutReserving() {
         var conflicts: [AppUpdateConflict] = [.workload]
-        let gate = AppUpdateSafetyGate(conflicts: { conflicts })
+        let gate = AppUpdateSafetyGate(conflicts: { conflicts }, deviceServiceEnabled: { false })
         let updater = AppUpdater(safety: gate, language: { .english }, allowsStartup: false, presentAlert: { _, _ in })
         updater.markPendingInstallation(true)
         var cancellations = 0
@@ -328,7 +329,7 @@ final class AppUpdaterTests: XCTestCase {
         var conflicts: [AppUpdateConflict] = []
         var alertCount = 0
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { conflicts }),
+            safety: AppUpdateSafetyGate(conflicts: { conflicts }, deviceServiceEnabled: { false }),
             language: { .english }, allowsStartup: false,
             presentAlert: { _, _ in alertCount += 1 }
         )
@@ -348,7 +349,7 @@ final class AppUpdaterTests: XCTestCase {
     func testReadyDialogRechecksForConflictsAtReplyAndCancelsPreparedInstall() {
         var conflicts: [AppUpdateConflict] = []
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { conflicts }),
+            safety: AppUpdateSafetyGate(conflicts: { conflicts }, deviceServiceEnabled: { false }),
             language: { .english }, allowsStartup: false, presentAlert: { _, _ in }
         )
         let standard = RecordingUpdateUserDriver()
@@ -367,7 +368,7 @@ final class AppUpdaterTests: XCTestCase {
 
     func testSaveFailureBlocksReadyDialogReply() {
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }, save: { throw CocoaError(.fileWriteNoPermission) }),
+            safety: AppUpdateSafetyGate(conflicts: { [] }, save: { throw CocoaError(.fileWriteNoPermission) }, deviceServiceEnabled: { false }),
             language: { .english }, allowsStartup: false, presentAlert: { _, _ in }
         )
         let standard = RecordingUpdateUserDriver()
@@ -382,7 +383,7 @@ final class AppUpdaterTests: XCTestCase {
 
     func testDismissingReadyDialogCancelsInsteadOfInstallingOnQuit() {
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .english },
             allowsStartup: false
         )
         let standard = RecordingUpdateUserDriver()
@@ -399,7 +400,7 @@ final class AppUpdaterTests: XCTestCase {
     func testQuitAtReadyDialogCancelsExactlyOnceAndFinishesAfterUpdateCycle() async {
         var finishedQuits = 0
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .english },
             allowsStartup: false, finishRequestedQuit: { finishedQuits += 1 }
         )
         let standard = RecordingUpdateUserDriver()
@@ -426,7 +427,7 @@ final class AppUpdaterTests: XCTestCase {
     func testExplicitReadyConfirmationReservesAndSavesBeforeTerminating() {
         var saves = 0
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }, save: { saves += 1 }),
+            safety: AppUpdateSafetyGate(conflicts: { [] }, save: { saves += 1 }, deviceServiceEnabled: { false }),
             language: { .english }, allowsStartup: false
         )
         let standard = RecordingUpdateUserDriver()
@@ -478,7 +479,7 @@ final class AppUpdaterTests: XCTestCase {
     func testDownloadFailurePresentsLocalizedRecoveryWithoutClaimingConnectionFailed() {
         var detail = ""
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }),
+            safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }),
             language: { .simplifiedChinese }, allowsStartup: false,
             presentAlert: { _, body in detail = body }
         )
@@ -494,7 +495,7 @@ final class AppUpdaterTests: XCTestCase {
     func testManualCheckAndResultUseSharedPresenterWithoutOpeningSparkleWindows() {
         let presenter = RecordingUpdatePromptPresenter()
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .simplifiedChinese },
+            safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .simplifiedChinese },
             allowsStartup: false, promptPresenter: presenter
         )
         let standard = RecordingUpdateUserDriver()
@@ -533,7 +534,7 @@ final class AppUpdaterTests: XCTestCase {
     func testCheckCancellationRunsOnceAndResetsCheckingState() {
         let presenter = RecordingUpdatePromptPresenter()
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }), language: { .english },
+            safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }), language: { .english },
             allowsStartup: false, promptPresenter: presenter
         )
         let driver = GuardedUpdateUserDriver(standard: RecordingUpdateUserDriver(), owner: updater)
@@ -550,7 +551,7 @@ final class AppUpdaterTests: XCTestCase {
         let presenter = RecordingUpdatePromptPresenter()
         var conflicts: [AppUpdateConflict] = []
         let updater = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { conflicts }), language: { .simplifiedChinese },
+            safety: AppUpdateSafetyGate(conflicts: { conflicts }, deviceServiceEnabled: { false }), language: { .simplifiedChinese },
             allowsStartup: false, promptPresenter: presenter
         )
         let driver = GuardedUpdateUserDriver(standard: RecordingUpdateUserDriver(), owner: updater)

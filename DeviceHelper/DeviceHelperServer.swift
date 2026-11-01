@@ -229,7 +229,9 @@ final class DeviceHelperListener: NSObject, NSXPCListenerDelegate {
         requirement = DeviceHelperSigning.requirement(identifier: DeviceHelperIdentity.appIdentifier, team: team)
     }
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
-        guard connection.effectiveUserIdentifier != 0, connection.auditSessionIdentifier != 0 else { return false }
+        guard connection.effectiveUserIdentifier != 0,
+              connection.auditSessionIdentifier != 0,
+              connection.auditSessionIdentifier != UInt32.max else { return false }
         connection.setCodeSigningRequirement(requirement)
         connection.exportedInterface = NSXPCInterface(with: DeviceHelperXPC.self)
         connection.exportedObject = DeviceHelperPeer(uid: connection.effectiveUserIdentifier, executor: executor)

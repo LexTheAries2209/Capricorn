@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
+import AppKit
+import SwiftUI
 import XCTest
 @testable import Capricorn
 
@@ -287,6 +289,28 @@ final class DeviceHelperTests: XCTestCase {
         XCTAssertEqual(process.terminationStatus, 1)
         XCTAssertTrue(String(decoding: error.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             .contains("must be started by launchd as root"))
+    }
+
+    @MainActor
+    func testServiceSettingsRenderBothLanguagesWithoutEnablingTheService() async throws {
+        for language in AppLanguage.allCases {
+            let view = NSHostingView(rootView: Form {
+                DeviceHelperSettingsSection(language: language)
+            }.formStyle(.grouped).frame(width: 620, height: 340))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 340),
+                                  styleMask: [.titled], backing: .buffered, defer: false)
+            window.contentView = view
+            window.appearance = NSAppearance(named: .aqua)
+            window.orderFront(nil)
+            defer { window.orderOut(nil) }
+            try await Task.sleep(for: .milliseconds(150))
+            view.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            try png.write(to: URL(fileURLWithPath: "/private/tmp/capricorn-device-service-\(language.rawValue).png"))
+            XCTAssertGreaterThan(png.count, 1_000)
+        }
     }
 }
 

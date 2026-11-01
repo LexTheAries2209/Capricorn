@@ -25,7 +25,7 @@ final class UpdateSafetyTests: XCTestCase {
     func testBlockedInstallationNeverReservesOrSavesAndDoesNotResumeItself() throws {
         var conflicts: [AppUpdateConflict] = [.benchmark]
         var saved = false
-        let gate = AppUpdateSafetyGate(conflicts: { conflicts }, save: { saved = true })
+        let gate = AppUpdateSafetyGate(conflicts: { conflicts }, save: { saved = true }, deviceServiceEnabled: { false })
         XCTAssertThrowsError(try gate.beginInstallation()) {
             XCTAssertEqual($0 as? AppUpdateBlockedError, AppUpdateBlockedError(conflicts: [.benchmark]))
         }
@@ -45,11 +45,27 @@ final class UpdateSafetyTests: XCTestCase {
             conflicts: { model.appUpdateConflicts },
             reserve: { model.reserveAppUpdateInstallation() },
             release: { model.releaseAppUpdateInstallation() },
-            save: { throw CocoaError(.fileWriteNoPermission) }
+            save: { throw CocoaError(.fileWriteNoPermission) },
+            deviceServiceEnabled: { false }
         )
         XCTAssertThrowsError(try gate.beginInstallation())
         XCTAssertFalse(gate.isReserved)
         XCTAssertFalse(model.isInstallingAppUpdate)
+    }
+
+    func testEnabledDeviceServiceBlocksBundleReplacementUntilExplicitlyDisabled() throws {
+        var enabled = true
+        let gate = AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { enabled })
+        XCTAssertThrowsError(try gate.beginInstallation()) {
+            XCTAssertEqual($0 as? AppUpdateBlockedError, AppUpdateBlockedError(conflicts: [.deviceService]))
+        }
+        XCTAssertFalse(gate.isReserved)
+        enabled = false
+        try gate.beginInstallation()
+        XCTAssertTrue(gate.isReserved)
+        enabled = true
+        XCTAssertThrowsError(try gate.check(), "The final installation check must catch a service enabled by another app instance.")
+        gate.endInstallation()
     }
 
     func testReservationPreventsNewBenchmarkAndRefreshAndCanBeReleased() async throws {
@@ -57,7 +73,8 @@ final class UpdateSafetyTests: XCTestCase {
         let gate = AppUpdateSafetyGate(
             conflicts: { model.appUpdateConflicts },
             reserve: { model.reserveAppUpdateInstallation() },
-            release: { model.releaseAppUpdateInstallation() }
+            release: { model.releaseAppUpdateInstallation() },
+            deviceServiceEnabled: { false }
         )
         try gate.beginInstallation()
         XCTAssertTrue(model.isInstallingAppUpdate)
