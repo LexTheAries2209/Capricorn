@@ -1221,6 +1221,8 @@ final class SmartErrorLogService: @unchecked Sendable {
 }
 
 enum SmartctlParser {
+    static let invalidResponseMessage = "The device returned invalid SMART data. No health information is available."
+
     struct ScanDevice: Hashable {
         var name: String
         var type: String?
@@ -1229,9 +1231,10 @@ enum SmartctlParser {
     }
 
     static func parseSelfTestCapability(_ result: CommandResult) -> SmartSelfTestCapability? {
-        guard let root = commandJSONRoot(result) else { return nil }
+        guard let root = commandJSONRoot(result),
+              invalidResponseReason(in: root, stderr: result.stderrString) == nil else { return nil }
         let exitStatus = root.dictionary("smartctl").int("exit_status") ?? Int(result.terminationStatus)
-        guard exitStatus & 0x03 == 0 else { return nil }
+        guard exitStatus & 0x07 == 0 else { return nil }
 
         let ataSelfTest = root.dictionary("ata_smart_data").dictionary("self_test")
         let polling = ataSelfTest.dictionary("polling_minutes")
@@ -1270,7 +1273,8 @@ enum SmartctlParser {
     }
 
     static func parseErrorLog(_ result: CommandResult) -> SmartErrorLogReport? {
-        guard let root = commandJSONRoot(result) else { return nil }
+        guard let root = commandJSONRoot(result),
+              invalidResponseReason(in: root, stderr: result.stderrString) == nil else { return nil }
         let output = combinedOutput(result).lowercased()
         if output.contains("error log not supported")
             || output.contains("error logging not supported")
@@ -1286,7 +1290,7 @@ enum SmartctlParser {
         }
 
         let exitStatus = root.dictionary("smartctl").int("exit_status") ?? Int(result.terminationStatus)
-        guard exitStatus & 0x03 == 0 else { return nil }
+        guard exitStatus & 0x07 == 0 else { return nil }
 
         // The NVMe health page contains a lifetime counter named
         // `num_err_log_entries`, but it is not the error-information log
@@ -1327,6 +1331,9 @@ enum SmartctlParser {
         fallback: String = "SMART self-test command failed."
     ) -> String {
         if let root = commandJSONRoot(result) {
+            if let reason = invalidResponseReason(in: root, stderr: result.stderrString) {
+                return reason
+            }
             if let openError = root.string("open_error") {
                 return friendlyOpenError(openError)
             }
@@ -1396,6 +1403,16 @@ enum SmartctlParser {
         let powerMode = root.dictionary("power_mode").string("name")
         let readSkipped = smartReadWasSkipped(root: root, powerMode: powerMode)
         let smartctlDiagnostics = diagnostics(root: root, target: targetDescriptor, readSkipped: readSkipped)
+        if let reason = invalidResponseReason(in: root, stderr: String(decoding: stderr, as: UTF8.self)) {
+            var snapshot = SmartSnapshot.unavailable(for: drive, reason: reason)
+            snapshot.smartStatusRaw = nil
+            snapshot.providerStatuses = [ProviderStatus(name: providerName, state: .failed, message: reason)]
+            var rejectedDiagnostics = smartctlDiagnostics
+            rejectedDiagnostics.openError = reason
+            rejectedDiagnostics.readSkippedToAvoidWake = false
+            snapshot.smartctlDiagnostics = rejectedDiagnostics
+            return snapshot
+        }
         if readSkipped {
             var snapshot = SmartSnapshot.unavailable(
                 for: drive,
@@ -1412,7 +1429,9 @@ enum SmartctlParser {
             return snapshot
         }
         let fatalMessage = root.string("open_error")
-            ?? (embeddedExitStatus & 0x03 != 0 ? smartctlMessages(root).first : nil)
+            ?? (embeddedExitStatus & 0x03 != 0
+                ? smartctlMessages(root).first ?? "smartctl could not open or identify this disk."
+                : nil)
         if let openError = fatalMessage {
             var snapshot = SmartSnapshot(
                 driveID: drive.id,
@@ -1530,6 +1549,33 @@ enum SmartctlParser {
         snapshot.health = evaluator.evaluate(drive: drive, snapshot: snapshot)
         snapshot.summary = evaluator.summary(for: drive, snapshot: snapshot)
         return snapshot
+    }
+
+    private static func invalidResponseReason(in root: [String: Any], stderr: String) -> String? {
+        // A successful command or a nonempty attribute table cannot authenticate
+        // bytes returned by an incompatible SAT bridge or driver.
+        for key in ["model_name", "serial_number", "firmware_version"] {
+            guard let raw = root[key] else { continue }
+            guard let value = raw as? String, !DeviceIdentityText.isMalformed(value) else {
+                return invalidResponseMessage
+            }
+            if key == "model_name", value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return invalidResponseMessage
+            }
+        }
+        if root.dictionary("smart_support").bool("available") == false, hasSMARTPayload(root) {
+            return invalidResponseMessage
+        }
+        let messages = smartctlMessages(root) + stderr.components(separatedBy: .newlines)
+        if messages.contains(where: {
+            let message = $0.lowercased()
+            return message.contains("checksum")
+                && (message.contains("invalid") || message.contains("error"))
+                && (message.contains("smart") || message.contains("identify"))
+        }) {
+            return invalidResponseMessage
+        }
+        return nil
     }
 
     private static func diagnostics(
@@ -1864,7 +1910,7 @@ enum SmartctlParser {
     }
 
     private static func hasSMARTPayload(_ root: [String: Any]) -> Bool {
-        if root["smart_status"] != nil || root["ata_smart_data"] != nil {
+        if parseSmartStatus(root)?.isEmpty == false || !root.dictionary("ata_smart_data").isEmpty {
             return true
         }
         if !root.dictionary("ata_smart_attributes").arrayOfDictionaries("table").isEmpty {
@@ -2217,6 +2263,7 @@ final class SmartSnapshotService: @unchecked Sendable {
 
 final class DriveHealthEvaluator {
     func evaluate(drive: DriveDevice, snapshot: SmartSnapshot) -> HealthStatus {
+        guard !snapshot.hasInvalidDeviceIdentity else { return .unavailable }
         if snapshot.providerStatuses.allSatisfy({ $0.state == .unavailable || $0.state == .failed }) && snapshot.attributes.isEmpty {
             return .unavailable
         }

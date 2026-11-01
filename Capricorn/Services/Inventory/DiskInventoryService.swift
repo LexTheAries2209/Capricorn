@@ -90,10 +90,19 @@ protocol DriveConnectionInfoProviding: Sendable {
     func connectionInfo(for drives: [DriveDevice]) async -> [String: DriveConnectionInfo]
 }
 
+enum DeviceIdentityText {
+    static func isMalformed(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        // smartctl renders non-text ATA identity bytes as literal \xNN escapes.
+        return trimmed.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
+            || trimmed.range(of: #"\\x[0-9a-fA-F]{2}"#, options: .regularExpression) != nil
+    }
+}
+
 enum DriveSerialNumberNormalizer {
     static func normalize(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+        guard !trimmed.isEmpty, !DeviceIdentityText.isMalformed(trimmed) else { return nil }
 
         let invalidValues = ["unknown", "not available", "not specified", "n/a", "none", "nil"]
         guard !invalidValues.contains(trimmed.lowercased()) else { return nil }

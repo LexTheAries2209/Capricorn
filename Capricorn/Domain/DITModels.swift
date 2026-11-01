@@ -450,8 +450,7 @@ enum DriveStableIdentityMatcher {
 
     private static func normalizedSerial(_ value: String?) -> String? {
         guard let value else { return nil }
-        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        return normalized.isEmpty || normalized == "NIL" ? nil : normalized
+        return DriveSerialNumberNormalizer.normalize(value)?.uppercased()
     }
 }
 
@@ -1189,7 +1188,9 @@ enum DrivePageHeaderText {
 
 enum SerialNumberDisplayFormatter {
     static func displayValue(_ serialNumber: String?, redact: Bool, missingValue: String = "None") -> String {
-        guard let serialNumber, !serialNumber.isEmpty else { return missingValue }
+        guard let serialNumber = serialNumber.flatMap(DriveSerialNumberNormalizer.normalize) else {
+            return missingValue
+        }
         guard redact else { return serialNumber }
 
         let prefix = String(serialNumber.prefix(4))
@@ -1667,11 +1668,16 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
         // A SMART response identifies the storage device, while the inventory
         // serial may belong to its USB bridge. Keep transport matching separate.
         guard driveID == drive.id, hasSMARTPayload else { return nil }
-        return deviceSerialNumber
+        return deviceSerialNumber.flatMap(DriveSerialNumberNormalizer.normalize)
+    }
+
+    var hasInvalidDeviceIdentity: Bool {
+        deviceSerialNumber.map(DeviceIdentityText.isMalformed) ?? false
     }
 
     var hasSMARTPayload: Bool {
-        smartStatusRaw?.isEmpty == false || !attributes.isEmpty
+        guard !hasInvalidDeviceIdentity else { return false }
+        return smartStatusRaw?.isEmpty == false || !attributes.isEmpty
             || temperatureCelsius != nil || lifeRemainingPercent != nil
             || powerOnHours != nil || powerCycleCount != nil
             || mediaErrors != nil || unsafeShutdowns != nil
@@ -1736,7 +1742,8 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     }
 
     func retainingSMARTData(from previous: SmartSnapshot, for drive: DriveDevice) -> SmartSnapshot {
-        guard smartReadSkippedToAvoidWake else { return self }
+        guard smartReadSkippedToAvoidWake, previous.driveID == drive.id,
+              previous.hasSMARTPayload else { return self }
         var retained = self
         retained.attributes.removeAll {
             $0.source.caseInsensitiveCompare("smartctl") == .orderedSame
@@ -1765,6 +1772,7 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     }
 
     func markingNativeSMARTRefreshing(for drive: DriveDevice) -> SmartSnapshot {
+        guard !hasInvalidDeviceIdentity else { return .refreshingNative(for: drive) }
         var refreshing = self
         refreshing.driveID = drive.id
         refreshing.providerStatuses.removeAll { $0.name.caseInsensitiveCompare("Native macOS") == .orderedSame }
@@ -1780,6 +1788,7 @@ struct SmartSnapshot: Identifiable, Codable, Hashable, Sendable {
     }
 
     func retainingNativeSMARTDataIfNeeded(from previous: SmartSnapshot, for drive: DriveDevice) -> SmartSnapshot {
+        guard !previous.hasInvalidDeviceIdentity else { return self }
         guard let currentNativeStatus = providerStatuses.first(where: {
             $0.name.caseInsensitiveCompare("Native macOS") == .orderedSame
         }) else { return self }

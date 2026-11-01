@@ -274,6 +274,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "The device service belongs to a different application build. Re-enable it in Settings.": "设备服务与当前 App 构建不一致，请在设置中停用后重新启用。",
         "The device helper version does not match this application.": "设备辅助服务版本与当前 App 不匹配。",
         "The SMART target does not identify exactly one physical disk.": "无法唯一确定 SMART 目标对应的物理硬盘。",
+        "The device returned invalid SMART data. No health information is available.": "设备返回了无效的 SMART 数据，无法获取健康信息。",
+        "smartctl could not open or identify this disk.": "smartctl 无法打开或识别此硬盘。",
         "The device service is busy. Wait for its current operation to complete.": "设备服务正忙，请等待当前操作和挂载恢复完成。",
         "Enable Device Service": "启用设备服务",
         "Disable Device Service": "停用设备服务",

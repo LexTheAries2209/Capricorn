@@ -726,7 +726,8 @@ final class AppModel {
             }
             let previousMatches = previousDrives.filter { DriveStableIdentityMatcher.matches($0, drive) }
             let previousDrive = previousMatches.first
-            if let previousDrive, let previousSnapshot = previousSnapshots[previousDrive.id] {
+            if let previousDrive, let previousSnapshot = previousSnapshots[previousDrive.id],
+               !previousSnapshot.hasInvalidDeviceIdentity {
                 if previousSnapshot.selectedProvider == USBRawSmartService.providerName {
                     guard previousMatches.count == 1, loadedDrives.filter({
                         DriveStableIdentityMatcher.matches(previousDrive, $0)
