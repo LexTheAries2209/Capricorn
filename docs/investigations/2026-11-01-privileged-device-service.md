@@ -157,6 +157,47 @@ by these unit tests. They require a controlled hardware validation after
 installation. No hardware self-test or USB capture is started automatically
 by building or running the test suite.
 
+## First Installed Hardware Baseline
+
+On 2026-11-01, the user supplied an external test disk and authorized the next
+validation step. The existing universal Release-configuration development
+build was verified with `codesign --verify --deep --strict`, copied to
+`/Applications/Capricorn.app`, verified again and launched from that location.
+No existing app at that path was replaced.
+
+The attached test disk was `Lexar SSD ARES 4TB`, 4,096,805,658,624 bytes,
+currently `/dev/disk6`. Disk Utility reported `PCI-Express`, an
+`IONVMeController` device-tree path, external physical media and native SMART.
+This connection is not the USB mass-storage / raw SNT transport. The APFS
+volume `40G4T_APFS_F` remained mounted at `/Volumes/40G4T_APFS_F`.
+
+At 12:15:28 CST, the installed ordinary smartctl 7.5 was run **as the normal
+user**, without the privileged service:
+
+```sh
+/Applications/Capricorn.app/Contents/Resources/smartctl \
+  -a --json -d nvme /dev/disk6
+```
+
+It returned exit status 0, SMART passed, 44 C, 2% percentage used, 978
+power-on hours, no media errors and no error-log entries. These are a
+point-in-time baseline, not a general disk-health guarantee and not evidence
+of a successful privileged XPC request.
+
+Clicking Enable Device Service registered a pending approval. `SMAppService`
+reported `requiresApproval`; the system log said the job was not allowed to
+bootstrap. The first registration call also returned `Operation not
+permitted`, so the existing Review System Approval button was used to open
+System Settings > Login Items & Extensions. The `Capricorn.app` background
+checkbox was observed off. The launchd system job was not loaded.
+
+The user's system approval is required before the daemon and its staged
+worker/TCC path can be tested. No service approval was automated, no
+administrator password was collected, no real self-test was started, and
+no volume was unmounted or USB device captured in this baseline step.
+Testing SNT additionally requires a USB mass-storage connection rather than
+this disk's current native PCIe/NVMe connection.
+
 ## 中文操作摘要
 
 - 在设置中启用一次“特权设备服务”，经系统批准后，受限的 SMART 功能共用一个
