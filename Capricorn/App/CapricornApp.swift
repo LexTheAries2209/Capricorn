@@ -38,7 +38,8 @@ struct CapricornApp: App {
         )
         _updateChecker = State(initialValue: AppUpdater(
             safety: safety, language: { preferences.language },
-            automaticUpdatesEnabled: { preferences.allowsAutomaticUpdateInstallation }
+            automaticUpdatesEnabled: { preferences.allowsAutomaticUpdateInstallation },
+            deviceService: DeviceHelperServiceManager.shared
         ))
     }
 

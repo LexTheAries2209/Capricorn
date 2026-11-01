@@ -266,7 +266,13 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
     private static let zhHans: [String: String] = [
         "Privileged Device Service": "特权设备服务",
-        "Disable the device service in Settings before updating": "更新前请先在设置中停用设备服务",
+        "Preparing the device service for update": "正在为更新准备设备服务",
+        "The device service could not be safely prepared for updating. Wait for disk operations to finish and try again.": "无法安全准备设备服务以进行更新，请等待磁盘操作和挂载恢复完成后重试。",
+        "The device service needs system approval. Review it in Settings.": "设备服务需要系统批准，请在设置中查看。",
+        "The device service signing team changed. Enable it explicitly in Settings.": "设备服务的签名团队已更改，请在设置中手动启用。",
+        "Unable to save the device service update state.": "无法保存设备服务的更新状态。",
+        "The device service belongs to a different application build. Re-enable it in Settings.": "设备服务与当前 App 构建不一致，请在设置中停用后重新启用。",
+        "The device helper version does not match this application.": "设备辅助服务版本与当前 App 不匹配。",
         "The device service is busy. Wait for its current operation to complete.": "设备服务正忙，请等待当前操作和挂载恢复完成。",
         "Enable Device Service": "启用设备服务",
         "Disable Device Service": "停用设备服务",

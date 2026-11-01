@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
 import Observation
-import ServiceManagement
 
 enum AppUpdateConflict: String, CaseIterable, Equatable, Sendable {
     case benchmark = "Benchmark"
@@ -14,7 +13,7 @@ enum AppUpdateConflict: String, CaseIterable, Equatable, Sendable {
     case diagnostics = "SMART Diagnostics"
     case refresh = "Refresh Disks"
     case installation = "Installing update…"
-    case deviceService = "Disable the device service in Settings before updating"
+    case deviceService = "Preparing the device service for update"
 }
 
 struct AppUpdateBlockedError: Error, Equatable {
@@ -30,31 +29,22 @@ final class AppUpdateSafetyGate {
     private let reserve: () -> Void
     private let release: () -> Void
     private let save: () throws -> Void
-    private let deviceServiceEnabled: () -> Bool
     private(set) var isReserved = false
 
     init(
         conflicts: @escaping () -> [AppUpdateConflict],
         reserve: @escaping () -> Void = {},
         release: @escaping () -> Void = {},
-        save: @escaping () throws -> Void = {},
-        deviceServiceEnabled: @escaping () -> Bool = {
-            let status = SMAppService.daemon(plistName: DeviceHelperIdentity.plistName).status
-            return status == .enabled || status == .requiresApproval
-        }
+        save: @escaping () throws -> Void = {}
     ) {
         self.conflicts = conflicts
         self.reserve = reserve
         self.release = release
         self.save = save
-        self.deviceServiceEnabled = deviceServiceEnabled
     }
 
     func check() throws {
-        var current = conflicts().filter { !isReserved || $0 != .installation }
-        // Do not replace a bundle while its root helper holds an older signed
-        // snapshot. The user can safely stop it in Settings and re-enable after.
-        if deviceServiceEnabled(), !current.contains(.deviceService) { current.append(.deviceService) }
+        let current = conflicts().filter { !isReserved || $0 != .installation }
         guard current.isEmpty else { throw AppUpdateBlockedError(conflicts: current) }
     }
 

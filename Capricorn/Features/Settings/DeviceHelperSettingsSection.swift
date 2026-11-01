@@ -4,7 +4,7 @@ import ServiceManagement
 
 struct DeviceHelperSettingsSection: View {
     let language: AppLanguage
-    @State private var manager = DeviceHelperServiceManager()
+    @State private var manager = DeviceHelperServiceManager.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {

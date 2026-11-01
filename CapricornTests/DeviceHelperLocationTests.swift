@@ -3,6 +3,10 @@ import XCTest
 @testable import Capricorn
 
 final class DeviceHelperLocationTests: XCTestCase {
+    func testBuiltAppUsesSupportedLocalVolumeAttributes() {
+        XCTAssertNoThrow(try DeviceHelperLocation.validate(Bundle.main.bundleURL))
+    }
+
     func testPermanentLocalLocationsAreNotRestrictedToApplications() {
         for path in ["/Applications/Capricorn.app", "/Applications/Utilities/Capricorn.app",
                      "/Users/example/Applications/Capricorn.app", "/Users/example/Desktop/Capricorn.app",

@@ -363,7 +363,7 @@ struct CapricornSettingsView: View {
                 .id(CapricornSettingsDestination.updates)
 
             DeviceHelperSettingsSection(language: language)
-                .disabled(updateChecker.safety.isReserved || updateChecker.hasPendingInstallation)
+                .disabled(updateChecker.safety.isReserved || updateChecker.hasPendingInstallation || updateChecker.isPreparingDeviceService)
 
             Section(language.t("Interface Display")) {
                 Picker(language.t("Language"), selection: $preferences.languageRawValue) {

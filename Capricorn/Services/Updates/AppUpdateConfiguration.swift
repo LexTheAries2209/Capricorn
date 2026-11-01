@@ -31,6 +31,7 @@ enum AppUpdateIssue: String, Equatable, Sendable {
     case signature = "The update signature could not be verified. The update was blocked."
     case installation = "The update could not be installed. Check application permissions or download it from Releases."
     case save = "History could not be saved. The update was blocked. Resolve the save error and try again."
+    case deviceService = "The device service could not be safely prepared for updating. Wait for disk operations to finish and try again."
 }
 
 enum AppUpdaterState: Equatable {

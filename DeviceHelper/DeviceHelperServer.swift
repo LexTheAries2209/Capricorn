@@ -213,8 +213,12 @@ private final class DeviceHelperOutput: @unchecked Sendable {
 private final class DeviceHelperPeer: NSObject, DeviceHelperXPC {
     let uid: uid_t
     let executor: DeviceHelperExecutor
-    init(uid: uid_t, executor: DeviceHelperExecutor) { self.uid = uid; self.executor = executor }
+    let installationID: String
+    init(uid: uid_t, executor: DeviceHelperExecutor, installationID: String) {
+        self.uid = uid; self.executor = executor; self.installationID = installationID
+    }
     func version(reply: @escaping (Int) -> Void) { reply(DeviceHelperIdentity.protocolVersion) }
+    func installation(reply: @escaping (String) -> Void) { reply(installationID) }
     func perform(_ request: Data, reply: @escaping (Data?, String?) -> Void) {
         executor.perform(data: request, uid: uid, reply: reply)
     }
@@ -228,8 +232,10 @@ private final class DeviceHelperPeer: NSObject, DeviceHelperXPC {
 final class DeviceHelperListener: NSObject, NSXPCListenerDelegate {
     let executor: DeviceHelperExecutor
     let requirement: String
-    init(appURL: URL, team: String) {
+    let installationID: String
+    init(appURL: URL, team: String, installation: String) {
         executor = DeviceHelperExecutor(appURL: appURL, team: team)
+        installationID = installation
         requirement = DeviceHelperSigning.requirement(identifier: DeviceHelperIdentity.appIdentifier, team: team)
     }
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
@@ -238,7 +244,8 @@ final class DeviceHelperListener: NSObject, NSXPCListenerDelegate {
               connection.auditSessionIdentifier != UInt32.max else { return false }
         connection.setCodeSigningRequirement(requirement)
         connection.exportedInterface = NSXPCInterface(with: DeviceHelperXPC.self)
-        connection.exportedObject = DeviceHelperPeer(uid: connection.effectiveUserIdentifier, executor: executor)
+        connection.exportedObject = DeviceHelperPeer(uid: connection.effectiveUserIdentifier, executor: executor,
+                                                    installationID: installationID)
         connection.activate()
         return true
     }

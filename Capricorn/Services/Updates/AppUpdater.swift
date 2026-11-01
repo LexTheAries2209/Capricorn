@@ -20,6 +20,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     private(set) var downloadProgress: Double?
     private(set) var hasPendingInstallation = false
     private(set) var isStarted = false
+    private(set) var isPreparingDeviceService = false
     let nativeLanguage: AppLanguage
     let safety: AppUpdateSafetyGate
     @ObservationIgnored private var updater: SPUUpdater?
@@ -40,6 +41,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     @ObservationIgnored private var quitsAfterCancellingUpdate = false
     @ObservationIgnored private var isCancellingPreparedInstallation = false
     @ObservationIgnored private let finishRequestedQuit: @MainActor () -> Void
+    @ObservationIgnored private let deviceService: any DeviceServiceUpdateCoordinating
+    @ObservationIgnored private var preparationID: UUID?
 
     init(
         safety: AppUpdateSafetyGate,
@@ -50,7 +53,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         presentAlert: ((String, String) -> Void)? = nil,
         promptPresenter: (any AppUpdatePromptPresenting)? = nil,
         finishRequestedQuit: (@MainActor () -> Void)? = nil,
-        automaticUpdatesEnabled: @escaping () -> Bool = { false }
+        automaticUpdatesEnabled: @escaping () -> Bool = { false },
+        deviceService: (any DeviceServiceUpdateCoordinating)? = nil
     ) {
         self.safety = safety
         self.language = language
@@ -59,6 +63,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
         self.allowsStartup = allowsStartup
         self.defaults = defaults
         self.automaticUpdatesEnabled = automaticUpdatesEnabled
+        self.deviceService = deviceService ?? NoDeviceServiceUpdates()
         // Read saved choices before creating Sparkle, including in Debug and with an invalid feed.
         automaticallyChecksForUpdates = defaults.object(forKey: PreferenceKey.checksOnLaunch) as? Bool
             ?? defaults.object(forKey: PreferenceKey.legacyAutomaticChecks) as? Bool ?? false
@@ -109,6 +114,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     func applicationDidLaunch() {
         guard !hasHandledApplicationLaunch else { return }
         hasHandledApplicationLaunch = true
+        if allowsStartup { restoreDeviceServiceIfNeeded() }
         guard allowsStartup, automaticallyChecksForUpdates else { return }
         start()
         guard let updater, isStarted, updater.canCheckForUpdates else { return }
@@ -127,9 +133,11 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
 
     func checkNow() {
         if let resume = postponedRelaunch {
-            guard authorizeUpdate(installing: true) else { return }
-            postponedRelaunch = nil
-            resume()
+            prepareInstallation { [weak self] ready in
+                guard ready else { return }
+                self?.postponedRelaunch = nil
+                resume()
+            }
             return
         }
         start()
@@ -179,20 +187,67 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     func authorizeUpdate(installing: Bool = false) -> Bool {
         do {
             if installing {
+                guard !isPreparingDeviceService, !deviceService.requiresPreparation else {
+                    throw AppUpdateBlockedError(conflicts: [.deviceService])
+                }
                 try safety.beginInstallation()
             } else {
                 try safety.check()
             }
             return true
         } catch {
+            if installing {
+                safety.endInstallation()
+                restoreDeviceServiceIfNeeded()
+            }
             reportBlocked(error)
             return false
         }
     }
 
+    /// The installer reply is withheld until the root worker has released the
+    /// disk and SMAppService's asynchronous unregister has actually completed.
+    func prepareInstallation(completion: @escaping (Bool) -> Void) {
+        guard !isPreparingDeviceService else { completion(false); return }
+        do { try safety.beginInstallation() }
+        catch { reportBlocked(error); completion(false); return }
+        guard deviceService.requiresPreparation else { completion(true); return }
+        let id = UUID()
+        preparationID = id
+        isPreparingDeviceService = true
+        Task { @MainActor [self] in
+            do {
+                try await deviceService.prepareForUpdate()
+                guard preparationID == id, safety.isReserved else {
+                    await deviceService.restoreAfterUpdate()
+                    isPreparingDeviceService = false
+                    completion(false)
+                    return
+                }
+                try safety.check()
+                guard !deviceService.requiresPreparation else {
+                    throw AppUpdateBlockedError(conflicts: [.deviceService])
+                }
+                preparationID = nil
+                isPreparingDeviceService = false
+                completion(true)
+            } catch {
+                let cancelled = preparationID != id || !safety.isReserved
+                preparationID = nil
+                safety.endInstallation()
+                await deviceService.restoreAfterUpdate()
+                isPreparingDeviceService = false
+                guard !cancelled else { completion(false); return }
+                if let blocked = error as? AppUpdateBlockedError { reportBlocked(blocked) }
+                else { showIssue(.deviceService) }
+                completion(false)
+            }
+        }
+    }
+
     func applicationMayTerminate() -> Bool {
         guard !quitsAfterCancellingUpdate else { return false }
-        if (hasPendingInstallation && !safety.isReserved) || isCancellingPreparedInstallation {
+        if (hasPendingInstallation && (!safety.isReserved || isPreparingDeviceService)) || isCancellingPreparedInstallation {
             // A prepared Sparkle installer watches for process termination. Cancel it
             // and wait for the update cycle to finish before honoring an ordinary quit.
             quitsAfterCancellingUpdate = true
@@ -228,9 +283,20 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     func markPendingInstallation(_ pending: Bool) {
         hasPendingInstallation = pending
         if !pending {
+            preparationID = nil
             clearPreparedInstallationCancellation()
             postponedRelaunch = nil
             safety.endInstallation()
+            restoreDeviceServiceIfNeeded()
+        }
+    }
+
+    private func restoreDeviceServiceIfNeeded() {
+        guard !isPreparingDeviceService, deviceService.requiresRestoration else { return }
+        isPreparingDeviceService = true
+        Task { @MainActor [self] in
+            await deviceService.restoreAfterUpdate()
+            isPreparingDeviceService = false
         }
     }
 
@@ -455,6 +521,17 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandar
     }
 
     func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem, untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
+        if isPreparingDeviceService {
+            postponedRelaunch = installHandler
+            return true
+        }
+        if deviceService.requiresPreparation {
+            prepareInstallation { [weak self] ready in
+                if ready { installHandler() }
+                else { self?.postponedRelaunch = installHandler }
+            }
+            return true
+        }
         guard authorizeUpdate(installing: true) else {
             // Only an explicit Check for Updates action may retry this handler.
             postponedRelaunch = installHandler

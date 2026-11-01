@@ -4,6 +4,17 @@ import Security
 import MachO
 
 enum DeviceHelperSigning {
+    static func codeIdentity(_ url: URL) throws -> String {
+        var code: SecStaticCode?
+        var info: CFDictionary?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code,
+              SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let digest = (info as? [String: Any])?[kSecCodeInfoUnique as String] as? Data else {
+            throw DeviceHelperError.rejected("Unable to read the application code signature identity.")
+        }
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
     static func isInternalSnapshotLink(_ entry: URL, snapshot: URL) -> Bool {
         let root = snapshot.resolvingSymlinksInPath().path
         return entry.resolvingSymlinksInPath().path.hasPrefix(root + "/")

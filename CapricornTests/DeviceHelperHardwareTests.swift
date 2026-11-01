@@ -15,7 +15,12 @@ final class DeviceHelperHardwareTests: XCTestCase {
         guard !disk.isInternal else { throw DeviceHelperError.rejected("Hardware tests require an external physical disk.") }
         let request = DeviceHelperRequest(operation: .readSMART, disk: disk, deviceType: type)
         try request.validate()
-        let response = try await DeviceHelperClient().perform(request)
+        let expectedBundle: Bundle
+        if let path = environment["CAPRICORN_HELPER_TEST_BUNDLE"] {
+            expectedBundle = try XCTUnwrap(Bundle(url: URL(fileURLWithPath: path)))
+            XCTAssertEqual(expectedBundle.bundleIdentifier, DeviceHelperIdentity.appIdentifier)
+        } else { expectedBundle = .main }
+        let response = try await DeviceHelperClient(bundle: expectedBundle).perform(request)
         XCTAssertEqual(response.exitStatus & 0x07, 0, String(decoding: response.stderr, as: UTF8.self))
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: response.stdout) as? [String: Any])
         XCTAssertNotNil(json["smart_status"])

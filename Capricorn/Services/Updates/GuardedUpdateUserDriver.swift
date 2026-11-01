@@ -14,6 +14,7 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
     private var isInvalidated = false
     private var readyReply: ((SPUUserUpdateChoice) -> Void)?
     private var isAutomaticUpdate = false
+    private var preparingReadyReply = false
 
     init(standard: SPUUserDriver, owner: AppUpdater) {
         self.standard = standard
@@ -179,21 +180,32 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
 
     private func respondToReady(_ choice: SPUUserUpdateChoice) {
         guard let reply = readyReply else { return }
-        readyReply = nil
-        owner?.clearPreparedInstallationCancellation()
-        guard choice == .install, owner?.authorizeUpdate(installing: true) == true else {
+        guard choice == .install else {
+            readyReply = nil
+            preparingReadyReply = false
+            owner?.clearPreparedInstallationCancellation()
             owner?.didCancelPreparedInstallation()
             reply(.skip)
             return
         }
-        reply(.install)
+        guard !preparingReadyReply, let owner else { return }
+        preparingReadyReply = true
+        owner.prepareInstallation { [weak self] ready in
+            guard let self, let reply = self.readyReply else { return }
+            self.readyReply = nil
+            self.preparingReadyReply = false
+            self.owner?.clearPreparedInstallationCancellation()
+            if !ready { self.owner?.didCancelPreparedInstallation() }
+            reply(ready ? .install : .skip)
+        }
     }
 
     func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {
         owner?.transition(to: .installing)
         standard.showInstallingUpdate(withApplicationTerminated: applicationTerminated) { [weak self] in
-            guard self?.owner?.authorizeUpdate(installing: true) == true else { return }
-            retryTerminatingApplication()
+            self?.owner?.prepareInstallation { ready in
+                if ready { retryTerminatingApplication() }
+            }
         }
     }
 
@@ -206,11 +218,12 @@ final class GuardedUpdateUserDriver: NSObject, SPUUserDriver {
         cancelDownload = nil
         cancelCheck = nil
         readyReply = nil
+        preparingReadyReply = false
         isAutomaticUpdate = false
         owner?.clearPreparedInstallationCancellation()
         owner?.dismissPrompt()
         standard.dismissUpdateInstallation()
-        if owner?.hasPendingInstallation == false { owner?.safety.endInstallation() }
+        if owner?.hasPendingInstallation == false { owner?.markPendingInstallation(false) }
     }
 
     func showUpdateInFocus() {

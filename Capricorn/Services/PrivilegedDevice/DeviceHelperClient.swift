@@ -8,6 +8,13 @@ protocol DeviceHelperRequesting: Sendable {
 
 struct DeviceHelperClient: DeviceHelperRequesting {
     static let unavailableMessage = "Enable the privileged device service in Settings before running this operation."
+    let bundle: Bundle
+
+    init(bundle: Bundle = .main) { self.bundle = bundle }
+
+    static func checkConnection() async throws {
+        _ = try await connect(request: nil, bundle: .main)
+    }
 
     static func prepareToStop() async throws {
         try await stopControl(cancel: false)
@@ -56,12 +63,17 @@ struct DeviceHelperClient: DeviceHelperRequesting {
 
     func perform(_ request: DeviceHelperRequest) async throws -> DeviceHelperResponse {
         try request.validate()
+        return try await Self.connect(request: request, bundle: bundle)
+    }
+
+    private static func connect(request: DeviceHelperRequest?, bundle: Bundle) async throws -> DeviceHelperResponse {
         guard SMAppService.daemon(plistName: DeviceHelperIdentity.plistName).status == .enabled else {
             throw DeviceHelperError.rejected(Self.unavailableMessage)
         }
         let requirement = DeviceHelperSigning.requirement(
             identifier: DeviceHelperIdentity.service, team: try DeviceHelperSigning.ownTeam())
-        let data = try JSONEncoder().encode(request)
+        let expectedInstallation = try DeviceHelperSigning.codeIdentity(bundle.bundleURL)
+        let data = try request.map { try JSONEncoder().encode($0) }
         return try await withCheckedThrowingContinuation { continuation in
             let call = DeviceHelperCall(continuation)
             let connection = NSXPCConnection(machServiceName: DeviceHelperIdentity.service, options: .privileged)
@@ -89,19 +101,30 @@ struct DeviceHelperClient: DeviceHelperRequesting {
                     call.finish(.failure(DeviceHelperError.rejected("The device helper version does not match this application.")))
                     return
                 }
-                guard call.completeHandshake() else { return }
-                proxy.perform(data) { data, message in
-                    do {
-                        if let message { throw DeviceHelperError.rejected(message) }
-                        guard let data, data.count <= 6 * 1024 * 1024 else {
-                            throw DeviceHelperError.rejected("The device service returned an invalid response.")
-                        }
-                        let response = try JSONDecoder().decode(DeviceHelperResponse.self, from: data)
-                        guard response.requestID == request.id else {
-                            throw DeviceHelperError.rejected("The device service response does not match the request.")
-                        }
-                        call.finish(.success(response))
-                    } catch { call.finish(.failure(error)) }
+                proxy.installation { installation in
+                    guard installation == expectedInstallation else {
+                        call.finish(.failure(DeviceHelperError.rejected(
+                            "The device service belongs to a different application build. Re-enable it in Settings.")))
+                        return
+                    }
+                    guard call.completeHandshake() else { return }
+                    guard let data, let request else {
+                        call.finish(.success(DeviceHelperResponse(requestID: UUID(), stdout: Data(), stderr: Data(), exitStatus: 0)))
+                        return
+                    }
+                    proxy.perform(data) { data, message in
+                        do {
+                            if let message { throw DeviceHelperError.rejected(message) }
+                            guard let data, data.count <= 6 * 1024 * 1024 else {
+                                throw DeviceHelperError.rejected("The device service returned an invalid response.")
+                            }
+                            let response = try JSONDecoder().decode(DeviceHelperResponse.self, from: data)
+                            guard response.requestID == request.id else {
+                                throw DeviceHelperError.rejected("The device service response does not match the request.")
+                            }
+                            call.finish(.success(response))
+                        } catch { call.finish(.failure(error)) }
+                    }
                 }
             }
         }

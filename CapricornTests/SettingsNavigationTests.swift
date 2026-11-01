@@ -15,7 +15,7 @@ final class SettingsNavigationTests: XCTestCase {
         preferences.requestedSettingsDestination = .updates
         defaults.set(Date(), forKey: AppUpdater.PreferenceKey.lastCheck)
         let checker = AppUpdater(
-            safety: AppUpdateSafetyGate(conflicts: { [] }, deviceServiceEnabled: { false }),
+            safety: AppUpdateSafetyGate(conflicts: { [] }),
             language: { preferences.language },
             allowsStartup: false,
             defaults: defaults

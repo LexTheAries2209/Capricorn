@@ -5,12 +5,13 @@ enum DeviceHelperIdentity {
     static let service = "lex.Capricorn.DeviceHelper"
     static let executable = "CapricornDeviceHelper"
     static let appIdentifier = "lex.Capricorn"
-    static let protocolVersion = 1
+    static let protocolVersion = 2
     static let plistName = service + ".plist"
 }
 
 @objc protocol DeviceHelperXPC {
     func version(reply: @escaping (Int) -> Void)
+    func installation(reply: @escaping (String) -> Void)
     func perform(_ request: Data, reply: @escaping (Data?, String?) -> Void)
     func result(_ requestID: String, reply: @escaping (Data?) -> Void)
     func prepareToStop(reply: @escaping (Bool) -> Void)

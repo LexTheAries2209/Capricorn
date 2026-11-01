@@ -12,7 +12,7 @@ do {
     let team = try DeviceHelperSigning.ownTeam()
     let app = try DeviceHelperSigning.containingApp()
     try DeviceHelperSigning.verify(url: app, identifier: DeviceHelperIdentity.appIdentifier, team: team)
-    let delegate = DeviceHelperListener(appURL: app, team: team)
+    let delegate = DeviceHelperListener(appURL: app, team: team, installation: try DeviceHelperSigning.codeIdentity(app))
     let listener = NSXPCListener(machServiceName: DeviceHelperIdentity.service)
     listener.setConnectionCodeSigningRequirement(delegate.requirement)
     listener.delegate = delegate
