@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
 import AppKit
+import Security
 import SwiftUI
 import XCTest
 @testable import Capricorn
@@ -249,6 +250,21 @@ final class DeviceHelperTests: XCTestCase {
     }
 
     func testBundledHelperHasTheCodeIdentityRequiredByXPC() throws {
+        var code: SecStaticCode?
+        let status = SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, [], &code)
+        var info: CFDictionary?
+        if status == errSecSuccess, let code {
+            XCTAssertEqual(SecCodeCopySigningInformation(
+                code, SecCSFlags(rawValue: kSecCSSigningInformation), &info), errSecSuccess)
+        } else {
+            XCTAssertEqual(status, errSecCSUnsigned)
+        }
+        let flags = (info as? [String: Any])?[kSecCodeInfoFlags as String] as? UInt32 ?? 0
+        // CI deliberately builds without a certificate; the service must still refuse that host.
+        if status == errSecCSUnsigned || flags & SecCodeSignatureFlags.adhoc.rawValue != 0 {
+            XCTAssertThrowsError(try DeviceHelperSigning.ownTeam())
+            throw XCTSkip("Certificate identity checks require a certificate-signed test host.")
+        }
         let team = try DeviceHelperSigning.ownTeam()
         let executable = try XCTUnwrap(Bundle.main.executableURL?.deletingLastPathComponent()
             .appendingPathComponent(DeviceHelperIdentity.executable))
