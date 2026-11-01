@@ -38,6 +38,20 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         }
     }
 
+    func sntOccupyingProcessMessage(_ result: USBRawSmartResult) -> String {
+        guard let process = result.occupyingProcesses.first else {
+            return t(result.occupyingProcessInspectionFailed
+                ? "Occupying process information is temporarily unavailable."
+                : "The occupying process could not be identified.")
+        }
+        switch self {
+        case .english:
+            return "An application that may be using the disk: \(process.command) (PID: \(process.pid))"
+        case .simplifiedChinese:
+            return "占用的程序可能是：\(process.command)（PID：\(process.pid)）"
+        }
+    }
+
     func diskOperationLockMessage(_ notice: DiskOperationLockNotice) -> String {
         if let failureMessage = notice.failureMessage {
             switch self {
@@ -313,6 +327,9 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "SMART data was read, but volume restoration could not be confirmed. Check the disk in Disk Utility.": "已读取 SMART，但无法确认卷挂载已恢复。请在“磁盘工具”中检查硬盘。",
         "SNT did not reach the USB capture workflow. Review the diagnostic output.": "SNT 未进入 USB 设备接管流程，请查看诊断输出。",
         "SNT returned no SMART data. Volume restoration completed.": "SNT 未返回 SMART 数据，卷挂载恢复完成。",
+        "The disk may be in use and could not be unmounted. Close applications using this disk, then try again.": "磁盘可能正在被占用，无法卸载，请关闭正在使用该磁盘的程序后重试。",
+        "The occupying process could not be identified.": "未能确定占用程序。",
+        "Occupying process information is temporarily unavailable.": "暂时无法获取占用程序信息。",
         "JMicron, ASMedia and Realtek returned no SMART data. Volume restoration completed.": "JMicron、ASMedia 和 Realtek 均未返回 SMART 数据，无法查询，卷挂载恢复完成。",
         "The USB disk could not be uniquely identified between SNT protocols. Further capture was stopped.": "切换 SNT 协议时无法唯一识别 USB 硬盘，已停止后续接管。",
         "SNT protocol probing stopped, and volume restoration could not be confirmed. Check the disk in Disk Utility.": "SNT 协议尝试已中断，无法确认卷挂载是否恢复，请在“磁盘工具”中检查硬盘。",

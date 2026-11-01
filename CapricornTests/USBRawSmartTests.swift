@@ -462,6 +462,189 @@ final class USBRawSmartTests: XCTestCase {
         ])
     }
 
+    func testBusyUnmountRecognizesTerminalMarkerAndLegacyErrors() {
+        for status in ["0x0000c010", "0xF8DA0002"] {
+            let result = USBRawSmartService.parse(
+                Self.busyUnmountResult(status: status),
+                drive: Self.drive(), target: Self.target, type: "sntasmedia")
+            XCTAssertTrue(result.unmountBusy)
+            XCTAssertTrue(result.restorationConfirmed)
+            XCTAssertEqual(AppLanguage.simplifiedChinese.t(result.message),
+                           "磁盘可能正在被占用，无法卸载，请关闭正在使用该磁盘的程序后重试。")
+        }
+        let marked = CommandResult(
+            stdout: Data("CAPRICORN_USBRAW_UNMOUNT_BUSY\texhausted".utf8),
+            stderr: Data("CAPRICORN_USBRAW\tunmounting\nCAPRICORN_USBRAW\trestored".utf8),
+            terminationStatus: 2)
+        XCTAssertTrue(USBRawSmartService.parse(
+            marked, drive: Self.drive(), target: Self.target, type: "sntasmedia").unmountBusy)
+
+        for status in ["0x0000c001", "0xf8da0003", "timed out"] {
+            let result = USBRawSmartService.parse(
+                Self.busyUnmountResult(status: status),
+                drive: Self.drive(), target: Self.target, type: "sntasmedia")
+            XCTAssertFalse(result.unmountBusy)
+        }
+        var captured = Self.busyUnmountResult()
+        captured.stderr.append(Data("\nCAPRICORN_USBRAW\tcapturing".utf8))
+        XCTAssertFalse(USBRawSmartService.parse(
+            captured, drive: Self.drive(), target: Self.target, type: "sntasmedia").unmountBusy)
+        var succeeded = Self.commandResult()
+        succeeded.stderr = Data("CAPRICORN_USBRAW_UNMOUNT\tattempt=1\tstatus=0x0000c010".utf8)
+        XCTAssertFalse(USBRawSmartService.parse(
+            succeeded, drive: Self.drive(), target: Self.target, type: "sntasmedia").unmountBusy)
+    }
+
+    func testBusyUnmountInspectsEveryMountedVolumeAndStopsProtocolProbing() async throws {
+        let drive = Self.busyDrive()
+        let first = "Finder 123 lex cwd DIR 1,23 512 456 /Volumes/A/file one\n"
+            + "Finder 123 lex 4r REG 1,23 512 457 /Volumes/A/file two"
+        let second = "Finder 123 lex cwd DIR 1,24 512 456 /Volumes/B\n"
+            + "qlmanage 456 lex 5r REG 1,24 512 457 /Volumes/B/movie.mov"
+        let openFiles = USBRawOpenFileRunner(outputs: [
+            "/Volumes/A": .success(Self.lsofResult(first)),
+            "/Volumes/B": .success(Self.lsofResult(second))
+        ])
+        let privileged = USBRawProbeRunner(results: [Self.busyUnmountResult()])
+        let inventory = USBRawProbeInventory(drives: [drive])
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto")),
+            administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in Self.target }, authorizeVolumes: { _ in },
+            inventoryProvider: inventory, openFileRunner: openFiles)
+        let result = try await service.read(drive: drive, target: Self.target)
+        XCTAssertTrue(result.unmountBusy)
+        XCTAssertEqual(result.occupyingProcesses.map(\.pid), [123, 456])
+        XCTAssertFalse(result.occupyingProcessInspectionFailed)
+        XCTAssertEqual(AppLanguage.simplifiedChinese.sntOccupyingProcessMessage(result),
+                       "占用的程序可能是：Finder（PID：123）")
+        XCTAssertTrue(AppLanguage.english.sntOccupyingProcessMessage(result).contains("Finder (PID: 123)"))
+        let calls = await openFiles.calls
+        XCTAssertEqual(calls.map(\.arguments), [
+            ["+f", "--", "/Volumes/A"], ["+f", "--", "/Volumes/B"]
+        ])
+        XCTAssertTrue(calls.allSatisfy { $0.timeout > 0 && $0.timeout <= 5 })
+        let attempts = await privileged.calls
+        let reloads = await inventory.loadCount
+        XCTAssertEqual(attempts.count, 1)
+        XCTAssertEqual(reloads, 0)
+        let diagnostic = try XCTUnwrap(result.transcript.components(separatedBy: "\n")
+            .first(where: { $0.hasPrefix("CAPRICORN_USBRAW_OPEN_FILES\t") }))
+        let data = Data(diagnostic.dropFirst("CAPRICORN_USBRAW_OPEN_FILES\t".count).utf8)
+        let records = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        XCTAssertEqual(records.count, 2)
+        XCTAssertEqual((records[0]["processes"] as? [[String: Any]])?.count, 2,
+                       "Keep all file records in diagnostics even when the summary deduplicates PIDs.")
+    }
+
+    func testBusyUnmountDistinguishesEmptyInspectionFromFailedInspection() async throws {
+        for failed in [false, true] {
+            let drive = Self.busyDrive()
+            let openFiles = USBRawOpenFileRunner(outputs: [
+                "/Volumes/A": failed
+                    ? .failure(.timedOut(executable: "/usr/sbin/lsof", seconds: 5))
+                    : .success(Self.lsofResult("")),
+                "/Volumes/B": .success(Self.lsofResult(""))
+            ])
+            let service = USBRawSmartService(
+                runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sntasmedia")),
+                administratorRunner: USBRawProbeRunner(results: [Self.busyUnmountResult()]),
+                executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+                targetResolver: { _ in Self.target }, authorizeVolumes: { _ in },
+                openFileRunner: openFiles)
+            let result = try await service.read(drive: drive, target: Self.target)
+            XCTAssertTrue(result.unmountBusy)
+            XCTAssertTrue(result.restorationConfirmed)
+            XCTAssertTrue(result.occupyingProcesses.isEmpty)
+            XCTAssertEqual(result.occupyingProcessInspectionFailed, failed)
+            XCTAssertEqual(AppLanguage.simplifiedChinese.sntOccupyingProcessMessage(result),
+                           failed ? "暂时无法获取占用程序信息。" : "未能确定占用程序。")
+            let calls = await openFiles.calls
+            XCTAssertEqual(calls.count, 2, "One failed lookup must not hide processes on another volume.")
+            XCTAssertEqual(result.message,
+                           "The disk may be in use and could not be unmounted. Close applications using this disk, then try again.")
+        }
+    }
+
+    func testBusyUnmountRestorationFailureTakesPriorityAndSkipsInspection() async throws {
+        let drive = Self.busyDrive()
+        let openFiles = USBRawOpenFileRunner(outputs: [:])
+        let privileged = USBRawProbeRunner(results: [Self.busyUnmountResult(restored: false)])
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto")),
+            administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in Self.target }, authorizeVolumes: { _ in },
+            openFileRunner: openFiles)
+        let result = try await service.read(drive: drive, target: Self.target)
+        XCTAssertTrue(result.unmountBusy)
+        XCTAssertFalse(result.restorationConfirmed)
+        XCTAssertTrue(result.message.contains("restoration could not be confirmed"))
+        let queries = await openFiles.calls
+        let attempts = await privileged.calls
+        XCTAssertTrue(queries.isEmpty)
+        XCTAssertEqual(attempts.count, 1)
+    }
+
+    func testUnmountTimeoutNeverStartsAnotherProtocolOrBusyInspection() async throws {
+        let drive = Self.busyDrive()
+        var timeout = Self.busyUnmountResult(status: "timed out")
+        timeout.stdout = Data(#"{"smartctl":{"exit_status":2,"messages":[{"string":"whole-disk unmount timed out; the operation may still complete","severity":"error"}]}}"#.utf8)
+        let privileged = USBRawProbeRunner(results: [timeout])
+        let openFiles = USBRawOpenFileRunner(outputs: [:])
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto")),
+            administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in Self.target }, authorizeVolumes: { _ in },
+            inventoryProvider: USBRawProbeInventory(drives: [drive]), openFileRunner: openFiles)
+        let result = try await service.read(drive: drive, target: Self.target)
+        XCTAssertFalse(result.unmountBusy)
+        XCTAssertEqual(result.attemptedBridges, [.jmicron])
+        let attempts = await privileged.calls
+        let inspections = await openFiles.calls
+        XCTAssertEqual(attempts.count, 1)
+        XCTAssertTrue(inspections.isEmpty)
+    }
+
+    func testBusyInspectionKeepsProcessFoundAfterAnotherVolumeQueryFails() async throws {
+        let drive = Self.busyDrive()
+        let openFiles = USBRawOpenFileRunner(outputs: [
+            "/Volumes/A": .failure(.nonZeroExit(
+                executable: "/usr/sbin/lsof", status: 1, stderr: "Permission denied")),
+            "/Volumes/B": .success(Self.lsofResult("Editor 789 lex 5r REG 1,24 512 457 /Volumes/B/file"))
+        ])
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sntasmedia")),
+            administratorRunner: USBRawProbeRunner(results: [Self.busyUnmountResult()]),
+            executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in Self.target }, authorizeVolumes: { _ in }, openFileRunner: openFiles)
+        let result = try await service.read(drive: drive, target: Self.target)
+        XCTAssertTrue(result.occupyingProcessInspectionFailed)
+        XCTAssertEqual(AppLanguage.simplifiedChinese.sntOccupyingProcessMessage(result),
+                       "占用的程序可能是：Editor（PID：789）")
+        XCTAssertTrue(result.transcript.contains("Permission denied"))
+        XCTAssertTrue(result.transcript.contains("Editor"))
+    }
+
+    func testBusyInspectionStopsWhenUSBIdentityChanges() async throws {
+        let changed = LockedState(false)
+        let drive = Self.busyDrive()
+        let openFiles = USBRawOpenFileRunner(outputs: [
+            "/Volumes/A": .success(Self.lsofResult(""))
+        ], onQuery: { changed.withLock { $0 = true } })
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sntasmedia")),
+            administratorRunner: USBRawProbeRunner(results: [Self.busyUnmountResult()]),
+            executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in changed.withLock { $0 } ? .init(registryID: 222) : Self.target },
+            authorizeVolumes: { _ in }, openFileRunner: openFiles)
+        let result = try await service.read(drive: drive, target: Self.target)
+        XCTAssertTrue(result.restorationConfirmed)
+        XCTAssertTrue(result.occupyingProcessInspectionFailed)
+        XCTAssertTrue(result.transcript.contains("USB device changed"))
+        let calls = await openFiles.calls
+        XCTAssertEqual(calls.count, 1)
+    }
+
     func testUnknownBridgeStartsAutomaticProbeAndStopsAtFirstSMARTPayload() async throws {
         let drive = Self.drive()
         let scan = USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto"))
@@ -735,6 +918,40 @@ final class USBRawSmartTests: XCTestCase {
     }
 
     @MainActor
+    func testBusyResultSheetRendersBothLanguages() async throws {
+        for language in AppLanguage.allCases {
+            let model = Self.model(service: USBRawSuspendedService())
+            model.requestUSBRawSmart(for: Self.drive())
+            var result = USBRawSmartService.parse(
+                Self.busyUnmountResult(), drive: Self.drive(), target: Self.target, type: "sntasmedia")
+            result.occupyingProcesses = [
+                .init(command: "Finder", pid: 123, user: "lex", path: "/Volumes/Media")
+            ]
+            model.usbRawSmartSession?.result = result
+            model.usbRawSmartSession?.state = .completed
+            let view = NSHostingView(rootView: USBRawSmartSheet(viewModel: model, language: language)
+                .environment(\.colorScheme, .light)
+                .background(Color(nsColor: .windowBackgroundColor)))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 400),
+                                  styleMask: [.titled], backing: .buffered, defer: false)
+            window.contentView = view
+            window.appearance = NSAppearance(named: .aqua)
+            window.orderFront(nil)
+            defer { window.orderOut(nil) }
+            try await Task.sleep(for: .milliseconds(150))
+            view.frame.size = view.fittingSize
+            view.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            try png.write(to: URL(fileURLWithPath: "/private/tmp/capricorn-snt-busy-\(language.rawValue).png"))
+            XCTAssertEqual(view.fittingSize.width, 580, accuracy: 1)
+            XCTAssertGreaterThan(view.fittingSize.height, 200)
+            XCTAssertLessThan(view.fittingSize.height, 700)
+        }
+    }
+
+    @MainActor
     func testRunningReadBlocksRefreshCloseBenchmarkAndUpdateThenPublishesStableMatch() async throws {
         let service = USBRawSuspendedService()
         let inventory = USBRawTestRefresh()
@@ -996,6 +1213,67 @@ final class USBRawSmartTests: XCTestCase {
         CommandResult(stdout: Data(#"{"smartctl":{"exit_status":2},"model_name":"Bridge"}"#.utf8),
                       stderr: Data("CAPRICORN_USBRAW\tcapturing\nCAPRICORN_USBRAW\treleasing\nCAPRICORN_USBRAW\trestoring\nCAPRICORN_USBRAW\trestored".utf8),
                       terminationStatus: 2)
+    }
+
+    static func busyDrive() -> DriveDevice {
+        var drive = drive()
+        drive.volumes = [
+            .init(deviceIdentifier: "disk99s1", name: "B", mountPoint: "/Volumes/B",
+                  sizeBytes: 1000, isWritable: true, isSystem: false),
+            .init(deviceIdentifier: "disk99s2", name: "A", mountPoint: "/Volumes/A",
+                  sizeBytes: 1000, isWritable: true, isSystem: false),
+            .init(deviceIdentifier: "disk99s3", name: "Duplicate", mountPoint: "/Volumes/A",
+                  sizeBytes: 1000, isWritable: true, isSystem: false),
+            .init(deviceIdentifier: "disk99s4", name: "Unmounted", mountPoint: nil,
+                  sizeBytes: 1000, isWritable: true, isSystem: false)
+        ]
+        return drive
+    }
+
+    static func lsofResult(_ output: String) -> CommandResult {
+        .init(stdout: Data(output.utf8), stderr: Data(), terminationStatus: output.isEmpty ? 1 : 0)
+    }
+
+    static func busyUnmountResult(status: String = "0x0000c010", restored: Bool = true) -> CommandResult {
+        .init(
+            stdout: Data(#"{"smartctl":{"exit_status":2,"messages":[{"string":"Smartctl open device failed: whole-disk unmount failed (\#(status))","severity":"error"}]}}"#.utf8),
+            stderr: Data(("CAPRICORN_USBRAW\tunmounting\nCAPRICORN_USBRAW\trestoring\nCAPRICORN_USBRAW\t"
+                + (restored ? "restored" : "restore_failed")).utf8),
+            terminationStatus: 2)
+    }
+}
+
+private actor USBRawOpenFileRunner: TimedCommandRunning {
+    struct Call: Sendable {
+        let arguments: [String]
+        let timeout: TimeInterval
+    }
+    let outputs: [String: Result<CommandResult, CommandError>]
+    let onQuery: (@Sendable () -> Void)?
+    private(set) var calls: [Call] = []
+
+    init(
+        outputs: [String: Result<CommandResult, CommandError>],
+        onQuery: (@Sendable () -> Void)? = nil
+    ) {
+        self.outputs = outputs
+        self.onQuery = onQuery
+    }
+
+    func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
+        XCTFail("SNT open-file inspection must have a timeout.")
+        throw CommandError.launchFailed("Missing timeout")
+    }
+
+    func run(_ executable: String, arguments: [String], timeout: TimeInterval) async throws -> CommandResult {
+        XCTAssertEqual(executable, "/usr/sbin/lsof")
+        calls.append(.init(arguments: arguments, timeout: timeout))
+        onQuery?()
+        guard let mount = arguments.last, let output = outputs[mount] else {
+            XCTFail("Unexpected mount: \(arguments)")
+            throw CommandError.launchFailed("Unexpected mount")
+        }
+        return try output.get()
     }
 }
 

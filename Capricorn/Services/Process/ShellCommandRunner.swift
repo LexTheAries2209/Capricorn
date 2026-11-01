@@ -523,13 +523,20 @@ final class DiskOpenFileService {
     func inspectOpenFiles(
         at mountPoint: String,
         driveID: String,
-        driveName: String
+        driveName: String,
+        timeout: TimeInterval? = nil
     ) async throws -> DiskOpenFileInspection {
         guard !mountPoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw DiskActionError.missingMountPoint
         }
 
-        let result = try await runner.run(lsofPath, arguments: ["+f", "--", mountPoint])
+        let arguments = ["+f", "--", mountPoint]
+        let result: CommandResult
+        if let timeout {
+            result = try await runner.run(lsofPath, arguments: arguments, timeout: timeout)
+        } else {
+            result = try await runner.run(lsofPath, arguments: arguments)
+        }
         if result.terminationStatus != 0, result.stdoutString.isEmpty, !result.stderrString.isEmpty {
             throw CommandError.nonZeroExit(executable: lsofPath, status: result.terminationStatus, stderr: result.stderrString)
         }

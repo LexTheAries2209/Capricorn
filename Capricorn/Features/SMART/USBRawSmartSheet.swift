@@ -85,6 +85,12 @@ struct USBRawSmartSheet: View {
                     ? "checkmark.circle" : "exclamationmark.triangle"
             )
             .foregroundStyle(result.restorationConfirmed ? Color.primary : Color.orange)
+            if result.unmountBusy, result.restorationConfirmed {
+                Text(language.sntOccupyingProcessMessage(result))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
             if !result.phases.isEmpty {
                 VStack(alignment: .leading, spacing: 5) {
                     ForEach(Array(result.phases.enumerated()), id: \.offset) { _, phase in

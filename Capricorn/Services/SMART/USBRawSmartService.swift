@@ -39,6 +39,9 @@ struct USBRawSmartResult: Sendable {
     var exitStatus: Int32
     var attemptedBridges: [SNTBridge] = []
     var probeInterruption: String?
+    var unmountBusy = false
+    var occupyingProcesses: [DiskOpenFileProcess] = []
+    var occupyingProcessInspectionFailed = false
 
     var restorationConfirmed: Bool {
         phases.last == .restored
@@ -50,6 +53,9 @@ struct USBRawSmartResult: Sendable {
             return restorationConfirmed
                 ? "SMART data was read and volume restoration completed."
                 : "SMART data was read, but volume restoration could not be confirmed. Check the disk in Disk Utility."
+        }
+        if unmountBusy, restorationConfirmed {
+            return "The disk may be in use and could not be unmounted. Close applications using this disk, then try again."
         }
         if phases.isEmpty {
             return "SNT did not reach the USB capture workflow. Review the diagnostic output."
@@ -198,6 +204,7 @@ struct USBRawSmartService: USBRawSmartRunning {
     let targetResolver: @Sendable (DriveDevice) throws -> USBRawSmartTarget
     let authorizeVolumes: @Sendable (DriveDevice) throws -> Void
     let inventoryProvider: DiskInventoryProviding
+    let openFileRunner: CommandRunning
 
     init(
         runner: CommandRunning = ShellCommandRunner(),
@@ -208,7 +215,8 @@ struct USBRawSmartService: USBRawSmartRunning {
             try USBRawSmartTargetResolver().target(for: $0)
         },
         authorizeVolumes: @escaping @Sendable (DriveDevice) throws -> Void = Self.authorizeMountedVolumes,
-        inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(networkProvider: nil)
+        inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(networkProvider: nil),
+        openFileRunner: CommandRunning = ShellCommandRunner()
     ) {
         self.runner = runner
         self.administratorRunner = administratorRunner
@@ -216,6 +224,7 @@ struct USBRawSmartService: USBRawSmartRunning {
         self.targetResolver = targetResolver
         self.authorizeVolumes = authorizeVolumes
         self.inventoryProvider = inventoryProvider
+        self.openFileRunner = openFileRunner
     }
 
     func target(for drive: DriveDevice) throws -> USBRawSmartTarget { try targetResolver(drive) }
@@ -255,6 +264,7 @@ struct USBRawSmartService: USBRawSmartRunning {
         _ bridges: [SNTBridge], drive: DriveDevice, target: USBRawSmartTarget, executableURL: URL
     ) async throws -> USBRawSmartResult {
         var currentTarget = target
+        var currentDrive = drive
         var previous: USBRawSmartResult?
         var transcripts: [String] = []
         var attempted: [SNTBridge] = []
@@ -270,6 +280,7 @@ struct USBRawSmartService: USBRawSmartRunning {
                     // Release/re-enumeration can change both diskN and the USB
                     // registry ID. Revalidate stable identity before each capture.
                     let reconnected = try await reconnectedDrive(matching: drive)
+                    currentDrive = reconnected
                     currentTarget = try self.target(for: reconnected)
                     try authorizeVolumes(reconnected)
                     guard try self.target(for: reconnected) == currentTarget else {
@@ -288,6 +299,14 @@ struct USBRawSmartService: USBRawSmartRunning {
                 transcripts[transcripts.count - 1] = header + result.transcript
                 result.transcript = transcripts.joined(separator: "\n")
                 result.attemptedBridges = attempted
+                // Changing bridge protocols cannot resolve failures before
+                // capture, including busy unmounts and unfinished timeouts.
+                if result.unmountBusy || !result.phases.contains(.capturing) {
+                    if result.unmountBusy, result.restorationConfirmed {
+                        await inspectBusyDisk(currentDrive, target: currentTarget, result: &result)
+                    }
+                    return result
+                }
                 // Text/JSON output or Identify alone is not a SMART result.
                 // Never capture again when release/restoration is uncertain.
                 if result.snapshot?.hasSMARTPayload == true || !result.restorationConfirmed {
@@ -313,6 +332,51 @@ struct USBRawSmartService: USBRawSmartRunning {
         // The list always contains a detected bridge or all three protocols.
         guard let previous else { throw USBRawSmartError.unavailable("No SNT protocols were selected.") }
         return previous
+    }
+
+    private func inspectBusyDisk(
+        _ drive: DriveDevice, target: USBRawSmartTarget, result: inout USBRawSmartResult
+    ) async {
+        let service = DiskOpenFileService(runner: openFileRunner)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        var seenPIDs = Set<Int>()
+        var records: [[String: Any]] = []
+        for mount in Set(drive.volumes.compactMap(\.mountPoint)).sorted() {
+            do {
+                try Task.checkCancellation()
+                guard try self.target(for: drive) == target else {
+                    throw USBRawSmartError.unavailable("The USB device changed after confirmation. Refresh disks before trying SNT.")
+                }
+                let remaining = ContinuousClock.now.duration(to: deadline)
+                guard remaining > .zero else {
+                    throw CommandError.timedOut(executable: "/usr/sbin/lsof", seconds: 10)
+                }
+                let seconds = Double(remaining.components.seconds)
+                    + Double(remaining.components.attoseconds) / 1e18
+                let inspection = try await service.inspectOpenFiles(
+                    at: mount, driveID: drive.id, driveName: drive.displayName,
+                    timeout: min(5, seconds))
+                for process in inspection.processes where seenPIDs.insert(process.pid).inserted {
+                    result.occupyingProcesses.append(process)
+                }
+                records.append([
+                    "mount": mount,
+                    "processes": inspection.processes.map {
+                        ["command": $0.command, "pid": $0.pid, "user": $0.user, "path": $0.path] as [String: Any]
+                    }
+                ])
+            } catch {
+                result.occupyingProcessInspectionFailed = true
+                records.append(["mount": mount, "error": error.localizedDescription])
+                // An identity change or cancellation must stop all further
+                // inspection. Keep the completed SNT cleanup evidence.
+                if error is USBRawSmartError || error is CancellationError { break }
+            }
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: records, options: [.sortedKeys]),
+           let json = String(data: data, encoding: .utf8) {
+            result.transcript += "\nCAPRICORN_USBRAW_OPEN_FILES\t" + json
+        }
     }
 
     private func reconnectedDrive(matching expected: DriveDevice) async throws -> DriveDevice {
@@ -359,10 +423,21 @@ struct USBRawSmartService: USBRawSmartRunning {
             guard line.hasPrefix(prefix) else { return nil }
             return USBRawSmartPhase(rawValue: String(line.dropFirst(prefix.count)))
         }
+        var unmountBusy = lines.contains("CAPRICORN_USBRAW_UNMOUNT_BUSY\texhausted")
         let json = lines.compactMap { line -> Data? in
             guard let data = line.data(using: .utf8),
                   var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   root["smartctl"] != nil else { return nil }
+            // Also recognize the bundled capricorn3 diagnostic format.
+            if let tool = root["smartctl"] as? [String: Any],
+               let messages = tool["messages"] as? [[String: Any]] {
+                unmountBusy = unmountBusy || messages.contains {
+                    guard $0["severity"] as? String == "error",
+                          let message = ($0["string"] as? String)?.lowercased() else { return false }
+                    return message.contains("whole-disk unmount failed (0x0000c010)")
+                        || message.contains("whole-disk unmount failed (0xf8da0002)")
+                }
+            }
             // A close/restore failure can set smartctl's fatal bit after valid
             // health data was obtained. Preserve that reading independently;
             // the original status and transcript remain in the session result.
@@ -391,6 +466,9 @@ struct USBRawSmartService: USBRawSmartRunning {
                     message: "SMART data was read, but volume restoration could not be confirmed. Check the disk in Disk Utility.")]
             }
         }
-        return USBRawSmartResult(snapshot: snapshot, phases: phases, transcript: transcript, exitStatus: result.terminationStatus)
+        return USBRawSmartResult(
+            snapshot: snapshot, phases: phases, transcript: transcript, exitStatus: result.terminationStatus,
+            unmountBusy: unmountBusy && result.terminationStatus != 0
+                && !phases.contains(.capturing) && !phases.contains(.reading))
     }
 }
