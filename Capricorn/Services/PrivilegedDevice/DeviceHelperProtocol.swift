@@ -12,7 +12,7 @@ enum DeviceHelperIdentity {
 @objc protocol DeviceHelperXPC {
     func version(reply: @escaping (Int) -> Void)
     func installation(reply: @escaping (String) -> Void)
-    func perform(_ request: Data, reply: @escaping (Data?, String?) -> Void)
+    func perform(_ request: Data, reply: @escaping @Sendable (Data?, String?) -> Void)
     func result(_ requestID: String, reply: @escaping (Data?) -> Void)
     func prepareToStop(reply: @escaping (Bool) -> Void)
     func cancelStop(reply: @escaping () -> Void)

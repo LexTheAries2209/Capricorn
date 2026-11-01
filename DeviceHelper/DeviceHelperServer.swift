@@ -19,7 +19,7 @@ final class DeviceHelperExecutor: @unchecked Sendable {
         self.team = team
     }
 
-    func perform(data: Data, uid: uid_t, reply: @escaping (Data?, String?) -> Void) {
+    func perform(data: Data, uid: uid_t, reply: @escaping @Sendable (Data?, String?) -> Void) {
         guard data.count <= 16_384 else { reply(nil, "The device request is too large."); return }
         let request: DeviceHelperRequest
         do {
@@ -219,7 +219,7 @@ private final class DeviceHelperPeer: NSObject, DeviceHelperXPC {
     }
     func version(reply: @escaping (Int) -> Void) { reply(DeviceHelperIdentity.protocolVersion) }
     func installation(reply: @escaping (String) -> Void) { reply(installationID) }
-    func perform(_ request: Data, reply: @escaping (Data?, String?) -> Void) {
+    func perform(_ request: Data, reply: @escaping @Sendable (Data?, String?) -> Void) {
         executor.perform(data: request, uid: uid, reply: reply)
     }
     func result(_ requestID: String, reply: @escaping (Data?) -> Void) {
