@@ -8,6 +8,20 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V3.1.2 - 2026-11-01
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.1.2) | [Release Notes / 发布说明](docs/releases/v3.1.2.md)
+
+### 中文
+
+- 改善磁盘短暂正忙时的 SNT 读取，加入有限次卸载重试。
+- 无法卸载时显示更清晰的提示及可能占用磁盘的程序，便于释放磁盘后重试。
+
+### English
+
+- Improves SNT reads when a disk is temporarily busy with bounded unmount retries.
+- Shows clearer unmount-failure guidance and a possible occupying process to help users free the disk before retrying.
+
 ## V3.1.1 - 2026-11-01
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.1.1) | [Release Notes / 发布说明](docs/releases/v3.1.1.md)
