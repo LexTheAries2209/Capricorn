@@ -42,6 +42,14 @@ re-enumerates and verifies a unique stable device identity and fresh USB target
 between attempts. It stops at a SMART payload or uncertain restoration.
 Automatic background refresh never starts this sequence.
 
+Patch `capricorn4` retries a completed whole-disk unmount busy response
+(`unix_err(EBUSY)` or `kDAReturnBusy`) at most twice, after one and two seconds.
+Each attempt revalidates the original media registry ID and USB registry ID.
+Timeouts, identity changes and other errors stop immediately. All attempts
+retain the original mount list and use ordinary, non-forced unmounting.
+`CAPRICORN_USBRAW_UNMOUNT` records each attempt and status;
+`CAPRICORN_USBRAW_UNMOUNT_BUSY` marks an exhausted busy failure.
+
 Patch `capricorn3` adds a user-authorized mount-identity exception for CODEX
 Compact Drive media when Disk Arbitration supplies neither a volume UUID nor
 a media UUID. It requires USB VID/PID `2818:0012`, a reader serial and location,

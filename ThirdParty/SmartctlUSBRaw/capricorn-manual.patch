@@ -9,7 +9,7 @@ index 506be2b..fa6ad4d 100644
 +int capricorn_usb_mount_preflight(const char * selector);
 +
 diff --git a/lib/os_darwin_usb.mm b/lib/os_darwin_usb.mm
-index e84929b..308b46b 100644
+index e84929b..6ad0179 100644
 --- a/lib/os_darwin_usb.mm
 +++ b/lib/os_darwin_usb.mm
 @@ -26,0 +27,2 @@
@@ -101,7 +101,99 @@ index e84929b..308b46b 100644
 +  }
 +}
 +
-@@ -611,3 +689,7 @@ static bool volume_matches(CFDictionaryRef description,
+@@ -568 +646 @@ static bool wait_da_operation(const da_operation_ptr & operation,
+-  const char * action, std::string & error_message)
++  const char * action, std::string & error_message, DAReturn * completed_status = nullptr)
+@@ -569,0 +648,2 @@ static bool wait_da_operation(const da_operation_ptr & operation,
++  if (completed_status)
++    *completed_status = kDAReturnNotReady;
+@@ -577,0 +658,2 @@ static bool wait_da_operation(const da_operation_ptr & operation,
++  if (completed_status)
++    *completed_status = operation->status;
+@@ -588 +670,2 @@ static bool wait_da_operation(const da_operation_ptr & operation,
+-static bool unmount_whole_disk(const disk_session_ptr & session, const std::string & name,
++template <typename Unmount, typename Validate, typename Delay>
++static bool unmount_with_busy_retry(Unmount unmount, Validate validate, Delay delay,
+@@ -589,0 +673,44 @@ static bool unmount_whole_disk(const disk_session_ptr & session, const std::stri
++{
++  for (unsigned attempt = 1; attempt <= 3; ++attempt) {
++    if (!validate()) {
++      error_message = "USB disk identity changed before whole-disk unmount";
++      return false;
++    }
++    DAReturn status = unmount(error_message);
++    fprintf(stderr, "CAPRICORN_USBRAW_UNMOUNT\tattempt=%u\tstatus=0x%08x\n",
++      attempt, (unsigned)status);
++    if (status == kDAReturnSuccess) {
++      error_message.clear();
++      return true;
++    }
++    // Only a completed busy response is retryable. A timeout leaves the
++    // operation in flight and must never start another unmount or capture.
++    if (status != unix_err(EBUSY) && status != kDAReturnBusy)
++      return false;
++    if (attempt == 3) {
++      fprintf(stderr, "CAPRICORN_USBRAW_UNMOUNT_BUSY\texhausted\n");
++      return false;
++    }
++    delay(attempt);
++  }
++  return false;
++}
++
++static uint64_t unmount_media_id(DADiskRef disk, uint64_t expected_usb_id)
++{
++  io_service_t media = DADiskCopyIOMedia(disk);
++  if (!media)
++    return 0;
++  uint64_t media_id = 0, usb_id = 0;
++  IORegistryEntryGetRegistryEntryID(media, &media_id);
++  io_service_t usb = find_usb_device_ancestor(media);
++  if (usb) {
++    IORegistryEntryGetRegistryEntryID(usb, &usb_id);
++    IOObjectRelease(usb);
++  }
++  IOObjectRelease(media);
++  return usb_id == expected_usb_id ? media_id : 0;
++}
++
++static bool unmount_whole_disk(const disk_session_ptr & session, const std::string & name,
++  uint64_t expected_usb_id, std::string & error_message)
+@@ -598,3 +725,27 @@ static bool unmount_whole_disk(const disk_session_ptr & session, const std::stri
+-  da_operation_ptr operation = std::make_shared<da_operation>(session);
+-  DADiskUnmount(disk, kDADiskUnmountOptionWhole, da_operation_callback,
+-    new da_operation_ptr(operation));
++  const uint64_t expected_media_id = unmount_media_id(disk, expected_usb_id);
++  bool ok = unmount_with_busy_retry(
++    [&](std::string & error) {
++      da_operation_ptr operation = std::make_shared<da_operation>(session);
++      DADiskUnmount(disk, kDADiskUnmountOptionWhole, da_operation_callback,
++        new da_operation_ptr(operation));
++      DAReturn status;
++      wait_da_operation(operation, "whole-disk unmount", error, &status);
++      return status;
++    },
++    [&]() {
++      // A reused diskN must never redirect a delayed retry to another disk.
++      DADiskRef current = DADiskCreateFromBSDName(kCFAllocatorDefault, session->ref,
++        name.c_str());
++      if (!current)
++        return false;
++      bool matches = expected_media_id
++        && unmount_media_id(current, expected_usb_id) == expected_media_id;
++      CFRelease(current);
++      return matches;
++    },
++    [](unsigned seconds) {
++      dispatch_semaphore_t timer = dispatch_semaphore_create(0);
++      dispatch_semaphore_wait(timer,
++        dispatch_time(DISPATCH_TIME_NOW, (int64_t)seconds * NSEC_PER_SEC));
++      dispatch_release(timer);
++    }, error_message);
+@@ -602 +753 @@ static bool unmount_whole_disk(const disk_session_ptr & session, const std::stri
+-  return wait_da_operation(operation, "whole-disk unmount", error_message);
++  return ok;
+@@ -611,3 +762,7 @@ static bool volume_matches(CFDictionaryRef description,
 -  return !volume.media_uuid.empty()
 -    && description_uuid(description, kDADiskDescriptionMediaUUIDKey)
 -      == volume.media_uuid;
@@ -112,13 +204,13 @@ index e84929b..308b46b 100644
 +    && codex_name_identity(description, volume.usb_identity, candidate)
 +    && candidate.codex_volume_name == volume.codex_volume_name
 +    && candidate.media_size == volume.media_size && candidate.block_size == volume.block_size;
-@@ -619 +701,2 @@ static const std::string & volume_identifier(
+@@ -619 +774,2 @@ static const std::string & volume_identifier(
 -  return !volume.volume_uuid.empty() ? volume.volume_uuid : volume.media_uuid;
 +  return !volume.volume_uuid.empty() ? volume.volume_uuid
 +    : (!volume.media_uuid.empty() ? volume.media_uuid : volume.codex_volume_name);
-@@ -627,0 +711 @@ struct volume_lookup
+@@ -627,0 +784 @@ struct volume_lookup
 +  std::set<uint64_t> matching_media;
-@@ -647,0 +732,9 @@ static void restore_disk_appeared(DADiskRef disk, void * context)
+@@ -647,0 +805,9 @@ static void restore_disk_appeared(DADiskRef disk, void * context)
 +    if (!lookup.volume.codex_volume_name.empty()) {
 +      uint64_t registry_id = 0;
 +      if (IORegistryEntryGetRegistryEntryID(media, &registry_id) != KERN_SUCCESS || !registry_id) {
@@ -128,7 +220,7 @@ index e84929b..308b46b 100644
 +      }
 +      lookup.matching_media.insert(registry_id);
 +    }
-@@ -667,0 +761,46 @@ static void restore_disk_changed(DADiskRef disk, CFArrayRef, void * context)
+@@ -667,0 +834,46 @@ static void restore_disk_changed(DADiskRef disk, CFArrayRef, void * context)
 +static bool codex_volume_is_unique(const disk_session_ptr & session,
 +  DADiskRef disk, const darwin_mounted_volume & volume)
 +{
@@ -175,7 +267,7 @@ index e84929b..308b46b 100644
 +  return inspected && matches.size() == 1 && matches.count(expected_id) == 1;
 +}
 +
-@@ -698,0 +838,7 @@ static DADiskRef find_volume(const disk_session_ptr & session,
+@@ -698,0 +911,7 @@ static DADiskRef find_volume(const disk_session_ptr & session,
 +  if (!volume.codex_volume_name.empty() && (!lookup.disk
 +      || lookup.matching_media.size() != 1 || !codex_volume_is_unique(session, lookup.disk, volume))) {
 +    if (lookup.disk)
@@ -183,11 +275,17 @@ index e84929b..308b46b 100644
 +    fprintf(stderr, "CAPRICORN_USBRAW_CODEX_NAME\tvolume name did not uniquely identify restored media\n");
 +    return nullptr;
 +  }
-@@ -758,0 +905 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
+@@ -758,0 +978 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
 +  fprintf(stderr, "CAPRICORN_USBRAW\trestoring\n");
-@@ -776,0 +924 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
+@@ -776,0 +997 @@ static bool restore_mounted_volumes(const disk_session_ptr & session,
 +  fprintf(stderr, "CAPRICORN_USBRAW\t%s\n", ok ? "restored" : "restore_failed");
-@@ -1977,0 +2126,56 @@ static bool select_protocol(IOUSBHostInterface * interface, uint8_t number,
+@@ -783,0 +1005,2 @@ static bool prepare_mounted_volumes(io_service_t service,
++  uint64_t usb_id = 0;
++  IORegistryEntryGetRegistryEntryID(service, &usb_id);
+@@ -799 +1022 @@ static bool prepare_mounted_volumes(io_service_t service,
+-    if (!unmount_whole_disk(session, *it, error_message)) {
++    if (!unmount_whole_disk(session, *it, usb_id, error_message)) {
+@@ -1977,0 +2201,56 @@ static bool select_protocol(IOUSBHostInterface * interface, uint8_t number,
 +static bool capricorn_authorize_device(const darwin_usb_device_info & info,
 +  int & error_number, std::string & error_message)
 +{
@@ -244,7 +342,7 @@ index e84929b..308b46b 100644
 +  return 0;
 +}
 +
-@@ -1982,0 +2187,7 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -1982,0 +2262,7 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +  // This separately bundled experimental tool must never capture implicitly.
 +  const char * manual = getenv("CAPRICORN_USBRAW_MANUAL");
 +  if (!manual || strcmp(manual, "1") || strncmp(selector, "usbraw:", 7)) {
@@ -252,25 +350,62 @@ index e84929b..308b46b 100644
 +    error_message = "Capricorn raw USB capture requires explicit manual authorization and a usbraw selector";
 +    return 0;
 +  }
-@@ -2023,0 +2235,5 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -2023,0 +2310,5 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +    if (!capricorn_authorize_device(info, error_number, error_message)) {
 +      IOObjectRelease(service);
 +      return 0;
 +    }
 +
-@@ -2034,0 +2251 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -2034,0 +2326 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +    fprintf(stderr, "CAPRICORN_USBRAW\tunmounting\n");
-@@ -2042,0 +2260 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -2042,0 +2335 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +    fprintf(stderr, "CAPRICORN_USBRAW\tcapturing\n");
-@@ -2175,0 +2394 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
+@@ -2175,0 +2469 @@ darwin_usb_handle * darwin_usb_open(const char * selector, uint64_t & registry_i
 +    fprintf(stderr, "CAPRICORN_USBRAW\treading\n");
-@@ -2186,0 +2406 @@ bool darwin_usb_close(darwin_usb_handle * handle, int & error_number,
+@@ -2186,0 +2481 @@ bool darwin_usb_close(darwin_usb_handle * handle, int & error_number,
 +  fprintf(stderr, "CAPRICORN_USBRAW\treleasing\n");
 diff --git a/lib/tests/os_darwin_usb_test.mm b/lib/tests/os_darwin_usb_test.mm
-index e18863f..b8d394a 100644
+index e18863f..add8f0c 100644
 --- a/lib/tests/os_darwin_usb_test.mm
 +++ b/lib/tests/os_darwin_usb_test.mm
-@@ -526,0 +527,57 @@ int main()
+@@ -402,0 +403,36 @@ int main()
++    // Exercise retry limits without touching disks or actually waiting.
++    struct UnmountCase {
++      std::vector<DAReturn> statuses;
++      unsigned valid_checks;
++      bool expected;
++      unsigned attempts;
++      std::vector<unsigned> delays;
++    };
++    const UnmountCase unmountCases[] = {
++      {{kDAReturnSuccess}, 3, true, 1, {}},
++      {{unix_err(EBUSY), kDAReturnSuccess}, 3, true, 2, {1}},
++      {{kDAReturnBusy, unix_err(EBUSY), kDAReturnSuccess}, 3, true, 3, {1, 2}},
++      {{unix_err(EBUSY), kDAReturnBusy, unix_err(EBUSY)}, 3, false, 3, {1, 2}},
++      {{kDAReturnNotReady}, 3, false, 1, {}}, // Includes an unfinished timeout.
++      {{unix_err(EPERM)}, 3, false, 1, {}},
++      {{unix_err(EBUSY), unix_err(EIO)}, 3, false, 2, {1}},
++      {{unix_err(EBUSY)}, 1, false, 1, {1}}, // Disk changed during the delay.
++      {{kDAReturnSuccess}, 0, false, 0, {}},
++    };
++    for (const auto & test : unmountCases) {
++      unsigned attempts = 0, checks = 0;
++      std::vector<unsigned> delays;
++      std::string error;
++      bool ok = unmount_with_busy_retry(
++        [&](std::string & message) {
++          if (attempts >= test.statuses.size())
++            std::abort();
++          message = "unmount failure";
++          return test.statuses[attempts++];
++        },
++        [&]() { return checks++ < test.valid_checks; },
++        [&](unsigned seconds) { delays.push_back(seconds); }, error);
++      CHECK(ok == test.expected && attempts == test.attempts && delays == test.delays);
++      CHECK(error.empty() == test.expected);
++    }
++
+@@ -526,0 +563,57 @@ int main()
 +    // Only the observed CODEX Compact Drive UDF media may use its unique
 +    // recording name when Disk Arbitration supplies neither UUID.
 +    darwin_usb_device_info codexUSB = {};
