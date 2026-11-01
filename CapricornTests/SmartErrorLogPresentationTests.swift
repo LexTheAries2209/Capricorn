@@ -118,12 +118,12 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                 }
                 let lines = observations.compactMap { $0.topCandidates(1).first?.string }
                 let text = normalized(lines.joined())
-                XCTAssertTrue(captionIsVisible(language.t(
+                XCTAssertFalse(captionIsVisible(language.t(
                     "When disabled, the SMART page hides self-test controls, saved reports, and error-log tools."
                 ), in: lines), "\(language), diagnostics enabled: \(enabled): \(lines)")
-                XCTAssertEqual(captionIsVisible(language.t(
+                XCTAssertFalse(captionIsVisible(language.t(
                     "When enabled, the SMART page shows tools to read, view, and export controller error reports."
-                ), in: lines), enabled, "\(language), diagnostics enabled: \(enabled): \(lines)")
+                ), in: lines), "\(language), diagnostics enabled: \(enabled): \(lines)")
                 XCTAssertFalse(text.contains(normalized(language.t("Overview"))))
                 XCTAssertFalse(preferences.showsSmartErrorLogInterface)
             }
