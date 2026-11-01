@@ -58,12 +58,23 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
             self.container = container
             let records = try container.mainContext.fetch(FetchDescriptor<UpdateFixtureHistory>())
             if build == "0042" {
-                finish([
+                var result: [String: Any] = [
                     "result": "updated",
                     "build": build,
                     "historyRetained": records.contains { $0.marker == "history-before-update" },
                     "preferencesRetained": UserDefaults.standard.string(forKey: "fixtureMarker") == "preference-before-update"
-                ])
+                ]
+                if scenario == "device-service-update" {
+                    let service = FixtureDeviceServiceUpdate(root: root)
+                    Task { @MainActor in
+                        let wasStopped = service.requiresRestoration
+                        await service.restoreAfterUpdate()
+                        result["serviceStoppedBeforeReplacement"] = wasStopped
+                        result["serviceRestoredAfterUpdate"] = !service.requiresRestoration
+                            && FileManager.default.fileExists(atPath: service.restored.path)
+                        self.finish(result)
+                    }
+                } else { finish(result) }
                 return
             }
             UserDefaults.standard.set("preference-before-update", forKey: "fixtureMarker")
@@ -114,7 +125,8 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
                 },
                 automaticUpdatesEnabled: { [weak self] in
                     self?.developerOptionsEnabled == true && self?.automaticUpdatesEnabled == true
-                }
+                },
+                deviceService: scenario == "device-service-update" ? FixtureDeviceServiceUpdate(root: root) : nil
             )
             self.owner = owner
             if usesLaunchCheck {
@@ -254,6 +266,30 @@ private final class UpdateFixtureDelegate: NSObject, NSApplicationDelegate {
             try? data.write(to: root.appendingPathComponent("result.json"))
         }
         NSApp.terminate(nil)
+    }
+}
+
+/// Exercises real Sparkle's asynchronous installer handoff. System registration
+/// itself is deliberately mocked; this fixture has no privileged daemon.
+@MainActor
+private final class FixtureDeviceServiceUpdate: DeviceServiceUpdateCoordinating {
+    private let root: URL
+    private var stopped = false
+    private var marker: URL { root.appendingPathComponent("device-service-stopped") }
+    var restored: URL { root.appendingPathComponent("device-service-restored") }
+    var requiresPreparation: Bool { !stopped }
+    var requiresRestoration: Bool { FileManager.default.fileExists(atPath: marker.path) }
+    init(root: URL) { self.root = root }
+    func prepareForUpdate() async throws {
+        try await Task.sleep(for: .milliseconds(300))
+        try Data("stopped before replacement".utf8).write(to: marker, options: .atomic)
+        stopped = true
+    }
+    func restoreAfterUpdate() async {
+        guard requiresRestoration else { return }
+        try? Data("restored by replacement app".utf8).write(to: restored, options: .atomic)
+        // Retain evidence instead of deleting the journal fixture.
+        try? FileManager.default.moveItem(at: marker, to: root.appendingPathComponent("device-service-stop-evidence"))
     }
 }
 

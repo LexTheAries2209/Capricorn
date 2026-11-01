@@ -27,7 +27,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sparkle-root", required=True, type=pathlib.Path)
     parser.add_argument("--scenario", choices=[
-        "update", "manual-only", "cancel-install", "quit-before-install",
+        "update", "device-service-update", "manual-only", "cancel-install", "quit-before-install",
         "developer-auto", "developer-auto-disabled", "developer-auto-conflict", "developer-auto-download-conflict",
         "developer-auto-off-during-download", "developer-auto-ready-conflict",
         "conflict", "archive-signature", "feed-signature", "missing-feed",
@@ -53,6 +53,7 @@ def main():
         "-F", str(frameworks), "-framework", "Sparkle", "-framework", "SwiftData",
         "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
         str(repo / "script/fixtures/SparkleUpdateFixture.swift"),
+        str(repo / "Capricorn/Services/PrivilegedDevice/DeviceServiceUpdateCoordinating.swift"),
         *(str(sources / name) for name in [
             "AppUpdateSafety.swift", "AppUpdateConfiguration.swift",
             "AppUpdatePromptController.swift", "AppUpdater.swift", "GuardedUpdateUserDriver.swift"
@@ -208,9 +209,11 @@ def main():
             "scenario": options.scenario, "artifacts": str(root),
             "feedRequests": requests.count("/appcast.xml"), "archiveDelay": options.archive_delay, **result
         }, indent=2))
-        if options.scenario in ("update", "developer-auto"):
+        if options.scenario in ("update", "developer-auto", "device-service-update"):
             assert result["result"] == "updated", result
             assert result["historyRetained"] and result["preferencesRetained"], result
+            if options.scenario == "device-service-update":
+                assert result["serviceStoppedBeforeReplacement"] and result["serviceRestoredAfterUpdate"], result
         elif options.scenario in ("manual-only", "developer-auto-disabled", "launch-conflict",
                                   "launch-refresh-during-check", "developer-auto-conflict"):
             assert result["result"] == "manual-required" and result["build"] == "0041", result
