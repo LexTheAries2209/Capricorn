@@ -265,6 +265,17 @@ final class DeviceHelperTests: XCTestCase {
             url: executable, identifier: DeviceHelperIdentity.service, team: "AAAAAAAAAA"))
     }
 
+    func testContainingAppUsesTheLoadedImageAndRequiresStandardEmbedding() throws {
+        XCTAssertEqual(try DeviceHelperSigning.containingApp(), Bundle.main.bundleURL.resolvingSymlinksInPath())
+        XCTAssertEqual(try DeviceHelperSigning.containingApp(
+            executableURL: URL(fileURLWithPath: "/Applications/Capricorn.app/Contents/MacOS/CapricornDeviceHelper")).path,
+                       "/Applications/Capricorn.app")
+        for path in ["/CapricornDeviceHelper", "/usr/local/bin/CapricornDeviceHelper",
+                     "/Applications/Capricorn.app/Contents/Resources/CapricornDeviceHelper"] {
+            XCTAssertThrowsError(try DeviceHelperSigning.containingApp(executableURL: URL(fileURLWithPath: path)))
+        }
+    }
+
     func testLaunchDaemonIsDemandStartedAndUsesOnlyBundledProgram() throws {
         let url = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/LaunchDaemons/" + DeviceHelperIdentity.plistName)
         let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: Any])
