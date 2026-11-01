@@ -2,6 +2,10 @@
 
 Branch: `codex/privileged-device-helper`
 
+The location and updater restrictions of the first implementation have been
+superseded by [automatic update coordination](2026-11-01-device-service-update-lifecycle.md).
+Historical hardware observations below retain the conditions of their test.
+
 ## Scope
 
 One demand-started root LaunchDaemon, `lex.Capricorn.DeviceHelper`, serves
@@ -31,8 +35,10 @@ imaging, arbitrary mounts and firmware commands are not part of this service.
 
 1. Build and sign the application and all embedded executables with the same
    certificate-backed development team. Ad-hoc signing is insufficient.
-2. Install the complete application at `/Applications/Capricorn.app` before
-   enabling the service. Distribution builds must also follow the normal
+2. Put the complete application in a permanent folder on a local writable
+   disk before enabling the service. `/Applications` is recommended, not
+   required. Temporary, translocated, read-only, removable and network
+   locations are rejected. Distribution builds must also follow the normal
    Developer ID / notarization process.
 3. Open Settings, then **Privileged Device Service**, and choose
    **Enable Device Service**.
@@ -128,10 +134,14 @@ Use **Disable Device Service** in Capricorn Settings. The client first asks
 the service to reserve an idle stop, then calls `SMAppService.unregister()`.
 It does not stop a worker that might be restoring mounts.
 
-The in-app updater blocks application replacement while the service is
-enabled or awaiting approval. For this first version, explicitly disable it,
-update the app, then enable it again. Follow the same procedure for manual
-app replacement. Automatic helper-version replacement is not implemented.
+The in-app updater now journals a previously enabled service, obtains an idle
+stop reservation and asynchronously unregisters it before allowing installation.
+The replacement app restores that service on launch and verifies its protocol
+and containing app's code-signature identity. Cancelled or failed updates
+recover through the same journal. A system approval requirement is surfaced
+instead of being bypassed. See the update lifecycle document for recovery
+boundaries and tests. For manual app replacement, still disable the service
+first unless an update transaction has already prepared it.
 
 ## Verification
 
@@ -294,7 +304,7 @@ self-test transport and manual confirmations.
 - SNT 每次仍须确认卸载；后台扫描、刷新不能主动接管 USB。
 - 不提供任意 shell、路径、命令或通用磁盘操作接口。
 - 正在执行或恢复挂载时不能通过 Capricorn 停用服务。
-- 第一版更新前须先停用服务，更新完成后再启用。
+- 当前 App 内更新自动协调安全停用及恢复；手动替换 App 仍应先停用服务。
 - 已完成系统批准后的真实 XPC、root 工具快照、NVMe SMART 与日志只读验证，
   并验证错误磁盘身份和非本 App 客户端会被拒绝。
 - USB-SNT 的 TCC 归属、接管与挂载恢复仍需 USB 通路真机验证；本轮的 PCIe/
