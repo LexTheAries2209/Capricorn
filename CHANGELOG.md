@@ -8,6 +8,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V3.1.0 - 2026-11-01
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.1.0) | [Release Notes / 发布说明](docs/releases/v3.1.0.md)
+
+### 中文
+
+- 新增经系统批准的特权设备服务，供 SMART 读取、受支持的自检和手动 SNT 共用，减少重复认证。
+- 支持在本地固定文件夹启用服务，应用内更新时安全停用并尝试恢复服务。
+- 设置说明改为鼠标悬浮提示，拓扑补充更多 SSD 型号名称。
+
+### English
+
+- Adds one system-approved privileged device service for SMART reads, supported self-tests, and manual SNT, reducing repeated authentication.
+- Supports service activation from permanent local folders, with safe service shutdown and restoration attempts during in-app updates.
+- Moves settings explanations to hover tips and adds more SSD model names to topology.
+
 ## V3.0.0 - 2026-10-30
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.0.0) | [Release Notes / 发布说明](docs/releases/v3.0.0.md)
