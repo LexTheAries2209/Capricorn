@@ -32,8 +32,6 @@ struct DeviceHelperSettingsSection: View {
                 }
                 .help(language.t("Refresh Service Status"))
             }
-            Text(language.t("SMART reads, supported hardware self-tests and manual SNT share this service. SNT still asks before unmounting. Removable-volume privacy permission remains separate."))
-                .font(.caption).foregroundStyle(.secondary)
             if let error = manager.error {
                 Text(language.t(error)).font(.callout).foregroundStyle(.orange).textSelection(.enabled)
             }

@@ -277,7 +277,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Device Service Not Enabled": "设备服务未启用",
         "Device Service Not Found": "未找到设备服务",
         "Device Service Unavailable": "设备服务不可用",
-        "SMART reads, supported hardware self-tests and manual SNT share this service. SNT still asks before unmounting. Removable-volume privacy permission remains separate.": "SMART 读取、受支持的硬件自检和手动 SNT 共用此服务。SNT 仍会在卸载前确认，可移动卷隐私授权仍需单独授予。",
         "Enable the privileged device service in Settings before running this operation.": "请先在设置中启用特权设备服务，再执行此操作。",
         "Install the signed Capricorn application in /Applications before enabling the device service.": "请先将已签名的 Capricorn 安装到 /Applications，再启用设备服务。",
         "Try SNT…": "尝试 SNT…",
