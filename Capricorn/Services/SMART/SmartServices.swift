@@ -778,10 +778,11 @@ final class SmartctlSmartProvider: SmartctlTargetProviding, @unchecked Sendable 
         }
 
         return supportedDrives.reduce(into: [:]) { targets, drive in
+            // Match a complete BSD name; disk7 must never select disk70 or disk7s1.
             let directMatch = devices.first(where: {
                 $0.name == drive.deviceNode
                     || $0.name.hasSuffix("/\(drive.bsdName)")
-                    || $0.name.contains(drive.bsdName)
+                    || $0.name == drive.bsdName
             })
             if let directMatch {
                 targets[drive.id] = SmartctlTargetDescriptor(
