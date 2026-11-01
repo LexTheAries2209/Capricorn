@@ -316,18 +316,14 @@ struct SmartDiagnosticsSettingsControls: View {
 
     var body: some View {
         Toggle(preferences.language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
-        Text(preferences.language.t("When disabled, the SMART page hides self-test controls, saved reports, and error-log tools."))
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .help(preferences.language.t("When disabled, the SMART page hides self-test controls, saved reports, and error-log tools."))
 
         if preferences.showsSmartSelfTestInterface {
             Toggle(
                 preferences.language.t("Show error entry reader"),
                 isOn: $preferences.showsSmartErrorLogInterface
             )
-            Text(preferences.language.t("When enabled, the SMART page shows tools to read, view, and export controller error reports."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            .help(preferences.language.t("When enabled, the SMART page shows tools to read, view, and export controller error reports."))
         }
     }
 }
@@ -377,14 +373,10 @@ struct CapricornSettingsView: View {
                 }
 
                 Toggle(language.t("Redact serial numbers"), isOn: $preferences.redactSerialNumbers)
-                Text(language.t("When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .help(language.t("When enabled, serial numbers show the first four characters followed by asterisks. Internal matching and history continue to use the full value."))
 
                 Toggle(language.t("Show Quick Check and Repair"), isOn: $preferences.showsCheckAndRepairActions)
-                Text(language.t("When disabled, Quick Disk Check is hidden from Overview and Check and Repair is hidden from the disk context menu."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .help(language.t("When disabled, Quick Disk Check is hidden from Overview and Check and Repair is hidden from the disk context menu."))
 
                 SmartDiagnosticsSettingsControls(preferences: preferences)
 
@@ -392,17 +384,13 @@ struct CapricornSettingsView: View {
                     language.t("Open benchmark progress window by default"),
                     isOn: $preferences.opensBenchmarkProgressWindowAutomatically
                 )
-                Text(language.t("When disabled, a benchmark continues in the background and opens its progress window only when you select View Progress."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .help(language.t("When disabled, a benchmark continues in the background and opens its progress window only when you select View Progress."))
 
                 Toggle(
                     language.t("Open SMART self-test progress window by default"),
                     isOn: $preferences.opensSmartSelfTestProgressWindowAutomatically
                 )
-                Text(language.t("When disabled, a SMART self-test continues in the background and opens its progress window only when you select View Progress."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .help(language.t("When disabled, a SMART self-test continues in the background and opens its progress window only when you select View Progress."))
             }
 
             Section(language.t("Disk Actions")) {
@@ -414,9 +402,7 @@ struct CapricornSettingsView: View {
                         Text(preference.title(language: language)).tag(preference)
                     }
                 }
-                Text(language.t("This applies only when Capricorn starts. Switching a volume from the disk context menu takes effect immediately."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .help(language.t("This applies only when Capricorn starts. Switching a volume from the disk context menu takes effect immediately."))
 
                 Picker(
                     language.t("Automatic disk refresh"),
@@ -426,14 +412,10 @@ struct CapricornSettingsView: View {
                         Text(interval.title(language: language)).tag(interval)
                     }
                 }
-                Text(language.t("Periodically rescans connected disks and refreshes SMART data. Disk connection and removal events always refresh automatically."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .help(language.t("Periodically rescans connected disks and refreshes SMART data. Disk connection and removal events always refresh automatically."))
 
                 Toggle(language.t("Do not wake sleeping disks for SMART refresh"), isOn: $preferences.avoidWakingSleepingDisks)
-                Text(language.t("When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .help(language.t("When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up."))
 
             }
 
@@ -533,9 +515,7 @@ struct CapricornSettingsView: View {
                     language.t("Show individual history delete buttons"),
                     isOn: $preferences.showsIndividualHistoryDeletion
                 )
-                Text(language.t("When enabled, visible and hidden history records can be permanently deleted after confirmation."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .help(language.t("When enabled, visible and hidden history records can be permanently deleted after confirmation."))
 
                 LabeledContent(language.t("Location")) {
                     Text(historyDatabaseDirectoryURL?.path ?? language.t("Unavailable"))
