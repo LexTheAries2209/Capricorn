@@ -20,9 +20,7 @@ final class DeviceHelperServiceManager {
         error = nil
         do {
             let team = try DeviceHelperSigning.ownTeam()
-            guard Bundle.main.bundleURL.deletingLastPathComponent().path == "/Applications" else {
-                throw DeviceHelperError.rejected("Install the signed Capricorn application in /Applications before enabling the device service.")
-            }
+            try DeviceHelperLocation.validate(Bundle.main.bundleURL)
             try DeviceHelperSigning.verify(url: Bundle.main.bundleURL, identifier: DeviceHelperIdentity.appIdentifier,
                                            team: team, nested: true)
             if service.status != .enabled && service.status != .requiresApproval { try service.register() }

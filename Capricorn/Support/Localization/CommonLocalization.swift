@@ -278,7 +278,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Device Service Not Found": "未找到设备服务",
         "Device Service Unavailable": "设备服务不可用",
         "Enable the privileged device service in Settings before running this operation.": "请先在设置中启用特权设备服务，再执行此操作。",
-        "Install the signed Capricorn application in /Applications before enabling the device service.": "请先将已签名的 Capricorn 安装到 /Applications，再启用设备服务。",
+        "Move Capricorn to a permanent folder on a local writable disk before enabling the device service.": "请先将 Capricorn 移至本机可写磁盘的固定文件夹，再启用设备服务。",
         "Try SNT…": "尝试 SNT…",
         "Try SNT": "尝试 SNT",
         "Detect Bridge": "自动识别桥接芯片",
