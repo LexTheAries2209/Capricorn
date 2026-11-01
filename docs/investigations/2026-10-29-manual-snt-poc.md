@@ -2,6 +2,12 @@
 
 Branch: `codex/darwin-usb-smart-poc`
 
+The development branch's authorization path has since moved from one-shot
+administrator prompts to a shared, system-approved device service. See
+[Privileged Device Service](2026-11-01-privileged-device-service.md) for the
+current implementation, activation procedure and remaining validation.
+The historical observations below still describe their original test dates.
+
 ## User Flow
 
 1. Wait for the normal disk/SMART refresh to finish.

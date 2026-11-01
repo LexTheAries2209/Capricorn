@@ -52,6 +52,8 @@ Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，�
 
 常规读取未返回数据的 USB-NVMe 设备可尝试实验性 SNT 读取，支持 JMicron、ASMedia 和 Realtek 桥接协议。读取需要管理员授权并暂时卸载设备上的卷，结束后尝试恢复挂载；请先关闭相关文件并备份重要数据。兼容性取决于桥接器及固件，不保证所有 USB 设备可用。
 
+本开发分支通过“设置 > 特权设备服务”提供一个经系统批准的辅助服务，供 SMART 读取、受支持的自检及手动 SNT 共用。请先将已签名 App 安装到 `/Applications`，再启用服务并完成系统批准。SNT 每次仍保留卸载确认，可移动卷隐私授权仍单独处理。更新前须停用服务，更新后重新启用。新服务的首次硬件/TCC 验证尚待系统批准后执行，详见[实现与验证边界](docs/investigations/2026-11-01-privileged-device-service.md)。
+
 ### 测速和实时活动
 
 测速提供默认、快速、SSD、HDD 四种配置；开启开发者选项及自定义测速开关后，可编辑测试项目和联动的 Q/T 参数，Q × T 不超过 16。快速配置通过两个代表性项目检查基本读写表现，不代替完整介质检查。大文件负载按硬盘记忆上次选择的大小，默认 128 GiB。
@@ -115,6 +117,8 @@ SMART availability varies across drives, memory cards, USB bridges, and network 
 Capricorn bundles smartmontools 7.5. It does not automatically install or remove system drivers, and benchmarks do not write directly to raw devices.
 
 USB-NVMe devices that return no data through ordinary reads can try experimental SNT reads using JMicron, ASMedia, or Realtek bridge protocols. This requires administrator authorization and temporarily unmounts the device's volumes, then attempts to restore them. Close related files and back up important data first. Compatibility depends on the bridge and firmware; support for every USB device is not guaranteed.
+
+This development branch adds one system-approved helper under Settings > Privileged Device Service for SMART reads, supported self-tests, and manual SNT. Install the signed app in `/Applications` before enabling it and approving it in System Settings. SNT still requires unmount confirmation for each manual operation; removable-volume privacy consent remains separate. Disable the service before updating and re-enable it afterward. First-run hardware/TCC validation of the new service is pending system approval; see the [implementation and verification boundaries](docs/investigations/2026-11-01-privileged-device-service.md).
 
 ### Benchmark And Live Activity
 
