@@ -8,6 +8,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V3.1.1 - 2026-11-01
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.1.1) | [Release Notes / 发布说明](docs/releases/v3.1.1.md)
+
+### 中文
+
+- 改善通过 USB 集线器连接设备时的 SMART 与 SNT 识别。
+- 无效 SMART 响应和异常序列号不再显示为健康数据，减少错误警报。
+- 修正 SMART 目标选择及无法确定设备时的中文提示。
+
+### English
+
+- Improves SMART and SNT device identification through USB hubs.
+- Rejects invalid SMART responses and malformed serial numbers instead of displaying misleading health data.
+- Corrects SMART target selection and the Chinese message for ambiguous devices.
+
 ## V3.1.0 - 2026-11-01
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.1.0) | [Release Notes / 发布说明](docs/releases/v3.1.0.md)
