@@ -82,16 +82,17 @@ struct USBRawSmartSession: Identifiable {
 
 enum USBRawSmartPolicy {
     static func isEligible(drive: DriveDevice, snapshot: SmartSnapshot?) -> Bool {
-        supportsManualRead(drive) && snapshot != nil && snapshot?.hasSMARTPayload == false
+        guard supportsRead(drive), let snapshot else { return false }
+        return !snapshot.hasSMARTPayload || (snapshot.health == .unavailable && snapshot.verifiedSource == nil)
     }
 
     static func canRefresh(drive: DriveDevice, snapshot: SmartSnapshot?) -> Bool {
-        supportsManualRead(drive) && snapshot?.driveID == drive.id
+        supportsRead(drive) && snapshot?.driveID == drive.id
             && snapshot?.hasSMARTPayload == true
             && snapshot?.selectedProvider == USBRawSmartService.providerName
     }
 
-    private static func supportsManualRead(_ drive: DriveDevice) -> Bool {
+    static func supportsRead(_ drive: DriveDevice) -> Bool {
         guard !drive.isVirtual, !drive.isInternal, !drive.isSystemDisk,
               !drive.isNetwork, !drive.isMemoryCard,
               drive.protocolName.localizedCaseInsensitiveContains("USB") else { return false }
@@ -235,6 +236,7 @@ struct USBRawSmartService: USBRawSmartRunning {
         inventoryProvider: DiskInventoryProviding = DiskutilInventoryProvider(networkProvider: nil),
         openFileRunner: CommandRunning = ShellCommandRunner(),
         automaticAuthorizationReady: @escaping @Sendable (DriveDevice) async -> Bool = { drive in
+            guard UserDefaults.standard.bool(forKey: AppPreferences.Key.automaticSNT) else { return false }
             guard SMAppService.daemon(plistName: DeviceHelperIdentity.plistName).status == .enabled else {
                 return false
             }
@@ -276,14 +278,22 @@ struct USBRawSmartService: USBRawSmartRunning {
         drive: DriveDevice, target: USBRawSmartTarget, automatic: Bool, preferredBridge: SNTBridge?
     ) async throws -> USBRawSmartResult {
         guard let executableURL, FileManager.default.isExecutableFile(atPath: executableURL.path) else {
+            if automatic { throw AutomaticSNTDeferral.unsupported }
             throw USBRawSmartError.unavailable("The experimental SNT tool is missing from this application.")
         }
-        guard try self.target(for: drive) == target else {
+        guard (try? self.target(for: drive)) == target else {
+            if automatic { throw AutomaticSNTDeferral.identityChanged }
             throw USBRawSmartError.unavailable("The USB device changed after confirmation. Refresh disks before trying SNT.")
         }
         // Passive discovery filters out composite devices and multiple disks/LUNs.
         // Never use --scan-open: that would capture before the explicit read.
-        let scan = try await runner.run(executableURL.path, arguments: ["--scan", "-d", "usb", "--json=c"], timeout: 15)
+        let scan: CommandResult
+        do {
+            scan = try await runner.run(executableURL.path, arguments: ["--scan", "-d", "usb", "--json=c"], timeout: 15)
+        } catch {
+            if automatic { throw AutomaticSNTDeferral.unsupported }
+            throw error
+        }
         let devices = SmartctlParser.parseScan(scan.stdout)?.filter {
             URL(fileURLWithPath: $0.name).lastPathComponent == drive.bsdName
         } ?? []
@@ -296,7 +306,8 @@ struct USBRawSmartService: USBRawSmartRunning {
         // Request removable-volume access from the user's app before entering
         // administrator authorization. A denial must leave the disk mounted.
         if !automatic { try authorizeVolumes(drive) }
-        guard try self.target(for: drive) == target else {
+        guard (try? self.target(for: drive)) == target else {
+            if automatic { throw AutomaticSNTDeferral.identityChanged }
             throw USBRawSmartError.unavailable("The USB device changed after confirmation. Refresh disks before trying SNT.")
         }
         // The tool itself owns non-forced unmount and restoration. Do not put
@@ -351,6 +362,7 @@ struct USBRawSmartService: USBRawSmartRunning {
                     "-i", "-H", "-A", "--json=c", "-d", bridge.rawValue, currentTarget.selector
                 ])
                 var result = Self.parse(command, drive: drive, target: currentTarget, type: bridge.rawValue)
+                if automatic, result.phases.isEmpty { throw AutomaticSNTDeferral.needsAuthorization }
                 transcripts[transcripts.count - 1] = header + result.transcript
                 result.transcript = transcripts.joined(separator: "\n")
                 result.attemptedBridges = attempted
@@ -369,6 +381,9 @@ struct USBRawSmartService: USBRawSmartRunning {
                 }
                 previous = result
             } catch {
+                if automatic, !captureRequested, error is USBRawSmartError {
+                    throw AutomaticSNTDeferral.identityChanged
+                }
                 guard var result = previous else { throw error }
                 if error is AutomaticSNTDeferral { throw error }
                 // A failed process call provides no cleanup evidence for this
@@ -394,7 +409,7 @@ struct USBRawSmartService: USBRawSmartRunning {
         let service = DiskOpenFileService(runner: openFileRunner)
         let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         for mount in Set(drive.volumes.compactMap(\.mountPoint)).sorted() {
-            guard try self.target(for: drive) == target else { throw AutomaticSNTDeferral.identityChanged }
+            guard (try? self.target(for: drive)) == target else { throw AutomaticSNTDeferral.identityChanged }
             let remaining = ContinuousClock.now.duration(to: deadline)
             let seconds = Double(remaining.components.seconds) + Double(remaining.components.attoseconds) / 1e18
             guard seconds > 0 else { throw AutomaticSNTDeferral.occupancyUnknown }
@@ -409,7 +424,7 @@ struct USBRawSmartService: USBRawSmartRunning {
                 throw AutomaticSNTDeferral.occupancyUnknown
             }
         }
-        guard try self.target(for: drive) == target else { throw AutomaticSNTDeferral.identityChanged }
+        guard (try? self.target(for: drive)) == target else { throw AutomaticSNTDeferral.identityChanged }
     }
 
     private func inspectBusyDisk(

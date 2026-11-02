@@ -86,7 +86,12 @@ final class AppModel {
     var diskOperationLockNotice: DiskOperationLockNotice?
     var usbRawSmartSession: USBRawSmartSession?
     var isUSBRawSmartPresented = false
-    var isUSBRawSmartActive: Bool { usbRawSmartSession?.state == .running }
+    var isUSBRawSmartActive: Bool { usbRawSmartSession?.state == .running || isAutomaticSNTReading }
+    var isAutomaticSNTReading = false
+    var automaticSNTEnabled = false
+    var automaticSNTConnections: [UUID: AutomaticSNTConnection] = [:]
+    @ObservationIgnored var automaticSNTTask: Task<Void, Never>?
+    let automaticSNTCache: AutomaticSNTCache
     private(set) var isInstallingAppUpdate = false
     private var activeDiskCommandCount = 0
 
@@ -391,6 +396,7 @@ final class AppModel {
         smartSelfTestService: SmartSelfTestService = SmartSelfTestService(),
         smartErrorLogService: SmartErrorLogService = SmartErrorLogService(),
         usbRawSmartService: USBRawSmartRunning = USBRawSmartService(),
+        automaticSNTCache: AutomaticSNTCache = AutomaticSNTCache(),
         smartDiagnosticsCapabilityCache: SmartDiagnosticsCapabilityCaching = SmartDiagnosticsCapabilityCache(),
         virtualT7DemoMode: Bool = false,
         virtualT7DemoStepNanoseconds: UInt64 = 1_000_000_000
@@ -399,6 +405,7 @@ final class AppModel {
         self.smartSelfTestService = smartSelfTestService
         self.smartErrorLogService = smartErrorLogService
         self.usbRawSmartService = usbRawSmartService
+        self.automaticSNTCache = automaticSNTCache
         self.smartDiagnosticsCapabilityCache = smartDiagnosticsCapabilityCache
         self.refreshService = refreshService ?? DriveRefreshService(
             inventoryProvider: inventoryProvider,
@@ -707,6 +714,7 @@ final class AppModel {
             self.refreshTask = nil
             self.activeRefreshID = nil
             self.isRefreshing = false
+            self.synchronizeAutomaticSNTConnections()
         }
         refreshTask = worker
         await worker.value
@@ -1326,12 +1334,14 @@ final class AppModel {
 
     private func acquireDiskOperationLock(
         for drive: DriveDevice,
-        operation: DiskOperationKind
+        operation: DiskOperationKind,
+        showsNotice: Bool = true
     ) -> DiskOperationLease? {
         guard !isInstallingAppUpdate, !isUSBRawSmartActive else { return nil }
         do {
             return try diskOperationLockCoordinator.acquire(for: drive, operation: operation)
         } catch let DiskOperationLockError.conflict(conflict) {
+            guard showsNotice else { return nil }
             diskOperationLockNotice = DiskOperationLockNotice(
                 requestedOperation: operation,
                 driveName: drive.displayName,
@@ -1339,6 +1349,7 @@ final class AppModel {
                 failureMessage: nil
             )
         } catch {
+            guard showsNotice else { return nil }
             diskOperationLockNotice = DiskOperationLockNotice(
                 requestedOperation: operation,
                 driveName: drive.displayName,
@@ -1389,6 +1400,7 @@ final class AppModel {
             // against a unique stable identity after re-enumerating the disk.
             let restoredDrive = await reconcileUSBRawSmartDrive(
                 session.drive, hasSMARTPayload: result.snapshot?.hasSMARTPayload == true)
+            recordManualSNTResult(result, for: session.drive, restoredDrive: restoredDrive)
             if var snapshot = result.snapshot, snapshot.hasSMARTPayload {
                 if let restoredDrive {
                     snapshot.driveID = restoredDrive.id
@@ -1407,6 +1419,47 @@ final class AppModel {
             usbRawSmartSession?.state = .completed
             refreshMessage = error.localizedDescription
         }
+    }
+
+    func performAutomaticSNTRead(
+        drive: DriveDevice, target: USBRawSmartTarget, preferredBridge: SNTBridge?
+    ) async throws -> (USBRawSmartResult, DriveDevice?) {
+        guard automaticSNTEnabled, usbRawSmartSession == nil, canBeginUSBRawSmart,
+              let lease = acquireDiskOperationLock(for: drive, operation: .usbRawSmart, showsNotice: false)
+        else { throw AutomaticSNTDeferral.busy }
+        isAutomaticSNTReading = true
+        activeDiskCommandCount += 1
+        driveSystemEventDebounceTask?.cancel()
+        driveSystemEventDebounceTask = nil
+        let selection = selectedDrive
+        defer {
+            activeDiskCommandCount -= 1
+            isAutomaticSNTReading = false
+            lease.release()
+        }
+        let result = try await usbRawSmartService.readAutomatically(
+            drive: drive, target: target, preferredBridge: preferredBridge)
+        let candidate = await reconcileUSBRawSmartDrive(
+            drive, hasSMARTPayload: result.snapshot?.hasSMARTPayload == true)
+        let restoredDrive: DriveDevice?
+        if let expected = AutomaticSNTCache.identityKey(for: drive),
+           let candidate, AutomaticSNTCache.identityKey(for: candidate) != expected {
+            restoredDrive = nil
+        } else {
+            restoredDrive = candidate
+        }
+        if let selection,
+           let selected = drives.first(where: { DriveStableIdentityMatcher.matches(selection, $0) }) {
+            selectedDriveID = selected.id
+        }
+        if let restoredDrive, var snapshot = result.snapshot, snapshot.hasSMARTPayload {
+            snapshot.driveID = restoredDrive.id
+            snapshots[restoredDrive.id] = snapshot
+        }
+        if !result.restorationConfirmed {
+            refreshMessage = result.message
+        }
+        return (result, restoredDrive)
     }
 
     func startLiveActivityMonitoring(drive: DriveDevice, interval: DiskActivitySampleInterval) {

@@ -44,6 +44,8 @@ struct SmartAttributesView: View {
                 showsSerialNumber: true
             )
 
+            AutomaticSNTStatusView(drive: drive, viewModel: viewModel)
+
             if SmartSnapshotHeaderVisibilityPolicy.showsHeader(for: snapshot) {
                 HStack(alignment: .top, spacing: 12) {
                     snapshotHeaderDetails

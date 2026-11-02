@@ -173,6 +173,10 @@ struct ContentView: View {
             guard ApplicationRuntime.allowsAutomaticStartupTasks else { return }
             await viewModel.runAutomaticRefresh(every: preferences.automaticRefreshInterval)
         }
+        .task(id: preferences.automaticSNT) {
+            guard ApplicationRuntime.allowsAutomaticStartupTasks else { return }
+            viewModel.configureAutomaticSNT(enabled: preferences.automaticSNT)
+        }
         .task(id: viewModel.driveInventoryRevision) {
             guard ApplicationRuntime.allowsAutomaticStartupTasks else {
                 connectionTopologyGraph = .assemble(paths: [:])

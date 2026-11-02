@@ -89,7 +89,7 @@ final class AutomaticSNTCache {
         }
         var values = entries()
         values[key] = record
-        if let data = try? JSONEncoder.dit.encode(values) {
+        if let data = try? JSONEncoder().encode(values) {
             defaults.set(data, forKey: Self.defaultsKey)
         }
     }
@@ -100,7 +100,7 @@ final class AutomaticSNTCache {
 
     private func entries() -> [String: AutomaticSNTRecord] {
         guard let data = defaults.data(forKey: Self.defaultsKey),
-              let values = try? JSONDecoder.dit.decode([String: AutomaticSNTRecord].self, from: data)
+              let values = try? JSONDecoder().decode([String: AutomaticSNTRecord].self, from: data)
         else { return [:] }
         return values
     }

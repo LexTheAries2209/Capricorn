@@ -58,6 +58,7 @@ final class AppPreferences {
         static let avoidWakingSleepingDisks = false
         static let redactSerialNumbers = false
         static let automaticRefreshInterval = DiskAutomaticRefreshInterval.off
+        static let automaticSNT = false
         static let showsCheckAndRepairActions = false
         static let showsIndividualHistoryDeletion = false
         static let opensBenchmarkProgressWindowAutomatically = true
@@ -85,6 +86,7 @@ final class AppPreferences {
         static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
         static let redactSerialNumbers = "redactSerialNumbers"
         static let automaticRefreshIntervalMinutes = "automaticRefreshIntervalMinutes"
+        static let automaticSNT = "automaticSNT"
         static let showsCheckAndRepairActions = "showsCheckAndRepairActions"
         static let showsIndividualHistoryDeletion = "showsIndividualHistoryDeletion"
         static let opensBenchmarkProgressWindowAutomatically = "opensBenchmarkProgressWindowAutomatically"
@@ -200,6 +202,13 @@ final class AppPreferences {
         }
     }
 
+    var automaticSNT: Bool {
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(automaticSNT, forKey: Key.automaticSNT)
+        }
+    }
+
     /// Controls both the Overview quick-check module and the related disk-action
     /// menu. Repair commands remain opt-in because they can modify metadata.
     var showsCheckAndRepairActions: Bool {
@@ -264,6 +273,7 @@ final class AppPreferences {
         automaticRefreshInterval = DiskAutomaticRefreshInterval(
             rawValue: defaults.integer(forKey: Key.automaticRefreshIntervalMinutes)
         ) ?? Defaults.automaticRefreshInterval
+        automaticSNT = defaults.object(forKey: Key.automaticSNT) as? Bool ?? Defaults.automaticSNT
         showsCheckAndRepairActions = defaults.object(forKey: Key.showsCheckAndRepairActions) as? Bool ?? Defaults.showsCheckAndRepairActions
         showsIndividualHistoryDeletion = defaults.object(forKey: Key.showsIndividualHistoryDeletion) as? Bool ?? Defaults.showsIndividualHistoryDeletion
         opensBenchmarkProgressWindowAutomatically = defaults.object(forKey: Key.opensBenchmarkProgressWindowAutomatically) as? Bool ?? Defaults.opensBenchmarkProgressWindowAutomatically
@@ -282,7 +292,7 @@ final class AppPreferences {
     /// Clears every app-owned defaults value while retaining disk capability
     /// cache entries. SwiftData history is stored separately and is untouched.
     func resetAllSettings() {
-        let preservedKeys = Set([SmartDiagnosticsCapabilityCache.defaultsKey])
+        let preservedKeys = Set([SmartDiagnosticsCapabilityCache.defaultsKey, AutomaticSNTCache.defaultsKey])
         for key in defaults.dictionaryRepresentation().keys where !preservedKeys.contains(key) {
             defaults.removeObject(forKey: key)
         }
@@ -299,6 +309,7 @@ final class AppPreferences {
         avoidWakingSleepingDisks = Defaults.avoidWakingSleepingDisks
         redactSerialNumbers = Defaults.redactSerialNumbers
         automaticRefreshInterval = Defaults.automaticRefreshInterval
+        automaticSNT = Defaults.automaticSNT
         showsCheckAndRepairActions = Defaults.showsCheckAndRepairActions
         showsIndividualHistoryDeletion = Defaults.showsIndividualHistoryDeletion
         opensBenchmarkProgressWindowAutomatically = Defaults.opensBenchmarkProgressWindowAutomatically
@@ -413,6 +424,8 @@ struct CapricornSettingsView: View {
                     }
                 }
                 .help(language.t("Periodically rescans connected disks and refreshes SMART data. Disk connection and removal events always refresh automatically."))
+
+                AutomaticSNTSettingsControls(preferences: preferences)
 
                 Toggle(language.t("Do not wake sleeping disks for SMART refresh"), isOn: $preferences.avoidWakingSleepingDisks)
                     .help(language.t("When an ATA or SCSI disk is in standby or sleep mode, Capricorn keeps its previous SMART data instead of spinning it up."))

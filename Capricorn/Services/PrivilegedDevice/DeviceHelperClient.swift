@@ -191,7 +191,20 @@ struct PrivilegedDeviceCommandRunner: CommandRunning {
 
     func run(_ executable: String, arguments: [String]) async throws -> CommandResult {
         let request = try Self.request(executable: executable, arguments: arguments, bundle: bundle, resolve: resolve)
-        let response = try await client.perform(request)
+        let response: DeviceHelperResponse
+        do {
+            response = try await client.perform(request)
+        } catch {
+            if request.automaticSNT {
+                if error.localizedDescription == "The device service is busy. Wait for its current operation to complete." {
+                    throw AutomaticSNTDeferral.busy
+                }
+                if error.localizedDescription == DeviceHelperClient.unavailableMessage {
+                    throw AutomaticSNTDeferral.needsAuthorization
+                }
+            }
+            throw error
+        }
         return CommandResult(stdout: response.stdout, stderr: response.stderr, terminationStatus: response.exitStatus)
     }
 
