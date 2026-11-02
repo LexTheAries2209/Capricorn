@@ -180,7 +180,9 @@ struct PrivilegedDeviceCommandRunner: CommandRunning {
     init(
         client: any DeviceHelperRequesting = DeviceHelperClient(),
         bundle: Bundle = .main,
-        resolve: @escaping @Sendable (String) throws -> DeviceHelperDisk = DeviceHelperDeviceResolver.disk(forTarget:)
+        resolve: @escaping @Sendable (String) throws -> DeviceHelperDisk = {
+            try DeviceHelperDeviceResolver.disk(forTarget: $0)
+        }
     ) {
         self.client = client
         self.bundle = bundle

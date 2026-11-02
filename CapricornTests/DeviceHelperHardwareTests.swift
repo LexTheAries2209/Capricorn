@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
 import IOKit
+import IOKit.storage
 import XCTest
 @testable import Capricorn
 
@@ -15,7 +16,14 @@ final class DeviceHelperHardwareTests: XCTestCase {
         var entry = IOServiceGetMatchingService(
             kIOMainPortDefault, IORegistryEntryIDMatching(disk.mediaRegistryID))
         var usbAncestors: [UInt64] = []
+        var storageTarget: String?
         while entry != 0 {
+            if storageTarget == nil, IOObjectConformsTo(entry, "IOBlockStorageDevice") != 0 {
+                var path = [CChar](repeating: 0, count: 4096)
+                if IORegistryEntryGetPath(entry, kIOServicePlane, &path) == KERN_SUCCESS {
+                    storageTarget = String(decoding: path.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+                }
+            }
             if IOObjectConformsTo(entry, "IOUSBHostDevice") != 0 {
                 var identifier: UInt64 = 0
                 let status = IORegistryEntryGetRegistryEntryID(entry, &identifier)
@@ -36,11 +44,35 @@ final class DeviceHelperHardwareTests: XCTestCase {
         XCTAssertEqual(target.registryID, nearestUSB)
         XCTAssertEqual(disk.usbRegistryID, nearestUSB)
         XCTAssertEqual(try DeviceHelperDeviceResolver.disk(forTarget: target.selector), disk)
+        XCTAssertEqual(try DeviceHelperDeviceResolver.disk(forTarget: XCTUnwrap(storageTarget)), disk)
         for hub in usbAncestors.dropFirst() {
             XCTAssertThrowsError(try DeviceHelperDeviceResolver.disk(forTarget: "usbraw:\(hub)"),
                                  "An upstream hub must not identify a physical disk.")
         }
+        let media = IOServiceGetMatchingService(
+            kIOMainPortDefault, IORegistryEntryIDMatching(disk.mediaRegistryID))
+        XCTAssertNotEqual(media, 0)
+        defer { if media != 0 { IOObjectRelease(media) } }
+        var descendants: io_iterator_t = 0
+        XCTAssertEqual(IORegistryEntryCreateIterator(
+            media, kIOServicePlane, IOOptionBits(kIORegistryIterateRecursively), &descendants), KERN_SUCCESS)
+        defer { if descendants != 0 { IOObjectRelease(descendants) } }
+        var synthesized: [String] = []
+        while case let child = IOIteratorNext(descendants), child != 0 {
+            defer { IOObjectRelease(child) }
+            guard IOObjectConformsTo(child, kIOMediaClass) != 0,
+                  IORegistryEntryCreateCFProperty(
+                    child, kIOMediaWholeKey as CFString, kCFAllocatorDefault, 0
+                  )?.takeRetainedValue() as? Bool == true,
+                  let bsd = IORegistryEntryCreateCFProperty(
+                    child, kIOBSDNameKey as CFString, kCFAllocatorDefault, 0
+                  )?.takeRetainedValue() as? String, bsd != name else { continue }
+            synthesized.append(bsd)
+            XCTAssertThrowsError(try DeviceHelperDeviceResolver.resolve(bsdName: bsd),
+                                 "A synthesized whole disk must not duplicate its physical backing disk.")
+        }
         print("DEVICE_HELPER_USB_IDENTITY disk=\(name) device=\(nearestUSB) upstream_hubs=\(usbAncestors.dropFirst())")
+        print("DEVICE_HELPER_MEDIA_IDENTITY physical=\(name) excluded_synthesized=\(synthesized)")
     }
 
     func testApprovedServiceReadsExternalDiskAndRejectsStaleIdentity() async throws {

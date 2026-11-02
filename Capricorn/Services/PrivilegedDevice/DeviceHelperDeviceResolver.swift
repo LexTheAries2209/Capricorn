@@ -3,50 +3,119 @@ import Foundation
 import IOKit
 import IOKit.storage
 
+/// The resolver uses the same registry traversal for live devices and fixture
+/// trees, so APFS layers can be tested without mounting or capturing a disk.
+struct DeviceHelperRegistry {
+    var matchingBSDName: (String) -> io_registry_entry_t
+    var parent: (io_registry_entry_t) -> io_registry_entry_t
+    var property: (io_registry_entry_t, String) -> Any?
+    var conforms: (io_registry_entry_t, String) -> Bool
+    var identifier: (io_registry_entry_t) -> UInt64?
+    var retain: (io_registry_entry_t) -> Void
+    var release: (io_registry_entry_t) -> Void
+    var mediaNames: () throws -> [String]
+
+    static var system: Self {
+        Self(
+            matchingBSDName: { name in
+                guard let match = IOBSDNameMatching(kIOMainPortDefault, 0, name) else { return 0 }
+                return IOServiceGetMatchingService(kIOMainPortDefault, match)
+            },
+            parent: { entry in
+                var parent: io_registry_entry_t = 0
+                return IORegistryEntryGetParentEntry(entry, kIOServicePlane, &parent) == KERN_SUCCESS ? parent : 0
+            },
+            property: { entry, key in
+                IORegistryEntryCreateCFProperty(entry, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
+            },
+            conforms: { IOObjectConformsTo($0, $1) != 0 },
+            identifier: { entry in
+                var identifier: UInt64 = 0
+                guard IORegistryEntryGetRegistryEntryID(entry, &identifier) == KERN_SUCCESS,
+                      identifier > 0 else { return nil }
+                return identifier
+            },
+            retain: { _ = IOObjectRetain($0) },
+            release: { _ = IOObjectRelease($0) },
+            mediaNames: {
+                var iterator: io_iterator_t = 0
+                guard IOServiceGetMatchingServices(
+                    kIOMainPortDefault, IOServiceMatching(kIOMediaClass), &iterator
+                ) == KERN_SUCCESS else {
+                    throw DeviceHelperError.rejected("Unable to enumerate physical disks.")
+                }
+                defer { IOObjectRelease(iterator) }
+                var names: [String] = []
+                while case let entry = IOIteratorNext(iterator), entry != 0 {
+                    if let name = IORegistryEntryCreateCFProperty(
+                        entry, kIOBSDNameKey as CFString, kCFAllocatorDefault, 0
+                    )?.takeRetainedValue() as? String {
+                        names.append(name)
+                    }
+                    IOObjectRelease(entry)
+                }
+                return names
+            })
+    }
+}
+
 enum DeviceHelperDeviceResolver {
-    static func resolve(bsdName: String) throws -> DeviceHelperDisk {
-        guard bsdName.range(of: #"^disk[0-9]+\z"#, options: .regularExpression) != nil,
-              let match = IOBSDNameMatching(kIOMainPortDefault, 0, bsdName) else {
+    static func resolve(
+        bsdName: String, registry: DeviceHelperRegistry = .system
+    ) throws -> DeviceHelperDisk {
+        guard bsdName.range(of: #"^disk[0-9]+\z"#, options: .regularExpression) != nil else {
             throw DeviceHelperError.rejected("A whole physical disk is required.")
         }
-        var entry = IOServiceGetMatchingService(kIOMainPortDefault, match)
+        var entry = registry.matchingBSDName(bsdName)
         guard entry != 0 else { throw DeviceHelperError.rejected("The selected disk is no longer connected.") }
         let original = entry
-        defer { IOObjectRelease(original) }
+        defer { registry.release(original) }
         func property(_ key: String) -> Any? {
-            IORegistryEntryCreateCFProperty(original, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
+            registry.property(original, key)
         }
-        guard property(kIOMediaWholeKey) as? Bool == true,
+        guard registry.conforms(original, kIOMediaClass),
+              property(kIOMediaWholeKey) as? Bool == true,
               let size = property(kIOMediaSizeKey) as? NSNumber, size.int64Value > 0 else {
             throw DeviceHelperError.rejected("A whole physical disk is required.")
         }
-        var mediaID: UInt64 = 0
-        guard IORegistryEntryGetRegistryEntryID(original, &mediaID) == KERN_SUCCESS else {
+        // APFS containers also set Whole=true and eventually reach a physical
+        // storage device. Only media provided directly by a block-storage
+        // driver represent that device; never count its synthesized children.
+        let provider = registry.parent(original)
+        guard provider != 0 else {
+            throw DeviceHelperError.rejected("Virtual and synthesized disks are not allowed.")
+        }
+        let physicalProvider = registry.conforms(provider, "IOBlockStorageDriver")
+        registry.release(provider)
+        guard physicalProvider else {
+            throw DeviceHelperError.rejected("Virtual and synthesized disks are not allowed.")
+        }
+        guard let mediaID = registry.identifier(original) else {
             throw DeviceHelperError.rejected("The disk Registry ID is unavailable.")
         }
         var usbID: UInt64?
         var isInternal = false
         var physical = false
-        IOObjectRetain(entry)
+        var virtual = false
+        registry.retain(entry)
         while entry != 0 {
-            if IOObjectConformsTo(entry, "IOBlockStorageDevice") != 0 { physical = true }
-            if let properties = IORegistryEntryCreateCFProperty(
-                entry, "Protocol Characteristics" as CFString, kCFAllocatorDefault, 0
-            )?.takeRetainedValue() as? [String: Any],
-               properties["Physical Interconnect Location"] as? String == "Internal" {
-                isInternal = true
+            if registry.conforms(entry, "IOBlockStorageDevice") { physical = true }
+            if let properties = registry.property(entry, "Protocol Characteristics") as? [String: Any] {
+                let location = properties["Physical Interconnect Location"] as? String
+                if location == "Internal" { isInternal = true }
+                if location == "File" || properties["Physical Interconnect"] as? String == "Virtual Interface" {
+                    virtual = true
+                }
             }
             // Keep the nearest USB device; higher ancestors may be upstream hubs.
-            if usbID == nil, IOObjectConformsTo(entry, "IOUSBHostDevice") != 0 {
-                var identifier: UInt64 = 0
-                if IORegistryEntryGetRegistryEntryID(entry, &identifier) == KERN_SUCCESS { usbID = identifier }
+            if usbID == nil, registry.conforms(entry, "IOUSBHostDevice") {
+                usbID = registry.identifier(entry)
             }
-            var parent: io_registry_entry_t = 0
-            let status = IORegistryEntryGetParentEntry(entry, kIOServicePlane, &parent)
-            IOObjectRelease(entry)
-            entry = status == KERN_SUCCESS ? parent : 0
+            let parent = registry.parent(entry)
+            registry.release(entry)
+            entry = parent
         }
-        guard physical else { throw DeviceHelperError.rejected("Virtual and synthesized disks are not allowed.") }
+        guard physical, !virtual else { throw DeviceHelperError.rejected("Virtual and synthesized disks are not allowed.") }
         return DeviceHelperDisk(bsdName: bsdName, mediaRegistryID: mediaID,
                                 sizeBytes: size.int64Value, usbRegistryID: usbID, isInternal: isInternal)
     }
@@ -92,24 +161,15 @@ enum DeviceHelperDeviceResolver {
         throw DeviceHelperError.rejected("The SMART target is not an ancestor of this physical disk.")
     }
 
-    static func disk(forTarget target: String) throws -> DeviceHelperDisk {
+    static func disk(
+        forTarget target: String, registry: DeviceHelperRegistry = .system
+    ) throws -> DeviceHelperDisk {
         if target.hasPrefix("/dev/disk") || target.hasPrefix("disk") {
-            return try resolve(bsdName: URL(fileURLWithPath: target).lastPathComponent)
+            return try resolve(bsdName: URL(fileURLWithPath: target).lastPathComponent, registry: registry)
         }
-        var iterator: io_iterator_t = 0
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching(kIOMediaClass), &iterator) == KERN_SUCCESS else {
-            throw DeviceHelperError.rejected("Unable to enumerate physical disks.")
-        }
-        defer { IOObjectRelease(iterator) }
         var matches: [DeviceHelperDisk] = []
-        while true {
-            let entry = IOIteratorNext(iterator)
-            guard entry != 0 else { break }
-            let name = IORegistryEntryCreateCFProperty(
-                entry, kIOBSDNameKey as CFString, kCFAllocatorDefault, 0
-            )?.takeRetainedValue() as? String
-            IOObjectRelease(entry)
-            if let name, let disk = try? resolve(bsdName: name) {
+        for name in try registry.mediaNames() {
+            if let disk = try? resolve(bsdName: name, registry: registry) {
                 let matchesTarget: Bool
                 if target.hasPrefix("usbraw:"), let id = UInt64(target.dropFirst(7)) {
                     matchesTarget = disk.usbRegistryID == id
@@ -119,8 +179,11 @@ enum DeviceHelperDeviceResolver {
                 if matchesTarget { matches.append(disk) }
             }
         }
+        guard !matches.isEmpty else {
+            throw DeviceHelperError.rejected("No connected physical disk matches this SMART target. Refresh disks and try again.")
+        }
         guard matches.count == 1, let disk = matches.first else {
-            throw DeviceHelperError.rejected("The SMART target does not identify exactly one physical disk.")
+            throw DeviceHelperError.rejected("This SMART target matches multiple physical disks. The operation was stopped.")
         }
         return disk
     }
