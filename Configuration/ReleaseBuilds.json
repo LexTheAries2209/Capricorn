@@ -95,6 +95,12 @@
       "status": "published",
       "version": "3.1.4",
       "tag": "v3.1.4"
+    },
+    {
+      "build": "0055",
+      "status": "reserved",
+      "version": "3.2.0",
+      "tag": "v3.2.0"
     }
   ]
 }
