@@ -4,6 +4,7 @@ import SwiftUI
 struct AutomaticSNTSettingsControls: View {
     @Bindable var preferences: AppPreferences
     @State private var serviceManager: DeviceHelperServiceManager
+    @State private var showsServiceWarning = false
     @Environment(\.scenePhase) private var scenePhase
 
     @MainActor
@@ -19,18 +20,30 @@ struct AutomaticSNTSettingsControls: View {
             Spacer(minLength: 8)
             Group {
                 if let warning {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(.red)
-                        .help(preferences.language.t(warning))
-                        .accessibilityLabel(preferences.language.t(warning))
-                        .accessibilityIdentifier("settings.automaticSNT.serviceWarning")
+                    Button {
+                        showsServiceWarning.toggle()
+                    } label: {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundStyle(.red)
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(preferences.language.t(warning))
+                    .accessibilityIdentifier("settings.automaticSNT.serviceWarning")
+                    .popover(isPresented: $showsServiceWarning, arrowEdge: .bottom) {
+                        Text(preferences.language.t(warning))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(width: 280, alignment: .leading)
+                            .padding(12)
+                    }
                 } else if serviceManager.availability == .checking {
                     ProgressView()
                         .controlSize(.mini)
                         .accessibilityLabel(preferences.language.t("Checking device service"))
                 }
             }
-            .frame(width: 16, height: 16)
+            .frame(width: 22, height: 22)
             Toggle(preferences.language.t("Read SNT automatically"), isOn: $preferences.automaticSNT)
                 .labelsHidden()
                 .disabled(serviceManager.availability != .available)
@@ -42,6 +55,9 @@ struct AutomaticSNTSettingsControls: View {
         .task { await serviceManager.monitorConnectionHealth() }
         .onChange(of: scenePhase) {
             if scenePhase == .active { serviceManager.refresh() }
+        }
+        .onChange(of: serviceManager.availability) {
+            if warning == nil { showsServiceWarning = false }
         }
     }
 
