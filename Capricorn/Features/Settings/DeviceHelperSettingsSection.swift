@@ -32,7 +32,7 @@ struct DeviceHelperSettingsSection: View {
                 }
                 .help(language.t("Refresh Service Status"))
             }
-            if let error = manager.error {
+            if let error = manager.error ?? manager.connectionError {
                 Text(language.t(error)).font(.callout).foregroundStyle(.orange).textSelection(.enabled)
             }
         }
@@ -42,7 +42,7 @@ struct DeviceHelperSettingsSection: View {
 
     private var statusTitle: String {
         switch manager.status {
-        case .enabled: "Device Service Enabled"
+        case .enabled: manager.availability == .unhealthy ? "Device Service Unavailable" : "Device Service Enabled"
         case .requiresApproval: "Device Service Awaiting System Approval"
         case .notRegistered: "Device Service Not Enabled"
         case .notFound: "Device Service Not Found"

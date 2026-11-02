@@ -3,13 +3,57 @@ import SwiftUI
 
 struct AutomaticSNTSettingsControls: View {
     @Bindable var preferences: AppPreferences
+    @State private var serviceManager: DeviceHelperServiceManager
+    @Environment(\.scenePhase) private var scenePhase
+
+    @MainActor
+    init(preferences: AppPreferences, serviceManager: DeviceHelperServiceManager? = nil) {
+        self.preferences = preferences
+        _serviceManager = State(initialValue: serviceManager ?? .shared)
+    }
 
     var body: some View {
-        Toggle(preferences.language.t("Read SNT automatically"), isOn: $preferences.automaticSNT)
-            .accessibilityIdentifier("settings.automaticSNT")
-            .help(preferences.language.t(
-                "When authorized, read idle USB disks once when Capricorn opens or a disk connects."
-            ))
+        HStack {
+            Text(preferences.language.t("Read SNT automatically"))
+                .foregroundStyle(serviceManager.availability == .available ? Color.primary : Color.secondary)
+            Spacer(minLength: 8)
+            Group {
+                if let warning {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.red)
+                        .help(preferences.language.t(warning))
+                        .accessibilityLabel(preferences.language.t(warning))
+                        .accessibilityIdentifier("settings.automaticSNT.serviceWarning")
+                } else if serviceManager.availability == .checking {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .accessibilityLabel(preferences.language.t("Checking device service"))
+                }
+            }
+            .frame(width: 16, height: 16)
+            Toggle(preferences.language.t("Read SNT automatically"), isOn: $preferences.automaticSNT)
+                .labelsHidden()
+                .disabled(serviceManager.availability != .available)
+                .accessibilityIdentifier("settings.automaticSNT")
+                .help(preferences.language.t(
+                    "When authorized, read idle USB disks once when Capricorn opens or a disk connects."
+                ))
+        }
+        .task { await serviceManager.monitorConnectionHealth() }
+        .onChange(of: scenePhase) {
+            if scenePhase == .active { serviceManager.refresh() }
+        }
+    }
+
+    private var warning: String? {
+        switch serviceManager.availability {
+        case .notEnabled:
+            "Enable the device service in Settings before using automatic SNT reads."
+        case .unhealthy:
+            "The privileged device service is not working. Disable and re-enable it."
+        case .checking, .available:
+            nil
+        }
     }
 }
 
