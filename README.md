@@ -34,7 +34,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 - 显示磁盘容量、文件系统、设备名称、序列号和连接信息。
 - 在共享拓扑图中查看硬盘、集线器与控制器的连接路径、链路速率和本地芯片名称，支持节点拖动与缩放。
 - 查看 SMART 健康状态、温度、寿命、通电时间、介质错误和读写数据。
-- 对兼容的 USB-NVMe 设备手动尝试 SNT SMART 读取，并可刷新已读取的数据。
+- 对兼容的 USB-NVMe 设备手动尝试 SNT SMART 读取；可在设置中开启启动及接入时的自动读取。
 - 支持查看 SMART 自检状态和历史记录。
 - 经系统批准的特权设备服务供 SMART 读取、受支持的自检及手动 SNT 共用。
 - 对指定文件夹执行顺序、随机、读取、写入和混合测速。
@@ -53,7 +53,9 @@ Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，�
 
 常规读取未返回数据的 USB-NVMe 设备可尝试实验性 SNT 读取，支持 JMicron、ASMedia 和 Realtek 桥接协议。读取需要管理员授权并暂时卸载设备上的卷，结束后尝试恢复挂载；请先关闭相关文件并备份重要数据。兼容性取决于桥接器及固件，不保证所有 USB 设备可用。
 
-在“设置 > 特权设备服务”中启用服务并完成系统批准后，可减少受支持 SMART 操作的重复认证。App 可放在本机可写磁盘上的固定文件夹，推荐 `/Applications`；临时、系统转移、只读、可移除和网络位置不能启用服务。SNT 每次仍需确认卸载，可移动卷隐私授权由系统单独管理。
+在“设置 > 特权设备服务”中启用服务并完成系统批准后，可减少受支持 SMART 操作的重复认证。App 可放在本机可写磁盘上的固定文件夹，推荐 `/Applications`；临时、系统转移、只读、可移除和网络位置不能启用服务。可移动卷隐私授权由系统单独管理，手动读取可发起授权。
+
+“设置 > 硬盘操作 > 自动读取 SNT”默认关闭。开启后，软件启动及硬盘接入时会在普通读取完成后尝试一次 SNT，无需逐次确认；仅在服务可用、卷可访问且全部挂载卷通过占用检查时执行。占用或检查不完整时延后 30 秒，不计失败。可重试的读取失败最多三次，首次失败后等待 30 秒、第二次后等待 2 分钟；未知桥接器的三种协议均失败则停止自动尝试。停止标记跨重启保存，手动读取成功会覆盖标记并恢复后续自动读取。缓存只保留当前结论与最后有效数据，显示原始读取时间；无法稳定识别介质时仅在当前连接内复用。自动读取同样会临时卸载卷；挂载恢复不确定时立即暂停。关闭开关会停止后续尝试，已经接管 USB 的服务仍会完成释放和恢复挂载。
 
 App 内更新会安全停用此前已启用的服务，并在取消、失败或新版启动后尝试恢复；系统可能要求重新批准。手动移动或替换 App 前请先停用服务。兼容性与验证范围见[发布说明](docs/releases/v3.1.4.md)。
 
@@ -103,7 +105,7 @@ On first launch, if macOS Gatekeeper shows an internet-download warning, right-c
 - Shows capacity, filesystem, device name, serial number, and connection information.
 - Shows shared storage paths, hubs, controllers, link rates, and local chip names in a topology diagram with draggable nodes and zoom.
 - Displays SMART health, temperature, life remaining, power-on time, media errors, and read/write data.
-- Offers manual SNT SMART reads for compatible USB-NVMe devices and refreshes previously retrieved data.
+- Offers manual SNT SMART reads for compatible USB-NVMe devices, with optional automatic reads on launch and connection.
 - Supports SMART self-test status and history.
 - Shares one system-approved privileged device service across SMART reads, supported self-tests, and manual SNT.
 - Benchmarks a selected folder with sequential, random, read, write, and mixed tests.
@@ -122,7 +124,9 @@ Capricorn bundles smartmontools 7.5. It does not automatically install or remove
 
 USB-NVMe devices that return no data through ordinary reads can try experimental SNT reads using JMicron, ASMedia, or Realtek bridge protocols. This requires administrator authorization and temporarily unmounts the device's volumes, then attempts to restore them. Close related files and back up important data first. Compatibility depends on the bridge and firmware; support for every USB device is not guaranteed.
 
-Enable Settings > Privileged Device Service and complete system approval to reduce repeated authentication for supported SMART operations. The app can live in a permanent folder on a local writable disk; `/Applications` is recommended. Temporary, translocated, read-only, removable and network locations cannot enable the service. Each manual SNT operation still requires unmount confirmation, and macOS manages removable-volume privacy consent separately.
+Enable Settings > Privileged Device Service and complete system approval to reduce repeated authentication for supported SMART operations. The app can live in a permanent folder on a local writable disk; `/Applications` is recommended. Temporary, translocated, read-only, removable and network locations cannot enable the service. macOS manages removable-volume privacy consent separately; manual reads can request access.
+
+Settings > Disk Actions > Read SNT automatically is off by default. When enabled, launch and disk-connection scans queue one SNT read after ordinary reads finish, without a per-read confirmation. The service must be available, mounted volumes accessible, and every mounted volume must pass an occupancy check. Busy or incomplete checks defer for 30 seconds without consuming failures. Retryable reads stop after three failures, with delays of 30 seconds and two minutes; unsuccessful probing of all three unknown bridge protocols stops further automatic attempts immediately. Exclusions persist across launches, and a successful manual read replaces them and enables future automatic reads. The cache stores the current conclusion and last valid data with its original timestamp; media without a stable identity use connection-local records. Automatic reads also temporarily unmount volumes. Uncertain mount restoration pauses automatic operation. Turning the switch off prevents subsequent attempts while an existing USB worker finishes release and restoration.
 
 In-app updates safely stop a previously enabled service and attempt restoration after cancellation, failure or the replacement app's launch. macOS may require renewed approval. Disable the service before manually moving or replacing the app. See the [release notes](docs/releases/v3.1.4.md) for compatibility and validation limits.
 

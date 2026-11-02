@@ -30,7 +30,10 @@ smartctl executable and its automatic scans remain unchanged.
 `dist-version.sh` embeds the pinned revision and Capricorn patch identifier;
 the source snapshot does not contain the upstream Git ancestry.
 
-Only the confirmed manual SNT workflow may invoke raw capture. Passive discovery
+Only a confirmed manual SNT workflow or an explicitly enabled automatic SNT
+workflow may invoke raw capture. The signed app sends distinct typed XPC consent
+for these operations; the service translates either into the native tool's
+legacy `CAPRICORN_USBRAW_MANUAL=1` capture gate. Passive discovery
 uses `--scan -d usb --json=c`, never `--scan-open`. An unsupported or ambiguous
 device is refused; no forced unmount, self-test, or firmware operation is used.
 
@@ -40,7 +43,17 @@ within the confirmed manual operation. Each attempt uses this same tool and
 finishes release and restoration before another can begin; the application
 re-enumerates and verifies a unique stable device identity and fresh USB target
 between attempts. It stops at a SMART payload or uncertain restoration.
-Automatic background refresh never starts this sequence.
+Ordinary periodic SMART refresh never starts this sequence. The separate,
+opt-in automatic SNT queue runs once on app launch or physical connection,
+checks service readiness and mounted-volume access without invoking the manual
+volume authorization function, and checks all mounted volumes for open files
+before each protocol. Unknown or incomplete occupancy defers capture. A
+successful cached protocol is preferred. Three retryable read failures or one
+complete unsuccessful three-protocol probe pause automatic attempts; busy
+responses do not consume that budget. Cleanup uncertainty also pauses the
+device. A successful manual read replaces its cached conclusion. The app
+records an unfinished-operation marker before dispatch, so an interrupted GUI
+cannot silently assume mount restoration completed on its next launch.
 
 Patch `capricorn4` retries a completed whole-disk unmount busy response
 (`unix_err(EBUSY)` or `kDAReturnBusy`) at most twice, after one and two seconds.
