@@ -8,6 +8,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V3.2.0 - 2026-11-02
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.2.0) | [Release Notes / 发布说明](docs/releases/v3.2.0.md)
+
+### 中文
+
+- 新增可选的自动 SNT 读取，在软件启动及硬盘接入时获取空闲 USB 硬盘的健康信息。
+- 保留最近有效数据，忙碌时等待，反复读取失败后暂停；手动读取成功后恢复后续自动尝试。
+- 设置显示设备服务状态警示，点击红色感叹号查看提示，服务不可用时禁用自动读取开关。
+
+### English
+
+- Adds optional automatic SNT reads for idle USB disks on app launch and connection.
+- Retains the last valid reading, waits while disks are busy, and pauses repeated failures; a successful manual read enables future automatic attempts.
+- Adds clickable device-service warnings in Settings and disables the automatic-read switch while the service is unavailable.
+
 ## V3.1.4 - 2026-11-02
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.1.4) | [Release Notes / 发布说明](docs/releases/v3.1.4.md)

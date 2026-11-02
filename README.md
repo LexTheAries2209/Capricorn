@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for disk inspection, SMART health checks, sto
 
 Capricorn 是一个本地 macOS 工具，用于磁盘检查、SMART 健康状态查看、存储测速、实时磁盘活动监控和硬盘连接拓扑查看。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v3.1.4`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v3.2.0`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v3.1.4.md](docs/releases/v3.1.4.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v3.2.0.md](docs/releases/v3.2.0.md)
 
 Complete release log / 完整更新记录：[CHANGELOG.md](CHANGELOG.md)
 
@@ -24,7 +24,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 
 ### 下载和安装
 
-前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v3.1.4-macOS.zip`，解压后将 `Capricorn.app` 放到 `Applications` 或其他本地工具目录。V2.10.1 及更早版本需手动安装一次，之后可使用应用内更新。
+前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v3.2.0-macOS.zip`，解压后将 `Capricorn.app` 放到 `Applications` 或其他本地工具目录。V2.10.1 及更早版本需手动安装一次，之后可使用应用内更新。
 
 首次打开时，如果 macOS Gatekeeper 显示互联网下载提示，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
@@ -36,7 +36,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 - 查看 SMART 健康状态、温度、寿命、通电时间、介质错误和读写数据。
 - 对兼容的 USB-NVMe 设备手动尝试 SNT SMART 读取；可在设置中开启启动及接入时的自动读取。
 - 支持查看 SMART 自检状态和历史记录。
-- 经系统批准的特权设备服务供 SMART 读取、受支持的自检及手动 SNT 共用。
+- 经系统批准的特权设备服务供 SMART 读取、受支持的自检及 SNT 共用。
 - 对指定文件夹执行顺序、随机、读取、写入和混合测速。
 - 观察实时磁盘读写活动，并运行读写负载。
 - 保存、查看和管理 SMART、测速及实时活动历史。
@@ -55,9 +55,9 @@ Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，�
 
 在“设置 > 特权设备服务”中启用服务并完成系统批准后，可减少受支持 SMART 操作的重复认证。App 可放在本机可写磁盘上的固定文件夹，推荐 `/Applications`；临时、系统转移、只读、可移除和网络位置不能启用服务。可移动卷隐私授权由系统单独管理，手动读取可发起授权。
 
-“设置 > 硬盘操作 > 自动读取 SNT”默认关闭。开启后，软件启动及硬盘接入时会在普通读取完成后尝试一次 SNT，无需逐次确认；仅在服务可用、卷可访问且全部挂载卷通过占用检查时执行。占用或检查不完整时延后 30 秒，不计失败。可重试的读取失败最多三次，首次失败后等待 30 秒、第二次后等待 2 分钟；未知桥接器的三种协议均失败则停止自动尝试。停止标记跨重启保存，手动读取成功会覆盖标记并恢复后续自动读取。缓存只保留当前结论与最后有效数据，显示原始读取时间；无法稳定识别介质时仅在当前连接内复用。自动读取同样会临时卸载卷；挂载恢复不确定时立即暂停。关闭开关会停止后续尝试，已经接管 USB 的服务仍会完成释放和恢复挂载。
+“设置 > 硬盘操作 > 自动读取 SNT”默认关闭。启用服务并授予所需权限后，可自动获取软件启动时已连接或新接入的空闲 USB 硬盘健康信息。读取会临时卸载并尝试恢复卷；被占用时等待空闲，连续读取失败后暂停，仍可手动重试。服务未启用或异常时开关不可用，点击旁边的红色感叹号可查看提示。兼容性、安全说明和验证范围见[发布说明](docs/releases/v3.2.0.md)。
 
-App 内更新会安全停用此前已启用的服务，并在取消、失败或新版启动后尝试恢复；系统可能要求重新批准。手动移动或替换 App 前请先停用服务。兼容性与验证范围见[发布说明](docs/releases/v3.1.4.md)。
+App 内更新会安全停用此前已启用的服务，并在取消、失败或新版启动后尝试恢复；系统可能要求重新批准。手动移动或替换 App 前请先停用服务。兼容性与验证范围见[发布说明](docs/releases/v3.2.0.md)。
 
 ### 测速和实时活动
 
@@ -75,7 +75,7 @@ App 内更新会安全停用此前已启用的服务，并在取消、失败或�
 
 ### 构建和测试
 
-自 V2.10.2 起采用“完整版本号 + 独立四位构建号”，本版为版本 `3.1.4`、Build `0054`。构建号根据发布构建记录全局递增，不再拼成版本号的第三段。详见[版本规则](docs/versioning.md)。
+自 V2.10.2 起采用“完整版本号 + 独立四位构建号”，本版为版本 `3.2.0`、Build `0055`。构建号根据发布构建记录全局递增，不再拼成版本号的第三段。详见[版本规则](docs/versioning.md)。
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build
@@ -95,7 +95,7 @@ Capricorn is for macOS users who need to inspect drive status, review external d
 
 ### Download And Install
 
-Download `Capricorn-v3.1.4-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn.app` to `Applications` or another local tools folder. V2.10.1 and earlier require one manual installation before in-app updates are available.
+Download `Capricorn-v3.2.0-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn.app` to `Applications` or another local tools folder. V2.10.1 and earlier require one manual installation before in-app updates are available.
 
 On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
@@ -107,7 +107,7 @@ On first launch, if macOS Gatekeeper shows an internet-download warning, right-c
 - Displays SMART health, temperature, life remaining, power-on time, media errors, and read/write data.
 - Offers manual SNT SMART reads for compatible USB-NVMe devices, with optional automatic reads on launch and connection.
 - Supports SMART self-test status and history.
-- Shares one system-approved privileged device service across SMART reads, supported self-tests, and manual SNT.
+- Shares one system-approved privileged device service across SMART reads, supported self-tests, and SNT.
 - Benchmarks a selected folder with sequential, random, read, write, and mixed tests.
 - Shows live disk activity and runs read/write workloads.
 - Saves, reviews, and manages SMART, benchmark, and live-activity history.
@@ -126,9 +126,9 @@ USB-NVMe devices that return no data through ordinary reads can try experimental
 
 Enable Settings > Privileged Device Service and complete system approval to reduce repeated authentication for supported SMART operations. The app can live in a permanent folder on a local writable disk; `/Applications` is recommended. Temporary, translocated, read-only, removable and network locations cannot enable the service. macOS manages removable-volume privacy consent separately; manual reads can request access.
 
-Settings > Disk Actions > Read SNT automatically is off by default. When enabled, launch and disk-connection scans queue one SNT read after ordinary reads finish, without a per-read confirmation. The service must be available, mounted volumes accessible, and every mounted volume must pass an occupancy check. Busy or incomplete checks defer for 30 seconds without consuming failures. Retryable reads stop after three failures, with delays of 30 seconds and two minutes; unsuccessful probing of all three unknown bridge protocols stops further automatic attempts immediately. Exclusions persist across launches, and a successful manual read replaces them and enables future automatic reads. The cache stores the current conclusion and last valid data with its original timestamp; media without a stable identity use connection-local records. Automatic reads also temporarily unmount volumes. Uncertain mount restoration pauses automatic operation. Turning the switch off prevents subsequent attempts while an existing USB worker finishes release and restoration.
+Settings > Disk Actions > Read SNT automatically is off by default. With the service enabled and required access granted, Capricorn can retrieve health information from idle USB disks already connected at launch or newly attached. Reads temporarily unmount volumes and attempt to restore them. Busy disks wait until idle; repeated read failures pause automatic attempts, with manual retry still available. The switch is unavailable when the service is disabled or unhealthy; click its red warning icon for guidance. See the [release notes](docs/releases/v3.2.0.md) for compatibility, safety and validation limits.
 
-In-app updates safely stop a previously enabled service and attempt restoration after cancellation, failure or the replacement app's launch. macOS may require renewed approval. Disable the service before manually moving or replacing the app. See the [release notes](docs/releases/v3.1.4.md) for compatibility and validation limits.
+In-app updates safely stop a previously enabled service and attempt restoration after cancellation, failure or the replacement app's launch. macOS may require renewed approval. Disable the service before manually moving or replacing the app. See the [release notes](docs/releases/v3.2.0.md) for compatibility and validation limits.
 
 ### Benchmark And Live Activity
 
@@ -146,7 +146,7 @@ Network volumes can be benchmarked as mounted folders, but they do not provide a
 
 ### Build And Test
 
-Starting with V2.10.2, the complete version and four-digit build are separate: this release is Version `3.1.4`, Build `0054`. Build increases globally with release-build allocations and is no longer the third version component. See the [version rules](docs/versioning.md).
+Starting with V2.10.2, the complete version and four-digit build are separate: this release is Version `3.2.0`, Build `0055`. Build increases globally with release-build allocations and is no longer the third version component. See the [version rules](docs/versioning.md).
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build
