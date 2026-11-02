@@ -451,7 +451,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Disk Refresh": "硬盘刷新",
         "Automatic disk refresh": "自动刷新硬盘",
         "Read SNT automatically": "自动读取 SNT",
-        "When authorized, read idle USB disks once when Capricorn opens or a disk connects. Volumes are temporarily unmounted and restored without a confirmation window. Three read failures pause automatic attempts; manual success enables them again.": "已获授权后，在软件启动或硬盘接入时自动读取一次空闲 USB 硬盘。期间会临时卸载并恢复卷，不再弹出确认窗口。读取失败三次后暂停自动尝试，手动读取成功后恢复。",
+        "When authorized, read idle USB disks once when Capricorn opens or a disk connects.": "已获授权后，在软件启动或硬盘接入时自动读取一次空闲 USB 硬盘。",
         "Waiting to read SNT": "等待 SNT 读取",
         "Reading SNT automatically": "正在自动读取 SNT",
         "SNT health information updated": "SNT 健康信息已更新",

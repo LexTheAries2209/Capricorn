@@ -7,12 +7,9 @@ struct AutomaticSNTSettingsControls: View {
     var body: some View {
         Toggle(preferences.language.t("Read SNT automatically"), isOn: $preferences.automaticSNT)
             .accessibilityIdentifier("settings.automaticSNT")
-        Text(preferences.language.t(
-            "When authorized, read idle USB disks once when Capricorn opens or a disk connects. Volumes are temporarily unmounted and restored without a confirmation window. Three read failures pause automatic attempts; manual success enables them again."
-        ))
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
+            .help(preferences.language.t(
+                "When authorized, read idle USB disks once when Capricorn opens or a disk connects."
+            ))
     }
 }
 
