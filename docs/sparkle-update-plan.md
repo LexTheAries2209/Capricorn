@@ -1,6 +1,6 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
-## V3.2.0 / Build 0055：发布准备
+## V3.2.0 / Build 0055：已发布
 
 自动 SNT 分支已快进合并到 Main。完整版本 `3.2.0`，独立全局构建号 `0055`，上一分发构建为 `0054`；固定 `Capricorn.app`、既有更新公钥和稳定 feed 保持一致。
 
@@ -15,6 +15,14 @@
 本次未执行真实 USB 接管、卷卸载或硬件自检。真实权限撤销与重新授权、全系统占用可见性、接管中拔盘、多卷挂载恢复、Intel/macOS 14 及其他 Mac 的服务批准仍需实机验收。自动读取的卷可访问检查不等于系统隐私授权状态查询，不保证所有权限变化场景都无系统弹窗。
 
 主要本地阶段：全量测试命令 178.0 秒（测试体约 119.7 秒）、严格并发 37.9 秒、Swift 6 37.6 秒、Universal Archive 92.1 秒、独立源码 Universal 构建 72.4 秒、20 个 Sparkle 场景 144.9 秒。Git 拉取首次传输因低速超时，通过 API 核对远端 Main 与本地相同后再快进合并，未强制更新历史。
+
+2026-11-02 已发布为最新正式版，标签指向 `283afc7e9392311e876e588a35f80be49a8acfff`，发布时 Main 与标签一致。GitHub Release 的 ZIP、源码包及 appcast 大小和 digest 均与保留的本地证据一致；公开 README、累计日志和三份发布说明与固定发布提交逐字节匹配。[CI](https://github.com/LexTheAries2209/Capricorn/actions/runs/41440616799) 的全量测试、严格并发及 Swift 6 三项全部通过，无重复标签任务。
+
+真实 Sparkle 公开稳定源检查确认旧 `0054` 发现 `3.2.0 / 0055`，当前 `0055` 无更新。公开 ZIP 返回 HTTP 200，公开清单与本地签名文件逐字节一致且签名复验通过。链接检查使用本机已配置的 HTTP 代理，未修改系统网络设置。普通 HTTPS 推送通过单次命令使用该代理，2.7 秒完成；ZIP 与源码/清单上传分别为 7.8 秒和 7.9 秒。公开更新发现检查耗时 4.4 秒，不代表真实用户 App 的安装验收；隔离安装和实机验证边界见上文。
+
+The release was published as latest on November 2, 2026 at `283afc7e9392311e876e588a35f80be49a8acfff`, after merging the automatic-SNT branch into Main. All three CI jobs passed. Real Sparkle public-feed checks confirmed that Build `0054` discovers `3.2.0 / 0055`, while `0055` reports no update. The public ZIP returns HTTP 200; all asset sizes and digests match retained evidence, and the public feed matches the signed local file byte for byte.
+
+构建号已标记为 published；此发布后记录单独提交，不改变已发布标签、App、ZIP、源码包或签名清单。版本备份源码保持固定发布提交 `283afc7`，完整 xcarchive/dSYM、签名更新附件及验证日志均保留。
 
 ## V3.1.4 / Build 0054：已发布
 
