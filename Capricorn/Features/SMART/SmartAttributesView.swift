@@ -227,47 +227,64 @@ struct SmartAttributesView: View {
 
     @ViewBuilder
     private var attributesTable: some View {
+        smartAttributesTable
+            .scrollIndicators(.visible, axes: .horizontal)
+    }
+
+    @ViewBuilder
+    private var smartAttributesTable: some View {
+        // Bound user resizing without changing the existing preferred widths.
         if showsNormalizedColumns {
             Table(attributes) {
-                TableColumn(language.t("ID")) { Text($0.id).monospaced() }
-                    .width(min: 64, ideal: 80)
+                TableColumn(language.t("ID")) { smartAttributeIDCell($0) }
+                    .width(min: 64, ideal: 80, max: 400)
                 TableColumn(language.t("Name")) { attribute in
                     SmartAttributeNameCell(attribute: attribute)
                 }
-                .width(min: 220, ideal: 320)
+                .width(min: 220, ideal: 320, max: 560)
                 TableColumn(language.t("Raw")) { Text($0.rawValue).monospacedDigit() }
-                    .width(min: 140, ideal: 180)
+                    .width(min: 140, ideal: 180, max: 480)
                 TableColumn(language.t("Current")) { Text($0.current.map(String.init) ?? "-").help(language.t(normalizedValueHelp)) }
-                    .width(62)
+                    .width(min: 62, ideal: 62, max: 120)
                 TableColumn(language.t("Worst")) { Text($0.worst.map(String.init) ?? "-").help(language.t(normalizedValueHelp)) }
-                    .width(62)
+                    .width(min: 62, ideal: 62, max: 120)
                 TableColumn(language.t("Threshold")) { Text($0.threshold.map(String.init) ?? "-").help(language.t(normalizedValueHelp)) }
-                    .width(72)
+                    .width(min: 72, ideal: 72, max: 140)
                 TableColumn(language.t("Status")) { smartAttributeStatusBadge($0).fixedSize() }
-                    .width(82)
+                    .width(min: 82, ideal: 82, max: 140)
                 TableColumn(language.t("Source")) { smartAttributeSourceCell($0) }
-                    .disabledCustomizationBehavior(.resize)
+                    .width(min: 100, max: 280)
             }
         } else {
             Table(attributes) {
-                TableColumn(language.t("ID")) { Text($0.id).monospaced() }
-                    .width(min: 64, ideal: 80)
+                TableColumn(language.t("ID")) { smartAttributeIDCell($0) }
+                    .width(min: 64, ideal: 80, max: 400)
                 TableColumn(language.t("Name")) { attribute in
                     SmartAttributeNameCell(attribute: attribute)
                 }
-                .width(min: 220, ideal: 320)
+                .width(min: 220, ideal: 320, max: 560)
                 TableColumn(language.t("Raw")) { Text($0.rawValue).monospacedDigit() }
-                    .width(min: 140, ideal: 180)
+                    .width(min: 140, ideal: 180, max: 480)
                 TableColumn(language.t("Status")) { smartAttributeStatusBadge($0).fixedSize() }
-                    .width(82)
+                    .width(min: 82, ideal: 82, max: 140)
                 TableColumn(language.t("Source")) { smartAttributeSourceCell($0) }
-                    .disabledCustomizationBehavior(.resize)
+                    .width(min: 100, max: 280)
             }
         }
     }
 
     private var normalizedValueHelp: String {
         "Current, worst, and threshold are ATA normalized health values. NVMe and native macOS SMART usually do not provide them."
+    }
+
+    private func smartAttributeIDCell(_ attribute: SmartAttribute) -> some View {
+        Text(attribute.id)
+            .monospaced()
+            .background {
+                if attribute.id == attributes.first?.id {
+                    SmartAttributesTableScrollConfiguration()
+                }
+            }
     }
 
     private func smartAttributeSourceCell(_ attribute: SmartAttribute) -> some View {
