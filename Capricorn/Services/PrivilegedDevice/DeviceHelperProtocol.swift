@@ -5,7 +5,7 @@ enum DeviceHelperIdentity {
     static let service = "lex.Capricorn.DeviceHelper"
     static let executable = "CapricornDeviceHelper"
     static let appIdentifier = "lex.Capricorn"
-    static let protocolVersion = 2
+    static let protocolVersion = 3
     static let plistName = service + ".plist"
 }
 
@@ -46,6 +46,9 @@ struct DeviceHelperRequest: Codable, Sendable {
     var transportRegistryID: UInt64? = nil
     var avoidWaking = false
     var confirmedUnmount = false
+    // The signed GUI may instead authorize an automatic request through its
+    // persisted opt-in. Never infer that consent from the executable name.
+    var automaticSNT = false
 
     func validate() throws {
         guard version == DeviceHelperIdentity.protocolVersion else {
@@ -63,12 +66,12 @@ struct DeviceHelperRequest: Codable, Sendable {
             throw DeviceHelperError.rejected("This SMART transport is not allowed by the device helper.")
         }
         if operation == .readSNT {
-            guard confirmedUnmount, !disk.isInternal, disk.usbRegistryID != nil,
+            guard confirmedUnmount != automaticSNT, !disk.isInternal, disk.usbRegistryID != nil,
                   ["sntasmedia", "sntjmicron", "sntrealtek"].contains(deviceType ?? ""),
                   transportRegistryID == nil, !avoidWaking else {
-                throw DeviceHelperError.rejected("SNT requires explicit unmount confirmation and an external USB disk.")
+                throw DeviceHelperError.rejected("SNT requires manual confirmation or automatic-read consent and an external USB disk.")
             }
-        } else if confirmedUnmount {
+        } else if confirmedUnmount || automaticSNT {
             throw DeviceHelperError.rejected("Only SNT may request USB capture.")
         }
         if avoidWaking {

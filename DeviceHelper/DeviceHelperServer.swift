@@ -158,6 +158,8 @@ final class DeviceHelperExecutor: @unchecked Sendable {
         process.environment = [
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "en_US.UTF-8",
             "CAPRICORN_USBRAW_USER_UID": String(uid),
+            // The native tool's legacy gate means capture is authorized; the
+            // typed XPC request distinguishes manual and automatic consent.
             "CAPRICORN_USBRAW_MANUAL": request.operation == .readSNT ? "1" : "0"
         ]
         let stdout = Pipe(), stderr = Pipe()

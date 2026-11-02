@@ -99,6 +99,26 @@ final class DeviceHelperTests: XCTestCase {
         }
     }
 
+    func testAutomaticCaptureConsentIsExplicitAndExclusive() throws {
+        var request = DeviceHelperRequest(operation: .readSNT, disk: Self.disk, deviceType: "sntrealtek")
+        request.automaticSNT = true
+        XCTAssertNoThrow(try request.validate())
+        request.confirmedUnmount = true
+        XCTAssertThrowsError(try request.validate())
+        var ordinary = DeviceHelperRequest(operation: .readSMART, disk: Self.disk, deviceType: "sat")
+        ordinary.automaticSNT = true
+        XCTAssertThrowsError(try ordinary.validate())
+        let raw = try XCTUnwrap(Bundle.main.executableURL?.deletingLastPathComponent()
+            .appendingPathComponent("smartctl-usbraw").path)
+        let mapped = try PrivilegedDeviceCommandRunner.request(
+            executable: "/usr/bin/env",
+            arguments: ["CAPRICORN_USBRAW_AUTOMATIC=1", raw,
+                        "-i", "-H", "-A", "--json=c", "-d", "sntrealtek", "usbraw:5678"],
+            bundle: .main, resolve: { _ in Self.disk })
+        XCTAssertTrue(mapped.automaticSNT)
+        XCTAssertFalse(mapped.confirmedUnmount)
+    }
+
     func testAdapterMapsAllExistingCommandsWithoutForwardingClientPaths() throws {
         let tool = try XCTUnwrap(Bundle.main.url(forResource: "smartctl", withExtension: nil)).path
         let commands: [(DeviceHelperOperation, [String])] = [

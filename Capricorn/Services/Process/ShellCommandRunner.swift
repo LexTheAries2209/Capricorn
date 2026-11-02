@@ -524,7 +524,8 @@ final class DiskOpenFileService {
         at mountPoint: String,
         driveID: String,
         driveName: String,
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        requiresCompleteResult: Bool = false
     ) async throws -> DiskOpenFileInspection {
         guard !mountPoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw DiskActionError.missingMountPoint
@@ -536,6 +537,13 @@ final class DiskOpenFileService {
             result = try await runner.run(lsofPath, arguments: arguments, timeout: timeout)
         } else {
             result = try await runner.run(lsofPath, arguments: arguments)
+        }
+        if requiresCompleteResult,
+           !result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || (result.terminationStatus != 0 && result.terminationStatus != 1)
+            || (!result.stdoutString.isEmpty && DiskOpenFileParser.parse(result.stdoutString).isEmpty) {
+            throw CommandError.nonZeroExit(
+                executable: lsofPath, status: result.terminationStatus, stderr: result.stderrString)
         }
         if result.terminationStatus != 0, result.stdoutString.isEmpty, !result.stderrString.isEmpty {
             throw CommandError.nonZeroExit(executable: lsofPath, status: result.terminationStatus, stderr: result.stderrString)

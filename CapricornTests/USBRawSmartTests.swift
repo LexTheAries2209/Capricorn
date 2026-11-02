@@ -495,6 +495,65 @@ final class USBRawSmartTests: XCTestCase {
             succeeded, drive: Self.drive(), target: Self.target, type: "sntasmedia").unmountBusy)
     }
 
+    func testAutomaticReadChecksEveryVolumeAndNeverRequestsAuthorization() async throws {
+        let drive = Self.busyDrive()
+        let privileged = USBRawRecordingRunner(result: Self.commandResult())
+        let openFiles = USBRawOpenFileRunner(outputs: [
+            "/Volumes/A": .success(Self.lsofResult("")),
+            "/Volumes/B": .success(Self.lsofResult(""))
+        ])
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sntjmicron")),
+            administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in Self.target },
+            authorizeVolumes: { _ in XCTFail("Automatic reads cannot request volume consent.") },
+            openFileRunner: openFiles, automaticAuthorizationReady: { _ in true })
+        let result = try await service.readAutomatically(drive: drive, target: Self.target, preferredBridge: .realtek)
+        XCTAssertTrue(result.snapshot?.hasSMARTPayload == true)
+        let inspections = await openFiles.calls
+        XCTAssertEqual(inspections.map { $0.arguments.last }, ["/Volumes/A", "/Volumes/B"])
+        let reads = await privileged.calls
+        XCTAssertEqual(reads.first?.arguments.first, "CAPRICORN_USBRAW_AUTOMATIC=1")
+        XCTAssertTrue(reads.first?.arguments.contains("sntrealtek") == true)
+    }
+
+    func testAutomaticBusyOrIncompleteInspectionNeverCaptures() async throws {
+        for output in [
+            Self.lsofResult("Finder 123 lex 9r REG 1,2 10 99 /Volumes/B/file"),
+            CommandResult(stdout: Data(), stderr: Data("permission denied".utf8), terminationStatus: 1),
+            Self.lsofResult("unparseable output")
+        ] {
+            let drive = Self.busyDrive()
+            let privileged = USBRawRecordingRunner(result: Self.commandResult())
+            let service = USBRawSmartService(
+                runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sntrealtek")),
+                administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+                targetResolver: { _ in Self.target }, authorizeVolumes: { _ in XCTFail("Unexpected consent") },
+                openFileRunner: USBRawOpenFileRunner(outputs: [
+                    "/Volumes/A": .success(Self.lsofResult("")), "/Volumes/B": .success(output)
+                ]), automaticAuthorizationReady: { _ in true })
+            do {
+                _ = try await service.readAutomatically(drive: drive, target: Self.target, preferredBridge: nil)
+                XCTFail("Busy or uninspectable volumes must defer.")
+            } catch {
+                XCTAssertTrue(error is AutomaticSNTDeferral)
+            }
+            let reads = await privileged.calls
+            XCTAssertTrue(reads.isEmpty)
+        }
+    }
+
+    func testAutomaticMissingAuthorizationDoesNotEvenScan() async {
+        let scan = USBRawRecordingRunner(result: Self.scan(for: Self.drive(), type: "sntrealtek"))
+        let service = USBRawSmartService(runner: scan, automaticAuthorizationReady: { _ in false })
+        do {
+            _ = try await service.readAutomatically(drive: Self.drive(), target: Self.target, preferredBridge: nil)
+            XCTFail("Missing permission must defer.")
+        } catch {}
+        let calls = await scan.calls
+        XCTAssertTrue(calls.isEmpty)
+    }
+
     func testBusyUnmountInspectsEveryMountedVolumeAndStopsProtocolProbing() async throws {
         let drive = Self.busyDrive()
         let first = "Finder 123 lex cwd DIR 1,23 512 456 /Volumes/A/file one\n"

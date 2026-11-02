@@ -204,8 +204,10 @@ struct PrivilegedDeviceCommandRunner: CommandRunning {
         let normal = bundle.url(forResource: "smartctl", withExtension: nil)?.path
         var args = arguments
         let isSNT = executable == "/usr/bin/env"
+        let isAutomaticSNT = args.first == "CAPRICORN_USBRAW_AUTOMATIC=1"
         if isSNT {
-            guard args.count >= 2, args[0] == "CAPRICORN_USBRAW_MANUAL=1", args[1] == raw else {
+            guard args.count >= 2,
+                  args[0] == "CAPRICORN_USBRAW_MANUAL=1" || isAutomaticSNT, args[1] == raw else {
                 throw DeviceHelperError.rejected("Only the bundled SNT tool may request USB capture.")
             }
             args.removeFirst(2)
@@ -244,7 +246,8 @@ struct PrivilegedDeviceCommandRunner: CommandRunning {
         var request = DeviceHelperRequest(operation: operation, disk: disk, deviceType: type)
         if !isSNT { request.transportRegistryID = try resolveTransport(target, disk) }
         request.avoidWaking = avoidWaking
-        request.confirmedUnmount = isSNT
+        request.confirmedUnmount = isSNT && !isAutomaticSNT
+        request.automaticSNT = isSNT && isAutomaticSNT
         try request.validate()
         return request
     }
