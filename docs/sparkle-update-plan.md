@@ -1,14 +1,20 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
-## V3.1.3 / Build 0053：发布准备
+## V3.1.3 / Build 0053：已发布
 
 本次修复 APFS 外置硬盘被误报为无法唯一确定 SMART 目标的问题，改善 SMART 与 SNT 的设备识别和目标异常提示。完整版本 `3.1.3`，独立全局构建号 `0053`，上一分发构建为 `0052`。固定 `Capricorn.app`、既有更新公钥与稳定 feed 保持一致。
+
+2026-11-02 发布为最新正式版，标签指向 `3074c69558879d1b31c745580fa109a4374daaaf`。发布时 Main 与标签一致；公开 README、累计日志和三份发布说明均与本地对应文件一致。公开 ZIP、对应源码包与 appcast 的大小及 GitHub digest 均与本地保留记录一致。
 
 全量 721 项测试：719 通过、2 跳过、0 失败；跳过 root 硬件操作检查及无证书测试主程序的证书专属检查。真实 USB APFS 只读身份检查通过：物理盘 `disk6` 可匹配，合成盘 `disk7` 被排除。严格并发、Swift 6、Universal Archive、归档 App 启动、App/服务/工具双架构与同团队证书签名、dSYM UUID 核对、存档源码独立 Universal Release 构建通过。20 个真实 Sparkle 隔离场景全部通过；服务衔接使用模拟协调器。
 
 完整 xcarchive/dSYM 保存在 `~/Library/Developer/Xcode/Archives/2026-11-02/Capricorn V3.1.3.xcarchive`；版本备份位于 `Capricorn旧版软件/Capricorn V3.1.3/`。采用同团队 Apple Development 证书，没有 Developer ID 或 Apple 公证。本次未执行真实 SNT 接管、卷卸载或硬件自检。
 
 更新包与清单 Ed25519 签名复验通过。真实 Sparkle 候选签名源确认旧 `0052` 发现 `3.1.3 / 0053`，当前 `0053` 无更新。ZIP 为 14,493,316 字节，SHA-256 为 `3e26074384894ef84d8483064a6ab6899572b171b6373d272135ea840706f044`。
+
+发布后的公开稳定源也由真实 Sparkle 验证：旧 `0052` 发现 `3.1.3 / 0053`，当前 `0053` 无更新。公开 ZIP 链接返回 HTTP 200，公开清单与本地签名文件逐字节一致。[GitHub CI](https://github.com/LexTheAries2209/Capricorn/actions/runs/41380876859) 的全量测试、严格并发和 Swift 6 三项检查全部通过，无重复标签任务。公开更新源检查仅验证更新发现；隔离安装回归的覆盖与服务衔接限制见前文及详细发布说明。
+
+The release was published as latest on November 2, 2026 at `3074c69558879d1b31c745580fa109a4374daaaf`. All three GitHub CI jobs passed. Real Sparkle public-feed checks confirmed that Build `0052` discovers `3.1.3 / 0053`, while `0053` reports no update. The public ZIP returns HTTP 200; all asset sizes and digests match retained local evidence, and the public feed matches the signed local file byte for byte.
 
 主要本地阶段：全量测试命令 158.5 秒（测试体约 133 秒）、严格并发 99.0 秒、Swift 6 99.3 秒；首次 Archive 88.6 秒，修正显示名称后重新归档 65.2 秒；独立源码 Universal 构建 68.1 秒，显示名称同步后的增量验证 3.5 秒；签名包准备 1.5 秒。保留第一次归档于本地遗弃目录，实际发布使用显示名称核对通过的新归档；源码未更改，无需重复全量行为测试。ZIP 摘要仅计算一次。
 
