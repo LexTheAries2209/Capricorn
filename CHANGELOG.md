@@ -8,6 +8,20 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V3.1.4 - 2026-11-02
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.1.4) | [Release Notes / 发布说明](docs/releases/v3.1.4.md)
+
+### 中文
+
+- SMART 表格支持横向滚动和有界列宽调整，来源列可拖动，窗口恢复后仍可查看完整信息。
+- 优化默认列宽分配，为 ID 留出更多空间，状态列保持紧凑固定宽度。
+
+### English
+
+- Adds horizontal scrolling and bounded column resizing to the SMART table, with a resizable Source column and accessible information after restoring the window.
+- Gives ID more default space and keeps Status at a compact fixed width.
+
 ## V3.1.3 - 2026-11-02
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.1.3) | [Release Notes / 发布说明](docs/releases/v3.1.3.md)
