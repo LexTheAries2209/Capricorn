@@ -169,6 +169,71 @@ final class DeviceHelperServiceLifecycleTests: XCTestCase {
         await manager.restoreAfterUpdate()
         XCTAssertEqual(service.registers, 1)
     }
+
+    func testDisabledOrMissingServiceCannotBecomeAvailableOrStartHandshake() async throws {
+        for (status, expected) in [
+            (SMAppService.Status.notRegistered, DeviceHelperAvailability.notEnabled),
+            (.requiresApproval, .notEnabled), (.notFound, .unhealthy)
+        ] {
+            let service = TestHelperRegistration(status)
+            var checks = 0
+            let manager = manager(service, try defaults(), check: { checks += 1 })
+            manager.refresh()
+            XCTAssertEqual(manager.availability, expected)
+            await Task.yield()
+            XCTAssertEqual(checks, 0)
+        }
+    }
+
+    func testEnabledServiceRequiresSuccessfulHandshakeBeforeBecomingAvailable() async throws {
+        let service = TestHelperRegistration(.enabled)
+        var continuation: CheckedContinuation<Void, Never>?
+        let manager = manager(service, try defaults(), check: {
+            await withCheckedContinuation { continuation = $0 }
+        })
+        manager.refresh()
+        XCTAssertEqual(manager.availability, .checking)
+        let started = await AsyncTestWaiter.wait { continuation != nil }
+        XCTAssertTrue(started)
+        continuation?.resume()
+        let ready = await AsyncTestWaiter.wait { manager.availability == .available }
+        XCTAssertTrue(ready)
+        XCTAssertNil(manager.connectionError)
+    }
+
+    func testEnabledButMismatchedServiceIsUnhealthyAndRecheckCanRecover() async throws {
+        let service = TestHelperRegistration(.enabled)
+        var fails = true
+        let manager = manager(service, try defaults(), check: {
+            if fails { throw DeviceHelperError.rejected("version mismatch") }
+        })
+        manager.refresh()
+        let failed = await AsyncTestWaiter.wait { manager.availability == .unhealthy }
+        XCTAssertTrue(failed)
+        XCTAssertEqual(manager.connectionError, "version mismatch")
+        fails = false
+        manager.refresh()
+        let ready = await AsyncTestWaiter.wait { manager.availability == .available }
+        XCTAssertTrue(ready)
+        XCTAssertNil(manager.connectionError)
+    }
+
+    func testOldHandshakeCannotEnableSwitchAfterServiceWasDisabled() async throws {
+        let service = TestHelperRegistration(.enabled)
+        var continuation: CheckedContinuation<Void, Never>?
+        let manager = manager(service, try defaults(), check: {
+            await withCheckedContinuation { continuation = $0 }
+        })
+        manager.refresh()
+        let started = await AsyncTestWaiter.wait { continuation != nil }
+        XCTAssertTrue(started)
+        service.status = .notRegistered
+        manager.refresh()
+        continuation?.resume()
+        await Task.yield()
+        XCTAssertEqual(manager.availability, .notEnabled)
+        XCTAssertNil(manager.connectionError)
+    }
 }
 
 @MainActor

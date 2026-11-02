@@ -18,6 +18,10 @@ private struct SystemDeviceHelperRegistration: DeviceHelperRegistering {
     func unregister() async throws { try await service.unregister() }
 }
 
+enum DeviceHelperAvailability: Equatable {
+    case checking, available, notEnabled, unhealthy
+}
+
 @MainActor
 @Observable
 final class DeviceHelperServiceManager: DeviceServiceUpdateCoordinating {
@@ -27,6 +31,10 @@ final class DeviceHelperServiceManager: DeviceServiceUpdateCoordinating {
     private(set) var status: SMAppService.Status = .notRegistered
     private(set) var isChanging = false
     private(set) var error: String?
+    private(set) var connectionError: String?
+    private var connectionAvailability: DeviceHelperAvailability = .checking
+    @ObservationIgnored private var connectionCheckTask: Task<Void, Never>?
+    @ObservationIgnored private var connectionCheckID: UUID?
     private let registration: any DeviceHelperRegistering
     private let defaults: UserDefaults
     private let validateInstallation: () throws -> String
@@ -64,14 +72,67 @@ final class DeviceHelperServiceManager: DeviceServiceUpdateCoordinating {
 
     var requiresPreparation: Bool { isChanging || registration.status == .enabled }
     var requiresRestoration: Bool { defaults.data(forKey: Self.updateReceiptKey) != nil }
+
+    var availability: DeviceHelperAvailability {
+        guard !isChanging else { return .checking }
+        switch status {
+        case .notRegistered, .requiresApproval: return .notEnabled
+        case .notFound: return .unhealthy
+        case .enabled: return connectionAvailability
+        @unknown default: return .unhealthy
+        }
+    }
+
     func refresh() {
-        status = registration.status
+        let current = registration.status
+        if status != current || isChanging || current != .enabled { invalidateConnectionCheck() }
+        status = current
         if status == .enabled, error == Self.approvalMessage { error = nil }
+        guard status == .enabled, !isChanging, connectionCheckTask == nil else { return }
+        let id = UUID()
+        connectionCheckID = id
+        let check = checkConnection
+        // Keep a previously verified status during a periodic recheck so the
+        // switch does not flicker disabled every time the timer fires.
+        connectionCheckTask = Task { [weak self] in
+            let failure: String?
+            do {
+                try await check()
+                failure = nil
+            } catch {
+                failure = error.localizedDescription
+            }
+            guard let self, self.connectionCheckID == id else { return }
+            self.connectionCheckID = nil
+            self.connectionCheckTask = nil
+            guard !self.isChanging, self.registration.status == .enabled else {
+                self.refresh()
+                return
+            }
+            self.connectionError = failure
+            self.connectionAvailability = failure == nil ? .available : .unhealthy
+        }
+    }
+
+    func monitorConnectionHealth() async {
+        while !Task.isCancelled {
+            refresh()
+            do { try await Task.sleep(for: .seconds(5)) } catch { return }
+        }
+    }
+
+    private func invalidateConnectionCheck() {
+        connectionCheckTask?.cancel()
+        connectionCheckTask = nil
+        connectionCheckID = nil
+        connectionAvailability = .checking
+        connectionError = nil
     }
 
     func enable() {
         guard !isChanging else { return }
         isChanging = true
+        invalidateConnectionCheck()
         defer { isChanging = false; refresh() }
         error = nil
         do {
@@ -88,6 +149,7 @@ final class DeviceHelperServiceManager: DeviceServiceUpdateCoordinating {
     func disable() async {
         guard !isChanging else { return }
         isChanging = true
+        invalidateConnectionCheck()
         defer { isChanging = false; refresh() }
         error = nil
         var prepared = false
@@ -109,6 +171,7 @@ final class DeviceHelperServiceManager: DeviceServiceUpdateCoordinating {
         guard !isChanging else { throw DeviceHelperError.rejected("The device service is busy. Wait for its current operation to complete.") }
         guard registration.status == .enabled else { return }
         isChanging = true
+        invalidateConnectionCheck()
         defer { isChanging = false; refresh() }
         let team = try validateInstallation()
         // Journal before stopping, so a crash between unregister and app
@@ -133,6 +196,7 @@ final class DeviceHelperServiceManager: DeviceServiceUpdateCoordinating {
     func restoreAfterUpdate() async {
         guard !isChanging, let data = defaults.data(forKey: Self.updateReceiptKey) else { return }
         isChanging = true
+        invalidateConnectionCheck()
         defer { isChanging = false; refresh() }
         error = nil
         do {
