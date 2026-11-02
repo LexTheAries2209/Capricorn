@@ -8,6 +8,20 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V3.1.3 - 2026-11-02
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.1.3) | [Release Notes / 发布说明](docs/releases/v3.1.3.md)
+
+### 中文
+
+- 修复 APFS 外置硬盘可能被误报为无法唯一确定 SMART 目标的问题。
+- 改善 SMART 与 SNT 的设备识别及目标异常提示。
+
+### English
+
+- Fixes ambiguous SMART-target errors for APFS external drives.
+- Improves device identification and target-error guidance for SMART and SNT.
+
 ## V3.1.2 - 2026-11-01
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.1.2) | [Release Notes / 发布说明](docs/releases/v3.1.2.md)
