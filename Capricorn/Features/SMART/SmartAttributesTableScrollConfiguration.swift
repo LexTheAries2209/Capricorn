@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import AppKit
+import ObjectiveC
 import SwiftUI
 
 struct SmartAttributesTableScrollConfiguration: NSViewRepresentable {
@@ -13,6 +14,8 @@ struct SmartAttributesTableScrollConfiguration: NSViewRepresentable {
 }
 
 final class SmartAttributesTableScrollConfigurationView: NSView {
+    private static var initialColumnWidthsKey: UInt8 = 0
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         configureTable()
@@ -28,10 +31,32 @@ final class SmartAttributesTableScrollConfigurationView: NSView {
                     table.columnAutoresizingStyle = .noColumnAutoresizing
                     scroll.hasHorizontalScroller = true
                     scroll.autohidesScrollers = false
+                    self?.configureInitialColumnWidths(in: table)
                     return
                 }
                 ancestor = view.superview
             }
         }
+    }
+
+    func configureInitialColumnWidths(in table: NSTableView) {
+        guard let idColumn = table.tableColumns.first,
+              let sourceColumn = table.tableColumns.last,
+              idColumn !== sourceColumn else { return }
+
+        // Allow the narrower default even when the original source width was at its minimum.
+        sourceColumn.minWidth = 70
+        guard objc_getAssociatedObject(table, &Self.initialColumnWidthsKey) == nil else { return }
+        objc_setAssociatedObject(table, &Self.initialColumnWidthsKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+
+        // Keep the marker on the table because scrolling can recreate the first cell's bridge.
+        let transferredWidth = max(0, min(
+            sourceColumn.width * 0.3,
+            sourceColumn.width - sourceColumn.minWidth,
+            idColumn.maxWidth - idColumn.width
+        ))
+        sourceColumn.width -= transferredWidth
+        idColumn.width += transferredWidth
+        table.tile()
     }
 }

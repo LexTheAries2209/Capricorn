@@ -6,6 +6,37 @@ import XCTest
 
 final class SmartAttributesTableLayoutTests: XCTestCase {
     @MainActor
+    func testInitialSourceWidthTransfersThirtyPercentToIDOnlyOnce() {
+        let table = NSTableView()
+        table.columnAutoresizingStyle = .noColumnAutoresizing
+        let idColumn = NSTableColumn(identifier: .init("id"))
+        idColumn.minWidth = 64
+        idColumn.maxWidth = 400
+        idColumn.width = 80
+        let sourceColumn = NSTableColumn(identifier: .init("source"))
+        sourceColumn.minWidth = 100
+        sourceColumn.maxWidth = 280
+        sourceColumn.width = 100
+        table.addTableColumn(idColumn)
+        table.addTableColumn(sourceColumn)
+        let configuration = SmartAttributesTableScrollConfigurationView()
+
+        configuration.configureInitialColumnWidths(in: table)
+        XCTAssertEqual(sourceColumn.width, 70, accuracy: 0.001)
+        XCTAssertEqual(idColumn.width, 110, accuracy: 0.001)
+        XCTAssertEqual(idColumn.width + sourceColumn.width, 180, accuracy: 0.001)
+
+        sourceColumn.width = 180
+        idColumn.width = 240
+        configuration.configureInitialColumnWidths(in: table)
+        XCTAssertEqual(sourceColumn.width, 180, accuracy: 0.001)
+        XCTAssertEqual(idColumn.width, 240, accuracy: 0.001)
+        SmartAttributesTableScrollConfigurationView().configureInitialColumnWidths(in: table)
+        XCTAssertEqual(sourceColumn.width, 180, accuracy: 0.001)
+        XCTAssertEqual(idColumn.width, 240, accuracy: 0.001)
+    }
+
+    @MainActor
     func testNVMeColumnsRemainResizableAndReachableAfterWideningAndRestoringWindow() async throws {
         for language in AppLanguage.allCases {
             try await checkLayout(normalized: false, language: language)
