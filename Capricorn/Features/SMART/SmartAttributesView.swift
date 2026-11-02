@@ -251,7 +251,8 @@ struct SmartAttributesView: View {
                 TableColumn(language.t("Threshold")) { Text($0.threshold.map(String.init) ?? "-").help(language.t(normalizedValueHelp)) }
                     .width(min: 72, ideal: 72, max: 140)
                 TableColumn(language.t("Status")) { smartAttributeStatusBadge($0).fixedSize() }
-                    .width(min: 82, ideal: 82, max: 140)
+                    .width(82)
+                    .disabledCustomizationBehavior(.resize)
                 TableColumn(language.t("Source")) { smartAttributeSourceCell($0) }
                     .width(min: 100, max: 280)
             }
@@ -266,7 +267,8 @@ struct SmartAttributesView: View {
                 TableColumn(language.t("Raw")) { Text($0.rawValue).monospacedDigit() }
                     .width(min: 140, ideal: 180, max: 480)
                 TableColumn(language.t("Status")) { smartAttributeStatusBadge($0).fixedSize() }
-                    .width(min: 82, ideal: 82, max: 140)
+                    .width(82)
+                    .disabledCustomizationBehavior(.resize)
                 TableColumn(language.t("Source")) { smartAttributeSourceCell($0) }
                     .width(min: 100, max: 280)
             }

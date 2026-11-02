@@ -53,8 +53,15 @@ final class SmartAttributesTableLayoutTests: XCTestCase {
         for column in table.tableColumns {
             XCTAssertGreaterThan(column.minWidth, 0)
             XCTAssertLessThanOrEqual(column.maxWidth, 560)
-            XCTAssertGreaterThan(column.maxWidth, column.minWidth)
-            XCTAssertTrue(column.resizingMask.contains(.userResizingMask), column.title)
+            if column.title == language.t("Status") {
+                XCTAssertEqual(column.width, 82, accuracy: 1)
+                XCTAssertEqual(column.minWidth, 82, accuracy: 1)
+                XCTAssertEqual(column.maxWidth, 82, accuracy: 1)
+                XCTAssertFalse(column.resizingMask.contains(.userResizingMask))
+            } else {
+                XCTAssertGreaterThan(column.maxWidth, column.minWidth)
+                XCTAssertTrue(column.resizingMask.contains(.userResizingMask), column.title)
+            }
         }
         let source = try XCTUnwrap(table.tableColumns.last)
         XCTAssertGreaterThanOrEqual(source.width, source.minWidth)
