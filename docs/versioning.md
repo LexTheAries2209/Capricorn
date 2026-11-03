@@ -22,6 +22,8 @@ Effective from V2.10.2, released on 2026-10-17.
 
 已发布的 V2.10.2 使用完整版本 `2.10.2`、Build `0042`，复用迁移时预留的编号。V2.10.3 使用 Build `0043`，V2.10.4 使用 `0044`，V2.10.5 使用 `0045`；2026-10-19 发布的 V2.11.0 使用 Build `0046`，V2.11.1 使用 Build `0047`。2026-10-29 发布的 V2.12.0 使用 Build `0048`，2026-10-30 发布的 V3.0.0 使用 Build `0049`，2026-11-01 发布的 V3.1.0 使用 Build `0050`，同日发布的 V3.1.1 使用 Build `0051`，V3.1.2 使用 Build `0052`。2026-11-02 发布的 V3.1.3 使用 Build `0053`，同日发布的 V3.1.4 使用 Build `0054`，V3.2.0 使用 Build `0055`；下一次新的发布构建为 `0056`。
 
+V3.2.1 发布准备已使用上述下一编号 `0056`；状态见分配记录，下一次新的发布构建为 `0057`。
+
 原开发编号 `1000` 没有公开发布，不作为累计次数或后续编号的基线。若本地装有该开发构建，应手动替换为新构建，不能期待 Sparkle 将 `0042` 判定为比 `1000` 更新。
 
 ### 后续发布
@@ -47,6 +49,8 @@ gh api --paginate --slurp repos/LexTheAries2209/Capricorn/releases \
 `MARKETING_VERSION` / `CFBundleShortVersionString` contains the complete public version, such as `2.11.0`. `CURRENT_PROJECT_VERSION` / `CFBundleVersion` is an independent, globally increasing release-build sequence formatted as four decimal digits: `0030` is followed by `0031`. Build numbers are compared numerically and are never appended to the public version or reset for a new marketing version. The App, appcast `sparkle:version`, and release notes must agree, including leading zeros.
 
 The October 17, 2026 audit found **41 published stable GitHub Releases**, from `v1.0.2` through `v2.10.1`, matching 41 changelog entries and 41 combined release-note files at that time. This verified release history provides the migration baseline; the complete count of past local compilations is unavailable. **V2.10.2 uses Build `0042`, V2.10.3 uses `0043`, V2.10.4 uses `0044`, V2.10.5 uses `0045`, V2.11.0 uses `0046`, V2.11.1 was published on October 19, 2026 with `0047`, V2.12.0 was published on October 29, 2026 with `0048`, V3.0.0 was published on October 30, 2026 with `0049`, V3.1.0 was published on November 1, 2026 with `0050`, and V3.1.1 and V3.1.2 were published the same day with `0051` and `0052`. V3.1.3 and V3.1.4 were published on November 2, 2026 with Builds `0053` and `0054`. V3.2.0 uses Build `0055` on November 2, 2026. The next new release build is `0056`.** The ledger records publication status. Debug builds, tests, and repeated validation of the same candidate do not automatically allocate another number.
+
+V3.2.1 release preparation uses the next allocation above, Build `0056`; its status is tracked in the ledger. The next new release build is `0057`.
 
 Historical ordinal 41 is not a claim that `v2.10.1` shipped with Build `0041`; its actual metadata was Version `2.10`, Build `1`. Existing releases and historical metadata are preserved. The allocation ledger records the actual publication status of Version `2.10.2`, Build `0042`. The unpublished development value `1000` is excluded from the release baseline; installations using it need manual replacement.
 

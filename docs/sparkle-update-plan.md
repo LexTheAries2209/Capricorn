@@ -1,5 +1,17 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
+## V3.2.1 / Build 0056：发布候选已验证
+
+本次在 Main 准备完整版本 `3.2.1`，独立全局构建号 `0056`，上一分发构建为 `0055`。加入 48 小时 SNT 缓存、采集时间行和 SMART 默认列宽调整；固定 `Capricorn.app`、既有更新公钥与稳定 feed 保持一致。
+
+全量 754 项测试：751 通过、3 项硬件或证书条件跳过、零失败。严格并发、Swift 6、Universal Archive、归档 App 启动、App/服务/两套 smartctl 双架构及同团队证书签名、dSYM UUID、存档源码独立 Universal Release 构建均通过。20 个真实 Sparkle 隔离场景全部通过，服务衔接使用模拟协调器。下载中冲突场景首轮下载先于冲突注入完成，加入两秒下载延迟后通过，未改产品代码。
+
+更新包与清单使用既有 Ed25519 密钥签名并复验。真实 Sparkle 候选源确认旧 `0055` 发现 `3.2.1 / 0056`，当前 `0056` 无更新。最终 ZIP 为 14,641,649 字节，SHA-256 为 `ddd5163e66f2c759f13e3f9256e76d5c9f4d1bf043563f20255f836e34681f49`，摘要仅计算一次。
+
+完整归档/dSYM 位于 `~/Library/Developer/Xcode/Archives/2026-11-03/Capricorn V3.2.1.xcarchive`，版本备份 App、README、固定源码与更新附件位于 `Capricorn旧版软件/Capricorn V3.2.1/`，没有额外桌面副本。沿用 Apple Development 签名，没有 Developer ID 或 Apple 公证。本次未执行真实 USB 接管、卷卸载或硬件自检，Intel/macOS 14、其他 Mac 的服务批准及真实 root 服务跨版本授权保留仍需实机验收。
+
+主要本地阶段：全量测试命令 182.8 秒（测试体约 118.8 秒）、严格并发 44.6 秒、Swift 6 44.3 秒、Universal Archive 101.4 秒、独立源码 Universal 构建 74.8 秒。Sparkle 场景首段含一次条件不足的冲突测试为 61.8 秒，调整条件后其余十二场景为 90.8 秒。候选源检查仅验证发现更新，不等于真实用户 App 安装验收。
+
 ## V3.2.0 / Build 0055：已发布
 
 自动 SNT 分支已快进合并到 Main。完整版本 `3.2.0`，独立全局构建号 `0055`，上一分发构建为 `0054`；固定 `Capricorn.app`、既有更新公钥和稳定 feed 保持一致。

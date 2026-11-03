@@ -8,6 +8,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V3.2.1 - 2026-11-03
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.2.1) | [Release Notes / 发布说明](docs/releases/v3.2.1.md)
+
+### 中文
+
+- 48 小时内已有有效 SNT 数据时跳过自动读取，保留手动更新；过期后读取失败仍显示上次数据。
+- SNT SMART 表格和历史报告显示实际采集时间，CSV 保留对应时间字段。
+- 调整 SMART 默认列宽，名称列缩小 15%，为 ID 留出更多空间。
+
+### English
+
+- Reuses valid SNT data for 48 hours while keeping manual refresh available; failed refreshes retain the previous reading.
+- Shows the actual capture time in the SNT SMART table and history reports, with the corresponding timestamp in CSV exports.
+- Reduces the default Name column width by 15% to give ID more space.
+
 ## V3.2.0 - 2026-11-02
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.2.0) | [Release Notes / 发布说明](docs/releases/v3.2.0.md)
