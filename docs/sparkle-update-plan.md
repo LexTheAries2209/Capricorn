@@ -1,6 +1,6 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
-## V3.2.1 / Build 0056：发布候选已验证
+## V3.2.1 / Build 0056：已发布
 
 本次在 Main 准备完整版本 `3.2.1`，独立全局构建号 `0056`，上一分发构建为 `0055`。加入 48 小时 SNT 缓存、采集时间行和 SMART 默认列宽调整；固定 `Capricorn.app`、既有更新公钥与稳定 feed 保持一致。
 
@@ -11,6 +11,14 @@
 完整归档/dSYM 位于 `~/Library/Developer/Xcode/Archives/2026-11-03/Capricorn V3.2.1.xcarchive`，版本备份 App、README、固定源码与更新附件位于 `Capricorn旧版软件/Capricorn V3.2.1/`，没有额外桌面副本。沿用 Apple Development 签名，没有 Developer ID 或 Apple 公证。本次未执行真实 USB 接管、卷卸载或硬件自检，Intel/macOS 14、其他 Mac 的服务批准及真实 root 服务跨版本授权保留仍需实机验收。
 
 主要本地阶段：全量测试命令 182.8 秒（测试体约 118.8 秒）、严格并发 44.6 秒、Swift 6 44.3 秒、Universal Archive 101.4 秒、独立源码 Universal 构建 74.8 秒。Sparkle 场景首段含一次条件不足的冲突测试为 61.8 秒，调整条件后其余十二场景为 90.8 秒。候选源检查仅验证发现更新，不等于真实用户 App 安装验收。
+
+2026-11-03 已发布为最新正式版，标签指向 `11782ac7baf01411c8124d9f0c75981359da9479`，发布时 Main 与标签一致。[GitHub CI](https://github.com/LexTheAries2209/Capricorn/actions/runs/41582906416) 的全量测试、严格并发和 Swift 6 三项全部通过。公开 README、累计日志和三份发布说明与固定发布提交逐字节匹配；ZIP、对应源码包和 appcast 的大小与 GitHub digest 均与本地保留证据一致。
+
+真实 Sparkle 公开稳定源确认旧 `0055` 发现 `3.2.1 / 0056`，当前 `0056` 无更新。公开 ZIP 返回 HTTP 200；公开 appcast 与本地签名文件逐字节一致且签名复验通过。链接检查使用本机既有系统代理对应的命令级代理设置，未修改系统网络。推送耗时 2.8 秒，ZIP 上传 4.9 秒，源码和清单上传 4.3 秒，公开源检查 5.0 秒。
+
+The release was published as latest on November 3, 2026 at `11782ac7baf01411c8124d9f0c75981359da9479`. All three CI jobs passed. Real Sparkle public-feed checks confirmed that Build `0055` discovers `3.2.1 / 0056`, while `0056` reports no update. The public ZIP returns HTTP 200; all asset sizes and digests match retained evidence, and the public feed matches the signed local file byte for byte.
+
+构建号已标记为 published；此发布后状态记录另行提交。已发布标签、App、ZIP、源码包和清单不变，版本备份源码保持固定发布提交 `11782ac`。
 
 ## V3.2.0 / Build 0055：已发布
 
