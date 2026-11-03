@@ -57,6 +57,18 @@ final class SmartAttributesTableScrollConfigurationView: NSView {
         ))
         sourceColumn.width -= transferredWidth
         idColumn.width += transferredWidth
+
+        if table.tableColumns.count > 2 {
+            let nameColumn = table.tableColumns[1]
+            // Transfer the name column's initial width without changing the table's total width.
+            let nameTransferredWidth = max(0, min(
+                nameColumn.width * 0.15,
+                nameColumn.width - nameColumn.minWidth,
+                idColumn.maxWidth - idColumn.width
+            ))
+            nameColumn.width -= nameTransferredWidth
+            idColumn.width += nameTransferredWidth
+        }
         table.tile()
     }
 }

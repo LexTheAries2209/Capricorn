@@ -6,34 +6,79 @@ import XCTest
 
 final class SmartAttributesTableLayoutTests: XCTestCase {
     @MainActor
-    func testInitialSourceWidthTransfersThirtyPercentToIDOnlyOnce() {
+    func testInitialSourceAndNameWidthsTransferToIDOnlyOnce() {
         let table = NSTableView()
         table.columnAutoresizingStyle = .noColumnAutoresizing
         let idColumn = NSTableColumn(identifier: .init("id"))
         idColumn.minWidth = 64
         idColumn.maxWidth = 400
         idColumn.width = 80
+        let nameColumn = NSTableColumn(identifier: .init("name"))
+        nameColumn.minWidth = 220
+        nameColumn.maxWidth = 560
+        nameColumn.width = 320
         let sourceColumn = NSTableColumn(identifier: .init("source"))
         sourceColumn.minWidth = 100
         sourceColumn.maxWidth = 280
         sourceColumn.width = 100
         table.addTableColumn(idColumn)
+        table.addTableColumn(nameColumn)
         table.addTableColumn(sourceColumn)
         let configuration = SmartAttributesTableScrollConfigurationView()
 
         configuration.configureInitialColumnWidths(in: table)
         XCTAssertEqual(sourceColumn.width, 70, accuracy: 0.001)
-        XCTAssertEqual(idColumn.width, 110, accuracy: 0.001)
-        XCTAssertEqual(idColumn.width + sourceColumn.width, 180, accuracy: 0.001)
+        XCTAssertEqual(nameColumn.width, 272, accuracy: 0.001)
+        XCTAssertEqual(idColumn.width, 158, accuracy: 0.001)
+        XCTAssertEqual(idColumn.width + nameColumn.width + sourceColumn.width, 500, accuracy: 0.001)
 
         sourceColumn.width = 180
+        nameColumn.width = 300
         idColumn.width = 240
         configuration.configureInitialColumnWidths(in: table)
         XCTAssertEqual(sourceColumn.width, 180, accuracy: 0.001)
+        XCTAssertEqual(nameColumn.width, 300, accuracy: 0.001)
         XCTAssertEqual(idColumn.width, 240, accuracy: 0.001)
         SmartAttributesTableScrollConfigurationView().configureInitialColumnWidths(in: table)
         XCTAssertEqual(sourceColumn.width, 180, accuracy: 0.001)
+        XCTAssertEqual(nameColumn.width, 300, accuracy: 0.001)
         XCTAssertEqual(idColumn.width, 240, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testInitialWidthTransfersRespectColumnLimits() {
+        for (idWidth, nameWidth, expectedIDWidth, expectedNameWidth): (CGFloat, CGFloat, CGFloat, CGFloat) in [
+            (80, 230, 120, 220),
+            (350, 320, 400, 300)
+        ] {
+            let table = NSTableView()
+            table.columnAutoresizingStyle = .noColumnAutoresizing
+            let idColumn = NSTableColumn(identifier: .init("id"))
+            idColumn.minWidth = 64
+            idColumn.maxWidth = 400
+            idColumn.width = idWidth
+            let nameColumn = NSTableColumn(identifier: .init("name"))
+            nameColumn.minWidth = 220
+            nameColumn.maxWidth = 560
+            nameColumn.width = nameWidth
+            let sourceColumn = NSTableColumn(identifier: .init("source"))
+            sourceColumn.minWidth = 100
+            sourceColumn.width = 100
+            table.addTableColumn(idColumn)
+            table.addTableColumn(nameColumn)
+            table.addTableColumn(sourceColumn)
+
+            SmartAttributesTableScrollConfigurationView().configureInitialColumnWidths(in: table)
+
+            XCTAssertEqual(idColumn.width, expectedIDWidth, accuracy: 0.001)
+            XCTAssertEqual(nameColumn.width, expectedNameWidth, accuracy: 0.001)
+            XCTAssertEqual(sourceColumn.width, 70, accuracy: 0.001)
+            XCTAssertEqual(
+                idColumn.width + nameColumn.width + sourceColumn.width,
+                idWidth + nameWidth + 100,
+                accuracy: 0.001
+            )
+        }
     }
 
     @MainActor
