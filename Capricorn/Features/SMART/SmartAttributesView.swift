@@ -21,7 +21,7 @@ struct SmartAttributesView: View {
     @State private var saveMessage: String?
 
     private var attributes: [SmartAttribute] {
-        snapshot?.attributes ?? []
+        snapshot?.attributesWithSNTCaptureTime ?? []
     }
 
     private var showsNormalizedColumns: Bool {
@@ -294,7 +294,8 @@ struct SmartAttributesView: View {
     private func smartAttributeSourceCell(_ attribute: SmartAttribute) -> some View {
         // Keep the full provider identity in data and exports; the table uses
         // a compact transport label with the original name available on hover.
-        Text(attribute.source == USBRawSmartService.providerName ? "SNT SMART" : attribute.source)
+        Text(attribute.source == USBRawSmartService.providerName ? "SNT SMART"
+             : SNTCaptureTimeMetadata.isCaptureTime(attribute) ? language.t(attribute.source) : attribute.source)
             .lineLimit(1)
             .help(attribute.source)
             .accessibilityLabel(attribute.source)
@@ -302,7 +303,9 @@ struct SmartAttributesView: View {
 
     @ViewBuilder
     private func smartAttributeStatusBadge(_ attribute: SmartAttribute) -> some View {
-        if isErrorLogAttribute(attribute), errorLogEntryCount(attribute) >= 1 {
+        if SNTCaptureTimeMetadata.isCaptureTime(attribute) {
+            Text("-").foregroundStyle(.secondary)
+        } else if isErrorLogAttribute(attribute), errorLogEntryCount(attribute) >= 1 {
             Label(language.t("Check"), systemImage: "magnifyingglass")
                 .font(.caption.bold())
                 .foregroundStyle(.blue)

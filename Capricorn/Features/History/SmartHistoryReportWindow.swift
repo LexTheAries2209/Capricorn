@@ -47,7 +47,7 @@ struct SmartHistoryReportWindow: View {
                     if let snapshot = payload.snapshot {
                         snapshotSummary(snapshot)
                         providerStatuses(snapshot.providerStatuses)
-                        attributes(snapshot.attributes)
+                        attributes(snapshot.attributesWithSNTCaptureTime)
                     } else {
                         ContentUnavailableView(
                             language.t("SMART Snapshot Report"),
@@ -350,7 +350,11 @@ private struct SmartHistoryAttributeReportRow: View {
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                HealthBadge(status: attribute.status, compact: true)
+                if SNTCaptureTimeMetadata.isCaptureTime(attribute) {
+                    Text("-").foregroundStyle(.secondary)
+                } else {
+                    HealthBadge(status: attribute.status, compact: true)
+                }
             }
 
             Text(language == .simplifiedChinese ? "\(attribute.name) - \(display.subtitle)" : display.subtitle)
@@ -380,7 +384,8 @@ private struct SmartHistoryAttributeReportRow: View {
                 }
             }
 
-            Label(attribute.source, systemImage: "shippingbox")
+            Label(SNTCaptureTimeMetadata.isCaptureTime(attribute) ? language.t(attribute.source) : attribute.source,
+                  systemImage: "shippingbox")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)

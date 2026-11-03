@@ -459,6 +459,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Reading SNT automatically": "正在自动读取 SNT",
         "SNT health information updated": "SNT 健康信息已更新",
         "Using cached SNT data": "正在显示 SNT 缓存数据",
+        "Capricorn metadata": "Capricorn 元数据",
         "SNT waiting for disk to become idle": "SNT 正在等待硬盘空闲",
         "SNT waiting for a complete disk-use check": "SNT 正在等待完整的占用检查",
         "Automatic SNT requires system authorization": "自动 SNT 读取需要系统授权",
@@ -1338,6 +1339,12 @@ enum SmartAttributeCatalog {
 
     private static let entriesByName: [String: Entry] = {
         let entries: [(String, Entry)] = [
+            ("Captured At", Entry(
+                englishTitle: "Captured At",
+                chineseTitle: "采集时间",
+                englishDescription: "Time this SNT SMART data was collected.",
+                chineseDescription: "此份 SNT SMART 数据的实际采集时间。"
+            )),
             ("Available Spare", Entry(
                 englishTitle: "Available Spare",
                 chineseTitle: "可用备用空间",
