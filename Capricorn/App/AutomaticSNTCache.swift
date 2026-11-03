@@ -16,6 +16,14 @@ struct AutomaticSNTRecord: Codable, Sendable {
     var lastSnapshot: SmartSnapshot?
     var diagnostic: String?
 
+    func hasFreshSnapshot(now: Date) -> Bool {
+        guard let snapshot = lastSnapshot,
+              snapshot.selectedProvider == USBRawSmartService.providerName,
+              snapshot.hasSMARTPayload else { return false }
+        let age = now.timeIntervalSince(snapshot.capturedAt)
+        return age >= 0 && age < 48 * 60 * 60
+    }
+
     mutating func apply(_ result: USBRawSmartResult, now: Date) {
         checkedAt = now
         diagnostic = result.transcript

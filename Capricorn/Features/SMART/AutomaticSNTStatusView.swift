@@ -49,7 +49,7 @@ struct AutomaticSNTSettingsControls: View {
                 .disabled(serviceManager.availability != .available)
                 .accessibilityIdentifier("settings.automaticSNT")
                 .help(preferences.language.t(
-                    "When authorized, read idle USB disks once when Capricorn opens or a disk connects."
+                    "When authorized, read idle USB disks when Capricorn opens or a disk connects, unless valid SNT data was captured within 48 hours."
                 ))
         }
         .task { await serviceManager.monitorConnectionHealth() }
@@ -104,6 +104,7 @@ struct AutomaticSNTStatusView: View {
     private func symbol(for status: AutomaticSNTStatus) -> String {
         switch status {
         case .updated: "checkmark.circle"
+        case .cached: "clock.arrow.circlepath"
         case .reading: "arrow.triangle.2.circlepath"
         case .recovery: "exclamationmark.triangle"
         case .authorization: "lock"

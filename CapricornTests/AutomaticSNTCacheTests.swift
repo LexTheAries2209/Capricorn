@@ -61,6 +61,25 @@ final class AutomaticSNTCacheTests: XCTestCase {
         XCTAssertEqual(record.lastSnapshot?.id, previous)
     }
 
+    func testFreshnessUsesSuccessfulCaptureTimeAndExpiresAtFortyEightHours() {
+        let now = Date()
+        var result = USBRawSmartTests.result(restored: true)
+        result.snapshot?.capturedAt = now.addingTimeInterval(-48 * 60 * 60 + 1)
+        var record = AutomaticSNTRecord()
+        record.apply(result, now: now)
+        XCTAssertTrue(record.hasFreshSnapshot(now: now))
+        XCTAssertFalse(record.hasFreshSnapshot(now: now.addingTimeInterval(1)))
+        result.snapshot = nil
+        record.apply(result, now: now.addingTimeInterval(60))
+        XCTAssertFalse(record.hasFreshSnapshot(now: now.addingTimeInterval(60)))
+        XCTAssertEqual(record.lastSnapshot?.capturedAt, now.addingTimeInterval(-48 * 60 * 60 + 1))
+        record.lastSnapshot?.capturedAt = now.addingTimeInterval(1)
+        XCTAssertFalse(record.hasFreshSnapshot(now: now), "A future timestamp is not fresh.")
+        record.lastSnapshot?.capturedAt = now
+        record.lastSnapshot?.selectedProvider = "smartctl"
+        XCTAssertFalse(record.hasFreshSnapshot(now: now))
+    }
+
     func testIdentityIncludesMediaAndBridgeButIgnoresBSDNumber() {
         let drive = Self.drive()
         let key = AutomaticSNTCache.identityKey(for: drive)

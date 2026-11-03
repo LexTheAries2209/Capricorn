@@ -23,7 +23,7 @@ final class AutomaticSNTTests: XCTestCase {
     }
 
     @MainActor
-    func testStartupReadsOnceWithoutSheetOrNavigationAndReconnectReadsAgain() async {
+    func testStartupReadsOnceAndReconnectUsesFreshCacheWithoutScheduledExpiryRead() async {
         let drive = AutomaticSNTCacheTests.drive()
         let service = AutomaticSNTTestService()
         let refresh = AutomaticSNTTestRefresh(drives: [drive])
@@ -48,7 +48,13 @@ final class AutomaticSNTTests: XCTestCase {
         await model.refresh()
         await model.processAutomaticSNTQueue(now: Date().addingTimeInterval(5))
         count = await service.readCount
-        XCTAssertEqual(count, 2)
+        XCTAssertEqual(count, 1)
+        XCTAssertEqual(model.automaticSNTStatus(for: drive), .cached)
+        await model.processAutomaticSNTQueue(now: now.addingTimeInterval(49 * 60 * 60))
+        model.synchronizeAutomaticSNTConnections(now: now.addingTimeInterval(49 * 60 * 60))
+        await model.processAutomaticSNTQueue(now: now.addingTimeInterval(49 * 60 * 60 + 3))
+        count = await service.readCount
+        XCTAssertEqual(count, 1, "Expiry alone must not start a read during the same connection.")
     }
 
     @MainActor
@@ -106,7 +112,13 @@ final class AutomaticSNTTests: XCTestCase {
         nextLaunch.synchronizeAutomaticSNTConnections(now: now)
         await nextLaunch.processAutomaticSNTQueue(now: now.addingTimeInterval(600))
         let finalCount = await service.readCount
-        XCTAssertEqual(finalCount, 5, "Manual success must re-enable the next launch.")
+        XCTAssertEqual(finalCount, 4, "Manual success supplies a fresh cache for the next launch.")
+        XCTAssertEqual(nextLaunch.automaticSNTStatus(for: drive), .cached)
+        let expiredLaunch = self.model(service: service, refresh: refresh)
+        expiredLaunch.synchronizeAutomaticSNTConnections(now: now.addingTimeInterval(49 * 60 * 60))
+        await expiredLaunch.processAutomaticSNTQueue(now: now.addingTimeInterval(49 * 60 * 60 + 3))
+        let expiredCount = await service.readCount
+        XCTAssertEqual(expiredCount, 5, "Manual success must also clear the persistent stop.")
     }
 
     @MainActor
@@ -130,9 +142,10 @@ final class AutomaticSNTTests: XCTestCase {
 
         let failureModel = self.model(service: service, refresh: AutomaticSNTTestRefresh(drives: [original]))
         await service.setResult(USBRawSmartTests.result(restored: false))
-        failureModel.synchronizeAutomaticSNTConnections(now: now)
-        await failureModel.processAutomaticSNTQueue(now: now.addingTimeInterval(3))
-        await failureModel.processAutomaticSNTQueue(now: now.addingTimeInterval(300))
+        let expired = now.addingTimeInterval(49 * 60 * 60)
+        failureModel.synchronizeAutomaticSNTConnections(now: expired)
+        await failureModel.processAutomaticSNTQueue(now: expired.addingTimeInterval(3))
+        await failureModel.processAutomaticSNTQueue(now: expired.addingTimeInterval(300))
         XCTAssertEqual(failureModel.automaticSNTStatus(for: original), .recovery)
         let afterFailure = await service.readCount
         XCTAssertEqual(afterFailure, 2)
@@ -157,6 +170,62 @@ final class AutomaticSNTTests: XCTestCase {
         await model.processAutomaticSNTQueue(now: now.addingTimeInterval(5))
         let count = await service.readCount
         XCTAssertEqual(count, 0)
+    }
+
+    @MainActor
+    func testFreshCacheSkipsStartupAndManualReadStillUpdatesIt() async {
+        let drive = AutomaticSNTCacheTests.drive()
+        let service = AutomaticSNTTestService()
+        let model = model(service: service, refresh: AutomaticSNTTestRefresh(drives: [drive]))
+        let now = Date()
+        var result = USBRawSmartTests.result(restored: true)
+        result.snapshot?.capturedAt = now.addingTimeInterval(-47 * 60 * 60)
+        var record = AutomaticSNTRecord()
+        record.apply(result, now: now)
+        model.automaticSNTCache.store(record, for: drive, connectionKey: "")
+        model.synchronizeAutomaticSNTConnections(now: now)
+        await model.processAutomaticSNTQueue(now: now.addingTimeInterval(3))
+        let count = await service.readCount
+        XCTAssertEqual(count, 0)
+        XCTAssertEqual(model.automaticSNTStatus(for: drive), .cached)
+        XCTAssertEqual(model.snapshots[drive.id]?.capturedAt, result.snapshot?.capturedAt)
+
+        model.requestUSBRawSmart(for: drive)
+        await model.beginUSBRawSmart()
+        let manualCount = await service.readCount
+        XCTAssertEqual(manualCount, 1)
+        XCTAssertEqual(model.automaticSNTStatus(for: drive), .updated)
+        let updated = model.automaticSNTCache.record(for: drive, connectionKey: "")
+        XCTAssertGreaterThan(updated!.lastSnapshot!.capturedAt, result.snapshot!.capturedAt)
+        XCTAssertTrue(updated!.hasFreshSnapshot(now: Date()))
+    }
+
+    @MainActor
+    func testExpiredCacheAttemptsReadAndRetainsPreviousDataAfterFailure() async {
+        let drive = AutomaticSNTCacheTests.drive()
+        let service = AutomaticSNTTestService()
+        let model = model(service: service, refresh: AutomaticSNTTestRefresh(drives: [drive]))
+        let now = Date()
+        var result = USBRawSmartTests.result(restored: true)
+        result.snapshot?.capturedAt = now.addingTimeInterval(-48 * 60 * 60)
+        var record = AutomaticSNTRecord()
+        record.apply(result, now: now)
+        model.automaticSNTCache.store(record, for: drive, connectionKey: "")
+        var failure = result
+        failure.snapshot = nil
+        await service.setResult(failure)
+
+        model.synchronizeAutomaticSNTConnections(now: now)
+        await model.processAutomaticSNTQueue(now: now.addingTimeInterval(3))
+
+        let count = await service.readCount
+        XCTAssertEqual(count, 1)
+        XCTAssertEqual(model.automaticSNTStatus(for: drive), .retrying)
+        XCTAssertEqual(model.snapshots[drive.id]?.capturedAt, result.snapshot?.capturedAt)
+        XCTAssertEqual(model.snapshots[drive.id]?.temperatureCelsius, 37)
+        let failed = model.automaticSNTCache.record(for: drive, connectionKey: "")
+        XCTAssertEqual(failed?.lastSnapshot?.capturedAt, result.snapshot?.capturedAt)
+        XCTAssertFalse(failed!.hasFreshSnapshot(now: now))
     }
 
     @MainActor

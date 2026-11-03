@@ -5,6 +5,7 @@ enum AutomaticSNTStatus: String, Sendable {
     case waiting = "Waiting to read SNT"
     case reading = "Reading SNT automatically"
     case updated = "SNT health information updated"
+    case cached = "Using cached SNT data"
     case busy = "SNT waiting for disk to become idle"
     case occupancyUnknown = "SNT waiting for a complete disk-use check"
     case authorization = "Automatic SNT requires system authorization"
@@ -78,6 +79,11 @@ extension AppModel {
                 } else if cached.status == .needsRecovery {
                     connection.completed = true
                     connection.status = .recovery
+                } else if !connection.completed, cached.hasFreshSnapshot(now: now) {
+                    // Complete this connection so an ordinary refresh after expiry
+                    // cannot trigger an unexpected USB capture.
+                    connection.completed = true
+                    connection.status = .cached
                 }
                 if snapshot.verifiedSource == nil, var previous = cached.lastSnapshot {
                     previous.driveID = drive.id
@@ -112,6 +118,12 @@ extension AppModel {
             automaticSNTConnections[connection.id] = connection
             return
         }
+        if record.hasFreshSnapshot(now: now) {
+            connection.completed = true
+            connection.status = .cached
+            automaticSNTConnections[connection.id] = connection
+            return
+        }
         if let retryAfter = record.retryAfter, retryAfter > now {
             connection.nextAttempt = retryAfter
             automaticSNTConnections[connection.id] = connection
@@ -132,6 +144,12 @@ extension AppModel {
             if let restoredDrive {
                 connection.drive = restoredDrive
                 if let current = try? usbRawSmartTarget(for: restoredDrive) { connection.target = current }
+                if result.snapshot?.hasSMARTPayload != true,
+                   snapshots[restoredDrive.id]?.verifiedSource == nil,
+                   var previous = record.lastSnapshot {
+                    previous.driveID = restoredDrive.id
+                    snapshots[restoredDrive.id] = previous
+                }
             } else if result.phases.contains(.capturing) {
                 record.status = .needsRecovery
             }
