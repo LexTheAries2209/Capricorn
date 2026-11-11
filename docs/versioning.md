@@ -24,7 +24,7 @@ Effective from V2.10.2, released on 2026-10-17.
 
 2026-11-03 发布的 V3.2.1 使用 Build `0056`，状态已记录为 published；下一次新的发布构建为 `0057`。
 
-2026-11-11 为 V3.2.2 预留 Build `0057`，发布完成后记录实际状态；后续新的发布构建从 `0058` 继续。
+2026-11-11 发布的 V3.2.2 使用 Build `0057`，状态已记录为 published；下一次新的发布构建为 `0058`。
 
 原开发编号 `1000` 没有公开发布，不作为累计次数或后续编号的基线。若本地装有该开发构建，应手动替换为新构建，不能期待 Sparkle 将 `0042` 判定为比 `1000` 更新。
 
@@ -54,7 +54,7 @@ The October 17, 2026 audit found **41 published stable GitHub Releases**, from `
 
 V3.2.1 was published on November 3, 2026 with Build `0056`, marked published in the ledger. The next new release build is `0057`.
 
-Build `0057` is reserved for V3.2.2 on November 11, 2026. Its status will be updated after publication; the next new release build will be `0058`.
+V3.2.2 was published on November 11, 2026 with Build `0057`, marked published in the ledger. The next new release build is `0058`.
 
 Historical ordinal 41 is not a claim that `v2.10.1` shipped with Build `0041`; its actual metadata was Version `2.10`, Build `1`. Existing releases and historical metadata are preserved. The allocation ledger records the actual publication status of Version `2.10.2`, Build `0042`. The unpublished development value `1000` is excluded from the release baseline; installations using it need manual replacement.
 

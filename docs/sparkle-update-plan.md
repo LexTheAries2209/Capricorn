@@ -1,6 +1,6 @@
 # Capricorn 自动更新：Sparkle 适配研究与功能计划
 
-## V3.2.2 / Build 0057：发布候选
+## V3.2.2 / Build 0057：已发布
 
 本次在 Main 准备完整版本 `3.2.2`、独立全局 Build `0057`，上一分发构建为 `0056`。自动 SNT 跳过只读介质和含只读卷的硬盘；错误日志读取移至默认关闭的开发者选项；新增默认关闭的“始终显示 SMART 自检”，SNT 和无 SMART 信息的设备仍不显示。固定 `Capricorn.app`、既有更新公钥和稳定 feed 保持一致。
 
@@ -12,9 +12,19 @@
 
 全量最终 768 项：763 通过、5 项显式硬件/离线实验或证书条件跳过、零失败。首轮虚拟磁盘编辑界面出现三个保存断言失败，单独复跑通过（命令 47.9 秒、测试体 6.1 秒）；第二轮仅旧侧栏截图将完整可见的 `ProtocolEnd` 误识别为 `ProtocolEno`。禁用字段标记的拼写校正并检查 OCR 候选后，全量通过。仅测试代码调整，发布 App 和 ZIP 未改动。
 
-主要本地阶段：严格并发 45.2 秒、Swift 6 47.3 秒、Universal Archive 102.0 秒、独立源码 Universal 构建 187.6 秒、20 个 Sparkle 场景合计 158.7 秒、候选源检查 3.0 秒。首轮全量命令 412.3 秒，第二轮 213.4 秒；最终通过的全量测试体约 130.2 秒。额外耗时来自旧 UI 测试排查和复跑。
+主要本地阶段：严格并发 45.2 秒、Swift 6 47.3 秒、Universal Archive 102.0 秒、独立源码 Universal 构建 187.6 秒、20 个 Sparkle 场景合计 158.7 秒、候选源检查 3.0 秒。首轮全量命令 412.3 秒，第二轮 213.4 秒；最终全量命令 158.6 秒，测试体约 130.2 秒。额外耗时来自旧 UI 测试排查和复跑。
 
 自动化 SNT 验证使用模拟磁盘和命令。此前单块 CODEX 显式手动实验取得错误日志，无有效返回条目；该设备不支持自检，未取得自检记录，也未启动自检。该硬件实验不作为通用 SNT 日志功能。真实多卷恢复、Intel/macOS 14、其他 Mac 服务批准及真实 root 服务跨版本授权保留仍需实机验收。
+
+2026-11-11 已发布为最新正式版，标签及 Release 指向固定提交 `927c0269e2d3a1aa34b021e381163e9a424d37f4`。公开 README、累计日志和三份发布说明与固定提交逐字节一致，发布说明的 GitHub Markdown 渲染链接已核对。ZIP、完整对应源码包和 appcast 的大小与 GitHub digest 均匹配本地证据。
+
+真实 Sparkle 公开稳定源确认旧 `0056` 发现 `3.2.2 / 0057`，当前 `0057` 无更新；公开 ZIP 返回 HTTP 200。公开清单与本地签名文件逐字节一致且签名复验通过。检查使用现有本机系统代理或命令级代理，未修改系统网络。推送 3.3 秒、ZIP 上传 4.9 秒、源码与清单上传 4.9 秒、公开源检查 5.0 秒。
+
+The release was published as latest on November 11, 2026 at `927c0269e2d3a1aa34b021e381163e9a424d37f4`. All public documentation and asset sizes/digests match retained evidence. Real Sparkle public-feed checks confirmed that Build `0056` discovers `3.2.2 / 0057`, while `0057` reports no update. The public ZIP returns HTTP 200, and the public feed matches the signed local file byte for byte.
+
+[GitHub CI](https://github.com/LexTheAries2209/Capricorn/actions/runs/42982095833) 的全量测试、严格并发、Swift 6 三项全部通过；远端完整测试任务约 5 分 25 秒，没有超出本地测试与编译的合理差异范围。All three CI jobs passed: full tests, strict concurrency and Swift 6 compatibility.
+
+构建号已标记为 published；此发布后状态记录另行提交。已发布标签、App、ZIP、源码包和清单不变；版本备份源码保持固定发布提交 `927c026`。
 
 ## V3.2.1 / Build 0056：已发布
 
