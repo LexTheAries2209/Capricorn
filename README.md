@@ -6,9 +6,9 @@ Capricorn is a local macOS utility for disk inspection, SMART health checks, sto
 
 Capricorn 是一个本地 macOS 工具，用于磁盘检查、SMART 健康状态查看、存储测速、实时磁盘活动监控和硬盘连接拓扑查看。
 
-[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v3.2.1`
+[Latest Release / 最新版本](https://github.com/LexTheAries2209/Capricorn/releases/latest): `v3.2.2`
 
-Bilingual release notes / 双语发布说明：[docs/releases/v3.2.1.md](docs/releases/v3.2.1.md)
+Bilingual release notes / 双语发布说明：[docs/releases/v3.2.2.md](docs/releases/v3.2.2.md)
 
 Complete release log / 完整更新记录：[CHANGELOG.md](CHANGELOG.md)
 
@@ -24,7 +24,7 @@ Capricorn 面向需要了解磁盘状态、检查外接设备、测试存储性�
 
 ### 下载和安装
 
-前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v3.2.1-macOS.zip`，解压后将 `Capricorn.app` 放到 `Applications` 或其他本地工具目录。V2.10.1 及更早版本需手动安装一次，之后可使用应用内更新。
+前往 [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest) 下载 `Capricorn-v3.2.2-macOS.zip`，解压后将 `Capricorn.app` 放到 `Applications` 或其他本地工具目录。V2.10.1 及更早版本需手动安装一次，之后可使用应用内更新。
 
 首次打开时，如果 macOS Gatekeeper 显示互联网下载提示，请在 Finder 中右键点击 App 后选择“打开”，或在“系统设置 > 隐私与安全性”中允许打开。
 
@@ -55,9 +55,9 @@ Capricorn 内置 smartmontools 7.5，不会自动安装或移除系统驱动，�
 
 在“设置 > 特权设备服务”中启用服务并完成系统批准后，可减少受支持 SMART 操作的重复认证。App 可放在本机可写磁盘上的固定文件夹，推荐 `/Applications`；临时、系统转移、只读、可移除和网络位置不能启用服务。可移动卷隐私授权由系统单独管理，手动读取可发起授权。
 
-“设置 > 硬盘操作 > 自动读取 SNT”默认关闭。启用服务并授予所需权限后，可自动获取软件启动时已连接或新接入的空闲 USB 硬盘健康信息；48 小时内已有有效 SNT 数据时直接使用缓存，手动读取始终可用。SNT 表格和历史报告显示实际采集时间。读取会临时卸载并尝试恢复卷；被占用时等待空闲，连续读取失败后暂停。服务未启用或异常时开关不可用，点击旁边的红色感叹号可查看提示。兼容性、安全说明和验证范围见[发布说明](docs/releases/v3.2.1.md)。
+“设置 > 硬盘操作 > 自动读取 SNT”默认关闭。启用服务并授予所需权限后，可自动获取软件启动时已连接或新接入的空闲 USB 硬盘健康信息；只读介质或包含只读卷的硬盘跳过自动读取，48 小时内已有有效 SNT 数据时直接使用缓存，手动读取始终可用。SNT 表格和历史报告显示实际采集时间。读取会临时卸载并尝试恢复卷；被占用时等待空闲，连续读取失败后暂停。服务未启用或异常时开关不可用，点击旁边的红色感叹号可查看提示。兼容性、安全说明和验证范围见[发布说明](docs/releases/v3.2.2.md)。
 
-App 内更新会安全停用此前已启用的服务，并在取消、失败或新版启动后尝试恢复；系统可能要求重新批准。手动移动或替换 App 前请先停用服务。兼容性与验证范围见[发布说明](docs/releases/v3.2.1.md)。
+App 内更新会安全停用此前已启用的服务，并在取消、失败或新版启动后尝试恢复；系统可能要求重新批准。手动移动或替换 App 前请先停用服务。兼容性与验证范围见[发布说明](docs/releases/v3.2.2.md)。
 
 ### 测速和实时活动
 
@@ -75,7 +75,7 @@ App 内更新会安全停用此前已启用的服务，并在取消、失败或�
 
 ### 构建和测试
 
-自 V2.10.2 起采用“完整版本号 + 独立四位构建号”，本版为版本 `3.2.1`、Build `0056`。构建号根据发布构建记录全局递增，不再拼成版本号的第三段。详见[版本规则](docs/versioning.md)。
+自 V2.10.2 起采用“完整版本号 + 独立四位构建号”，本版为版本 `3.2.2`、Build `0057`。构建号根据发布构建记录全局递增，不再拼成版本号的第三段。详见[版本规则](docs/versioning.md)。
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build
@@ -95,7 +95,7 @@ Capricorn is for macOS users who need to inspect drive status, review external d
 
 ### Download And Install
 
-Download `Capricorn-v3.2.1-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn.app` to `Applications` or another local tools folder. V2.10.1 and earlier require one manual installation before in-app updates are available.
+Download `Capricorn-v3.2.2-macOS.zip` from [GitHub Releases](https://github.com/LexTheAries2209/Capricorn/releases/latest), then move `Capricorn.app` to `Applications` or another local tools folder. V2.10.1 and earlier require one manual installation before in-app updates are available.
 
 On first launch, if macOS Gatekeeper shows an internet-download warning, right-click the app in Finder and choose Open, or allow it from System Settings > Privacy & Security.
 
@@ -126,9 +126,9 @@ USB-NVMe devices that return no data through ordinary reads can try experimental
 
 Enable Settings > Privileged Device Service and complete system approval to reduce repeated authentication for supported SMART operations. The app can live in a permanent folder on a local writable disk; `/Applications` is recommended. Temporary, translocated, read-only, removable and network locations cannot enable the service. macOS manages removable-volume privacy consent separately; manual reads can request access.
 
-Settings > Disk Actions > Read SNT automatically is off by default. With the service enabled and required access granted, Capricorn can retrieve health information from idle USB disks already connected at launch or newly attached. Valid SNT data captured within 48 hours are reused; manual reads remain available. The SNT table and history reports show the actual capture time. Reads temporarily unmount volumes and attempt to restore them. Busy disks wait until idle; repeated read failures pause automatic attempts. The switch is unavailable when the service is disabled or unhealthy; click its red warning icon for guidance. See the [release notes](docs/releases/v3.2.1.md) for compatibility, safety and validation limits.
+Settings > Disk Actions > Read SNT automatically is off by default. With the service enabled and required access granted, Capricorn can retrieve health information from idle USB disks already connected at launch or newly attached. Read-only media and disks containing read-only volumes are skipped automatically. Valid SNT data captured within 48 hours are reused; manual reads remain available. The SNT table and history reports show the actual capture time. Reads temporarily unmount volumes and attempt to restore them. Busy disks wait until idle; repeated read failures pause automatic attempts. The switch is unavailable when the service is disabled or unhealthy; click its red warning icon for guidance. See the [release notes](docs/releases/v3.2.2.md) for compatibility, safety and validation limits.
 
-In-app updates safely stop a previously enabled service and attempt restoration after cancellation, failure or the replacement app's launch. macOS may require renewed approval. Disable the service before manually moving or replacing the app. See the [release notes](docs/releases/v3.2.1.md) for compatibility and validation limits.
+In-app updates safely stop a previously enabled service and attempt restoration after cancellation, failure or the replacement app's launch. macOS may require renewed approval. Disable the service before manually moving or replacing the app. See the [release notes](docs/releases/v3.2.2.md) for compatibility and validation limits.
 
 ### Benchmark And Live Activity
 
@@ -146,7 +146,7 @@ Network volumes can be benchmarked as mounted folders, but they do not provide a
 
 ### Build And Test
 
-Starting with V2.10.2, the complete version and four-digit build are separate: this release is Version `3.2.1`, Build `0056`. Build increases globally with release-build allocations and is no longer the third version component. See the [version rules](docs/versioning.md).
+Starting with V2.10.2, the complete version and four-digit build are separate: this release is Version `3.2.2`, Build `0057`. Build increases globally with release-build allocations and is no longer the third version component. See the [version rules](docs/versioning.md).
 
 ```sh
 xcodebuild -project Capricorn.xcodeproj -scheme Capricorn -destination 'platform=macOS' build

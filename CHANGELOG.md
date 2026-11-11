@@ -8,6 +8,22 @@ This file records every public Capricorn release. Entries are listed newest firs
 
 V2.10.2 and later separate the complete version from a four-digit Build. Historical releases retain their original metadata. See the [version rules](docs/versioning.md).
 
+## V3.2.2 - 2026-11-11
+
+[GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.2.2) | [Release Notes / 发布说明](docs/releases/v3.2.2.md)
+
+### 中文
+
+- 自动 SNT 跳过只读介质及包含只读卷的硬盘，减少接管后挂载恢复失败的风险。
+- 将“读取错误日志”移至开发者选项，默认关闭。
+- 新增默认关闭的“始终显示 SMART 自检”开发者选项；SNT 硬盘和没有 SMART 信息的设备仍不显示。
+
+### English
+
+- Skips automatic SNT reads for read-only media and disks containing read-only volumes, reducing the risk of mount-restoration failures.
+- Moves the error-log reader to Developer Options, off by default.
+- Adds an off-by-default “Always show SMART self-tests” developer option; SNT disks and devices without SMART information remain excluded.
+
 ## V3.2.1 - 2026-11-03
 
 [GitHub Release](https://github.com/LexTheAries2209/Capricorn/releases/tag/v3.2.1) | [Release Notes / 发布说明](docs/releases/v3.2.1.md)
