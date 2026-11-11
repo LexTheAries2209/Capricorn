@@ -54,6 +54,7 @@ final class AppPreferences {
         static let showsBuildNumber = false
         static let automaticallyDownloadsAndInstallsUpdates = false
         static let showsSmartSelfTestInterface = false
+        static let alwaysShowsSmartSelfTestInterface = false
         static let showsSmartErrorLogInterface = false
         static let avoidWakingSleepingDisks = false
         static let redactSerialNumbers = false
@@ -82,6 +83,7 @@ final class AppPreferences {
         // longer operates on system disks, so clear the persisted legacy key.
         static let legacyAllowSystemDiskSelfTests = "allowSystemDiskSelfTests"
         static let showsSmartSelfTestInterface = "showsSmartSelfTestInterface"
+        static let alwaysShowsSmartSelfTestInterface = "alwaysShowsSmartSelfTestInterface"
         static let showsSmartErrorLogInterface = "showsSmartErrorLogInterface"
         static let avoidWakingSleepingDisks = "avoidWakingSleepingDisks"
         static let redactSerialNumbers = "redactSerialNumbers"
@@ -168,6 +170,14 @@ final class AppPreferences {
         didSet {
             guard !suppressesPersistence else { return }
             defaults.set(showsSmartSelfTestInterface, forKey: Key.showsSmartSelfTestInterface)
+        }
+    }
+
+    /// Overrides presentation only; command support and disk protections remain unchanged.
+    var alwaysShowsSmartSelfTestInterface: Bool {
+        didSet {
+            guard !suppressesPersistence else { return }
+            defaults.set(alwaysShowsSmartSelfTestInterface, forKey: Key.alwaysShowsSmartSelfTestInterface)
         }
     }
 
@@ -267,6 +277,7 @@ final class AppPreferences {
         defaults.removeObject(forKey: Key.legacySmartctlPath)
         defaults.removeObject(forKey: Key.legacyAllowSystemDiskSelfTests)
         showsSmartSelfTestInterface = defaults.object(forKey: Key.showsSmartSelfTestInterface) as? Bool ?? Defaults.showsSmartSelfTestInterface
+        alwaysShowsSmartSelfTestInterface = defaults.object(forKey: Key.alwaysShowsSmartSelfTestInterface) as? Bool ?? Defaults.alwaysShowsSmartSelfTestInterface
         showsSmartErrorLogInterface = defaults.object(forKey: Key.showsSmartErrorLogInterface) as? Bool ?? Defaults.showsSmartErrorLogInterface
         avoidWakingSleepingDisks = defaults.object(forKey: Key.avoidWakingSleepingDisks) as? Bool ?? Defaults.avoidWakingSleepingDisks
         redactSerialNumbers = defaults.object(forKey: Key.redactSerialNumbers) as? Bool ?? Defaults.redactSerialNumbers
@@ -305,6 +316,7 @@ final class AppPreferences {
         showsBuildNumber = Defaults.showsBuildNumber
         automaticallyDownloadsAndInstallsUpdates = Defaults.automaticallyDownloadsAndInstallsUpdates
         showsSmartSelfTestInterface = Defaults.showsSmartSelfTestInterface
+        alwaysShowsSmartSelfTestInterface = Defaults.alwaysShowsSmartSelfTestInterface
         showsSmartErrorLogInterface = Defaults.showsSmartErrorLogInterface
         avoidWakingSleepingDisks = Defaults.avoidWakingSleepingDisks
         redactSerialNumbers = Defaults.redactSerialNumbers

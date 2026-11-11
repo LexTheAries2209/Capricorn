@@ -25,6 +25,11 @@ struct DeveloperSettingsSection: View {
                     isOn: $preferences.showsBuildNumber
                 )
                 Toggle(
+                    preferences.language.t("Always show SMART self-tests"),
+                    isOn: $preferences.alwaysShowsSmartSelfTestInterface
+                )
+                .help(preferences.language.t("Show SMART self-tests even when SMART diagnostics is hidden. Disks without SMART data and SNT disks remain excluded."))
+                Toggle(
                     preferences.language.t("Show error entry reader"),
                     isOn: $preferences.showsSmartErrorLogInterface
                 )

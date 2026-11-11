@@ -149,6 +149,7 @@ extension CapricornTests {
         let preferences = AppPreferences(defaults: defaults)
         XCTAssertTrue(preferences.showsSmartSelfTestInterface)
         XCTAssertFalse(preferences.showsSmartErrorLogInterface)
+        XCTAssertFalse(preferences.alwaysShowsSmartSelfTestInterface)
         preferences.showsSmartErrorLogInterface = true
         preferences.showsSmartSelfTestInterface = false
 
@@ -190,6 +191,7 @@ extension CapricornTests {
         XCTAssertFalse(preferences.allowsBuildNumberDisplay)
         XCTAssertFalse(preferences.automaticallyDownloadsAndInstallsUpdates)
         XCTAssertFalse(preferences.allowsAutomaticUpdateInstallation)
+        XCTAssertFalse(preferences.alwaysShowsSmartSelfTestInterface)
 
         preferences.enablesDeveloperOptions = true
         XCTAssertFalse(preferences.allowsCustomBenchmarkConfiguration)
@@ -198,6 +200,7 @@ extension CapricornTests {
         preferences.enablesVirtualDisks = true
         preferences.showsBuildNumber = true
         preferences.automaticallyDownloadsAndInstallsUpdates = true
+        preferences.alwaysShowsSmartSelfTestInterface = true
 
         let reloaded = AppPreferences(defaults: defaults)
         XCTAssertTrue(reloaded.enablesDeveloperOptions)
@@ -205,6 +208,7 @@ extension CapricornTests {
         XCTAssertTrue(reloaded.allowsVirtualDisks)
         XCTAssertTrue(reloaded.allowsBuildNumberDisplay)
         XCTAssertTrue(reloaded.allowsAutomaticUpdateInstallation)
+        XCTAssertTrue(reloaded.alwaysShowsSmartSelfTestInterface)
 
         reloaded.enablesDeveloperOptions = false
         let disabled = AppPreferences(defaults: defaults)
@@ -216,6 +220,7 @@ extension CapricornTests {
         XCTAssertTrue(disabled.enablesCustomBenchmarkConfiguration)
         XCTAssertTrue(disabled.enablesVirtualDisks)
         XCTAssertTrue(disabled.showsBuildNumber)
+        XCTAssertTrue(disabled.alwaysShowsSmartSelfTestInterface)
         disabled.enablesDeveloperOptions = true
         XCTAssertTrue(disabled.allowsCustomBenchmarkConfiguration)
         XCTAssertTrue(disabled.allowsVirtualDisks)
@@ -226,11 +231,13 @@ extension CapricornTests {
         disabled.enablesVirtualDisks = false
         disabled.showsBuildNumber = false
         disabled.automaticallyDownloadsAndInstallsUpdates = false
+        disabled.alwaysShowsSmartSelfTestInterface = false
         let turnedOff = AppPreferences(defaults: defaults)
         XCTAssertFalse(turnedOff.allowsCustomBenchmarkConfiguration)
         XCTAssertFalse(turnedOff.allowsVirtualDisks)
         XCTAssertFalse(turnedOff.allowsBuildNumberDisplay)
         XCTAssertFalse(turnedOff.allowsAutomaticUpdateInstallation)
+        XCTAssertFalse(turnedOff.alwaysShowsSmartSelfTestInterface)
     }
 
     @MainActor
@@ -253,6 +260,7 @@ extension CapricornTests {
         preferences.showsBuildNumber = true
         preferences.automaticallyDownloadsAndInstallsUpdates = true
         preferences.showsSmartSelfTestInterface = true
+        preferences.alwaysShowsSmartSelfTestInterface = true
         preferences.showsSmartErrorLogInterface = true
         preferences.avoidWakingSleepingDisks = true
         preferences.redactSerialNumbers = true
@@ -287,6 +295,9 @@ extension CapricornTests {
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.showsBuildNumber))
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.automaticallyDownloadsAndInstallsUpdates))
         XCTAssertEqual(preferences.showsSmartSelfTestInterface, AppPreferences.Defaults.showsSmartSelfTestInterface)
+        XCTAssertFalse(preferences.alwaysShowsSmartSelfTestInterface)
+        XCTAssertNil(defaults.object(forKey: AppPreferences.Key.alwaysShowsSmartSelfTestInterface))
+        XCTAssertFalse(AppPreferences(defaults: defaults).alwaysShowsSmartSelfTestInterface)
         XCTAssertFalse(preferences.showsSmartErrorLogInterface)
         XCTAssertNil(defaults.object(forKey: AppPreferences.Key.showsSmartErrorLogInterface))
         XCTAssertFalse(AppPreferences(defaults: defaults).showsSmartErrorLogInterface)

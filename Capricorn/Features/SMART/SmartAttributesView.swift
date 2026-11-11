@@ -17,6 +17,7 @@ struct SmartAttributesView: View {
     @Environment(\.appLanguage) private var language
     @AppStorage(AppPreferences.Key.enablesDeveloperOptions) private var enablesDeveloperOptions = false
     @AppStorage(AppPreferences.Key.showsSmartSelfTestInterface) private var showsSmartSelfTestInterface = false
+    @AppStorage(AppPreferences.Key.alwaysShowsSmartSelfTestInterface) private var alwaysShowsSmartSelfTestInterface = false
     @AppStorage(AppPreferences.Key.showsSmartErrorLogInterface) private var showsSmartErrorLogInterface = false
     @AppStorage("smartSnapshotExportFolder") private var snapshotExportFolderPath = ""
     @State private var saveMessage: String?
@@ -58,12 +59,16 @@ struct SmartAttributesView: View {
             primarySmartContent
                 .layoutPriority(1)
 
-            if showsSmartSelfTestInterface,
-               SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: attributes) {
+            if SmartDiagnosticsVisibilityPolicy.showsSelfTestPanel(
+                for: drive, snapshot: snapshot, isEnabled: showsSmartSelfTestInterface,
+                alwaysShow: enablesDeveloperOptions && alwaysShowsSmartSelfTestInterface
+            ) {
                 SmartDiagnosticsPanel(
                     drive: drive,
                     snapshot: snapshot,
-                    showsErrorLogInterface: enablesDeveloperOptions && showsSmartErrorLogInterface,
+                    showsErrorLogInterface: enablesDeveloperOptions && showsSmartErrorLogInterface
+                        && showsSmartSelfTestInterface
+                        && SmartDiagnosticsVisibilityPolicy.showsPanel(for: drive, attributes: attributes),
                     viewModel: viewModel,
                     selfTestHistory: selfTestHistory,
                     exportSelfTestHistory: exportSelfTestHistory,
@@ -341,6 +346,28 @@ enum SmartSnapshotHeaderVisibilityPolicy {
 }
 
 enum SmartDiagnosticsVisibilityPolicy {
+    static func showsSelfTestPanel(
+        for drive: DriveDevice, snapshot: SmartSnapshot?, isEnabled: Bool, alwaysShow: Bool
+    ) -> Bool {
+        guard let snapshot else { return false }
+        let transports = [
+            snapshot.selectedTransport, snapshot.smartctlDiagnostics?.selectedTransport,
+            snapshot.smartctlDiagnostics?.deviceType
+        ].compactMap { $0 }
+        guard snapshot.selectedProvider != USBRawSmartService.providerName,
+              !snapshot.attributes.contains(where: { $0.source == USBRawSmartService.providerName }),
+              !transports.contains(where: { $0.lowercased().hasPrefix("snt") }) else { return false }
+        if alwaysShow {
+            // Inventory can carry "Not Supported" as its only SMART status.
+            // Require actual data or a verified health result before overriding.
+            var dataOnly = snapshot
+            dataOnly.smartStatusRaw = nil
+            return snapshot.driveID == drive.id && (dataOnly.hasSMARTPayload
+                || (snapshot.verifiedSource != nil && snapshot.health != .unavailable))
+        }
+        return isEnabled && showsPanel(for: drive, attributes: snapshot.attributes)
+    }
+
     static func showsPanel(for drive: DriveDevice, attributes: [SmartAttribute]) -> Bool {
         !drive.isNetwork
             && !drive.isSystemDisk

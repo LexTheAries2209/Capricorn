@@ -397,6 +397,8 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         "Show SMART self-test status and controls": "显示 SMART 自检状态和测试功能",
         "When disabled, self-test status, records, and controls are hidden in Overview and SMART.": "关闭后，概览和 SMART 界面不会显示自检状态、记录或测试控制。",
         "Show SMART diagnostics": "显示 SMART 诊断",
+        "Always show SMART self-tests": "始终显示 SMART 自检",
+        "Show SMART self-tests even when SMART diagnostics is hidden. Disks without SMART data and SNT disks remain excluded.": "即使隐藏 SMART 诊断，也显示 SMART 自检。无 SMART 数据的硬盘和 SNT 硬盘仍不显示。",
         "Show error entry reader": "显示读取错误条目",
         "When enabled, the SMART page shows tools to read, view, and export controller error reports.": "开启后，可在 SMART 页面读取、查看和导出控制器错误报告。",
         "When disabled, the SMART page hides self-test controls, saved reports, and error-log tools.": "关闭后，SMART 页面将隐藏自检控制、已保存报告和错误日志工具。",

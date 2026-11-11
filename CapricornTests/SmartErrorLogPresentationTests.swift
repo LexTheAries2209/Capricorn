@@ -140,7 +140,7 @@ final class SmartErrorLogPresentationTests: XCTestCase {
             }
             .formStyle(.grouped)
             .padding(20)
-            .frame(width: 620, height: 420)
+            .frame(width: 620, height: 480)
             let hostingView = NSHostingView(rootView: root)
             let window = makeWindow(hostingView)
             defer { window.orderOut(nil) }
@@ -155,8 +155,68 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                 let lines = try textObservations(in: image).compactMap { $0.topCandidates(1).first?.string }
                 XCTAssertTrue(captionIsVisible(language.t("Enable developer options"), in: lines), "\(lines)")
                 XCTAssertEqual(captionIsVisible(language.t("Show error entry reader"), in: lines), enabled, "\(lines)")
+                XCTAssertEqual(captionIsVisible(language.t("Always show SMART self-tests"), in: lines), enabled, "\(lines)")
                 XCTAssertFalse(preferences.showsSmartSelfTestInterface)
+                XCTAssertFalse(preferences.alwaysShowsSmartSelfTestInterface)
                 XCTAssertFalse(preferences.showsSmartErrorLogInterface)
+            }
+        }
+    }
+
+    @MainActor
+    func testAlwaysShowSelfTestsRendersWithSNTAndNoDataExceptionsInBothLanguages() async throws {
+        let suiteName = "CapricornTests.alwaysShowSelfTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = AppPreferences(defaults: defaults)
+        let system = CapricornTests.fixtureDrive()
+        var native = CapricornTests.fixtureSnapshot(for: system)
+        native.attributes = [SmartAttribute(
+            id: "temperature.current", name: "Temperature", rawValue: "32 C",
+            current: nil, worst: nil, threshold: nil, status: .good, source: "Native macOS")]
+        var external = system
+        external.isSystemDisk = false
+        external.isInternal = false
+        let snt = USBRawSmartTests.drive()
+        let variants: [(String, DriveDevice, SmartSnapshot?, Bool, Bool, Bool)] = [
+            ("system", system, native, true, true, true),
+            ("disabled", system, native, true, false, false),
+            ("developer-off", system, native, false, true, false),
+            ("no-data", system, .unavailable(for: system, reason: "Fixture"), true, true, false),
+            ("snt", snt, USBRawSmartTests.result(restored: true).snapshot, true, true, false),
+            ("external-native", external, native, true, true, true)
+        ]
+        for language in AppLanguage.allCases {
+            for (name, drive, snapshot, developer, alwaysShow, visible) in variants {
+                preferences.enablesDeveloperOptions = developer
+                preferences.alwaysShowsSmartSelfTestInterface = alwaysShow
+                preferences.showsSmartSelfTestInterface = false
+                preferences.showsSmartErrorLogInterface = true
+                let model = AppModel()
+                model.smartSelfTestCapabilities[drive.id] = .unavailable("Fixture")
+                let root = SmartAttributesView(
+                    drive: drive, snapshot: snapshot, viewModel: model, selfTestHistory: [],
+                    saveSnapshot: { _ in "" }, exportSelfTestHistory: { _, _, _ in "" },
+                    exportErrorLog: { _, _, _ in "" }, satDriverGuidance: nil,
+                    openSATDriverSettings: {}
+                )
+                .defaultAppStorage(defaults)
+                .environment(\.appLanguage, language)
+                .environment(\.locale, Locale(identifier: language.localeIdentifier))
+                .environment(\.colorScheme, .light)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .frame(width: 1_000, height: 650)
+                let hostingView = NSHostingView(rootView: root)
+                let window = makeWindow(hostingView)
+                defer { window.orderOut(nil) }
+                try await Task.sleep(for: .milliseconds(250))
+                hostingView.layoutSubtreeIfNeeded()
+                let image = try capturedImage(in: hostingView, name: "always-self-test-\(name)-\(language.rawValue)")
+                let lines = try textObservations(in: image).compactMap { $0.topCandidates(1).first?.string }
+                XCTAssertEqual(captionIsVisible(language.t("SMART Diagnostics"), in: lines), visible, "\(lines)")
+                XCTAssertFalse(captionIsVisible(language.t("SMART Error Entries"), in: lines), "\(lines)")
+                XCTAssertEqual(model.smartSelfTestSession, .idle)
+                XCTAssertTrue(model.smartErrorLogReports.isEmpty)
             }
         }
     }
