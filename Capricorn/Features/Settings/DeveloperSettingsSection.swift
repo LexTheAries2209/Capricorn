@@ -25,6 +25,11 @@ struct DeveloperSettingsSection: View {
                     isOn: $preferences.showsBuildNumber
                 )
                 Toggle(
+                    preferences.language.t("Show error entry reader"),
+                    isOn: $preferences.showsSmartErrorLogInterface
+                )
+                .help(preferences.language.t("When enabled, the SMART page shows tools to read, view, and export controller error reports."))
+                Toggle(
                     preferences.language.t("Automatically download and install updates"),
                     isOn: $preferences.automaticallyDownloadsAndInstallsUpdates
                 )

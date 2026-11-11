@@ -37,6 +37,16 @@ final class USBRawSmartTests: XCTestCase {
         return drive
     }
 
+    func testRawSNTAttributesDoNotMeetStandardSmartctlDiagnosticsGate() throws {
+        let drive = Self.drive()
+        let snapshot = try XCTUnwrap(Self.result(restored: true).snapshot)
+        XCTAssertTrue(snapshot.hasSMARTPayload)
+        XCTAssertEqual(snapshot.selectedProvider, USBRawSmartService.providerName)
+        XCTAssertTrue(snapshot.attributes.allSatisfy { $0.source == USBRawSmartService.providerName })
+        XCTAssertFalse(SmartDiagnosticsVisibilityPolicy.showsPanel(
+            for: drive, attributes: snapshot.attributesWithSNTCaptureTime))
+    }
+
     func testCodexNameExceptionIsNarrowAndSurvivesBSDRenumbering() {
         let drive = Self.codexDrive()
         var renamed = drive

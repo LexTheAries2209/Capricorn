@@ -97,7 +97,7 @@ final class DeveloperSettingsTests: XCTestCase {
         .padding(20)
         let hostingView = NSHostingView(rootView: root)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 360),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 420),
             styleMask: [.titled], backing: .buffered, defer: false
         )
         window.contentView = hostingView
@@ -135,13 +135,14 @@ final class DeveloperSettingsTests: XCTestCase {
                 XCTAssertTrue(lines.contains { $0.contains(normalized(language.t("Enable developer options"))) }, "\(lines)")
                 for title in [
                     "Enable custom benchmark configuration", "Allow adding virtual disks (Beta)",
-                    "Show build number", "Automatically download and install updates"
+                    "Show build number", "Show error entry reader", "Automatically download and install updates"
                 ] {
                     XCTAssertEqual(lines.contains { $0.contains(normalized(language.t(title))) }, enabled, "\(lines)")
                 }
                 XCTAssertFalse(preferences.enablesCustomBenchmarkConfiguration)
                 XCTAssertFalse(preferences.enablesVirtualDisks)
                 XCTAssertFalse(preferences.showsBuildNumber)
+                XCTAssertFalse(preferences.showsSmartErrorLogInterface)
                 XCTAssertFalse(preferences.automaticallyDownloadsAndInstallsUpdates)
             }
         }

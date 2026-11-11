@@ -15,6 +15,7 @@ struct SmartAttributesView: View {
     let satDriverGuidance: SATSMARTDriverGuidance?
     let openSATDriverSettings: () -> Void
     @Environment(\.appLanguage) private var language
+    @AppStorage(AppPreferences.Key.enablesDeveloperOptions) private var enablesDeveloperOptions = false
     @AppStorage(AppPreferences.Key.showsSmartSelfTestInterface) private var showsSmartSelfTestInterface = false
     @AppStorage(AppPreferences.Key.showsSmartErrorLogInterface) private var showsSmartErrorLogInterface = false
     @AppStorage("smartSnapshotExportFolder") private var snapshotExportFolderPath = ""
@@ -62,7 +63,7 @@ struct SmartAttributesView: View {
                 SmartDiagnosticsPanel(
                     drive: drive,
                     snapshot: snapshot,
-                    showsErrorLogInterface: showsSmartErrorLogInterface,
+                    showsErrorLogInterface: enablesDeveloperOptions && showsSmartErrorLogInterface,
                     viewModel: viewModel,
                     selfTestHistory: selfTestHistory,
                     exportSelfTestHistory: exportSelfTestHistory,

@@ -171,7 +171,7 @@ final class AppPreferences {
         }
     }
 
-    /// Controller error reports are a separate opt-in within SMART diagnostics.
+    /// Controller error reports require a separate opt-in under developer options.
     var showsSmartErrorLogInterface: Bool {
         didSet {
             guard !suppressesPersistence else { return }
@@ -328,14 +328,6 @@ struct SmartDiagnosticsSettingsControls: View {
     var body: some View {
         Toggle(preferences.language.t("Show SMART diagnostics"), isOn: $preferences.showsSmartSelfTestInterface)
             .help(preferences.language.t("When disabled, the SMART page hides self-test controls, saved reports, and error-log tools."))
-
-        if preferences.showsSmartSelfTestInterface {
-            Toggle(
-                preferences.language.t("Show error entry reader"),
-                isOn: $preferences.showsSmartErrorLogInterface
-            )
-            .help(preferences.language.t("When enabled, the SMART page shows tools to read, view, and export controller error reports."))
-        }
     }
 }
 

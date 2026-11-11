@@ -79,7 +79,7 @@ final class SmartErrorLogPresentationTests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsRevealErrorEntryReaderBelowEnabledDiagnosticsInBothLanguages() async throws {
+    func testGeneralSettingsKeepErrorReaderInDeveloperOptionsInBothLanguages() async throws {
         let suiteName = "CapricornTests.errorReaderSettings.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -105,17 +105,13 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                     in: hostingView, name: "settings-\(language.rawValue)-\(enabled)"
                 )
                 let observations = try textObservations(in: image)
-                let main = try XCTUnwrap(observations.first {
+                XCTAssertNotNil(observations.first {
                     $0.topCandidates(1).first?.string.contains(language.t("Show SMART diagnostics")) == true
                 })
                 let child = observations.first {
                     $0.topCandidates(1).first?.string.contains(language.t("Show error entry reader")) == true
                 }
-                XCTAssertEqual(child != nil, enabled)
-                if let child {
-                    XCTAssertLessThan(child.boundingBox.midY, main.boundingBox.midY)
-                    XCTAssertEqual(child.boundingBox.minX, main.boundingBox.minX, accuracy: 0.01)
-                }
+                XCTAssertNil(child)
                 let lines = observations.compactMap { $0.topCandidates(1).first?.string }
                 let text = normalized(lines.joined())
                 XCTAssertFalse(captionIsVisible(language.t(
@@ -131,7 +127,42 @@ final class SmartErrorLogPresentationTests: XCTestCase {
     }
 
     @MainActor
-    func testSmartPageHidesErrorReaderByDefaultAndTracksBothSettings() async throws {
+    func testDeveloperOptionsRevealErrorReaderWithDiagnosticsStillDisabledInBothLanguages() async throws {
+        let suiteName = "CapricornTests.errorReaderDeveloperSettings.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = AppPreferences(defaults: defaults)
+
+        for language in AppLanguage.allCases {
+            preferences.languageRawValue = language.rawValue
+            let root = Form {
+                DeveloperSettingsSection(preferences: preferences)
+            }
+            .formStyle(.grouped)
+            .padding(20)
+            .frame(width: 620, height: 420)
+            let hostingView = NSHostingView(rootView: root)
+            let window = makeWindow(hostingView)
+            defer { window.orderOut(nil) }
+
+            for enabled in [false, true, false] {
+                preferences.enablesDeveloperOptions = enabled
+                try await Task.sleep(for: .milliseconds(250))
+                hostingView.layoutSubtreeIfNeeded()
+                let image = try capturedImage(
+                    in: hostingView, name: "developer-settings-\(language.rawValue)-\(enabled)"
+                )
+                let lines = try textObservations(in: image).compactMap { $0.topCandidates(1).first?.string }
+                XCTAssertTrue(captionIsVisible(language.t("Enable developer options"), in: lines), "\(lines)")
+                XCTAssertEqual(captionIsVisible(language.t("Show error entry reader"), in: lines), enabled, "\(lines)")
+                XCTAssertFalse(preferences.showsSmartSelfTestInterface)
+                XCTAssertFalse(preferences.showsSmartErrorLogInterface)
+            }
+        }
+    }
+
+    @MainActor
+    func testSmartPageErrorReaderRequiresDeveloperAndBothDiagnosticsSettings() async throws {
         let suiteName = "CapricornTests.errorReaderVisibility.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -160,14 +191,18 @@ final class SmartErrorLogPresentationTests: XCTestCase {
             let window = makeWindow(hostingView)
             defer { window.orderOut(nil) }
 
-            for (diagnostics, errorReader) in [(true, false), (true, true), (false, true), (true, true), (true, false)] {
+            for (developer, diagnostics, errorReader) in [
+                (false, true, false), (false, true, true), (true, true, false),
+                (true, true, true), (true, false, true), (false, true, true), (true, true, true)
+            ] {
+                preferences.enablesDeveloperOptions = developer
                 preferences.showsSmartSelfTestInterface = diagnostics
                 preferences.showsSmartErrorLogInterface = errorReader
                 try await Task.sleep(for: .milliseconds(250))
                 hostingView.layoutSubtreeIfNeeded()
                 let image = try capturedImage(
                     in: hostingView,
-                    name: "visibility-\(language.rawValue)-\(diagnostics)-\(errorReader)"
+                    name: "visibility-\(language.rawValue)-\(developer)-\(diagnostics)-\(errorReader)"
                 )
                 let text = normalized(try textObservations(in: image).compactMap {
                     $0.topCandidates(1).first?.string
@@ -175,11 +210,12 @@ final class SmartErrorLogPresentationTests: XCTestCase {
                 XCTAssertEqual(text.contains(normalized(language.t("SMART Diagnostics"))), diagnostics)
                 XCTAssertEqual(
                     text.contains(normalized(language.t("SMART Error Entries"))),
-                    diagnostics && errorReader
+                    developer && diagnostics && errorReader
                 )
                 XCTAssertFalse(text.contains(normalized(language.t("Self-tests and saved reports."))))
                 XCTAssertFalse(text.contains(normalized(language.t("Self-tests, saved reports, and controller error entries."))))
                 XCTAssertTrue(model.smartErrorLogReports.isEmpty, "Changing visibility must not read a drive.")
+                XCTAssertEqual(AppPreferences(defaults: defaults).showsSmartErrorLogInterface, errorReader)
             }
         }
     }
@@ -351,6 +387,7 @@ final class SmartErrorLogPresentationTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(true, forKey: AppPreferences.Key.showsSmartSelfTestInterface)
         defaults.set(true, forKey: AppPreferences.Key.showsSmartErrorLogInterface)
+        defaults.set(true, forKey: AppPreferences.Key.enablesDeveloperOptions)
         var drive = CapricornTests.fixtureDrive()
         drive.isSystemDisk = false
         var snapshot = CapricornTests.fixtureSnapshot(for: drive)
