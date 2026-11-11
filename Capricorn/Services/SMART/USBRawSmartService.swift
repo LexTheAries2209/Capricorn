@@ -98,6 +98,12 @@ enum USBRawSmartPolicy {
               drive.protocolName.localizedCaseInsensitiveContains("USB") else { return false }
         return true
     }
+
+    static func supportsAutomaticRead(_ drive: DriveDevice) -> Bool {
+        // Capture detaches the entire USB device, including read-only volumes
+        // whose mounts may not be restorable after re-enumeration.
+        supportsRead(drive) && drive.isWritable && drive.volumes.allSatisfy(\.isWritable)
+    }
 }
 
 enum USBRawSmartError: Error, LocalizedError {
@@ -270,6 +276,7 @@ struct USBRawSmartService: USBRawSmartRunning {
     func readAutomatically(
         drive: DriveDevice, target: USBRawSmartTarget, preferredBridge: SNTBridge?
     ) async throws -> USBRawSmartResult {
+        guard USBRawSmartPolicy.supportsAutomaticRead(drive) else { throw AutomaticSNTDeferral.unsupported }
         guard await automaticAuthorizationReady(drive) else { throw AutomaticSNTDeferral.needsAuthorization }
         return try await read(drive: drive, target: target, automatic: true, preferredBridge: preferredBridge)
     }
@@ -347,6 +354,9 @@ struct USBRawSmartService: USBRawSmartRunning {
                     }
                 }
                 if automatic {
+                    guard USBRawSmartPolicy.supportsAutomaticRead(currentDrive) else {
+                        throw AutomaticSNTDeferral.unsupported
+                    }
                     guard await automaticAuthorizationReady(currentDrive) else {
                         throw AutomaticSNTDeferral.needsAuthorization
                     }

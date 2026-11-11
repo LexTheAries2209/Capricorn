@@ -23,6 +23,58 @@ final class AutomaticSNTTests: XCTestCase {
     }
 
     @MainActor
+    func testReadOnlyMediaAndVolumesNeverEnterAutomaticQueue() async {
+        for scenario in ["media", "volume", "mixed", "unmounted", "codex"] {
+            var drive = AutomaticSNTCacheTests.drive()
+            switch scenario {
+            case "media": drive.isWritable = false
+            case "volume": drive.volumes[0].isWritable = false
+            case "mixed":
+                var readOnly = drive.volumes[0]
+                readOnly.deviceIdentifier = "disk99s2"
+                readOnly.isWritable = false
+                drive.volumes.append(readOnly)
+            case "unmounted":
+                drive.volumes[0].isWritable = false
+                drive.volumes[0].mountPoint = nil
+            default: drive = USBRawSmartTests.codexDrive()
+            }
+            let service = AutomaticSNTTestService()
+            let model = model(service: service, refresh: AutomaticSNTTestRefresh(drives: [drive]))
+            model.drives = [drive]
+            let now = Date()
+            model.synchronizeAutomaticSNTConnections(now: now)
+            await model.processAutomaticSNTQueue(now: now.addingTimeInterval(3))
+            XCTAssertTrue(model.automaticSNTConnections.isEmpty, scenario)
+            let count = await service.readCount
+            XCTAssertEqual(count, 0, scenario)
+            XCTAssertNil(model.automaticSNTCache.record(for: drive, connectionKey: ""), scenario)
+            XCTAssertTrue(model.offersUSBRawSmart(for: drive), "Manual confirmation remains available: \(scenario)")
+        }
+    }
+
+    @MainActor
+    func testQueuedDiskBecomingReadOnlySkipsWithoutRecordingFailure() async {
+        var drive = AutomaticSNTCacheTests.drive()
+        let service = AutomaticSNTTestService()
+        let model = model(service: service, refresh: AutomaticSNTTestRefresh(drives: [drive]))
+        let now = Date()
+        model.synchronizeAutomaticSNTConnections(now: now)
+        let token = model.automaticSNTConnections.keys.first!
+        drive.volumes[0].isWritable = false
+        model.drives = [drive]
+
+        await model.processAutomaticSNTQueue(now: now.addingTimeInterval(3))
+        await model.processAutomaticSNTQueue(now: now.addingTimeInterval(300))
+
+        let count = await service.readCount
+        XCTAssertEqual(count, 0)
+        XCTAssertEqual(model.automaticSNTStatus(for: drive), .unsupported)
+        XCTAssertTrue(model.automaticSNTConnections[token]!.completed)
+        XCTAssertNil(model.automaticSNTCache.record(for: drive, connectionKey: token.uuidString))
+    }
+
+    @MainActor
     func testStartupReadsOnceAndReconnectUsesFreshCacheWithoutScheduledExpiryRead() async {
         let drive = AutomaticSNTCacheTests.drive()
         let service = AutomaticSNTTestService()

@@ -8,6 +8,11 @@ Ordinary periodic refresh does not repeat a completed connection's SNT read.
 
 ## Admission and ownership
 
+- Read-only media and disks containing any read-only volume are excluded from
+  automatic SNT, including CODEX UDF cards. The queue rechecks before dispatch,
+  and the service rechecks after re-enumeration before another bridge probe.
+  This skip does not consume retries or persist a failure; manual SNT remains
+  available with confirmation.
 - The privileged service must be enabled and pass its version/installation
   handshake. Automatic requests carry typed consent distinct from manual
   unmount confirmation; helper protocol version 3 rejects mismatched clients.

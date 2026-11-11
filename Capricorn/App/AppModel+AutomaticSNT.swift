@@ -57,7 +57,7 @@ extension AppModel {
     func synchronizeAutomaticSNTConnections(now: Date = Date()) {
         guard automaticSNTEnabled, !isUSBRawSmartActive else { return }
         var retained: [UUID: AutomaticSNTConnection] = [:]
-        for drive in drives where USBRawSmartPolicy.supportsRead(drive) {
+        for drive in drives where USBRawSmartPolicy.supportsAutomaticRead(drive) {
             guard let snapshot = snapshots[drive.id],
                   offersUSBRawSmart(for: drive) || offersUSBRawSmartRefresh(for: drive),
                   let target = try? usbRawSmartTarget(for: drive) else { continue }
@@ -108,6 +108,13 @@ extension AppModel {
               let target = try? usbRawSmartTarget(for: drive), target == connection.target else {
             connection.status = .waiting
             connection.nextAttempt = now.addingTimeInterval(30)
+            automaticSNTConnections[connection.id] = connection
+            return
+        }
+        // A queued disk may have become read-only since the last full refresh.
+        guard USBRawSmartPolicy.supportsAutomaticRead(drive) else {
+            connection.completed = true
+            connection.status = .unsupported
             automaticSNTConnections[connection.id] = connection
             return
         }

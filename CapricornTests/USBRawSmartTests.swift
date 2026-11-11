@@ -495,6 +495,70 @@ final class USBRawSmartTests: XCTestCase {
             succeeded, drive: Self.drive(), target: Self.target, type: "sntasmedia").unmountBusy)
     }
 
+    func testAutomaticReadOnlyDiskSkipsBeforeAuthorizationOrAnyCommand() async {
+        for scenario in ["media", "volume", "mixed", "codex"] {
+            var drive = Self.busyDrive()
+            switch scenario {
+            case "media": drive.isWritable = false
+            case "volume":
+                for index in drive.volumes.indices { drive.volumes[index].isWritable = false }
+            case "mixed": drive.volumes[1].isWritable = false
+            default: drive = Self.codexDrive()
+            }
+            let scan = USBRawRecordingRunner(result: Self.scan(for: drive, type: "sntrealtek"))
+            let privileged = USBRawRecordingRunner(result: Self.commandResult())
+            let openFiles = USBRawOpenFileRunner(outputs: [:])
+            let service = USBRawSmartService(
+                runner: scan, administratorRunner: privileged,
+                executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+                targetResolver: { _ in Self.target },
+                openFileRunner: openFiles,
+                automaticAuthorizationReady: { _ in
+                    XCTFail("Read-only media must be skipped before authorization checks.")
+                    return true
+                })
+            do {
+                _ = try await service.readAutomatically(drive: drive, target: Self.target, preferredBridge: nil)
+                XCTFail("Read-only media must not be probed: \(scenario)")
+            } catch let deferral as AutomaticSNTDeferral {
+                XCTAssertEqual(deferral, .unsupported, scenario)
+            } catch {
+                XCTFail("Unexpected error: \(error)")
+            }
+            let scans = await scan.calls
+            let reads = await privileged.calls
+            let inspections = await openFiles.calls
+            XCTAssertTrue(scans.isEmpty, scenario)
+            XCTAssertTrue(reads.isEmpty, scenario)
+            XCTAssertTrue(inspections.isEmpty, scenario)
+        }
+    }
+
+    func testAutomaticProbeStopsIfReconnectedVolumeBecomesReadOnly() async {
+        let drive = Self.busyDrive()
+        var reconnected = drive
+        reconnected.volumes[0].isWritable = false
+        let privileged = USBRawProbeRunner(results: [Self.emptyProbeResult()])
+        let service = USBRawSmartService(
+            runner: USBRawRecordingRunner(result: Self.scan(for: drive, type: "sat,auto")),
+            administratorRunner: privileged, executableURL: URL(fileURLWithPath: "/usr/bin/true"),
+            targetResolver: { _ in Self.target }, inventoryProvider: USBRawProbeInventory(drives: [reconnected]),
+            openFileRunner: USBRawOpenFileRunner(outputs: [
+                "/Volumes/A": .success(Self.lsofResult("")),
+                "/Volumes/B": .success(Self.lsofResult(""))
+            ]), automaticAuthorizationReady: { _ in true })
+        do {
+            _ = try await service.readAutomatically(drive: drive, target: Self.target, preferredBridge: nil)
+            XCTFail("A read-only reconnected volume must stop further capture.")
+        } catch let deferral as AutomaticSNTDeferral {
+            XCTAssertEqual(deferral, .unsupported)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        let reads = await privileged.calls
+        XCTAssertEqual(reads.count, 1)
+    }
+
     func testAutomaticReadChecksEveryVolumeAndNeverRequestsAuthorization() async throws {
         let drive = Self.busyDrive()
         let privileged = USBRawRecordingRunner(result: Self.commandResult())
