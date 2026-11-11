@@ -107,6 +107,12 @@
       "status": "published",
       "version": "3.2.1",
       "tag": "v3.2.1"
+    },
+    {
+      "build": "0057",
+      "status": "reserved",
+      "version": "3.2.2",
+      "tag": "v3.2.2"
     }
   ]
 }
