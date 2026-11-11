@@ -505,6 +505,7 @@ final class SidebarAutoFitTests: XCTestCase {
                 let request = VNRecognizeTextRequest()
                 request.recognitionLevel = .accurate
                 request.recognitionLanguages = ["zh-Hans", "en-US"]
+                request.usesLanguageCorrection = false
                 try VNImageRequestHandler(cgImage: image).perform([request])
                 // Vision can return a wrapped unit before its preceding number.
                 // Restore visual reading order before checking complete field values.
@@ -516,9 +517,13 @@ final class SidebarAutoFitTests: XCTestCase {
                 }
                 let text = observations.compactMap { $0.topCandidates(1).first?.string }
                     .joined().replacingOccurrences(of: " ", with: "").lowercased()
+                // Field sentinels are literal IDs; consider OCR alternatives without spelling correction.
+                let fieldText = observations.flatMap { $0.topCandidates(5).map(\.string) }
+                    .joined().replacingOccurrences(of: " ", with: "").lowercased()
                 let nameEnding = drive.isVirtual ? "modelend" : drive.isNetwork ? "hostend" : "volumeend"
                 for ending in [nameEnding, "modelend", "serialend", "protocolend", "4.1tb"] {
-                    XCTAssertTrue(text.contains(ending), "\(language) \(kind) native sidebar hid \(ending): \(text)")
+                    let recognized = ending == "4.1tb" ? text : fieldText
+                    XCTAssertTrue(recognized.contains(ending), "\(language) \(kind) native sidebar hid \(ending): \(text)")
                 }
                 if drive.isVirtual {
                     let marker = language == .simplifiedChinese ? "虚拟硬盘" : "virtualdisk"
